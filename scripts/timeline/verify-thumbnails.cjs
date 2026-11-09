@@ -211,7 +211,7 @@ async function main() {
 
     await owner.page.goto(origin + '/dashboard')
     await owner.page
-      .getByRole('searchbox', { name: 'Search files by name' })
+      .getByRole('searchbox', { name: 'Search files' })
       .fill(prefix)
     const library = owner.page.getByRole('list', {
       name: 'Your files',

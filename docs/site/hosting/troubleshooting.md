@@ -141,15 +141,21 @@ Inspect delivery history under Profile → Integrations. Confirm the receiver re
 
 Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK=true`. Redirecting a webhook URL is not a substitute for setting its final destination. If all existing webhooks fail after a secret change, check the encryption key before changing receiver signatures. [API and webhook documentation](/api/).
 
+## Search can't find a file
+
+Check the line under the library's search box first. **Reading N files for search** means the search index hasn't reached every file yet; a count that never shrinks means no Flare process is running its worker, or each attempt fails. Look for `search-index` warnings in the logs. Choose **N files couldn’t be read** to see each failed file's reason. A missing-from-storage file fails with "Flare couldn’t open this file in storage"; restore the object, then choose **Try reading them again**.
+
+Files marked **Skipped** were read while a [Search switch](/admin/#search) was off or exceed a size limit. Scanned PDFs, photos without text and videos have no searchable text by design; their names, tags and folders still match. The [search guide](/guide/search#troubleshooting) covers what people can check themselves.
+
 ## OCR, expiration, or delivery jobs seem delayed
 
-Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General and may be opted out for an upload. Processing an image takes time and does not guarantee useful extracted text.
+Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General → **Search**. Processing an image takes time and does not guarantee useful extracted text.
 
 With `audit.read`, filter [Audit log](/admin/audit) for the relevant file and processing outcomes, then compare the timestamps with worker diagnostics. Recorded OCR events retain outcomes rather than extracted text.
 
-Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, and account storage-cleanup jobs use durable queues and retries, while image OCR work has process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
+Expiration is a background action; an unavailable process cannot apply it on schedule. Email, webhook, search index and account storage-cleanup jobs use durable queues and retries, while on-demand **Extract text** requests have process-local queue state. A green `/api/health` response does not certify that any of these jobs succeeded.
 
-Each Flare process reads one image at a time. Automatic OCR after upload and **Extract text** requests share that queue, so a burst of uploads delays manual requests and the reverse. A request waits up to 60 seconds and then answers `202` while reading continues. At most ten new images wait to be read, and at most 30 requests wait for results at once, including requests for an image that is already being read; more get `503`. Each account, or client address for anonymous visitors, can start 20 readings per 10 minutes before getting `429`. After a failed reading, Flare waits 5 minutes before trying that image again. All of this state is in memory: a restart clears it, and queued work that hadn't finished is not resumed. Ask for **Extract text** again after a restart. Correct client addresses depend on your [proxy configuration](/hosting/reverse-proxy).
+Each Flare process reads one image at a time. Automatic OCR after upload and **Extract text** requests share that queue, so a burst of uploads delays manual requests and the reverse. A request waits up to 60 seconds and then answers `202` while reading continues. At most ten new images wait to be read, and at most 30 requests wait for results at once, including requests for an image that is already being read; more get `503`. Each account, or client address for anonymous visitors, can start 20 readings per 10 minutes before getting `429`. After a failed reading, Flare waits 5 minutes before trying that image again. This request state is in memory: a restart clears it. Ask for **Extract text** again after a restart. Automatic recognition after upload is queued in the database by the search index instead, so a restart resumes it; a file being read when the process stopped is read again about 5 minutes later. Correct client addresses depend on your [proxy configuration](/hosting/reverse-proxy).
 
 ## Audit activity is missing
 

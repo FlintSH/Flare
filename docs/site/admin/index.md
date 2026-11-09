@@ -37,11 +37,20 @@ Stable builds open the archive for their installed release; rolling builds open 
 
 Reading instance settings needs `settings.read`; changing General needs `settings.general`. Access/SSO uses `settings.security`, Storage uses `settings.storage`, Email uses `settings.email`, and instance appearance uses `appearance.manage`. Custom CSS/head HTML requires Administrator because it can execute browser code. Give the read permission alongside the relevant edit permission when delegating dashboard settings work.
 
-### Background image OCR
+### Search
 
-OCR extracts text from uploaded images so it can be searched and used by OCR-based tag rules. It is enabled by default. Disable **Background OCR processing** if you do not need it or want to reduce processing work on a small server.
+The **Search** card controls what Flare reads from files so people can [find them by what's inside](/guide/search). Everything runs in the Flare server process; nothing is sent to another service. Names, tags and folders are always searchable.
 
-OCR processing outcomes can be investigated in [Audit log](./audit); the audit details do not include extracted text. Changing this switch does not erase existing OCR text. Upload options can opt individual uploads out of OCR, and extracting text is asynchronous. A successful upload does not mean text recognition is already finished or that the image contains recognizable text.
+| Switch                       | Default | What it reads                                                                                                                                                                                    |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Recognize text in images** | On      | Text in PNG, JPEG, WebP, BMP, GIF and TIFF images up to 25 MB, by OCR, one image at a time per process. Also feeds OCR-based tag rules.                                                          |
+| **Read documents**           | On      | Selectable PDF text (up to 50 MB and 200 pages), Word, Excel, PowerPoint and OpenDocument text (up to 50 MB), the first 1 MiB of text and code files, and the paths inside ZIP and TAR archives. |
+
+<Screenshot src="/screenshots/search/settings-search.webp" alt="The Search card in Settings, General, with the switches Recognize text in images and Read documents both on" caption="Both switches are on for new and upgraded instances." />
+
+Flare reads each new file in the background seconds after upload; the upload never waits for it. Turning a switch off makes new files of that kind **Skipped** and keeps text already read. Turning it back on reads the skipped files in the background within a minute. People can still choose **Extract text (OCR)** on one image while image recognition is off. The first switch was called **Background OCR processing** and is the same setting, so its saved value carries over.
+
+Each file keeps up to 100,000 characters of extracted text in the database, in the `FileSearchIndex` table, which [backups](/hosting/maintenance#make-a-consistent-local-backup) include. Reading a large PDF or document uses memory in the server process for a moment; turn **Read documents** off on a very small server if that matters more than search. OCR outcomes can be investigated in [Audit log](./audit); the audit details do not include extracted text. A successful upload does not mean text recognition is finished or that the image contains recognizable text. [Upgrading](/hosting/maintenance#search-index-after-upgrading) reads existing files in the background too.
 
 ### Credits
 

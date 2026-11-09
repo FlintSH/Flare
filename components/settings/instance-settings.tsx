@@ -409,6 +409,10 @@ export function InstanceSettings({
           workingConfig.settings.general.ocr
         ) ||
         !deepEqual(
+          savedConfig.settings.general.search,
+          workingConfig.settings.general.search
+        ) ||
+        !deepEqual(
           savedConfig.settings.general.credits,
           workingConfig.settings.general.credits
         ),
@@ -535,18 +539,21 @@ export function InstanceSettings({
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Image search</CardTitle>
+                <CardTitle>Search</CardTitle>
                 <CardDescription className="text-pretty">
-                  Find your images by the words inside them.
+                  Flare reads files on this server so people can find them by
+                  what’s inside. Nothing is sent to another service. Names, tags
+                  and folders are always searchable.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between gap-4">
                   <div className="min-w-0 flex-1 space-y-0.5">
-                    <Label>Background OCR processing</Label>
+                    <Label>Recognize text in images</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
-                      Enable OCR to allow searching through text content in
-                      uploaded images.
+                      Reads text in screenshots, photos and scans in the
+                      background (OCR), one image at a time. People can still
+                      extract text from one image when this is off.
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -554,7 +561,7 @@ export function InstanceSettings({
                       <ChangeIndicator />
                     )}
                     <Switch
-                      aria-label="Background OCR processing"
+                      aria-label="Recognize text in images"
                       checked={workingConfig.settings.general.ocr.enabled}
                       onCheckedChange={(checked) =>
                         handleSettingChange('general', {
@@ -565,6 +572,38 @@ export function InstanceSettings({
                     />
                   </div>
                 </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Read documents</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Reads text from PDFs, Word, Excel, PowerPoint and
+                      OpenDocument files, text and code files, and the file
+                      names inside archives.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isFieldChanged('general', ['search', 'documents']) && (
+                      <ChangeIndicator />
+                    )}
+                    <Switch
+                      aria-label="Read documents"
+                      checked={workingConfig.settings.general.search.documents}
+                      onCheckedChange={(checked) =>
+                        handleSettingChange('general', {
+                          search: { documents: checked },
+                        })
+                      }
+                      className={getFieldClasses('general', [
+                        'search',
+                        'documents',
+                      ])}
+                    />
+                  </div>
+                </div>
+                <p className="text-pretty text-xs text-muted-foreground">
+                  Turning either on reads files that were skipped while it was
+                  off, in the background.
+                </p>
               </CardContent>
             </Card>
             <Card>

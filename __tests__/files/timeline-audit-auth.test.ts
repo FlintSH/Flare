@@ -23,6 +23,9 @@ vi.mock('@/lib/database/prisma', () => ({
     user: mocks.user,
     role: mocks.role,
     apiToken: mocks.apiToken,
+    // A search reads the account's tags and folder names to match them.
+    vaultTag: { findMany: async () => [] },
+    vaultFolder: { findMany: async () => [] },
     $queryRaw: mocks.queryRaw,
   },
 }))
@@ -146,13 +149,16 @@ beforeEach(() => {
   mocks.queryRaw.mockImplementation(async (query: Prisma.Sql) =>
     query.sql.includes('clock_timestamp')
       ? [{ snapshot: new Date('2026-10-06T12:00:00.000Z') }]
-      : [
-          {
-            from: new Date('2025-01-01T00:00:00.000Z'),
-            to: new Date('2025-02-01T00:00:00.000Z'),
-            count: BigInt(2),
-          },
-        ]
+      : // Whether some file has every word of the search.
+        query.sql.includes('SELECT EXISTS')
+        ? [{ found: true }]
+        : [
+            {
+              from: new Date('2025-01-01T00:00:00.000Z'),
+              to: new Date('2025-02-01T00:00:00.000Z'),
+              count: BigInt(2),
+            },
+          ]
   )
 })
 
@@ -164,10 +170,14 @@ describe('timeline authentication and audit integration', () => {
     expect((await response.json()).data.total).toBe(2)
     expect(mocks.session).toHaveBeenCalledOnce()
     expect(mocks.apiToken.findUnique).not.toHaveBeenCalled()
-    expect(mocks.queryRaw).toHaveBeenCalledTimes(2)
-    const aggregate = mocks.queryRaw.mock.calls[1][0] as Prisma.Sql
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(3)
+    const aggregate = mocks.queryRaw.mock.calls[2][0] as Prisma.Sql
     expect(aggregate.values).toContain(account.id)
-    expect(aggregate.values).toContain(`%${search}%`)
+    // Every word of the search is matched, in the name and the content index.
+    for (const word of search.toLowerCase().split(' ')) {
+      expect(aggregate.values).toContain(`%${word}%`)
+      expect(aggregate.values).toContain(`'${word}':*`)
+    }
     expect(auditResult(200, 'success')).toMatchObject({
       actorId: account.id,
       actorName: account.name,

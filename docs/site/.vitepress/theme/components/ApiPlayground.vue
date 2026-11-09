@@ -30,6 +30,20 @@ const operations = {
     scope: 'files:read',
     permission: 'files.read',
   },
+  search: {
+    label: 'Search your files',
+    method: 'GET',
+    path: '/api/files?search=invoice%20-draft&sortBy=relevance',
+    scope: 'files:read',
+    permission: 'files.read',
+  },
+  searchIndex: {
+    label: 'Check what search has read',
+    method: 'GET',
+    path: '/api/files/search-index',
+    scope: 'files:read',
+    permission: 'files.read',
+  },
   selectedFiles: {
     label: 'Refresh selected file metadata',
     method: 'GET',

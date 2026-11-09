@@ -3,6 +3,7 @@ import { createWorker } from 'tesseract.js'
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
+import { saveRecognizedText } from '@/lib/search/store'
 import { getStorageProvider } from '@/lib/storage'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
 
@@ -53,6 +54,10 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
 
     // A failed attempt leaves durable work for the worker or the next OCR request.
     await applyPendingOcrTags(fileId)
+    // Text recognized on request becomes searchable right away.
+    await saveRecognizedText(fileId, text.trim()).catch(() =>
+      logger.warn('Recognized text could not be saved for search', { fileId })
+    )
 
     await recordAudit({
       ...target,

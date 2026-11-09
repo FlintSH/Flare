@@ -216,9 +216,10 @@ describe('anchored image navigation API', () => {
     expect(mocks.file.findMany).not.toHaveBeenCalled()
   })
 
+  // A search's neighbors are found in SQL; __tests__/search/database.test.ts
+  // covers that against PostgreSQL.
   it('applies owner, image type, and all selected filters when validating the anchor', async () => {
     await request({
-      search: 'holiday',
       types: 'image/jpeg,image/png',
       visibility: 'private,hasPassword',
       dateFrom: '2026-01-01T00:00:00.000Z',
@@ -229,12 +230,6 @@ describe('anchored image navigation API', () => {
         {
           userId: 'owner',
           AND: [
-            {
-              OR: [
-                { name: { contains: 'holiday', mode: 'insensitive' } },
-                { ocrText: { contains: 'holiday', mode: 'insensitive' } },
-              ],
-            },
             { mimeType: { in: ['image/jpeg', 'image/png'] } },
             {
               uploadedAt: {

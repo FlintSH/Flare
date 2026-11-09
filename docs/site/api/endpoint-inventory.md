@@ -26,6 +26,7 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/files`                                     | GET    | `files:read`   | Paginated file metadata, selected-ID refreshes, search, filters, and image neighbors. |
 | `/api/files`                                     | POST   | `files:upload` | One multipart file upload.                                                            |
 | `/api/files/timeline`                            | GET    | `files:read`   | Account-wide bucket counts; non-date sorts use null `from`/`to` boundaries.           |
+| `/api/files/search-index`                        | GET    | `files:read`   | How many of your files the search index has read, by state.                           |
 | `/api/files/types`                               | GET    | `files:read`   | MIME types present in the account.                                                    |
 | `/api/files/chunks`                              | POST   | `files:upload` | Initialize a chunk upload.                                                            |
 | `/api/files/chunks`                              | GET    | `files:upload` | Obtain a part URL using `uploadId` and `partNumber` query parameters.                 |
@@ -185,6 +186,7 @@ These routes use `requireAccount`, whose compatibility path accepts a browser se
 | `/api/tags/{id}`            | PATCH, DELETE     | Edit or delete an owned tag.                                                                                                                                                                                                  |
 | `/api/tags/{id}/apply`      | POST              | Apply a tag's rule to existing files.                                                                                                                                                                                         |
 | `/api/files/tags`           | GET, PATCH        | GET reads current tag assignments for 1–100 owned file IDs with `files.read`; PATCH changes assignments with `files.update` and `tags.manage`. See the [selection contract](./files#read-current-tags-for-a-selection).       |
+| `/api/files/search-index`   | POST              | Read failed files, or up to 100 chosen files, again for search, with `files.read`. Ten requests per 10 minutes per address. See [search index](./files#search-index-status).                                                  |
 
 Writes from a browser session follow the [browser-session write rule](./authentication#browser-session-writes); legacy-token requests are not origin- or type-checked. This table describes actual authentication code, not a recommendation to use the legacy token to automate account changes. New integrations should use the documented named-token API, and people should use the dashboard for these operations.
 

@@ -113,6 +113,7 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 ## Where to go next
 
 - [Browse, search, and preview your library](./library)
+- [Find a file by what is inside it](./search)
 - [Organize with folders](./folders) and [tags](./tags)
 - [Share text and code](./pastes), or [shorten a URL](./short-links)
 - [Choose your workspace appearance](./appearance)

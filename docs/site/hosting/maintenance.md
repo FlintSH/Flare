@@ -101,6 +101,16 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Search index after upgrading
+
+Migration `20261109000000_file_search_index` adds the `FileSearchIndex` table, a `SearchIndexStatus` type, and a `flare_search_fold` SQL function that folds letter case and Latin accents for name search. It needs no PostgreSQL extension, environment variable or separate worker. It adds one row per existing file, so it takes a few seconds per million files.
+
+After startup, each Flare process reads existing files in the background, newest first, with the [search index worker](#background-workers): two files at a time, and one image at a time for text recognition. Images that already have recognized text reuse it instead of being read again. Images whose recognition failed before, or that were never recognized because automatic OCR was off, are recognized now if **Recognize text in images** is on. On a large library this takes a while and keeps one CPU core busy; plan the upgrade for a quiet time, or turn the [Search switches](/admin/#search) off and back on later. Search works during the backlog: names, tags and folders match at once, and contents match as files are read. People can watch progress under the library's search box.
+
+Extracted text takes database space: up to 100,000 characters per file, usually far less, plus its index. Backups include it. Uploads keep their speed: publishing a file adds one row in the same transaction, and reading happens afterward.
+
+Rolling back to an older image leaves the table in place, unused. Restoring the matching pre-upgrade backup removes it.
+
 ### Next.js 16 and React 19
 
 Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup and upgrade steps above. There are no new settings, environment variables, or database migrations, and existing sessions stay signed in.
@@ -401,18 +411,19 @@ docker compose exec -T db psql -U flare -d flare -c \
 
 Background work runs inside the application. Each process starts these workers when it starts, so no separate worker service is needed, but a stopped process runs none of them:
 
-| Worker                                                                                                         | Runs                              | Log component      |
-| -------------------------------------------------------------------------------------------------------------- | --------------------------------- | ------------------ |
-| [Rate-limit and login-history cleanup](#authentication-rate-limit-cleanup)                                     | Every 60 seconds                  | `security-cleanup` |
-| [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set | 1 minute after start, then hourly | `audit-retention`  |
-| [Account storage cleanup](#account-storage-cleanup)                                                            | Every 5 seconds                   | `storage-cleanup`  |
-| [File expiry](#file-expiry-jobs)                                                                               | Every 5 seconds                   | `file-expiry`      |
-| [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
-| [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
-| [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
-| Memory check, production only                                                                                  | Every 60 seconds                  | `startup`          |
+| Worker                                                                                                             | Runs                                                                  | Log component      |
+| ------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- | ------------------ |
+| [Rate-limit and login-history cleanup](#authentication-rate-limit-cleanup)                                         | Every 60 seconds                                                      | `security-cleanup` |
+| [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set     | 1 minute after start, then hourly                                     | `audit-retention`  |
+| [Account storage cleanup](#account-storage-cleanup)                                                                | Every 5 seconds                                                       | `storage-cleanup`  |
+| [File expiry](#file-expiry-jobs)                                                                                   | Every 5 seconds                                                       | `file-expiry`      |
+| [Email delivery](../admin/email#limits-and-delivery-history)                                                       | Every 5 seconds                                                       | `email`            |
+| [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                    | Every 5 seconds                                                       | `integrations`     |
+| [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                               | Every 15 seconds                                                      | `ocr`              |
+| [Search index](../guide/search#see-what-search-has-read): reads new files, retries failures after 1 and 10 minutes | 5 seconds after start, then every 10 seconds, and right after uploads | `search-index`     |
+| Memory check, production only                                                                                      | Every 60 seconds                                                      | `startup`          |
 
-Apart from audit retention, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.
+Apart from audit retention and the search index, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.
 
 Each worker starts on its own, so one that fails to start can't keep the others from starting. The `startup` component logs `Startup tasks failed` with the task's name and continues. In earlier versions, the first failure skipped every task after it. A database error while file expiry started, for example, kept webhooks and OCR-tag retries from running in that process until it restarted, and email delivery until an administrator saved email settings or retried a message.
 
@@ -427,6 +438,7 @@ Each worker starts on its own, so one that fails to start can't keep the others 
 | Pending account-cleanup jobs          | Storage failures can outlive the deleted account; inspect retries and the recorded target |
 | Failed file-expiry jobs               | A failed expiration leaves the file public or stored until its owner schedules it again   |
 | Failed email/webhook deliveries       | A running web service can still fail external delivery                                    |
+| Files waiting for search              | A backlog that never shrinks means no process is running the search index worker          |
 | A periodic upload/download check      | Tests the database-and-storage path together                                              |
 | Backup age and restore result         | Confirms recovery is practical                                                            |
 

@@ -5,6 +5,7 @@ export const LIBRARY_LISTS = {
   tags: 'vault-tags',
   folders: 'vault-folders',
   fileTypes: 'library-file-types',
+  searchIndex: 'library-search-index',
 } as const
 
 export type LibraryList = (typeof LIBRARY_LISTS)[keyof typeof LIBRARY_LISTS]

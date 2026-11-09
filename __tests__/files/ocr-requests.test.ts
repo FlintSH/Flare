@@ -155,7 +155,7 @@ describe('on-demand OCR requests', () => {
     expect(mocks.recognize).toHaveBeenCalledTimes(1)
   })
 
-  it('shares a recognition already queued by upload processing', async () => {
+  it('shares a recognition already queued by the search index', async () => {
     const { get, ocrQueue } = await modules()
     mocks.files.set('uploaded', image('uploaded'))
     const gate = deferred()
@@ -164,7 +164,7 @@ describe('on-demand OCR requests', () => {
       return { data: { text: 'From upload', confidence: 80 } }
     })
 
-    await ocrQueue.add({
+    void ocrQueue.recognize({
       fileId: 'uploaded',
       filePath: 'uploads/owner/uploaded/uploaded.png',
     })
@@ -407,7 +407,7 @@ describe('OCR admission and waiting limits', () => {
     })
   })
 
-  it('refunds the charge when upload processing queues the same image meanwhile', async () => {
+  it('refunds the charge when the search index queues the same image meanwhile', async () => {
     const { ocrQueue } = await modules()
     mocks.files.set('raced', image('raced'))
     const gate = deferred()
@@ -420,8 +420,8 @@ describe('OCR admission and waiting limits', () => {
       { fileId: 'raced', filePath: 'raced' },
       {
         admit: async () => {
-          // Upload processing queues the same file while this request is charged.
-          await ocrQueue.add({ fileId: 'raced', filePath: 'raced' }, true)
+          // The search index queues the same file while this request is charged.
+          void ocrQueue.recognize({ fileId: 'raced', filePath: 'raced' })
           return { refund }
         },
       }

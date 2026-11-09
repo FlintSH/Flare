@@ -298,9 +298,7 @@ async function findFile(page, name) {
   // Virtual rows outside the current window are not mounted. Search the library
   // before opening a file that is beyond the visible cards, including on mobile.
   if (!(await menu.count()))
-    await page
-      .getByRole('searchbox', { name: 'Search files by name' })
-      .fill(name)
+    await page.getByRole('searchbox', { name: 'Search files' }).fill(name)
   await expect(menu).toBeVisible()
   return menu
 }

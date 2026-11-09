@@ -81,6 +81,7 @@ export default defineConfig({
         ['Your first steps', '/guide/'],
         ['Upload files', '/guide/uploading'],
         ['File library & timeline', '/guide/library'],
+        ['Find files with search', '/guide/search'],
         ['Archives', '/guide/archives'],
         ['Sharing & privacy', '/guide/sharing'],
         ['Folders', '/guide/folders'],

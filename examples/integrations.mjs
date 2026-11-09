@@ -122,6 +122,41 @@ if (mode === 'upload') {
   if (!response.ok)
     throw new Error(`Metadata refresh failed (${response.status}): ${body}`)
   process.stdout.write(body + '\n')
+} else if (mode === 'search') {
+  const { FLARE_URL, FLARE_TOKEN } = process.env
+  const words = process.argv.slice(3).join(' ').trim()
+  if (!FLARE_URL || !FLARE_TOKEN || !words || words.length > 500)
+    throw new Error(
+      'Set FLARE_URL and FLARE_TOKEN (files:read), then run: node examples/integrations.mjs search <words>, at most 500 characters.'
+    )
+  const url = new URL('/api/files', FLARE_URL)
+  url.searchParams.set('search', words)
+  url.searchParams.set('sortBy', 'relevance')
+  url.searchParams.set('limit', '10')
+  const response = await fetch(url, {
+    headers: { authorization: `Bearer ${FLARE_TOKEN}` },
+  })
+  const body = await response.text()
+  if (!response.ok)
+    throw new Error(`Search failed (${response.status}): ${body}`)
+  const { data, pagination } = JSON.parse(body)
+  // Snippets are plain text; matching words are marked with [brackets] here.
+  const text = (segments) =>
+    segments.map((s) => (s.match ? `[${s.text}]` : s.text)).join('')
+  process.stdout.write(`${pagination.total} matching files\n`)
+  for (const file of data) {
+    const { match } = file
+    const reasons = [
+      match.name && 'name',
+      ...match.tags.map((tag) => `tag ${tag.name}`),
+      match.folder && `folder ${match.folder.path}`,
+      match.content &&
+        `${match.content.source}: ${text(match.content.snippet)}`,
+      match.entries && `archive: ${match.entries.paths.map(text).join(', ')}`,
+      match.missing.length && `missing ${match.missing.join(' ')}`,
+    ].filter(Boolean)
+    process.stdout.write(`${file.name}\n  ${reasons.join('\n  ')}\n`)
+  }
 } else if (mode === 'receive') {
   const secret = process.env.FLARE_WEBHOOK_SECRET
   if (!secret)
@@ -203,7 +238,7 @@ if (mode === 'upload') {
   )
 } else {
   console.log(
-    'Usage: node examples/integrations.mjs upload <file> [mime-type] | timeline [IANA-timezone] | files <file-id> [file-id ...] | receive'
+    'Usage: node examples/integrations.mjs upload <file> [mime-type] | timeline [IANA-timezone] | files <file-id> [file-id ...] | search <words> | receive'
   )
   process.exitCode = 1
 }

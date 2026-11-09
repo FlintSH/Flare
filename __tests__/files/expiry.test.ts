@@ -34,6 +34,7 @@ const mocks = vi.hoisted(() => ({
     },
     event: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn() },
     vaultFolder: { findFirst: vi.fn() },
+    fileSearchIndex: { create: vi.fn() },
   },
 }))
 vi.mock('@/lib/audit', () => ({
@@ -73,7 +74,7 @@ vi.mock('@/lib/security/file-validation', () => ({
   validateFileType: async () => ({ valid: true }),
 }))
 vi.mock('@/lib/integrations/webhooks', () => ({ enqueueFileReady: vi.fn() }))
-vi.mock('@/lib/ocr', () => ({ ocrQueue: { add: vi.fn() } }))
+vi.mock('@/lib/search/worker', () => ({ nudgeSearchIndex: vi.fn() }))
 
 const deadline = new Date('2099-10-06T15:30:00.000Z')
 const file = {

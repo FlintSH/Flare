@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     file: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     vaultFolder: { findFirst: vi.fn() },
+    fileSearchIndex: { create: vi.fn() },
     apiToken: { findUnique: vi.fn() },
     uploadProfile: { findFirst: vi.fn() },
   },
@@ -52,7 +53,7 @@ vi.mock('@/lib/security/file-validation', () => ({
 vi.mock('@/lib/integrations/webhooks', () => ({
   enqueueFileReady: mocks.enqueueFileReady,
 }))
-vi.mock('@/lib/ocr', () => ({ ocrQueue: { add: vi.fn() } }))
+vi.mock('@/lib/search/worker', () => ({ nudgeSearchIndex: vi.fn() }))
 
 const user: AuthenticatedUser = {
   id: 'alice',
@@ -183,6 +184,10 @@ describe('tags at the shared upload commit boundary', () => {
     expect(mocks.applyAutomaticTags.mock.invocationCallOrder[0]).toBeLessThan(
       mocks.enqueueFileReady.mock.invocationCallOrder[0]
     )
+    // Queued for search in the same transaction, so no file is ever missed.
+    expect(mocks.tx.fileSearchIndex.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ fileId: file.id, userId: 'alice' }),
+    })
   })
 
   it('uses the existing chunk assembly transaction without opening another transaction', async () => {

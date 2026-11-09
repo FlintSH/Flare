@@ -40,6 +40,8 @@ interface VirtualFilesProps {
   library: Library
   initialIndex: number
   chronological: boolean
+  /** Pixels each card adds below its details, such as search matches. */
+  cardExtraHeight?: number
   renderFile: (file: FileType) => ReactNode
   onVisibleFiles: (files: FileType[], firstIndex: number) => void
   onRefresh: () => void
@@ -50,6 +52,7 @@ export function VirtualFiles({
   library,
   initialIndex,
   chronological,
+  cardExtraHeight = 0,
   renderFile,
   onVisibleFiles,
   onRefresh,
@@ -148,10 +151,11 @@ export function VirtualFiles({
           ? 44
           : (dimensions.width - (dimensions.columns - 1) * 16) /
               dimensions.columns +
-            85)
+            85 +
+            cardExtraHeight)
       )
     },
-    [layout, dimensions, windowStart]
+    [layout, dimensions, windowStart, cardExtraHeight]
   )
   const topInset = Math.max(
     96,

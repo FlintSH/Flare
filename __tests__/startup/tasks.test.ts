@@ -22,6 +22,7 @@ for (const [path, name] of [
   ['@/lib/integrations/worker', 'startWebhookWorker'],
   ['@/lib/storage/deletion-worker', 'startStorageDeletionWorker'],
   ['@/lib/tags/worker', 'startOcrTagWorker'],
+  ['@/lib/search/worker', 'startSearchIndexWorker'],
   ['@/lib/startup/memory-monitor', 'startMemoryMonitor'],
 ])
   vi.doMock(path, () => ({
@@ -35,6 +36,7 @@ const workers = [
   'startAuditRetentionWorker',
   'startMailWorker',
   'startOcrTagWorker',
+  'startSearchIndexWorker',
   'startSecurityCleanupWorker',
   'startStorageDeletionWorker',
   'startWebhookWorker',

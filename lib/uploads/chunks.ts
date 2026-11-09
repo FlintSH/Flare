@@ -306,7 +306,7 @@ export async function completeChunkUpload(
       })
       return { file, created: true }
     })
-    if (result.created) enqueueUploadProcessing(result.file)
+    if (result.created) enqueueUploadProcessing()
     // Retain the bounded session briefly so a lost completion response can retry.
     return uploadLinks(result.file, user)
   } catch (error) {

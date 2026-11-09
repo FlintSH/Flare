@@ -2,12 +2,23 @@ import { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
 import { fileSort } from '@/lib/files/gallery-navigation'
-import { FileListInputError, fileListFilters } from '@/lib/files/list-filters'
+import {
+  FileListInputError,
+  libraryFileFilters,
+} from '@/lib/files/list-filters'
 import {
   type FileTimeline,
+  RELEVANCE_SORT,
   isDateOrder,
   isGrouping,
 } from '@/lib/library/contract'
+import type { SearchPlan } from '@/lib/search/query'
+
+function searchMatch(search: SearchPlan | null) {
+  return search
+    ? { searchMatch: search.partial ? ('some' as const) : ('every' as const) }
+    : {}
+}
 
 /** A database-clock read plus one aggregate; no file metadata or IDs are loaded. */
 export async function fileTimeline(
@@ -32,15 +43,35 @@ export async function fileTimeline(
   const snapshot = clock.snapshot.toISOString()
   const filters = new URLSearchParams(params)
   filters.set('snapshot', snapshot)
-  const { where, sql } = fileListFilters(userId, filters)
-  const sort = fileSort(params.get('sortBy') || 'newest')
-  if (!isDateOrder(sort)) {
-    const total = await prisma.file.count({ where })
+  const sortBy = params.get('sortBy') || 'newest'
+  const sort = fileSort(sortBy)
+  const undated = !isDateOrder(sort) || sortBy === RELEVANCE_SORT
+  // The timeline decides whether a search lists files with every word. An
+  // undated list counts both kinds in one pass, so it starts from files with
+  // some of the words and keeps the narrower list when it has any files.
+  if (undated) filters.set('searchMatch', 'some')
+  else filters.delete('searchMatch')
+  const { from, sql, search } = await libraryFileFilters(userId, filters)
+  // Best match ranks a search: one bucket, like other orders not by date.
+  if (!isDateOrder(sort) || (search && sortBy === RELEVANCE_SORT)) {
+    const both = search?.partial
+    const [{ total: count, every }] = await prisma.$queryRaw<
+      { total: bigint; every: bigint | null }[]
+    >(
+      Prisma.sql`SELECT COUNT(*) AS total, ${
+        both
+          ? Prisma.sql`COUNT(*) FILTER (WHERE ${search.match})`
+          : Prisma.sql`NULL`
+      } AS every FROM ${from} WHERE ${sql}`
+    )
+    if (search && both) search.partial = !Number(every)
+    const total = Number(search && both && Number(every) ? every : count)
     return {
       total,
       snapshot,
       groupBy: 'none',
       timezone,
+      ...searchMatch(search),
       buckets: total
         ? [{ key: 'all', from: null, to: null, count: total, offset: 0 }]
         : [],
@@ -65,7 +96,7 @@ export async function fileTimeline(
       COUNT(*) AS count
     FROM (
       SELECT date_trunc(${groupBy}, f."uploadedAt" AT TIME ZONE 'UTC' AT TIME ZONE ${timezone}) AS bucket
-      FROM "File" f WHERE ${sql}
+      FROM ${from} WHERE ${sql}
     ) dates
     GROUP BY bucket ORDER BY bucket ${order}
   `)
@@ -87,6 +118,7 @@ export async function fileTimeline(
     snapshot,
     groupBy: requestedGroup,
     timezone,
+    ...searchMatch(search),
     buckets,
   }
 }

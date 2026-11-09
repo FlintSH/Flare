@@ -7,6 +7,7 @@ import {
   type SortField,
   librarySort,
 } from '@/lib/library/contract'
+import { SEARCH_INDEX_STATES } from '@/lib/search/store'
 
 export const fileListSelect = {
   id: true,
@@ -26,16 +27,18 @@ export const fileListSelect = {
     select: { tag: { select: { id: true, name: true } } },
     orderBy: { tag: { normalizedName: 'asc' } },
   },
+  searchIndex: { select: { status: true, source: true, reason: true } },
 } satisfies Prisma.FileSelect
 
 /**
  * A list row as the API sends it: tag names flat, the password reduced to a
- * flag, and the pending expiry's time and action.
+ * flag, the pending expiry's time and action, and what search could read.
  */
 export function fileListItem(
   {
     password,
     tags,
+    searchIndex,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
   expiry: FileExpiry | null
@@ -43,6 +46,11 @@ export function fileListItem(
   return {
     ...file,
     tags: tags.map(({ tag }) => tag),
+    searchIndex: searchIndex && {
+      state: SEARCH_INDEX_STATES[searchIndex.status],
+      source: searchIndex.source,
+      reason: searchIndex.reason,
+    },
     hasPassword: Boolean(password),
     expiresAt: expiry?.expiresAt ?? null,
     expiryAction: expiry?.action ?? null,
@@ -51,12 +59,19 @@ export function fileListItem(
 
 type GalleryDirection = 'next' | 'previous'
 type GalleryAnchor = Pick<File, 'id' | SortField>
+type ColumnSort = FileSort & { field: SortField }
 
-/** What a `sortBy` value orders by. The API also sorts by name, which the library doesn't offer. */
-export function fileSort(sortBy: string): FileSort {
-  return sortBy === 'name'
-    ? { field: 'name', direction: 'asc' }
-    : librarySort(sortBy)
+/**
+ * What a `sortBy` value orders by in a list without a search. The API also
+ * sorts by name, which the library doesn't offer. Best match has nothing to
+ * rank without a search, so it lists newest first.
+ */
+export function fileSort(sortBy: string): ColumnSort {
+  if (sortBy === 'name') return { field: 'name', direction: 'asc' }
+  const sort = librarySort(sortBy)
+  return sort.field === 'relevance'
+    ? { field: 'uploadedAt', direction: 'desc' }
+    : { field: sort.field, direction: sort.direction }
 }
 
 export function fileOrderBy(
@@ -78,7 +93,7 @@ export function fileOrderBy(
 
 function galleryBoundary(
   anchor: GalleryAnchor,
-  sort: FileSort,
+  sort: ColumnSort,
   direction: GalleryDirection
 ): Prisma.FileWhereInput {
   const comparison =

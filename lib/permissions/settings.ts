@@ -13,6 +13,7 @@ const generalPermissions: Record<string, Permission> = {
   registrations: 'settings.security',
   credits: 'settings.general',
   ocr: 'settings.general',
+  search: 'settings.general',
 }
 export function settingsPatchAllowed(
   subject: { permissions?: readonly string[] },

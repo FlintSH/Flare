@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react'
@@ -16,6 +17,7 @@ import {
   CheckSquare,
   FolderOpen,
   RefreshCw,
+  ScanText,
   SearchX,
   Tag,
   Upload,
@@ -36,8 +38,13 @@ import {
   FILE_ACTIONS,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
+import { MATCH_DETAILS_HEIGHT } from '@/components/dashboard/file-card/match-details'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
-import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
+import {
+  FileFilters,
+  SIZE_PRESETS,
+} from '@/components/dashboard/file-grid/file-filters'
+import { SearchIndexStatus } from '@/components/dashboard/file-grid/search-index-status'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { VirtualFiles } from '@/components/dashboard/file-grid/virtual-files'
 import { ImageLightbox } from '@/components/file/image-lightbox'
@@ -57,10 +64,11 @@ import {
 } from '@/lib/library/changes'
 import {
   BATCH_LIMIT,
-  DEFAULT_SORT,
+  INDEX_FILTERS,
   UNFILED,
   UNTAGGED,
   VISIBILITY_FILTERS,
+  defaultSort,
   folderDestination,
   isDateOrder,
   librarySort,
@@ -68,6 +76,8 @@ import {
 } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
+import { parseSearch } from '@/lib/search/text'
+import { formatBytes } from '@/lib/utils'
 
 import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
@@ -88,6 +98,18 @@ import { toast } from '@/hooks/use-toast'
 // keep their shape on light panels.
 const filterChipClassName =
   'rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs'
+
+function sizeLabel(minSize: number | null, maxSize: number | null) {
+  const preset = SIZE_PRESETS.find(
+    (option) => option.min === minSize && option.max === maxSize
+  )
+  if (preset) return preset.label
+  if (minSize !== null && maxSize !== null)
+    return `${formatBytes(minSize)} to ${formatBytes(maxSize)}`
+  return minSize !== null
+    ? `${formatBytes(minSize)} and larger`
+    : `Up to ${formatBytes(maxSize ?? 0)}`
+}
 
 function emptyFolderHint(user: PermissionSubject | null | undefined) {
   const upload = allows(user, ['uploadFiles', 'fileIntoFolder'])
@@ -187,10 +209,22 @@ function FileLibrary({ scope }: { scope: string }) {
     setTypes,
     setDateRange,
     setVisibility,
+    setIndexFilter,
+    setSizeRange,
     setSortBy,
     setGroupBy,
     resetFilters,
   } = useFileFilters()
+  const searching = !!filters.search.trim()
+  // Cards explain matches while searching, and index states while filtering by them.
+  const showMatch = searching || filters.index.length > 0
+  const highlight = useMemo(
+    () =>
+      parseSearch(filters.search).positive.filter(
+        (term) => term.field === 'any' || term.field === 'name'
+      ),
+    [filters.search]
+  )
   const { position: anchorIndex, record: recordPosition } =
     useFileLibraryPosition(filters, pathname, urlQuery, refreshFiles, scope)
   const library = useFileTimeline(filters, refreshKey, scope)
@@ -255,11 +289,14 @@ function FileLibrary({ scope }: { scope: string }) {
     navigationPending,
     navigationStale,
   } = useImageGallery(filters, files, refreshKey)
+  const sized = filters.minSize !== null || filters.maxSize !== null
   const hasActiveFilters = Boolean(
     filters.tag ||
     filters.search ||
     filters.types.length ||
     filters.visibility.length ||
+    filters.index.length ||
+    sized ||
     filters.dateFrom ||
     filters.dateTo
   )
@@ -272,6 +309,8 @@ function FileLibrary({ scope }: { scope: string }) {
     !filters.search &&
     !filters.types.length &&
     !filters.visibility.length &&
+    !filters.index.length &&
+    !sized &&
     !filters.dateFrom &&
     !filters.dateTo
 
@@ -375,6 +414,10 @@ function FileLibrary({ scope }: { scope: string }) {
             onGroupChange={setGroupBy}
             visibility={filters.visibility}
             onVisibilityChange={setVisibility}
+            searching={searching}
+            minSize={filters.minSize}
+            maxSize={filters.maxSize}
+            onSizeChange={setSizeRange}
             tagFilter={
               <TagFilter
                 value={filters.tag || null}
@@ -384,8 +427,19 @@ function FileLibrary({ scope }: { scope: string }) {
             }
           />
         </div>
+        <SearchIndexStatus
+          search={filters.search}
+          index={filters.index}
+          onShowIndex={setIndexFilter}
+        />
+        {searching && timeline?.searchMatch === 'some' && (
+          <p className="mt-2 text-pretty text-xs text-muted-foreground">
+            No file has every word, so these files have some of them, best
+            matches first. Each card shows the words it’s missing.
+          </p>
+        )}
         {(hasActiveFilters ||
-          filters.sortBy !== DEFAULT_SORT ||
+          filters.sortBy !== defaultSort(filters.search) ||
           filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {filters.tag && (
@@ -409,6 +463,31 @@ function FileLibrary({ scope }: { scope: string }) {
               <span className={filterChipClassName}>
                 {filters.types.length} file{' '}
                 {filters.types.length === 1 ? 'type' : 'types'}
+              </span>
+            )}
+            {filters.index.map((value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() =>
+                  setIndexFilter(filters.index.filter((item) => item !== value))
+                }
+                aria-label={`Remove ${INDEX_FILTERS.find((filter) => filter.value === value)?.label} filter`}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ScanText className="h-3 w-3 shrink-0" />
+                <span className="truncate">
+                  {
+                    INDEX_FILTERS.find((filter) => filter.value === value)
+                      ?.label
+                  }
+                </span>
+                <X className="h-3 w-3 shrink-0" />
+              </button>
+            ))}
+            {sized && (
+              <span className={filterChipClassName}>
+                {sizeLabel(filters.minSize, filters.maxSize)}
               </span>
             )}
             {filters.visibility.map((value) => (
@@ -572,7 +651,7 @@ function FileLibrary({ scope }: { scope: string }) {
                 ? 'All your files are still together in your vault.'
                 : 'Add this tag from a file’s menu, select several files, or give it an automatic rule in Manage tags.'
               : hasActiveFilters
-                ? 'Try another file name or reset your filters to see everything in your library.'
+                ? 'Try fewer or shorter words, or reset your filters. Search looks in names, tags, folders and the text Flare has read from your files.'
                 : filters.folder === UNFILED
                   ? 'All your files are organized into folders. You can always find them in All files.'
                   : filters.folder
@@ -611,6 +690,7 @@ function FileLibrary({ scope }: { scope: string }) {
             selectionBarRef={selectionBar}
             initialIndex={anchorIndex.current}
             chronological={isDateOrder(librarySort(filters.sortBy))}
+            cardExtraHeight={showMatch ? MATCH_DETAILS_HEIGHT : 0}
             onVisibleFiles={onVisibleFiles}
             onRefresh={refreshFiles}
             renderFile={(file) => (
@@ -642,6 +722,8 @@ function FileLibrary({ scope }: { scope: string }) {
                 onTagSelect={setTag}
                 selected={selectedIds.includes(file.id)}
                 onSelect={selecting ? () => toggleFile(file) : undefined}
+                showMatch={showMatch}
+                highlight={highlight}
               />
             )}
           />

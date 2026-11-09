@@ -143,10 +143,13 @@ describe('file library filtering and gallery order', () => {
     )
   })
 
-  it('combines MIME type with search, dates, and visibility in a stable page order', async () => {
+  // Searches are matched and ordered in SQL; __tests__/search/database.test.ts
+  // covers them against PostgreSQL.
+  it('combines MIME type, dates, visibility, size and index status in a stable page order', async () => {
     const query = new URLSearchParams({
-      search: 'holiday',
       types: 'image/jpeg',
+      minSize: String(2 * 1024 * 1024),
+      index: 'failed,waiting',
       dateFrom: '2026-01-01T00:00:00.000Z',
       visibility: 'private,hasPassword',
       sortBy: 'oldest',
@@ -160,15 +163,16 @@ describe('file library filtering and gallery order', () => {
     const where = {
       userId: 'library-owner',
       AND: [
-        {
-          OR: [
-            { name: { contains: 'holiday', mode: 'insensitive' } },
-            { ocrText: { contains: 'holiday', mode: 'insensitive' } },
-          ],
-        },
         { mimeType: { in: ['image/jpeg'] } },
         { uploadedAt: { gte: new Date('2026-01-01T00:00:00.000Z') } },
         { OR: [{ visibility: 'PRIVATE' }, { password: { not: null } }] },
+        // Files record sizes in megabytes.
+        { size: { gte: 2 } },
+        {
+          searchIndex: {
+            status: { in: ['FAILED', 'PENDING', 'PROCESSING'] },
+          },
+        },
       ],
     }
     expect(mocks.file.count).toHaveBeenCalledWith({ where })

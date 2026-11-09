@@ -34,7 +34,7 @@
         "operationId": "listFiles",
         "summary": "List and search your files",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits.",
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits. With a search, each file also has a match object explaining why it matched; every file has searchIndex, what the search index read from it. Search runs on this server; Flare sends no file contents to other services.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "responses": {
@@ -61,7 +61,12 @@
                       "tags": [],
                       "hasPassword": false,
                       "expiresAt": null,
-                      "expiryAction": null
+                      "expiryAction": null,
+                      "searchIndex": {
+                        "state": "indexed",
+                        "source": "ocr",
+                        "reason": null
+                      }
                     }
                   ],
                   "pagination": {
@@ -90,7 +95,7 @@
             }
           },
           "400": {
-            "description": "Invalid page, limit, gallery pair, date, snapshot, visibility, or selected-ID filter.",
+            "description": "Invalid page, limit, gallery pair, date, snapshot, visibility, size, index, searchMatch, search length, or selected-ID filter.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ApiError" }
@@ -165,14 +170,18 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Case-insensitive filename or OCR-text match.",
-            "schema": { "type": "string" }
+            "description": "Words to find in filenames, tag names, folder paths (parent folders included), and text Flare read from the files (image text, PDFs, Office and OpenDocument files, text files and archive member names). Case, Latin accents and filename separators are ignored. Every word must match somewhere; when no file has every plain word, files with some of them are listed and each file's match.missing names the absent words. Supports \"quoted phrases\", -exclusions, and name:, text:, tag:, folder: (or in:), type: (or ext:) prefixes. At most 500 characters; only the first 12 terms count.",
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "example": "invoice lisbon -draft"
           },
           {
             "name": "sortBy",
             "in": "query",
             "required": false,
-            "description": "Sort order; unknown values fall back to newest.",
+            "description": "Sort order; unknown values fall back to newest. relevance orders a search by how well files match, newest first among equals; without a search it lists newest first. The default stays newest when sortBy is omitted, even with a search.",
             "schema": {
               "type": "string",
               "default": "newest",
@@ -185,7 +194,8 @@
                 "most-viewed",
                 "least-viewed",
                 "most-downloaded",
-                "least-downloaded"
+                "least-downloaded",
+                "relevance"
               ]
             }
           },
@@ -216,6 +226,48 @@
             "required": false,
             "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "minSize",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive lower size bound in bytes (whole number, at most 2^50).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1125899906842624
+            }
+          },
+          {
+            "name": "maxSize",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper size bound in bytes (whole number, at most 2^50).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1125899906842624
+            }
+          },
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated search index states: waiting, indexed, empty, failed, skipped, unsupported. Multiple values are ORed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "failed"
+          },
+          {
+            "name": "searchMatch",
+            "in": "query",
+            "required": false,
+            "description": "every or some: whether a multi-word search lists files with every word or with some of them. Send the timeline response's searchMatch unchanged with each window request; without it, the list decides from the data on every request.",
+            "schema": {
+              "type": "string",
+              "enum": ["every", "some"]
+            }
           },
           {
             "name": "folder",
@@ -1281,7 +1333,7 @@
         "operationId": "getFileTimeline",
         "summary": "Count file timeline buckets across your account",
         "tags": ["Files"],
-        "description": "Database-aggregated counts only; no file metadata. Uses the same account-scoped filters as GET /api/files. Returns a fresh upload-time snapshot ceiling and nonempty calendar buckets, ordered newest or oldest. For non-date sorts returns one undated bucket. Fetch each visible window through GET /api/files with the same filters, snapshot, and date range intersected with the bucket. The snapshot does not freeze edits, deletions, or backdated inserts.",
+        "description": "Database-aggregated counts only; no file metadata. Uses the same account-scoped filters as GET /api/files. Returns a fresh upload-time snapshot ceiling and nonempty calendar buckets, ordered newest or oldest. For non-date sorts returns one undated bucket. Fetch each visible window through GET /api/files with the same filters, snapshot, and date range intersected with the bucket. The snapshot does not freeze edits, deletions, or backdated inserts. A search ordered by relevance has one undated bucket, and the response says whether its files have every word (searchMatch).",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "x-flare-permissions": ["files.read"],
@@ -1311,14 +1363,18 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Case-insensitive filename or OCR-text match.",
-            "schema": { "type": "string" }
+            "description": "Words to find in filenames, tag names, folder paths (parent folders included), and text Flare read from the files (image text, PDFs, Office and OpenDocument files, text files and archive member names). Case, Latin accents and filename separators are ignored. Every word must match somewhere; when no file has every plain word, files with some of them are listed and each file's match.missing names the absent words. Supports \"quoted phrases\", -exclusions, and name:, text:, tag:, folder: (or in:), type: (or ext:) prefixes. At most 500 characters; only the first 12 terms count.",
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "example": "invoice lisbon -draft"
           },
           {
             "name": "sortBy",
             "in": "query",
             "required": false,
-            "description": "Sort order; unknown values fall back to newest.",
+            "description": "Sort order; unknown values fall back to newest. relevance orders a search by how well files match, newest first among equals; without a search it lists newest first. The default stays newest when sortBy is omitted, even with a search.",
             "schema": {
               "type": "string",
               "default": "newest",
@@ -1331,7 +1387,8 @@
                 "most-viewed",
                 "least-viewed",
                 "most-downloaded",
-                "least-downloaded"
+                "least-downloaded",
+                "relevance"
               ]
             }
           },
@@ -1362,6 +1419,38 @@
             "required": false,
             "description": "Comma-separated public, private, hasPassword. Conditions within this filter are ORed.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "minSize",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive lower size bound in bytes (whole number, at most 2^50).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1125899906842624
+            }
+          },
+          {
+            "name": "maxSize",
+            "in": "query",
+            "required": false,
+            "description": "Inclusive upper size bound in bytes (whole number, at most 2^50).",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 1125899906842624
+            }
+          },
+          {
+            "name": "index",
+            "in": "query",
+            "required": false,
+            "description": "Comma-separated search index states: waiting, indexed, empty, failed, skipped, unsupported. Multiple values are ORed.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "failed"
           },
           {
             "name": "folder",
@@ -1445,7 +1534,7 @@
             }
           },
           "400": {
-            "description": "Invalid groupBy, timezone, date, or visibility filter.",
+            "description": "Invalid groupBy, timezone, date, visibility, size, index, or search length.",
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/ApiError" }
@@ -1467,6 +1556,95 @@
                 "schema": { "$ref": "#/components/schemas/Error" },
                 "example": {
                   "error": "You do not have permission to perform this action."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/files/search-index": {
+      "get": {
+        "operationId": "getSearchIndexSummary",
+        "summary": "How much of your library search has read",
+        "tags": ["Files"],
+        "description": "Requires the files:read scope. Counts your files by search index state and says whether this instance reads image text and documents. Asking to read files again (POST) needs a browser session.",
+        "security": [
+          {
+            "BearerAuth": []
+          }
+        ],
+        "x-flare-scope": "files:read",
+        "x-flare-permissions": ["files.read"],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchIndexSummaryResponse"
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "total": 24,
+                    "counts": {
+                      "waiting": 0,
+                      "indexed": 17,
+                      "empty": 2,
+                      "failed": 2,
+                      "skipped": 0,
+                      "unsupported": 3
+                    },
+                    "reads": {
+                      "imageText": true,
+                      "documents": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string"
+                },
+                "example": "private, no-store"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated account lacks the required current role permission.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "You do not have permission to perform this action."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
                 }
               }
             }
@@ -2070,6 +2248,27 @@
             "type": ["string", "null"],
             "enum": ["DELETE", "SET_PRIVATE", null],
             "description": "What the pending expiration at expiresAt does: deletes the file or makes it private. Null when none is pending."
+          },
+          "searchIndex": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FileSearchIndex"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "match": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FileMatch"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only when the request has a search."
           }
         },
         "required": [
@@ -2293,6 +2492,209 @@
               "buckets": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/FileTimelineBucket" }
+              },
+              "searchMatch": {
+                "type": "string",
+                "enum": ["every", "some"],
+                "description": "With a search only: every when the files have every word, some when none did and the list holds files with some of them. Pass it to window requests as searchMatch."
+              }
+            }
+          }
+        }
+      },
+      "TextSegment": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "match": {
+            "type": "boolean",
+            "enum": [true],
+            "description": "Present on text that matched a search word."
+          }
+        }
+      },
+      "FileSearchIndex": {
+        "type": "object",
+        "required": ["state", "source", "reason"],
+        "description": "What Flare could read from the file for search.",
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "waiting",
+              "indexed",
+              "empty",
+              "failed",
+              "skipped",
+              "unsupported"
+            ]
+          },
+          "source": {
+            "type": ["string", "null"],
+            "enum": ["ocr", "text", "pdf", "document", "archive", null],
+            "description": "Where the text came from."
+          },
+          "reason": {
+            "type": ["string", "null"],
+            "description": "Why there is no text, written for people. Never contains storage paths or parser errors."
+          }
+        }
+      },
+      "FileMatch": {
+        "type": "object",
+        "required": ["name", "tags", "folder", "content", "entries", "missing"],
+        "description": "Why a file matched a search. Only on list results with a search.",
+        "properties": {
+          "name": {
+            "type": "boolean",
+            "description": "A search word is in the filename."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "name"],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "The file's tags that matched."
+          },
+          "folder": {
+            "type": ["object", "null"],
+            "required": ["id", "path"],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string",
+                "description": "Folder names from the top, joined with \" / \"."
+              }
+            }
+          },
+          "content": {
+            "type": ["object", "null"],
+            "required": ["source", "snippet"],
+            "properties": {
+              "source": {
+                "type": "string",
+                "enum": ["ocr", "text", "pdf", "document"]
+              },
+              "snippet": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TextSegment"
+                },
+                "description": "About 160 characters around the matches; \"…\" segments mark cut text."
+              }
+            }
+          },
+          "entries": {
+            "type": ["object", "null"],
+            "required": ["paths", "more"],
+            "properties": {
+              "paths": {
+                "type": "array",
+                "maxItems": 3,
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TextSegment"
+                  }
+                }
+              },
+              "more": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "description": "Archive members whose paths matched."
+          },
+          "missing": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Search words this file lacks, folded to lower case without accents. Empty unless no file had every word."
+          }
+        }
+      },
+      "SearchIndexSummaryResponse": {
+        "type": "object",
+        "required": ["success", "data"],
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [true]
+          },
+          "data": {
+            "type": "object",
+            "required": ["total", "counts", "reads"],
+            "properties": {
+              "total": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Files in your library."
+              },
+              "counts": {
+                "type": "object",
+                "required": [
+                  "waiting",
+                  "indexed",
+                  "empty",
+                  "failed",
+                  "skipped",
+                  "unsupported"
+                ],
+                "properties": {
+                  "waiting": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "indexed": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "empty": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "failed": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "skipped": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "unsupported": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              },
+              "reads": {
+                "type": "object",
+                "required": ["imageText", "documents"],
+                "properties": {
+                  "imageText": {
+                    "type": "boolean",
+                    "description": "Background OCR is on."
+                  },
+                  "documents": {
+                    "type": "boolean",
+                    "description": "Document reading is on."
+                  }
+                }
               }
             }
           }

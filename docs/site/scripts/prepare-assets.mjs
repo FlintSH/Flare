@@ -115,6 +115,7 @@ for (const [directory, name] of [
   ['vault-folders', 'sharing-demo'],
   ['vault-folders', 'protected-file-demo'],
   ['roles', 'roles-demo'],
+  ['search', 'search-demo'],
 ]) {
   await copyFile(
     resolve(root, '../../.github/assets', directory, `${name}.mp4`),

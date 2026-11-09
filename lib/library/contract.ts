@@ -18,11 +18,16 @@ export const BATCH_LIMIT = 100
 
 export type SortField = 'uploadedAt' | 'size' | 'views' | 'downloads' | 'name'
 export interface FileSort {
-  field: SortField
+  /** `relevance` orders search results by how well they match. */
+  field: SortField | 'relevance'
   direction: 'asc' | 'desc'
 }
 
-/** The library's orders as its menu lists them. The first is the default. */
+/**
+ * The library's orders as its menu lists them. The first is the default
+ * without a search; the last, Best match, is the default with one and only
+ * applies to searches.
+ */
 export const SORT_OPTIONS = [
   {
     value: 'newest',
@@ -72,10 +77,22 @@ export const SORT_OPTIONS = [
     field: 'downloads',
     direction: 'asc',
   },
+  {
+    value: 'relevance',
+    label: 'Best match',
+    field: 'relevance',
+    direction: 'desc',
+  },
 ] as const satisfies readonly (FileSort & { value: string; label: string })[]
 export type SortOption = (typeof SORT_OPTIONS)[number]['value']
 /** Addresses leave this order out. */
 export const DEFAULT_SORT = SORT_OPTIONS[0].value
+export const RELEVANCE_SORT = 'relevance' satisfies SortOption
+
+/** The order a library address without `sortBy` uses. */
+export function defaultSort(search: string): SortOption {
+  return search.trim() ? RELEVANCE_SORT : DEFAULT_SORT
+}
 
 /** The library order a `sortBy` value names; anything else is the default. */
 export function librarySort(sortBy: string | null) {
@@ -113,6 +130,20 @@ export const VISIBILITY_FILTERS = [
 }[]
 export type VisibilityFilter = (typeof VISIBILITY_FILTERS)[number]['value']
 
+/** What the search index knows about a file, as filters and the API name it. */
+export const INDEX_FILTERS = [
+  { value: 'waiting', label: 'Waiting to be read' },
+  { value: 'indexed', label: 'Text found' },
+  { value: 'empty', label: 'No text found' },
+  { value: 'failed', label: 'Couldn’t be read' },
+  { value: 'skipped', label: 'Skipped' },
+  { value: 'unsupported', label: 'Contents not searchable' },
+] as const
+export type IndexFilter = (typeof INDEX_FILTERS)[number]['value']
+
+/** Bytes. The largest size filter a request may name. */
+export const MAX_SIZE_FILTER = 2 ** 50
+
 /** The view a library address shows. */
 export interface LibraryFilters {
   folder: string | null
@@ -120,6 +151,11 @@ export interface LibraryFilters {
   search: string
   types: string[]
   visibility: VisibilityFilter[]
+  /** Search index states; files in any of them match. */
+  index: IndexFilter[]
+  /** Bytes, inclusive. */
+  minSize: number | null
+  maxSize: number | null
   dateFrom: string | null
   dateTo: string | null
   sortBy: SortOption
@@ -137,6 +173,16 @@ function positiveInteger(value: string | null, fallback: number) {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function size(value: string | null) {
+  if (value === null || value === '') return null
+  const parsed = Number(value)
+  return Number.isSafeInteger(parsed) &&
+    parsed >= 0 &&
+    parsed <= MAX_SIZE_FILTER
+    ? parsed
+    : null
+}
+
 function validDate(value: string | null) {
   if (!value) return null
   const date = new Date(value)
@@ -145,13 +191,16 @@ function validDate(value: string | null) {
 
 /** The view an address's query names, ignoring values the library doesn't offer. */
 export function readLibraryFilters(params: URLSearchParams): LibraryFilters {
-  const sort = librarySort(params.get('sortBy'))
+  const search = params.get('search') || ''
+  let sort = librarySort(params.get('sortBy') ?? defaultSort(search))
+  // Best match ranks a search; without one there's nothing to rank by.
+  if (sort.value === RELEVANCE_SORT && !search.trim()) sort = SORT_OPTIONS[0]
   const groupBy = params.get('groupBy')
   return {
     folder: params.get('folder') || null,
     tag: params.get('tag') || null,
     groupBy: isGrouping(groupBy) && isDateOrder(sort) ? groupBy : 'none',
-    search: params.get('search') || '',
+    search,
     types: [...new Set(params.get('types')?.split(',').filter(Boolean) || [])],
     dateFrom: validDate(params.get('dateFrom')),
     dateTo: validDate(params.get('dateTo')),
@@ -165,6 +214,18 @@ export function readLibraryFilters(params: URLSearchParams): LibraryFilters {
           ) || []
       ),
     ],
+    index: [
+      ...new Set(
+        params
+          .get('index')
+          ?.split(',')
+          .filter((value): value is IndexFilter =>
+            INDEX_FILTERS.some((filter) => filter.value === value)
+          ) || []
+      ),
+    ],
+    minSize: size(params.get('minSize')),
+    maxSize: size(params.get('maxSize')),
     sortBy: sort.value,
     page: positiveInteger(params.get('page'), 1),
     limit: Math.min(
@@ -186,7 +247,11 @@ export function libraryQuery(filters: LibraryFilters): string {
   if (filters.dateTo) params.set('dateTo', filters.dateTo)
   if (filters.visibility.length)
     params.set('visibility', filters.visibility.join(','))
-  if (filters.sortBy !== DEFAULT_SORT) params.set('sortBy', filters.sortBy)
+  if (filters.index.length) params.set('index', filters.index.join(','))
+  if (filters.minSize !== null) params.set('minSize', String(filters.minSize))
+  if (filters.maxSize !== null) params.set('maxSize', String(filters.maxSize))
+  if (filters.sortBy !== defaultSort(filters.search))
+    params.set('sortBy', filters.sortBy)
   if (filters.page !== 1) params.set('page', filters.page.toString())
   if (filters.limit !== DEFAULT_PAGE_SIZE)
     params.set('limit', filters.limit.toString())
@@ -226,6 +291,9 @@ export function listQuery(filters: LibraryFilters): URLSearchParams {
     ...(filters.visibility.length > 0 && {
       visibility: filters.visibility.join(','),
     }),
+    ...(filters.index.length > 0 && { index: filters.index.join(',') }),
+    ...(filters.minSize !== null && { minSize: String(filters.minSize) }),
+    ...(filters.maxSize !== null && { maxSize: String(filters.maxSize) }),
   })
 }
 
@@ -249,6 +317,11 @@ export interface FileTimeline {
   groupBy: FileGrouping
   timezone: string
   buckets: FileTimelineBucket[]
+  /**
+   * With a search: `every` when the files have every word, `some` when none
+   * did and the list holds files with some of them. Absent without a search.
+   */
+  searchMatch?: 'every' | 'some'
 }
 
 /**
@@ -258,7 +331,7 @@ export interface FileTimeline {
  */
 export function timelineWindow(
   filters: LibraryFilters,
-  timeline: Pick<FileTimeline, 'snapshot'>,
+  timeline: Pick<FileTimeline, 'snapshot' | 'searchMatch'>,
   bucket: FileTimelineBucket,
   page: number,
   pageSize: number
@@ -267,6 +340,7 @@ export function timelineWindow(
   query.set('page', String(page))
   query.set('limit', String(pageSize))
   query.set('snapshot', timeline.snapshot)
+  if (timeline.searchMatch) query.set('searchMatch', timeline.searchMatch)
   if (bucket.from && bucket.to) {
     query.set(
       'dateFrom',

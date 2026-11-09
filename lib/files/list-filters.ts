@@ -1,12 +1,19 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, type SearchIndexStatus } from '@prisma/client'
 
+import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import {
   BATCH_LIMIT,
+  INDEX_FILTERS,
+  MAX_SIZE_FILTER,
   UNFILED,
   UNTAGGED,
   VISIBILITY_FILTERS,
 } from '@/lib/library/contract'
+import { type SearchPlan, planSearch } from '@/lib/search/query'
+import { SEARCH_INDEX_STATES } from '@/lib/search/store'
+import { MAX_SEARCH_LENGTH } from '@/lib/search/text'
+import { bytesToMB } from '@/lib/utils/size'
 
 export class FileListInputError extends HttpError {
   constructor(message: string) {
@@ -22,7 +29,10 @@ function dateValue(value: string, name: string): Date {
   return date
 }
 
-/** Keep metadata pages and SQL timeline counts on exactly the same predicates. */
+/**
+ * Keep metadata pages and SQL timeline counts on exactly the same predicates.
+ * Everything but the search; {@link libraryFileFilters} adds that.
+ */
 export function fileListFilters(userId: string, params: URLSearchParams) {
   const conditions: Prisma.FileWhereInput[] = []
   const sqlConditions: Prisma.Sql[] = [Prisma.sql`f."userId" = ${userId}`]
@@ -77,18 +87,6 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
             AND ft.excluded = false AND tag."userId" = ${userId})`
       )
   }
-
-  const search = params.get('search') || ''
-  if (search)
-    add(
-      {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { ocrText: { contains: search, mode: 'insensitive' } },
-        ],
-      },
-      Prisma.sql`(f.name ILIKE ${`%${search}%`} OR f."ocrText" ILIKE ${`%${search}%`})`
-    )
 
   const types = params.get('types')?.split(',') || []
   if (types.length)
@@ -148,16 +146,110 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
     )
   }
 
+  for (const [name, bound] of [
+    ['minSize', 'gte'],
+    ['maxSize', 'lte'],
+  ] as const) {
+    const value = params.get(name)
+    if (value === null || value === '') continue
+    const bytes = Number(value)
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || bytes > MAX_SIZE_FILTER)
+      throw new FileListInputError(`${name} must be a whole number of bytes`)
+    // Files record their sizes in megabytes.
+    const megabytes = bytesToMB(bytes)
+    add(
+      { size: { [bound]: megabytes } },
+      bound === 'gte'
+        ? Prisma.sql`f.size >= ${megabytes}`
+        : Prisma.sql`f.size <= ${megabytes}`
+    )
+  }
+
+  const index = params.get('index')?.split(',').filter(Boolean) || []
+  if (index.length) {
+    const statuses = new Set<SearchIndexStatus>()
+    for (const value of index) {
+      const matching = Object.entries(SEARCH_INDEX_STATES)
+        .filter(([, state]) => state === value)
+        .map(([status]) => status as SearchIndexStatus)
+      if (!matching.length)
+        throw new FileListInputError(
+          `index must name ${INDEX_FILTERS.map((filter) => filter.value).join(', ')}`
+        )
+      for (const status of matching) statuses.add(status)
+    }
+    add(
+      { searchIndex: { status: { in: [...statuses] } } },
+      Prisma.sql`EXISTS (SELECT 1 FROM "FileSearchIndex" si
+        WHERE si."fileId" = f.id
+          AND si.status::text IN (${Prisma.join([...statuses])}))`
+    )
+  }
+
   const snapshotValue = params.get('snapshot')
-  if (snapshotValue) {
-    const snapshot = dateValue(snapshotValue, 'snapshot')
+  const snapshot = snapshotValue ? dateValue(snapshotValue, 'snapshot') : null
+  if (snapshot)
     add(
       { uploadedAt: { lte: snapshot } },
       Prisma.sql`f."uploadedAt" <= ${snapshot}`
     )
-  }
 
   const where: Prisma.FileWhereInput = { userId }
   if (conditions.length) where.AND = conditions
-  return { where, sql: Prisma.join(sqlConditions, ' AND ') }
+  return { where, sql: Prisma.join(sqlConditions, ' AND '), snapshot }
+}
+
+export type LibraryFileFilters =
+  | {
+      /** The matching files, for Prisma. */
+      where: Prisma.FileWhereInput
+      /** The same files: `SELECT … FROM ${from} WHERE ${sql}`, with `File` as `f`. */
+      from: Prisma.Sql
+      sql: Prisma.Sql
+      search: null
+    }
+  | {
+      /** A search can only be expressed in SQL. */
+      where: null
+      from: Prisma.Sql
+      sql: Prisma.Sql
+      search: SearchPlan
+    }
+
+/**
+ * Every filter of a list request, including its search. A search needs the
+ * owner's tags and folders, so this reads them once.
+ */
+export async function libraryFileFilters(
+  userId: string,
+  params: URLSearchParams
+): Promise<LibraryFileFilters> {
+  const { where, sql, snapshot } = fileListFilters(userId, params)
+  const search = params.get('search') || ''
+  if (search.length > MAX_SEARCH_LENGTH)
+    throw new FileListInputError(
+      `search must be at most ${MAX_SEARCH_LENGTH} characters`
+    )
+  const plan = search ? await planSearch(userId, search, snapshot) : null
+  if (!plan) return { where, from: Prisma.sql`"File" f`, sql, search: null }
+  const decided = params.get('searchMatch')
+  if (decided !== null && decided !== 'every' && decided !== 'some')
+    throw new FileListInputError('searchMatch must be every or some')
+  if (plan.someMatch) {
+    // The timeline decides once from the data and its pages repeat its answer,
+    // so they agree and don't look again; other requests look themselves.
+    if (decided) plan.partial = decided === 'some'
+    else {
+      const [{ found }] = await prisma.$queryRaw<{ found: boolean }[]>(
+        Prisma.sql`SELECT EXISTS (SELECT 1 FROM ${plan.from} WHERE ${sql} AND ${plan.match}) AS found`
+      )
+      plan.partial = !found
+    }
+  }
+  return {
+    where: null,
+    from: plan.from,
+    sql: Prisma.sql`${sql} AND ${plan.partial ? plan.someMatch! : plan.match}`,
+    search: plan,
+  }
 }

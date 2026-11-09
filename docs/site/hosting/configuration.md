@@ -168,7 +168,8 @@ These defaults describe a new instance before your setup choices. Existing insta
 | Public registration             | Enabled; empty disabled message                                       | [Access and users](/admin/users)                                  |
 | Invite member limits            | 5 active invites per person; 1 use per invite; 30-day longest expiry  | [Invite links](/admin/users#set-member-limits)                    |
 | Let everyone create invites     | Off; stored as the Everyone role's `invites.create` grant             | [Invite links](/admin/users#choose-who-can-invite)                |
-| Background OCR                  | Enabled                                                               | [General settings](/admin/#general)                               |
+| Recognize text in images (OCR)  | Enabled                                                               | [Search settings](/admin/#search)                                 |
+| Read documents for search       | Enabled                                                               | [Search settings](/admin/#search)                                 |
 | Credits footer                  | Shown                                                                 | [Appearance](/admin/appearance)                                   |
 | Storage provider                | Local                                                                 | [Storage](/hosting/storage)                                       |
 | S3 credentials / endpoint       | Empty; force path style off                                           | [S3](/hosting/storage#s3-compatible-storage)                      |

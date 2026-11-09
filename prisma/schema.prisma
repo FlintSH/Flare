@@ -257,10 +257,53 @@ model File {
   tags             VaultFileTag[]
   folderId         String?        @map("vaultFolderId")
   folder           VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  searchIndex      FileSearchIndex?
 
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
+}
+
+enum SearchIndexStatus {
+  PENDING
+  PROCESSING
+  INDEXED
+  EMPTY
+  FAILED
+  SKIPPED
+  UNSUPPORTED
+}
+
+// What Flare read from a file's contents for search; names, tags and folders
+// are matched live. Rows are work items for the search index worker too.
+model FileSearchIndex {
+  fileId      String                   @id
+  // The file's owner, so content matches stay inside one library.
+  userId      String
+  status      SearchIndexStatus        @default(PENDING)
+  // ocr, text, pdf, document or archive.
+  source      String?
+  // Extracted text, capped; snippets come from here.
+  content     String?
+  // Archive member paths, one per line.
+  entries     String?
+  // Content weighted C and member paths weighted D; written with raw SQL.
+  vector      Unsupported("tsvector")?
+  // Why there is no text: shown to the owner, never a storage or parser error.
+  reason      String?
+  attempts    Int                      @default(0)
+  // The extractor version that produced this row; older rows are read again.
+  version     Int                      @default(0)
+  availableAt DateTime                 @default(now())
+  leaseId     String?
+  leaseUntil  DateTime?
+  indexedAt   DateTime?
+  updatedAt   DateTime                 @updatedAt
+  file        File                     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([userId, status])
+  @@index([vector], type: Gin)
 }
 
 // Independent of retired Folder tables: folders organize existing files without

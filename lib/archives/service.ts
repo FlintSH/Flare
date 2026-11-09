@@ -711,7 +711,7 @@ export async function extractArchive(
         maxWait: Math.min(10_000, operation.transactionTimeout()),
       }
     )
-    for (const file of result.files) enqueueUploadProcessing(file)
+    if (result.files.length) enqueueUploadProcessing()
     return {
       folderId: result.wrapper.id,
       fileCount: manifest.fileCount,
@@ -825,7 +825,7 @@ export async function createAccountArchive(
         maxWait: Math.min(10_000, operation.transactionTimeout()),
       }
     )
-    enqueueUploadProcessing(file)
+    enqueueUploadProcessing()
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
     return {
       file: {

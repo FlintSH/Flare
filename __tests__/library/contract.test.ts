@@ -34,6 +34,9 @@ describe('library addresses', () => {
       search: '',
       types: [],
       visibility: [],
+      index: [],
+      minSize: null,
+      maxSize: null,
       dateFrom: null,
       dateTo: null,
       sortBy: 'newest',
@@ -43,6 +46,33 @@ describe('library addresses', () => {
     })
     expect(libraryQuery(view())).toBe('')
     expect(libraryHref()).toBe('/dashboard')
+  })
+
+  it('ranks a search by best match unless the address names another order', () => {
+    expect(view('search=invoice').sortBy).toBe('relevance')
+    expect(libraryQuery(view('search=invoice'))).toBe('search=invoice')
+    expect(view('search=invoice&sortBy=newest').sortBy).toBe('newest')
+    expect(libraryQuery(view('search=invoice&sortBy=newest'))).toBe(
+      'search=invoice&sortBy=newest'
+    )
+    // Without a search there's nothing to rank.
+    expect(view('sortBy=relevance').sortBy).toBe('newest')
+    expect(view('search=x&sortBy=relevance&groupBy=month').groupBy).toBe('none')
+  })
+
+  it('reads size and search index filters, ignoring values it does not offer', () => {
+    const filters = view('minSize=1024&maxSize=lots&index=failed,waiting,nope')
+    expect(filters).toMatchObject({
+      minSize: 1024,
+      maxSize: null,
+      index: ['failed', 'waiting'],
+    })
+    expect(libraryQuery(filters)).toBe('index=failed%2Cwaiting&minSize=1024')
+    expect(Object.fromEntries(listQuery(filters))).toMatchObject({
+      index: 'failed,waiting',
+      minSize: '1024',
+    })
+    expect(view('minSize=-1').minSize).toBeNull()
   })
 
   it('ignores values the library does not offer and groups only upload-date orders', () => {
@@ -146,6 +176,8 @@ describe('the list API reads the same vocabulary', () => {
       ['least-viewed', { field: 'views', direction: 'asc' }],
       ['most-downloaded', { field: 'downloads', direction: 'desc' }],
       ['least-downloaded', { field: 'downloads', direction: 'asc' }],
+      // Lists without a search have nothing to rank; searches order in SQL.
+      ['relevance', { field: 'uploadedAt', direction: 'desc' }],
     ])
     expect(fileSort('name')).toEqual({ field: 'name', direction: 'asc' })
     expect(fileSort('constructor')).toMatchObject({

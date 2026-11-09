@@ -29,6 +29,7 @@ import {
   type FileActionId,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
+import { MatchDetails } from '@/components/dashboard/file-card/match-details'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
@@ -58,6 +59,7 @@ import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
+import { type SearchTerm, findTermRanges, segmentText } from '@/lib/search/text'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
 import { useOcr } from '@/hooks/use-ocr'
@@ -90,6 +92,10 @@ interface FileCardProps {
   onFolderSelect?: (id: string) => void
   selected?: boolean
   onSelect?: () => void
+  /** Show why the file matched a search, or what search could read from it. */
+  showMatch?: boolean
+  /** Search words to mark in the filename. */
+  highlight?: SearchTerm[]
 }
 
 /**
@@ -109,6 +115,8 @@ export function FileCard({
   onFolderSelect,
   selected,
   onSelect,
+  showMatch,
+  highlight,
 }: FileCardProps) {
   const { user } = usePermissions()
   const { toast } = useToast()
@@ -590,7 +598,23 @@ export function FileCard({
             title={file.name}
             className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            {file.name}
+            {file.match?.name && highlight?.length
+              ? segmentText(
+                  file.name,
+                  findTermRanges(file.name, highlight, 'anywhere')
+                ).map((segment, index) =>
+                  segment.match ? (
+                    <mark
+                      key={index}
+                      className="rounded-sm bg-primary/20 text-foreground"
+                    >
+                      {segment.text}
+                    </mark>
+                  ) : (
+                    segment.text
+                  )
+                )
+              : file.name}
           </Link>
           <span className="shrink-0 text-xs text-muted-foreground">
             {formatFileSize(file.size)}
@@ -664,6 +688,7 @@ export function FileCard({
           </div>
         </div>
       </div>
+      {showMatch && <MatchDetails file={file} />}
 
       <Dialog
         open={isPasswordDialogOpen}

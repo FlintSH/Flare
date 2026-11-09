@@ -90,6 +90,17 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     permissions: ['files.read'],
     scope: 'files:read',
   },
+  {
+    methods: ['GET'],
+    path: '/api/files/search-index',
+    permissions: ['files.read'],
+    scope: 'files:read',
+  },
+  {
+    methods: ['POST'],
+    path: '/api/files/search-index',
+    permissions: ['files.read'],
+  },
   { methods: ['GET'], path: '/api/files/tags', permissions: ['files.read'] },
   {
     methods: ['PATCH'],

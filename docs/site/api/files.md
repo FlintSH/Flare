@@ -177,12 +177,16 @@ curl --fail-with-body --get \
 | `page`             | `1`            | Positive integer, starting at 1.                                                                                                                                                    |
 | `limit`            | `24`           | Positive integer, capped at 100.                                                                                                                                                    |
 | `ids`              | All files      | One comma-separated list of 1–100 distinct file IDs, each 1–128 characters without whitespace or ASCII control characters. Combined with ownership and every other supplied filter. |
-| `search`           | Empty          | Case-insensitive match against filename or stored OCR text.                                                                                                                         |
-| `sortBy`           | `newest`       | `newest`, `oldest`, `largest`, `smallest`, `name`, `most-viewed`, `least-viewed`, `most-downloaded`, `least-downloaded`. Unrecognized values use newest order.                      |
+| `search`           | Empty          | Words to find in filenames, tags, folder paths and text Flare read from the files. See [search requests](#search-requests). At most 500 characters.                                 |
+| `sortBy`           | `newest`       | `newest`, `oldest`, `largest`, `smallest`, `name`, `most-viewed`, `least-viewed`, `most-downloaded`, `least-downloaded`, `relevance`. Unrecognized values use newest order.         |
 | `types`            | All types      | Comma-separated exact MIME types, such as `image/png,image/jpeg`.                                                                                                                   |
 | `dateFrom`         | No lower bound | Inclusive upload date/time lower bound. Prefer ISO 8601 timestamps with a timezone.                                                                                                 |
 | `dateTo`           | No upper bound | Inclusive upper bound. A date-only value includes the final day using server-local time; explicit timestamps preserve the supplied instant.                                         |
 | `visibility`       | All files      | Comma-separated `public`, `private`, `hasPassword`. Multiple values are ORed together. `public` and `private` match in any letter case; `hasPassword` only as written.              |
+| `minSize`          | No lower bound | Inclusive size in **bytes**, a whole number up to 2<sup>50</sup>.                                                                                                                   |
+| `maxSize`          | No upper bound | Inclusive size in **bytes**, a whole number up to 2<sup>50</sup>.                                                                                                                   |
+| `index`            | All files      | Comma-separated [search index states](#search-index-status): `waiting`, `indexed`, `empty`, `failed`, `skipped`, `unsupported`. Multiple values are ORed together.                  |
+| `searchMatch`      | Decided        | `every` or `some`. Send the timeline's `searchMatch` with each window request of a search; see [search requests](#search-requests).                                                 |
 | `folder`           | All folders    | Owned folder ID or `unfiled`. A folder filter matches that folder directly, not its descendants.                                                                                    |
 | `tag`              | All tags       | Owned tag ID or `untagged`. Excluded automatic tags do not count as active tags.                                                                                                    |
 | `snapshot`         | No ceiling     | Inclusive upload timestamp ceiling returned by the timeline endpoint; send it unchanged on each window request.                                                                     |
@@ -210,7 +214,8 @@ Different filter categories combine with AND. For example, `types=image/png&visi
       "tags": [{ "id": "TAG_ID", "name": "Finance" }],
       "hasPassword": false,
       "expiresAt": null,
-      "expiryAction": null
+      "expiryAction": null,
+      "searchIndex": { "state": "indexed", "source": "ocr", "reason": null }
     }
   ],
   "pagination": { "total": 1, "pageCount": 1, "page": 1, "limit": 24 }
@@ -235,9 +240,66 @@ curl --fail-with-body --get \
 
 Empty IDs, duplicate IDs, whitespace or ASCII control characters, overlong IDs, more than 100 IDs, or repeated `ids` parameters return `400`. The regular page and limit rules still apply; omitting `limit` returns at most 24 records.
 
-The response excludes password hashes and OCR text. `hasPassword` indicates protection; search can match OCR without returning the text itself. `expiresAt` is when the file's earliest pending expiration runs, or `null`, and `expiryAction` is what that expiration does: `DELETE` or `SET_PRIVATE`, or `null` with no expiration pending. Earlier versions sent only `expiresAt`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
+The response excludes password hashes and the full text Flare read from files. `hasPassword` indicates protection. A search returns a short `match.content.snippet` around the matching words, to the file's owner only; `searchIndex` says what the [search index](#search-index-status) read from each file. Earlier builds sent neither field. `expiresAt` is when the file's earliest pending expiration runs, or `null`, and `expiryAction` is what that expiration does: `DELETE` or `SET_PRIVATE`, or `null` with no expiration pending. Earlier versions sent only `expiresAt`. An empty library has `data: []`, `total: 0`, and `pageCount: 0`. List responses include `Cache-Control: private, no-store`.
 
 Normal pages use offsets, so a library changing between requests can move entries between pages. The optional `snapshot` ceiling excludes files uploaded after that instant; it does not freeze deletions, folder/tag edits, sharing changes, or mutable sort values. Invalid dates, snapshots, or visibility values return `400`. For image navigation, provide both gallery parameters. Anchored requests restrict results to images within your other filters, exclude the anchor itself, and return neighbors in the requested direction. Their pagination also includes an `offset`. A missing or filtered-out anchor returns `404`; supplying only one gallery parameter returns `400`.
+
+### Search requests
+
+Search runs on your Flare server against its own database. Flare doesn't send file contents, text or search words to another service.
+
+A search looks for each word in four places: the filename, the names of the file's tags, its folder's path including parent folders, and the text Flare read from the file. Letter case, Latin accents (`résumé` finds `Résumé`) and filename separators are ignored, so `finalreport` finds `final_FINAL(2).docx` and `2024-03-01` finds `IMG_20240301_093012.jpg`. Names, tags and folders match any part of a word. Text read from files matches the start of words, and a trailing `s` is dropped from words longer than four letters, so `invoices` finds `Invoice`.
+
+| Written          | Meaning                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `invoice lisbon` | Both words, each anywhere                                                |
+| `"total due"`    | The words together, in this order                                        |
+| `-draft`         | Leave out files matching the word                                        |
+| `name:report`    | Only in filenames                                                        |
+| `text:wifi`      | Only in text Flare read from the file                                    |
+| `tag:receipts`   | Only in tag names                                                        |
+| `folder:taxes`   | Only in folder paths; `in:` is the same                                  |
+| `type:pdf`       | An extension or MIME subtype; `image`, `video`, `audio` or `text` a kind |
+
+An unknown prefix is part of the word, so `10:32` still finds a screenshot taken at 10:32. Only the first 12 terms count.
+
+Every word must match somewhere. When no file has every plain word, the list instead holds files with at least one of them, and each file's `match.missing` lists the words it lacks. Exclusions and words limited to one place stay required. The timeline reports which kind of list it counted as `searchMatch`: `every` or `some`. Send that value back as `searchMatch` on each window request so the pages agree with the count; a request without it decides from the data itself, which costs an extra query.
+
+`sortBy=relevance` orders a search by how well files match: a word in the name counts most, then a tag, the folder path and the file's text, with newest first among equals. The library uses it by default while searching; the API keeps `newest` when `sortBy` is omitted, as before. Relevance lists have one undated timeline bucket.
+
+With a search, each file has a `match` object:
+
+```json
+{
+  "match": {
+    "name": false,
+    "tags": [],
+    "folder": { "id": "FOLDER_ID", "path": "Taxes / 2024" },
+    "content": {
+      "source": "pdf",
+      "snippet": [
+        { "text": "ACME Corp " },
+        { "text": "Invoice", "match": true },
+        { "text": " 2024-117 Bill to: Robin Quinn… " }
+      ]
+    },
+    "entries": null,
+    "missing": []
+  }
+}
+```
+
+`content.source` is `ocr`, `text`, `pdf` or `document`. `entries` lists up to three archive members whose paths matched, with `more` counting the rest. Snippet segments with `match: true` are the matching words; render them as text, never as HTML.
+
+```sh
+curl --fail-with-body --get \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  --data-urlencode 'search=invoice -draft type:pdf' \
+  --data-urlencode 'sortBy=relevance' \
+  "$FLARE_URL/api/files"
+```
+
+A search longer than 500 characters, a `searchMatch` other than `every` or `some`, or an invalid `minSize`, `maxSize` or `index` returns `400`.
 
 ### Check raw view counts
 
@@ -277,6 +339,51 @@ File content responses set `Cache-Control` from the file's access state, so a sh
 
 Access denials from these routes, `404` for a private file and `401` for a missing or wrong password, also send `private, no-store`. Archive listings and entries always do. There is no `Vary` header: a public, unprotected response is the same for every requester, and the others are never stored. A response cached while a file was public stays cached after it becomes private or gets a password; see [browser and CDN caching](/guide/sharing#browser-and-cdn-caching).
 
+## Search index status
+
+**`GET /api/files/search-index`** · Scope: **`files:read`**
+
+Flare reads each new file in the background after upload: text in images (when [automatic OCR](/admin/#search) is on), PDFs, Word, Excel, PowerPoint and OpenDocument files, text and code files, and the member names of ZIP and TAR archives. This counts your files by what it found.
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  "$FLARE_URL/api/files/search-index"
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "total": 24,
+    "counts": {
+      "waiting": 0,
+      "indexed": 17,
+      "empty": 2,
+      "failed": 2,
+      "skipped": 0,
+      "unsupported": 3
+    },
+    "reads": { "imageText": true, "documents": true }
+  }
+}
+```
+
+| State         | Meaning                                                                                             |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| `waiting`     | Not read yet, or being read.                                                                        |
+| `indexed`     | Text was found and is searchable.                                                                   |
+| `empty`       | Read without trouble, but there was no text, such as a photo or a scanned PDF without a text layer. |
+| `failed`      | Reading failed, after up to three attempts. `reason` says why.                                      |
+| `skipped`     | A setting is off or the file is over a size limit.                                                  |
+| `unsupported` | Flare doesn't read this kind of file, such as video, audio or HEIC images.                          |
+
+Names, tags and folders are searchable whatever the state. Each list row's `searchIndex` has the file's `state`, `source` and a `reason` written for people; it never contains storage paths or parser errors.
+
+**`POST /api/files/search-index`** · Browser session or legacy token; named tokens are refused
+
+Reads files again: `{ "failed": true }` queues every failed file, `{ "fileIds": ["ID", …] }` up to 100 of your files. Files already waiting are left alone, and text found earlier stays searchable until the new result replaces it. The answer is `{ "queued": 3 }`. Each address may send 10 of these requests per 10 minutes; more answer `429` with `Retry-After`.
+
 ## Browse the whole file timeline
 
 **`GET /api/files/timeline`** · Scope: **`files:read`** · Account permission: **`files.read`**
@@ -292,12 +399,12 @@ curl --fail-with-body --get \
   "$FLARE_URL/api/files/timeline"
 ```
 
-| Parameter                                                                     | Default               | Meaning                                                                                                                            |
-| ----------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `ids`, `search`, `types`, `dateFrom`, `dateTo`, `visibility`, `folder`, `tag` | Same as the file list | All filter rules above apply.                                                                                                      |
-| `sortBy`                                                                      | `newest`              | Date order produces calendar buckets. Other supported sorts produce one undated bucket. Unknown values use newest.                 |
-| `groupBy`                                                                     | `none`                | `none`, `month`, `week`, or `year`. `none` uses month buckets internally, without requesting visible headings. Weeks start Monday. |
-| `timezone`                                                                    | `UTC`                 | IANA time zone for calendar boundaries, such as `America/Los_Angeles`. Browser clients can use their local IANA zone.              |
+| Parameter                                                                                                    | Default               | Meaning                                                                                                                                            |
+| ------------------------------------------------------------------------------------------------------------ | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ids`, `search`, `types`, `dateFrom`, `dateTo`, `visibility`, `minSize`, `maxSize`, `index`, `folder`, `tag` | Same as the file list | All filter rules above apply. The timeline ignores `searchMatch` and decides it itself.                                                            |
+| `sortBy`                                                                                                     | `newest`              | Date order produces calendar buckets. Other supported sorts, and `relevance` with a search, produce one undated bucket. Unknown values use newest. |
+| `groupBy`                                                                                                    | `none`                | `none`, `month`, `week`, or `year`. `none` uses month buckets internally, without requesting visible headings. Weeks start Monday.                 |
+| `timezone`                                                                                                   | `UTC`                 | IANA time zone for calendar boundaries, such as `America/Los_Angeles`. Browser clients can use their local IANA zone.                              |
 
 ```json
 {
@@ -327,7 +434,7 @@ curl --fail-with-body --get \
 }
 ```
 
-`from` is inclusive and `to` exclusive. Both are ISO UTC instants for local calendar boundaries; daylight-saving changes can make a week or month shorter or longer. `offset` is the number of matching files before this bucket in the selected order. Empty periods are omitted. `newest` returns newest buckets first; `oldest` returns oldest first. `key` equals `from`. Non-date sorts return `groupBy: "none"` and one bucket with `key: "all"`, null boundaries, and the total count. An empty result returns `total: 0` and `buckets: []`. `groupBy` otherwise preserves the requested value, including `none`.
+`from` is inclusive and `to` exclusive. Both are ISO UTC instants for local calendar boundaries; daylight-saving changes can make a week or month shorter or longer. `offset` is the number of matching files before this bucket in the selected order. Empty periods are omitted. `newest` returns newest buckets first; `oldest` returns oldest first. `key` equals `from`. Non-date sorts return `groupBy: "none"` and one bucket with `key: "all"`, null boundaries, and the total count. An empty result returns `total: 0` and `buckets: []`. `groupBy` otherwise preserves the requested value, including `none`. With a search, the response also has `searchMatch`: `every` when the counted files have every word, or `some` when none did and it counted files with some of them. Pass it on to each window request, as described in [search requests](#search-requests).
 
 Treat both boundaries as `string | null` when generating a client from the OpenAPI 3.1 contract. For example, a nonempty `sortBy=largest` response contains an undated bucket like this; do not parse its null boundaries as dates:
 

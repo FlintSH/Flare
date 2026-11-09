@@ -33,6 +33,20 @@ These short, silent recordings capture actual browser interactions with Flare an
 
 This recording uses real application requests and a disposable account seeded with 12,000 demonstration files across several years. The upload dates and file contents are fixtures; the scrolling, date jumps, selection, and filtering are actual browser interactions. It does not measure the performance of your server or storage provider. [Follow the library guide](./guide/library#scroll-through-your-library) for keyboard controls, selection limits, and retry behavior.
 
+### Find files by what is inside them
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Find files by what is inside them: 43-second silent Flare recording with demonstration files" :poster="withBase('/screenshots/search/search-results.webp')" :src="withBase('/demos/search-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+
+1. Open **Files** in a demonstration library of 27 mixed files: screenshots, photos, PDFs, Office files, notes, archives, a video, and two damaged files. Under the search box, **Text read from 20 of 27 files** and **2 files couldn’t be read**.
+2. Type **lisbon**. Three files match: a CSV whose text mentions the Lisbon Metro, a ZIP holding `photos/lisbon-tram-28.jpg`, and a résumé PDF. Each card names where the word was found and marks it.
+3. Type **invoices total**. An invoice named `scan0001.pdf` matches by its PDF text, with **Invoice** marked.
+4. Type **wifi password**. No file has both words, so a note says the list shows files with some of them. A router screenshot matches by its recognized text, marked **Password**, and shows **Missing: wifi**.
+5. Open **Search tips** to see the phrase, exclusion and prefix syntax, then close it.
+6. Clear the search and choose **2 files couldn’t be read**. A damaged PDF and a damaged ZIP each show why. Choose **Try reading them again**: a message confirms, the view adds **Waiting to be read**, and both files soon show **Couldn’t be read** again, because they really are damaged.
+7. Reset the filters and search for **receipt**: a receipt photo and a scan, both tagged **Receipts**, and a spreadsheet whose text mentions fuel receipts. The whole library is then queued to be read again, as after an upgrade. The line under the search box shows **Reading 27 files for search** and counts down, results stay in place, and **More files were read. Update results** appears once reading finishes.
+
+This recording uses a production build of Flare, real uploads, real text recognition and document reading on the same server, and an isolated database. The router password and other personal details in the files are made up. Requeuing the library uses the real `POST /api/files/search-index` request a person's browser sends; the recording itself doesn't measure search speed. [Read the search guide](./guide/search).
+
 ### Browse the same library on a phone
 
 <div style="max-width: 390px; margin-inline: auto">

@@ -100,4 +100,4 @@ Exported recipes include the selected tags' account-specific IDs. A recipe conta
 
 ## When a tag does not appear
 
-Check the rule's source and phrase, then the timing. Filename rules apply to new uploads; older files need **Apply rule to existing files…**. Extracted-text rules require completed OCR, which supports images rather than PDFs. Also check whether you previously removed that tag from the file: Flare honors that manual choice.
+Check the rule's source and phrase, then the timing. Filename rules apply to new uploads; older files need **Apply rule to existing files…**. Extracted-text rules require completed OCR, which supports images rather than PDFs. Text that [search](./search) reads from PDFs and documents doesn't trigger these rules. Also check whether you previously removed that tag from the file: Flare honors that manual choice.

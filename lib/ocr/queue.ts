@@ -1,6 +1,4 @@
 import { type AuditContext, auditContext } from '@/lib/audit/context'
-import { getConfig } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 
 import { type OCRResult, processImageOCRTask } from './processor'
@@ -73,32 +71,18 @@ class OCRQueue {
   private waitingRequests = 0
   private failures = new Map<string, number>()
 
-  /** Background processing after upload. Resolves once the task is queued. */
-  async add(task: OCRTask, force: boolean = false) {
-    if (!force) {
-      const config = await getConfig()
-      if (!config.settings.general.ocr.enabled) {
-        logger.debug('OCR processing is disabled in settings, skipping queue', {
-          fileId: task.fileId,
-        })
-        await prisma.file.update({
-          where: { id: task.fileId },
-          data: {
-            isOcrProcessed: true,
-            ocrText: null,
-            ocrConfidence: null,
-          },
-        })
-        return
-      }
-    }
-
-    void this.enqueue(task, false)
+  /**
+   * Background recognition for the search index. Joins work already queued for
+   * the file and shares the single recognition slot with requests, without
+   * their wait limit or budget.
+   */
+  recognize(task: OCRTask): Promise<OCRResult> {
+    return this.enqueue(task, false)
   }
 
   /**
    * Recognition someone asked for. Joins work already queued for the file and
-   * shares the queue's single recognition slot with upload processing.
+   * shares the queue's single recognition slot with the search index.
    * Automatic OCR may be disabled; manual extraction stays available.
    */
   async request(
@@ -179,7 +163,7 @@ class OCRQueue {
             status: 'limited',
             retryAfterSeconds: charge.retryAfterSeconds,
           }
-        // Upload processing can queue the same file while this is charged.
+        // The search index can queue the same file while this is charged.
         const queued = this.inFlight.get(task.fileId)
         if (queued) {
           await charge?.refund()

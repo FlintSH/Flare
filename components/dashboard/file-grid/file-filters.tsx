@@ -38,6 +38,7 @@ import { fileTypeGroup, fileTypeLabel } from '@/lib/files/file-kind'
 import {
   type FileGrouping,
   GROUP_OPTIONS,
+  RELEVANCE_SORT,
   SORT_OPTIONS,
   type SortOption,
   VISIBILITY_FILTERS,
@@ -61,7 +62,21 @@ interface FileFiltersProps {
   onGroupChange: (groupBy: FileGrouping) => void
   visibility: VisibilityFilter[]
   onVisibilityChange: (visibility: VisibilityFilter[]) => void
+  /** Best match is offered only while searching. */
+  searching: boolean
+  minSize: number | null
+  maxSize: number | null
+  onSizeChange: (minSize: number | null, maxSize: number | null) => void
 }
+
+const MB = 1024 * 1024
+/** Size choices in the File type menu, in bytes, both ends inclusive. */
+export const SIZE_PRESETS = [
+  { label: 'Under 1 MB', min: null, max: MB - 1 },
+  { label: '1 to 10 MB', min: MB, max: 10 * MB - 1 },
+  { label: '10 to 100 MB', min: 10 * MB, max: 100 * MB - 1 },
+  { label: '100 MB and larger', min: 100 * MB, max: null },
+] as const
 
 // The toolbar's lists share one pattern: the check sits in a column on the
 // left, as in the Visibility, File type and Tags lists. SelectItem draws its
@@ -88,7 +103,13 @@ export const FileFilters = memo(function FileFilters({
   onGroupChange,
   visibility,
   onVisibilityChange,
+  searching,
+  minSize,
+  maxSize,
+  onSizeChange,
 }: FileFiltersProps) {
+  const sized = minSize !== null || maxSize !== null
+  const typeCount = selectedTypes.length + (sized ? 1 : 0)
   // The chosen days are named in the reader's time zone, which the server lacks.
   const hydrated = useHydrated()
   const fileTypesByCategory = [...new Set([...fileTypes, ...selectedTypes])]
@@ -119,7 +140,9 @@ export const FileFilters = memo(function FileFilters({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {SORT_OPTIONS.map((option) => (
+          {SORT_OPTIONS.filter(
+            (option) => searching || option.value !== RELEVANCE_SORT
+          ).map((option) => (
             <SelectItem
               key={option.value}
               value={option.value}
@@ -179,18 +202,18 @@ export const FileFilters = memo(function FileFilters({
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            aria-label="File type"
+            aria-label="File type and size"
             className={cn(
               filterClass,
-              selectedTypes.length > 0 &&
+              typeCount > 0 &&
                 'border-primary bg-primary/10 [&_svg]:text-foreground'
             )}
           >
             <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden sm:inline">File type</span>
-            {selectedTypes.length > 0 && (
+            <span className="hidden sm:inline">Type &amp; size</span>
+            {typeCount > 0 && (
               <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums leading-none text-primary-foreground sm:static sm:h-5 sm:min-w-5 sm:text-[11px]">
-                {selectedTypes.length}
+                {typeCount}
               </span>
             )}
           </Button>
@@ -245,6 +268,22 @@ export const FileFilters = memo(function FileFilters({
               </p>
             )}
           </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Size</DropdownMenuLabel>
+          {SIZE_PRESETS.map((preset) => (
+            <DropdownMenuCheckboxItem
+              key={preset.label}
+              checked={minSize === preset.min && maxSize === preset.max}
+              onSelect={(event) => event.preventDefault()}
+              onCheckedChange={(checked) =>
+                checked
+                  ? onSizeChange(preset.min, preset.max)
+                  : onSizeChange(null, null)
+              }
+            >
+              {preset.label}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
       <Popover>

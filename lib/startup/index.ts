@@ -4,6 +4,7 @@ import { startMailWorker } from '@/lib/email/worker'
 import { startFileExpiryWorker } from '@/lib/files/expiry-worker'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
+import { startSearchIndexWorker } from '@/lib/search/worker'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
 import { startOcrTagWorker } from '@/lib/tags/worker'
 
@@ -34,6 +35,7 @@ export async function runStartupTasks() {
     ['email delivery', startMailWorker],
     ['webhook delivery', startWebhookWorker],
     ['OCR tag retries', startOcrTagWorker],
+    ['search index', startSearchIndexWorker],
   ]
   if (process.env.NODE_ENV === 'production')
     tasks.push(['memory monitor', startMemoryMonitor])

@@ -62,9 +62,9 @@ const features = [
   ],
   [
     'Organize',
-    'Search & filters',
-    'Find files by name or OCR text, and narrow the library by date, type, tags, and visibility.',
-    '/guide/library',
+    'Search inside files',
+    'Find files by the words in images, PDFs, documents, pastes and ZIP files, with snippets showing why each matched. Runs on your server.',
+    '/guide/search',
   ],
   [
     'Organize',
@@ -87,7 +87,7 @@ const features = [
   [
     'Organize',
     'OCR',
-    'Extract text from images in the background for searching and automatic tagging.',
+    'Recognize text in images in the background for search and automatic tagging.',
     '/guide/tags',
   ],
   [

@@ -1,5 +1,7 @@
 import type { ExpiryAction } from '@/types/events'
 
+import type { FileMatch, FileSearchIndexInfo } from '@/lib/search/contract'
+
 export interface FileType {
   id: string
   name: string
@@ -16,4 +18,8 @@ export interface FileType {
   expiryAction?: ExpiryAction | null
   folderId?: string | null
   tags?: { id: string; name: string }[]
+  /** What search could read from the file's contents. */
+  searchIndex?: FileSearchIndexInfo | null
+  /** Why the file matched; only in search results. */
+  match?: FileMatch | null
 }

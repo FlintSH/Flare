@@ -86,6 +86,13 @@ export const configSchema = z.object({
       ocr: z.object({
         enabled: z.boolean().default(true),
       }),
+      // Text, PDF, Office and archive reading for library search. Image text
+      // follows the OCR switch.
+      search: z
+        .object({
+          documents: z.boolean().default(true),
+        })
+        .prefault({}),
       oidc: z
         .object({
           enabled: z.boolean().default(false),

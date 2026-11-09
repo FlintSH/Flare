@@ -6,12 +6,14 @@ import {
   fileListSelect,
   fileOrderBy,
 } from '@/lib/files/gallery-navigation'
-import { fileListFilters } from '@/lib/files/list-filters'
+import { libraryFileFilters } from '@/lib/files/list-filters'
 import { requireAccount } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from '@/lib/library/contract'
+import { searchGalleryPage, searchPage } from '@/lib/search/list'
+import { explainMatches } from '@/lib/search/query'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
 import { directUpload } from '@/lib/uploads/direct'
 import { uploadRoutes } from '@/lib/uploads/http'
@@ -57,12 +59,50 @@ export const GET = api(
     const offset = (page - 1) * limit
     if (!Number.isSafeInteger(offset))
       throw new HttpError(400, 'Page is too large')
-    const { where } = fileListFilters(user.id, searchParams)
+    const filters = await libraryFileFilters(user.id, searchParams)
 
     let resultPage
-    if (galleryAnchor && galleryDirection) {
+    if (filters.search) {
+      // A search is ordered and paged in SQL, then read like any list.
+      const plan = filters.search
+      const found =
+        galleryAnchor && galleryDirection
+          ? await searchGalleryPage({
+              plan,
+              sql: filters.sql,
+              sortBy,
+              anchorId: galleryAnchor,
+              direction: galleryDirection,
+              limit,
+            })
+          : await searchPage({
+              plan,
+              sql: filters.sql,
+              sortBy,
+              limit,
+              offset,
+            }).then(({ ids, total }) => ({
+              ids,
+              pagination: {
+                total,
+                pageCount: Math.ceil(total / limit),
+                page,
+                limit,
+              },
+            }))
+      if (!found) throw new HttpError(404, 'Image not found')
+      const rows = await prisma.file.findMany({
+        where: { id: { in: found.ids }, userId: user.id },
+        select: fileListSelect,
+      })
+      const byId = new Map(rows.map((row) => [row.id, row]))
+      resultPage = {
+        files: found.ids.flatMap((id) => byId.get(id) ?? []),
+        pagination: found.pagination,
+      }
+    } else if (galleryAnchor && galleryDirection) {
       resultPage = await anchoredGalleryPage({
-        where,
+        where: filters.where,
         sortBy,
         anchorId: galleryAnchor,
         direction: galleryDirection,
@@ -70,6 +110,7 @@ export const GET = api(
       })
       if (!resultPage) throw new HttpError(404, 'Image not found')
     } else {
+      const where = filters.where
       const total = await prisma.file.count({ where })
       const files = await prisma.file.findMany({
         where,
@@ -90,13 +131,24 @@ export const GET = api(
       }
     }
 
-    const expirations = await getFilesExpirationInfo(
-      resultPage.files.map((file) => file.id)
-    )
+    const [expirations, matches] = await Promise.all([
+      getFilesExpirationInfo(resultPage.files.map((file) => file.id)),
+      filters.search
+        ? explainMatches(
+            filters.search,
+            resultPage.files.map((file) => ({
+              id: file.id,
+              folderId: file.folderId,
+              tags: file.tags.map(({ tag }) => tag),
+            }))
+          )
+        : null,
+    ])
     return paginatedResponse(
-      resultPage.files.map((file) =>
-        fileListItem(file, expirations.get(file.id) ?? null)
-      ),
+      resultPage.files.map((file) => ({
+        ...fileListItem(file, expirations.get(file.id) ?? null),
+        ...(matches && { match: matches.get(file.id) ?? null }),
+      })),
       resultPage.pagination
     )
   },

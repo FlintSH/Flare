@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   recognize: vi.fn(),
   terminate: vi.fn(),
   applyPendingOcrTags: vi.fn(),
+  saveRecognizedText: vi.fn(),
 }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
@@ -23,6 +24,9 @@ vi.mock('@/lib/storage', () => ({
 vi.mock('tesseract.js', () => ({ createWorker: mocks.createWorker }))
 vi.mock('@/lib/tags/ocr', () => ({
   applyPendingOcrTags: mocks.applyPendingOcrTags,
+}))
+vi.mock('@/lib/search/store', () => ({
+  saveRecognizedText: mocks.saveRecognizedText,
 }))
 vi.mock('@/lib/logger', () => ({
   loggers: { ocr: { info: vi.fn(), error: vi.fn() } },
@@ -51,6 +55,7 @@ beforeEach(() => {
     data: { text: ' private OCR receipt contents \n', confidence: 92.5 },
   })
   mocks.update.mockResolvedValue({ id: 'file-1' })
+  mocks.saveRecognizedText.mockResolvedValue(undefined)
 })
 
 describe('OCR audit lifecycle', () => {
@@ -64,6 +69,11 @@ describe('OCR audit lifecycle', () => {
       confidence: 92.5,
       text: 'private OCR receipt contents',
     })
+    // The owner can find the image by its text right away.
+    expect(mocks.saveRecognizedText).toHaveBeenCalledWith(
+      'file-1',
+      'private OCR receipt contents'
+    )
     expect(recorded).toEqual([
       expect.objectContaining({
         action: 'ocr.started',

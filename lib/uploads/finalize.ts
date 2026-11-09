@@ -18,10 +18,11 @@ import { validateOwnedFolderId } from '@/lib/folders/service'
 import { tokenUsable } from '@/lib/integrations/tokens'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
 import { loggers } from '@/lib/logger'
-import { ocrQueue } from '@/lib/ocr'
 import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import { hasPermission } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
+import { queueSearchIndex } from '@/lib/search/store'
+import { nudgeSearchIndex } from '@/lib/search/worker'
 import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
@@ -209,6 +210,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     })
     await applyProfileTags(tx, file, options.tagIds ?? [])
     await applyAutomaticTags(file.id, 'filename', tx)
+    await queueSearchIndex(tx, file)
     await tx.user.update({
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },
@@ -221,7 +223,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     ? await persist(input.transaction)
     : await prisma.$transaction(persist)
   setAuditTarget({ type: 'file', id: result.file.id, name: result.file.name })
-  if (result.created && !input.transaction) enqueueUploadProcessing(result.file)
+  if (result.created && !input.transaction) enqueueUploadProcessing()
   return result.file
 }
 
@@ -229,19 +231,12 @@ export async function finalizeUpload(input: UploadInput) {
   return publishPreparedUpload(await prepareUpload(input))
 }
 
-/** Call only after the transaction that publishes this file has committed. */
-export function enqueueUploadProcessing(file: {
-  id: string
-  path: string
-  mimeType: string
-}) {
-  if (file.mimeType.startsWith('image/')) {
-    void ocrQueue
-      .add({ filePath: file.path, fileId: file.id })
-      .catch((error) =>
-        loggers.files.error('Background OCR failed', error as Error)
-      )
-  }
+/**
+ * Call only after the transaction that publishes this file has committed. The
+ * file is already queued for search; this only starts reading it sooner.
+ */
+export function enqueueUploadProcessing() {
+  nudgeSearchIndex()
 }
 
 /** Never remove a committed object because response serialization or cleanup failed. */

@@ -102,7 +102,11 @@ describe('delegated settings', () => {
       expect(settingsPatchAllowed(general, settings)).toBe(false)
     expect(
       settingsPatchAllowed(general, {
-        general: { ocr: { enabled: false }, credits: { showFooter: true } },
+        general: {
+          ocr: { enabled: false },
+          search: { documents: false },
+          credits: { showFooter: true },
+        },
       })
     ).toBe(true)
   })

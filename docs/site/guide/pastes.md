@@ -65,7 +65,7 @@ Pastes start unfiled because the paste form has no folder selector. Move the sav
 
 Find a paste by its filename in **Files**. You can download it, add tags, move it to a folder, change visibility, update password protection or expiration, and delete it.
 
-Pastes count toward storage and are subject to upload restrictions. Library search matches filenames and saved OCR text; it does not provide full-text search across paste contents.
+Pastes count toward storage and are subject to upload restrictions. [Library search](./search) finds pastes by their contents as well as their names: Flare reads the first 1 MiB of each paste in the background after you save it.
 
 A private paste stays accessible only to its owner and accounts with `content.read` (including Administrator). A password does not turn a private paste into a link accessible to other users. See [sharing and privacy](./sharing).
 

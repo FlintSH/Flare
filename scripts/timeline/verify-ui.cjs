@@ -576,7 +576,7 @@ async function main() {
 
     await top(page)
     await page
-      .getByRole('searchbox', { name: 'Search files by name' })
+      .getByRole('searchbox', { name: 'Search files' })
       .fill('Northern lights')
     await expect(
       page.getByText('1,000 files', { exact: true }).first()
@@ -973,8 +973,10 @@ async function main() {
     ).toBeVisible()
     await ready(page)
     await page
-      .getByRole('searchbox', { name: 'Search files by name' })
-      .fill('No matching timeline demo file')
+      .getByRole('searchbox', { name: 'Search files' })
+      // One unknown word: a search of several words lists files with some
+      // of them when none has all, and the demo filenames contain "file".
+      .fill('zqxvbnm')
     await expect(
       page.getByRole('heading', {
         name: 'No files match your search',
@@ -1026,7 +1028,7 @@ async function main() {
       .getByRole('checkbox', { name: 'Select visible files', exact: true })
       .check()
     await page
-      .getByRole('searchbox', { name: 'Search files by name' })
+      .getByRole('searchbox', { name: 'Search files' })
       .fill('Northern lights')
     await expect(
       page.getByText('0 selected · up to 100', { exact: true })

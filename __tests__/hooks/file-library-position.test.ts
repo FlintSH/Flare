@@ -247,7 +247,11 @@ describe('file library history positions', () => {
   })
 
   it('does not corrupt an old filter entry while router.push is still committing its URL', () => {
-    const selected = { ...filters, search: 'invoice' }
+    const selected = {
+      ...filters,
+      search: 'invoice',
+      sortBy: 'relevance' as const,
+    }
     const hook = render(selected) // Local controls changed; URL is still old.
     hook.record(48)
     vi.advanceTimersByTime(500)
@@ -276,7 +280,11 @@ describe('file library history positions', () => {
   it('restores another filter entry after popstate and ignores foreign paths', () => {
     const hook = render()
     hook.record(48)
-    const selected = { ...filters, search: 'invoice' }
+    const selected = {
+      ...filters,
+      search: 'invoice',
+      sortBy: 'relevance' as const,
+    }
     location.search = '?search=invoice'
     history.state = withLibraryPosition(
       nextState,
