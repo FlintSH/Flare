@@ -42,6 +42,7 @@ const state = (processState[stateKey] ??= {
   requeuedAt: 0,
   versionsChecked: false,
   active: 0,
+  started: false,
 }) as {
   running: Promise<void> | null
   again: boolean
@@ -50,6 +51,8 @@ const state = (processState[stateKey] ??= {
   versionsChecked: boolean
   /** Extractions running in this process, including ones past their deadline. */
   active: number
+  /** Whether this process runs the worker; only then do uploads nudge it. */
+  started: boolean
 }
 // State from before a development reload may predate newer fields.
 state.active ??= 0
@@ -191,6 +194,8 @@ function drain(): Promise<void> {
  * poll. The upload's response never waits for it.
  */
 export function nudgeSearchIndex() {
+  // Scripts and tests that publish files don't run background work.
+  if (!state.started) return
   setTimeout(() => {
     drain().catch(() =>
       logger.warn('Search indexing is unavailable; retrying on the next poll.')
@@ -200,6 +205,7 @@ export function nudgeSearchIndex() {
 
 /** Rows in the database are the queue, so work survives restarts and replicas. */
 export function startSearchIndexWorker() {
+  state.started = true
   return startIntervalWorker({
     key: 'search-index',
     everyMs: 10_000,
