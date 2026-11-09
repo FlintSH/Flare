@@ -44,19 +44,19 @@ Letter case and accents don't matter: `resume` finds `Résumé – Jane Doe.pdf`
 
 Every word has to match somewhere, though not all in the same place: `lisbon receipt` finds a photo tagged **Receipts** whose text mentions Lisbon. Choose **Search tips** (the question mark in the search box) for a short reminder of these:
 
-| Write          | To find                                                                         |
-| -------------- | ------------------------------------------------------------------------------- |
-| `"total due"`  | The words together, in this order                                               |
-| `-draft`       | Files without the word                                                          |
-| `name:report`  | The word in filenames only                                                      |
-| `text:wifi`    | The word in text Flare read from the file only                                  |
-| `tag:receipts` | The word in tag names only                                                      |
-| `in:taxes`     | The word in folder names only, including parent folders. `folder:` is the same. |
-| `type:pdf`     | An extension, such as `pdf` or `docx`, or a kind: `image`, `video`, `audio`     |
+| Write          | To find                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| `"total due"`  | The words together, in this order                                                        |
+| `-draft`       | Files without the word. `-in:taxes` leaves out the Taxes folder and keeps unfiled files. |
+| `name:report`  | The word in filenames only                                                               |
+| `text:wifi`    | The word in text Flare read from the file only                                           |
+| `tag:receipts` | The word in tag names only                                                               |
+| `in:taxes`     | The word in folder names only, including parent folders. `folder:` is the same.          |
+| `type:pdf`     | An extension, such as `pdf` or `docx`, or a kind: `image`, `video`, `audio`              |
 
 <Screenshot src="/screenshots/search/search-tips.webp" alt="The Search tips popover listing example searches: invoice lisbon, a quoted phrase, -draft, name:, text:, tag:, in: and type: prefixes, each with what it finds" caption="Search tips sits in the search box." />
 
-A colon that isn't one of these prefixes is part of the word, so `11.32` or `10:32` still finds a screenshot named after the time it was taken. Searches can be up to 500 characters, and only the first 12 words count.
+Quoted words match across punctuation, the way the index stores them: `"w2 employer"` finds `taxes/2024/W2-employer.pdf` inside a ZIP. A colon that isn't one of these prefixes is part of the word, so `11.32` or `10:32` still finds a screenshot named after the time it was taken. Searches can be up to 500 characters, and only the first 12 words count.
 
 ### When no file has every word
 

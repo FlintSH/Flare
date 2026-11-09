@@ -446,6 +446,16 @@ suite('library search against disposable PostgreSQL', () => {
     ).toBe('ocr')
     expect(await names('"b22 gate"')).toEqual([])
     expect(await names('w2 employer')).toEqual(['backup.zip'])
+    const phrase = await search('"w2 employer"')
+    expect(phrase.data[0].match?.entries?.paths.map(text)).toEqual([
+      'taxes/2024/W2-employer.pdf',
+    ])
+    expect(phrase.data[0].match?.entries?.paths.map(marked)).toEqual([
+      ['W2-employer'],
+    ])
+    // An unknown prefix that names an object property is just text.
+    expect(await names('constructor:foo')).toEqual([])
+    expect(await names('type:constructor')).toEqual([])
     expect(await names('name:lisbon')).toEqual([])
   })
 
@@ -556,6 +566,8 @@ suite('library search against disposable PostgreSQL', () => {
       path: 'Taxes / 2024',
     })
     expect(await names('in:taxes')).toEqual(['b.pdf'])
+    // Unfiled files have no folder, which must not hide them from exclusions.
+    expect((await names('-in:taxes')).sort()).toEqual(['a.png', 'mine.txt'])
     expect(await names('tag:receipts')).toEqual(['a.png'])
     // The other account's words, tags and file never show up.
     expect(await names('lisbon')).toEqual([])

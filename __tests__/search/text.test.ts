@@ -61,6 +61,16 @@ describe('search text', () => {
       { value: '10:32', field: 'any', phrase: false, negated: false },
       { value: 'foo:bar', field: 'any', phrase: false, negated: false },
     ])
+    // Inherited object properties are not places to look.
+    expect(
+      parseSearch('constructor:foo toString:x').terms.map((t) => [
+        t.field,
+        t.value,
+      ])
+    ).toEqual([
+      ['any', 'constructor:foo'],
+      ['any', 'tostring:x'],
+    ])
     expect(parseSearch('  - "" ').terms).toEqual([])
     expect(parseSearch('a '.repeat(40)).terms).toHaveLength(12)
     expect(parseSearch('-draft').positive).toEqual([])
@@ -116,6 +126,14 @@ describe('search text', () => {
     expect(
       segments.map((segment) => segment.text).join('').length
     ).toBeLessThan(240)
+    // Phrases match word by word, as the index does, across punctuation.
+    expect(
+      findTermRanges(
+        'photos/w2-employer.pdf',
+        parseSearch('"w2 employer"').terms,
+        'words'
+      )
+    ).toEqual([{ start: 7, end: 18 }])
     // The window with the most different words wins over the first match.
     const spread = snippet(
       'x '.repeat(200) + 'alpha ' + 'y '.repeat(100) + 'alpha beta gamma end',

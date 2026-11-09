@@ -76,7 +76,9 @@ const KIND_PREFIXES: Record<string, string> = {
 
 function typeCondition(value: string) {
   const singular = value.replace(/s$/, '')
-  const prefix = KIND_PREFIXES[singular]
+  const prefix = Object.hasOwn(KIND_PREFIXES, singular)
+    ? KIND_PREFIXES[singular]
+    : undefined
   if (prefix) return Prisma.sql`f."mimeType" LIKE ${`${prefix}%`}`
   const extension = value.replace(/[\\%_]/g, (character) => `\\${character}`)
   return Prisma.sql`(lower(f.name) LIKE ${`%.${extension}`} ESCAPE '\\'
@@ -249,7 +251,8 @@ export async function planSearch(
     if (termLooksIn(term, 'folder')) {
       plan.folderIds = matchingIds(library.folders, term.value)
       plan.folder = plan.folderIds.length
-        ? Prisma.sql`f."vaultFolderId" IN (${Prisma.join(plan.folderIds)})`
+        ? // An unfiled file's folder is NULL; NOT of NULL would hide it.
+          Prisma.sql`COALESCE(f."vaultFolderId" IN (${Prisma.join(plan.folderIds)}), FALSE)`
         : NEVER
     }
     if (termLooksIn(term, 'text')) {

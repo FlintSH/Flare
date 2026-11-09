@@ -136,7 +136,12 @@ export function parseSearch(query: string): ParsedSearch {
     if (!prefix && bare === '-') continue
     let field: SearchField = 'any'
     let raw = quoted ?? bare ?? ''
-    const known = prefix ? FIELD_ALIASES[prefix.toLowerCase()] : undefined
+    // Own properties only: "constructor:" is text, not a place to look.
+    const alias = prefix?.toLowerCase()
+    const known =
+      alias && Object.hasOwn(FIELD_ALIASES, alias)
+        ? FIELD_ALIASES[alias]
+        : undefined
     if (prefix && !known) raw = `${prefix}:${raw}`
     else if (known) field = known
     // A lone "-" or a quoted nothing.
@@ -175,32 +180,44 @@ export function findTermRanges(
 ): TextRange[] {
   const folded = foldText(text)
   const ranges: TextRange[] = []
-  const needles = new Set<string>()
-  for (const term of terms) {
-    if (mode === 'anywhere') needles.add(term.value)
-    else {
+  if (mode === 'anywhere') {
+    for (const needle of new Set(terms.map((term) => term.value))) {
+      if (!needle) continue
+      for (
+        let at = folded.indexOf(needle);
+        at >= 0;
+        at = folded.indexOf(needle, at + 1)
+      )
+        ranges.push({ start: at, end: at + needle.length })
+    }
+  } else {
+    // Match word by word, as the index does: "w2 employer" finds
+    // "w2-employer.pdf", and the last word is a prefix.
+    const words = [...folded.matchAll(WORD)].map((match) => ({
+      start: match.index,
+      end: match.index + match[0].length,
+      word: match[0].slice(0, MAX_TOKEN_LENGTH),
+    }))
+    const sequences = new Map<string, string[]>()
+    for (const term of terms) {
       const tokens = tokenize(term.value)
       if (!tokens.length) continue
-      // The last word is a prefix, as the index matches it.
       tokens.push(wordPrefix(tokens.pop()!))
-      if (term.phrase || tokens.length > 1) needles.add(tokens.join(' '))
-      else needles.add(tokens[0])
+      sequences.set(tokens.join(' '), tokens)
     }
-  }
-  for (const needle of needles) {
-    if (!needle) continue
-    let from = 0
-    for (;;) {
-      const index = folded.indexOf(needle, from)
-      if (index < 0) break
-      from = index + 1
-      if (
-        mode === 'words' &&
-        index > 0 &&
-        /[\p{L}\p{N}]/u.test(folded[index - 1])
-      )
-        continue
-      ranges.push({ start: index, end: index + needle.length })
+    for (const tokens of sequences.values()) {
+      const last = tokens.length - 1
+      for (let first = 0; first + last < words.length; first++) {
+        let matches = true
+        for (let k = 0; k < last && matches; k++)
+          matches = words[first + k].word === tokens[k]
+        if (!matches || !words[first + last].word.startsWith(tokens[last]))
+          continue
+        ranges.push({
+          start: words[first].start,
+          end: words[first + last].start + tokens[last].length,
+        })
+      }
     }
   }
   ranges.sort((a, b) => a.start - b.start || b.end - a.end)
