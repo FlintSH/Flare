@@ -116,6 +116,16 @@ describe('search text', () => {
     expect(
       segments.map((segment) => segment.text).join('').length
     ).toBeLessThan(240)
+    // The window with the most different words wins over the first match.
+    const spread = snippet(
+      'x '.repeat(200) + 'alpha ' + 'y '.repeat(100) + 'alpha beta gamma end',
+      parseSearch('alpha beta gamma').terms
+    )
+    expect(spread.filter((s) => s.match).map((s) => s.text)).toEqual([
+      'alpha',
+      'beta',
+      'gamma',
+    ])
     expect(segmentText('abc', [{ start: 1, end: 2 }])).toEqual([
       { text: 'a' },
       { text: 'b', match: true },
@@ -141,6 +151,20 @@ describe('extraction helpers', () => {
     expect(kind('paste', 'application/octet-stream', true)).toBe('text')
     expect(kind('a.mp4', 'video/mp4')).toBeNull()
     expect(kind('a.bin', 'application/octet-stream')).toBeNull()
+  })
+
+  it('strips hostile markup in one pass, so an upload cannot stall the server', () => {
+    // Unclosed comments, styles and tags each made the old patterns rescan to
+    // the end of the text: 100 KB took seconds and 1 MB minutes.
+    const started = performance.now()
+    for (const hostile of ['<!--', '<style', '<a', '<script'])
+      markupText(hostile.repeat(200_000))
+    expect(performance.now() - started).toBeLessThan(1_000)
+    expect(
+      markupText(
+        '<P>İstanbul<SCRIPT>bad()</Script>ok <style a>x</STYLE>end<!-- c -->z'
+      )
+    ).toBe(' İstanbul ok  end z')
   })
 
   it('reads text from markup and refuses binary data', () => {

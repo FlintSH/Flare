@@ -48,9 +48,20 @@ export async function claimSearchIndexJobs(
   const leaseId = randomUUID()
   return prisma.$queryRaw<SearchIndexJob[]>`
     WITH candidates AS (
+      -- Each branch reads the (status, availableAt) index instead of sorting
+      -- the whole backlog; locked rows are rechecked before they're claimed.
       SELECT "fileId" FROM "FileSearchIndex"
-      WHERE (status = 'PENDING' AND "availableAt" <= ${now})
-        OR (status = 'PROCESSING' AND "leaseUntil" <= ${now})
+      WHERE "fileId" IN (
+        (SELECT "fileId" FROM "FileSearchIndex"
+          WHERE status = 'PENDING' AND "availableAt" <= ${now}
+          ORDER BY "availableAt" DESC LIMIT ${slots * 4})
+        UNION ALL
+        (SELECT "fileId" FROM "FileSearchIndex"
+          WHERE status = 'PROCESSING' AND "leaseUntil" <= ${now}
+          LIMIT ${slots * 4})
+      )
+      AND ((status = 'PENDING' AND "availableAt" <= ${now})
+        OR (status = 'PROCESSING' AND "leaseUntil" <= ${now}))
       ORDER BY "availableAt" DESC
       LIMIT ${slots}
       FOR UPDATE SKIP LOCKED
@@ -165,25 +176,30 @@ export async function saveRecognizedText(fileId: string, text: string) {
 
 /**
  * Read files again: rows from an older extractor, and skipped files whose
- * setting has been turned back on. Returns how many were queued.
+ * setting has been turned back on. Returns how many were queued. Skipped rows
+ * are found through the status index; checking versions reads every row, so
+ * workers do that once per process.
  */
-export async function requeueOutdated(enabled: {
-  ocr: boolean
-  documents: boolean
-}) {
+export async function requeueOutdated(
+  enabled: { ocr: boolean; documents: boolean },
+  /** Also look for rows from an older extractor, which reads every row. */
+  versions = true
+) {
   const reasons = [
     ...(enabled.ocr ? [OCR_OFF_REASON] : []),
     ...(enabled.documents ? [DOCUMENTS_OFF_REASON] : []),
   ]
   const now = new Date()
   const [outdated, unskipped] = await Promise.all([
-    prisma.fileSearchIndex.updateMany({
-      where: {
-        version: { lt: SEARCH_EXTRACTOR_VERSION },
-        status: { notIn: ['PENDING', 'PROCESSING'] },
-      },
-      data: { status: 'PENDING', attempts: 0, availableAt: now },
-    }),
+    versions
+      ? prisma.fileSearchIndex.updateMany({
+          where: {
+            version: { lt: SEARCH_EXTRACTOR_VERSION },
+            status: { notIn: ['PENDING', 'PROCESSING'] },
+          },
+          data: { status: 'PENDING', attempts: 0, availableAt: now },
+        })
+      : { count: 0 },
     reasons.length
       ? prisma.fileSearchIndex.updateMany({
           where: { status: 'SKIPPED', reason: { in: reasons } },

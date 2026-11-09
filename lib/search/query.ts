@@ -384,22 +384,30 @@ const ENTRY_EXAMPLES = 3
  */
 export function snippet(text: string, terms: SearchTerm[]): TextSegment[] {
   const ranges = findTermRanges(text, terms, 'words')
-  const folded = foldText(text)
+  // Slide a window over the matches, which come sorted and don't overlap,
+  // counting the different words inside it. Linear in the number of matches.
+  const reach = SNIPPET_LENGTH - SNIPPET_BEFORE
+  const counts = new Map<string, number>()
+  const word = (index: number) =>
+    text.slice(ranges[index].start, ranges[index].end).toLowerCase()
   let best = ranges[0]
   let bestWords = 0
-  for (const candidate of ranges.slice(0, 50)) {
-    const words = new Set(
-      ranges
-        .filter(
-          (range) =>
-            range.start >= candidate.start &&
-            range.end <= candidate.start + SNIPPET_LENGTH - SNIPPET_BEFORE
-        )
-        .map((range) => folded.slice(range.start, range.end))
-    ).size
-    if (words > bestWords) {
-      best = candidate
-      bestWords = words
+  let next = 0
+  for (let first = 0; first < Math.min(ranges.length, 50); first++) {
+    const limit = ranges[first].start + reach
+    for (; next < ranges.length && ranges[next].end <= limit; next++) {
+      const key = word(next)
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    if (counts.size > bestWords) {
+      best = ranges[first]
+      bestWords = counts.size
+    }
+    if (first < next) {
+      const key = word(first)
+      const left = (counts.get(key) ?? 1) - 1
+      if (left) counts.set(key, left)
+      else counts.delete(key)
     }
   }
   const first = best?.start ?? 0

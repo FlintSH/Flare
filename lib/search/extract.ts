@@ -172,19 +172,55 @@ function decodeEntities(text: string) {
   )
 }
 
-/** The words of HTML, SVG or document XML, without markup. */
-export function markupText(markup: string): string {
-  return decodeEntities(
-    markup
-      .replace(/<(script|style)\b[\s\S]*?<\/\1\s*>/gi, ' ')
-      .replace(/<!--[\s\S]*?-->/g, ' ')
-      // Paragraphs, cells, rows, breaks and tabs separate words; runs don't.
-      .replace(
-        /<\/?(?:w:p|w:tab|w:br|w:cr|a:p|a:br|text:p|text:h|text:tab|text:line-break|text:s|si|c|row|p|div|br|li|tr|td|th|h[1-6]|title|text|tspan|desc)\b[^>]*>/gi,
-        ' '
-      )
-      .replace(/<[^>]*>/g, '')
+// Paragraphs, cells, rows, breaks and tabs separate words; runs don't.
+const SEPARATING_TAGS = new Set(
+  'w:p w:tab w:br w:cr a:p a:br text:p text:h text:tab text:line-break text:s si c row p div br li tr td th h1 h2 h3 h4 h5 h6 title text tspan desc'.split(
+    ' '
   )
+)
+
+/**
+ * The words of HTML, SVG or document XML, without markup. One pass that only
+ * moves forward: these files come from uploaders, and backtracking patterns
+ * would let a crafted file hold the server for minutes.
+ */
+export function markupText(markup: string): string {
+  let text = ''
+  let at = 0
+  while (at < markup.length) {
+    const open = markup.indexOf('<', at)
+    if (open < 0) {
+      text += markup.slice(at)
+      break
+    }
+    text += markup.slice(at, open)
+    if (markup.startsWith('<!--', open)) {
+      const close = markup.indexOf('-->', open + 4)
+      if (close < 0) break
+      text += ' '
+      at = close + 3
+      continue
+    }
+    const close = markup.indexOf('>', open + 1)
+    if (close < 0) break
+    const tag = markup.slice(open + 1, Math.min(close, open + 40))
+    const name = (/^\/?([\w:-]*)/.exec(tag)?.[1] ?? '').toLowerCase()
+    at = close + 1
+    if ((name === 'script' || name === 'style') && tag[0] !== '/') {
+      // Skip to the matching end tag; without one, the rest is code.
+      const endTag = new RegExp(`</${name}`, 'ig')
+      endTag.lastIndex = at
+      const end = endTag.exec(markup)?.index ?? -1
+      if (end < 0) break
+      const endClose = markup.indexOf('>', end)
+      if (endClose < 0) break
+      text += ' '
+      at = endClose + 1
+      continue
+    }
+    if (SEPARATING_TAGS.has(name)) text += ' '
+  }
+  return decodeEntities(text)
 }
 
 /** Decode the start of a text file, or null when it is really binary. */
@@ -264,7 +300,10 @@ async function extractImageText(file: ExtractableFile): Promise<Extraction> {
   return found('ocr', recognizedText(result.text ?? ''), NO_IMAGE_TEXT)
 }
 
-async function extractPdfText(file: ExtractableFile): Promise<Extraction> {
+async function extractPdfText(
+  file: ExtractableFile,
+  signal: AbortSignal
+): Promise<Extraction> {
   if (mbToBytes(file.size) > PDF_MAX_BYTES)
     return {
       status: 'SKIPPED',
@@ -288,11 +327,15 @@ async function extractPdfText(file: ExtractableFile): Promise<Extraction> {
       false
     )
   }
+  // Stop parsing when the worker gives up on this file.
+  const stop = () => void document.loadingTask.destroy()
+  signal.addEventListener('abort', stop, { once: true })
   try {
     const pages: string[] = []
     let length = 0
     const count = Math.min(document.numPages, PDF_MAX_PAGES)
     for (let number = 1; number <= count; number++) {
+      signal.throwIfAborted()
       const page = await document.getPage(number)
       const { items } = await page.getTextContent()
       const text = items
@@ -316,6 +359,7 @@ async function extractPdfText(file: ExtractableFile): Promise<Extraction> {
       false
     )
   } finally {
+    signal.removeEventListener('abort', stop)
     void document.loadingTask.destroy()
   }
 }
@@ -339,7 +383,8 @@ function partOrder(path: string) {
 
 async function extractDocumentText(
   file: ExtractableFile,
-  kind: 'docx' | 'pptx' | 'xlsx' | 'odf'
+  kind: 'docx' | 'pptx' | 'xlsx' | 'odf',
+  signal: AbortSignal
 ): Promise<Extraction> {
   if (mbToBytes(file.size) > DOCUMENT_MAX_BYTES)
     return {
@@ -365,6 +410,7 @@ async function extractDocumentText(
     const parts: { path: string; xml: string }[] = []
     let total = 0
     for await (const entry of zip.eachEntry()) {
+      signal.throwIfAborted()
       if (!DOCUMENT_PARTS[kind].test(entry.fileName)) continue
       // Encrypted members can't be read; their declared sizes can lie.
       if (entry.generalPurposeBitFlag & 0x1) throw damaged
@@ -394,7 +440,8 @@ async function extractDocumentText(
 }
 
 async function extractArchiveEntries(
-  file: ExtractableFile
+  file: ExtractableFile,
+  signal: AbortSignal
 ): Promise<Extraction> {
   let ref
   try {
@@ -403,6 +450,8 @@ async function extractArchiveEntries(
     throw new ExtractionFailure('Flare couldn’t open this archive in storage.')
   }
   const controller = new AbortController()
+  const stop = () => controller.abort()
+  signal.addEventListener('abort', stop, { once: true })
   try {
     const { index } = await getArchiveIndex(ref, {
       signal: controller.signal,
@@ -435,6 +484,7 @@ async function extractArchiveEntries(
       false
     )
   } finally {
+    signal.removeEventListener('abort', stop)
     controller.abort()
   }
 }
@@ -453,23 +503,28 @@ async function extractPlainText(
   return found('text', markup ? markupText(text) : text, 'This file is empty.')
 }
 
-/** Read what can be searched in a file. Throws {@link ExtractionFailure}. */
+/**
+ * Read what can be searched in a file. Throws {@link ExtractionFailure}.
+ * Aborting `signal` stops PDF parsing, document reading and archive listing;
+ * text recognition finishes in its own worker.
+ */
 export async function extractSearchableText(
-  file: ExtractableFile
+  file: ExtractableFile,
+  signal: AbortSignal = new AbortController().signal
 ): Promise<Extraction> {
   const extractor = extractorFor(file)
   switch (extractor) {
     case 'ocr':
       return extractImageText(file)
     case 'pdf':
-      return extractPdfText(file)
+      return extractPdfText(file, signal)
     case 'docx':
     case 'pptx':
     case 'xlsx':
     case 'odf':
-      return extractDocumentText(file, extractor)
+      return extractDocumentText(file, extractor, signal)
     case 'archive':
-      return extractArchiveEntries(file)
+      return extractArchiveEntries(file, signal)
     case 'markup':
       return extractPlainText(file, true)
     case 'text':

@@ -378,7 +378,7 @@ curl --fail-with-body \
 | `skipped`     | A setting is off or the file is over a size limit.                                                  |
 | `unsupported` | Flare doesn't read this kind of file, such as video, audio or HEIC images.                          |
 
-Names, tags and folders are searchable whatever the state. Each list row's `searchIndex` has the file's `state`, `source` and a `reason` written for people; it never contains storage paths or parser errors.
+The `index` list filter reads each file's current state, which the `snapshot` ceiling doesn't freeze: while files are being read, a file can move between states from one page to the next. Refresh the list when reading finishes. Names, tags and folders are searchable whatever the state. Each list row's `searchIndex` has the file's `state`, `source` and a `reason` written for people; it never contains storage paths or parser errors.
 
 **`POST /api/files/search-index`** · Browser session or legacy token; named tokens are refused
 

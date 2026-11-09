@@ -22,6 +22,13 @@ function latinAccent(codePoint: number) {
 export function foldText(value: string): string {
   let folded = ''
   for (const character of value) {
+    const code = character.charCodeAt(0)
+    // Nothing below the Latin accents needs more than lower case.
+    if (code < 0xc0) {
+      folded +=
+        code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : character
+      continue
+    }
     const lower = character.toLowerCase()
     const base = character.normalize('NFKD').replace(MARKS, '').toLowerCase()
     if (latinAccent(character.codePointAt(0)!) && /^[a-z]$/.test(base))

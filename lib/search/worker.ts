@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/logger'
 import { startIntervalWorker } from '@/lib/runtime/interval-worker'
 
 import {
+  type ExtractableFile,
   type Extraction,
   ExtractionFailure,
   extractSearchableText,
@@ -39,22 +40,43 @@ const state = (processState[stateKey] ??= {
   running: null as Promise<void> | null,
   again: false,
   requeuedAt: 0,
-}) as { running: Promise<void> | null; again: boolean; requeuedAt: number }
+  versionsChecked: false,
+  active: 0,
+}) as {
+  running: Promise<void> | null
+  again: boolean
+  requeuedAt: number
+  /** Rows from an older extractor were requeued once in this process. */
+  versionsChecked: boolean
+  /** Extractions running in this process, including ones past their deadline. */
+  active: number
+}
+// State from before a development reload may predate newer fields.
+state.active ??= 0
 
-function withTimeout<T>(work: Promise<T>): Promise<T> {
+/**
+ * Extract with a deadline. Work that outlives it is aborted where it can be,
+ * and keeps counting against this process's concurrency until it really
+ * ends, so slow files can't pile up when their claims are retried.
+ */
+function extractWithin(file: ExtractableFile): Promise<Extraction> {
+  const controller = new AbortController()
+  state.active++
+  const work = extractSearchableText(file, controller.signal).finally(
+    () => state.active--
+  )
   let timer: ReturnType<typeof setTimeout> | undefined
   return Promise.race([
     work,
     new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () =>
-          reject(
-            new ExtractionFailure(
-              'Reading this file took too long, so Flare stopped.'
-            )
-          ),
-        EXTRACTION_TIMEOUT_MS
-      )
+      timer = setTimeout(() => {
+        controller.abort()
+        reject(
+          new ExtractionFailure(
+            'Reading this file took too long, so Flare stopped.'
+          )
+        )
+      }, EXTRACTION_TIMEOUT_MS)
     }),
   ]).finally(() => clearTimeout(timer))
 }
@@ -104,7 +126,7 @@ async function readFile(job: SearchIndexJob, documents: boolean) {
     )
     renew.unref()
     try {
-      extraction = await withTimeout(extractSearchableText(file))
+      extraction = await extractWithin(file)
     } catch (error) {
       const failure =
         error instanceof ExtractionFailure
@@ -126,9 +148,15 @@ export async function runSearchIndexBatch(): Promise<number> {
   const documents = config.search.documents
   if (Date.now() - state.requeuedAt >= REQUEUE_EVERY_MS) {
     state.requeuedAt = Date.now()
-    await requeueOutdated({ ocr: config.ocr.enabled, documents })
+    await requeueOutdated(
+      { ocr: config.ocr.enabled, documents },
+      !state.versionsChecked
+    )
+    state.versionsChecked = true
   }
-  const jobs = await claimSearchIndexJobs(SEARCH_INDEX_CONCURRENCY)
+  const jobs = await claimSearchIndexJobs(
+    Math.max(0, SEARCH_INDEX_CONCURRENCY - state.active)
+  )
   const results = await Promise.allSettled(
     jobs.map((job) => readFile(job, documents))
   )
