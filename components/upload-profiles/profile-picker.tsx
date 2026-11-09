@@ -17,9 +17,11 @@ import {
 import { RefusedRequest } from '@/lib/client/request'
 import { allows } from '@/lib/permissions/actions'
 import {
+  type EffectiveUploadOptions,
   UPLOAD_DEFAULTS,
   type UploadProfileOptions,
   type UploadProfileView,
+  effectiveUploadOptions,
 } from '@/lib/uploads/schema'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
@@ -29,7 +31,7 @@ export type ProfilesData = {
   profiles: (UploadProfileView & { effectiveRevision?: string })[]
   defaultProfileId: string | null
   accountOptions: UploadProfileOptions
-  effective: Required<UploadProfileOptions>
+  effective: EffectiveUploadOptions
   canShare: boolean
 }
 
@@ -104,7 +106,12 @@ export function ProfilePicker({
       ? { ...UPLOAD_DEFAULTS, visibility: 'PRIVATE' as const }
       : value === undefined
         ? data?.effective
-        : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
+        : effectiveUploadOptions(data?.accountOptions, profile?.options)
+  const naming = effective?.nameTemplate
+    ? `Filenames from ${effective.nameTemplate}`
+    : effective?.randomizeFileUrls
+      ? 'Random filenames'
+      : 'Original filenames'
   const expiry =
     effective?.expiration === 'DISABLED'
       ? 'no expiry'
@@ -178,7 +185,8 @@ export function ProfilePicker({
           Your uploads are private because your roles do not allow sharing.
         </p>
       )}
-      <p className="text-pretty text-xs text-muted-foreground">
+      {/* A name pattern can be one long unbroken word. */}
+      <p className="text-pretty text-xs text-muted-foreground [overflow-wrap:anywhere]">
         {archiveMode && !selectedId
           ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
           : archiveMode && selectedId && !profile
@@ -188,7 +196,7 @@ export function ProfilePicker({
                 : 'Loading the selected upload profile…')
             : error ||
               (effective
-                ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveMode ? archiveExpiry : expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
+                ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveMode ? archiveExpiry : expiry} · ${naming}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
                 : 'Your saved default is applied by the server.')}
       </p>
       {archiveMode &&

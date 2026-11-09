@@ -100,7 +100,7 @@ The token must include `files:upload`, and the selected profile must belong to t
 - Setting an explicit `expiresAt` fails with `403`, including `null`.
 - Chunk requests can only access upload sessions created with that bound profile.
 
-Bindings apply to the profile's resolved sharing, expiration, naming, style, and tag options. A folder is a request-only destination and is still selectable from the account's folders. Upload passwords are also request-only; they are not saved upload-profile options. Avoid sending redundant option fields for bound tokens: send the file and let the selected profile supply its policy.
+Bindings apply to the profile's resolved sharing, expiration, naming (original, random, or a [name pattern](../guide/upload-profiles#name-uploads-with-a-pattern)), style, and tag options. A folder is a request-only destination and is still selectable from the account's folders. Upload passwords are also request-only; they are not saved upload-profile options. Avoid sending redundant option fields for bound tokens: send the file and let the selected profile supply its policy.
 
 New uploads use the profile's current settings. Chunked uploads keep the option snapshot selected when they start. Removing a bound profile does not turn the token into an unrestricted token; uploads fail until the connection is replaced with a valid configuration.
 

@@ -16,6 +16,7 @@ import {
   type ResolvedUploadOptions,
   type UploadRequestOptions,
   mergeUploadOptions,
+  namingChoice,
   uploadProfileOptionsSchema,
   uploadRequestOptionFields,
   uploadRequestOptionsSchema,
@@ -44,7 +45,13 @@ export function requestUploadOptions(req: Request): UploadRequestOptions {
   if (folderHeader && folderQuery && folderHeader !== folderQuery)
     throw new UploadError('Conflicting upload folder selections.')
   const folder = folderHeader ?? folderQuery
+  const patternHeader = req.headers.get('x-upload-name-template')
+  const patternQuery = searchParams.get('nameTemplate')
+  if (patternHeader && patternQuery && patternHeader !== patternQuery)
+    throw new UploadError('Conflicting name pattern selections.')
+  const pattern = patternHeader ?? patternQuery
   return parseInput(uploadRequestOptionsSchema, {
+    ...(pattern ? { nameTemplate: pattern } : {}),
     ...(value ? { profileId: value === 'none' ? null : value } : {}),
     ...(folder ? { folderId: folder === 'none' ? null : folder } : {}),
   })
@@ -57,6 +64,8 @@ export function parseUploadFields(
   const values: Record<string, unknown> = {}
   for (const key of Object.keys(uploadRequestOptionFields)) {
     if (fields[key] === undefined) continue
+    // An empty pattern field chooses nothing, like an empty header.
+    if (key === 'nameTemplate' && fields[key] === '') continue
     if (key === 'tagIds') {
       try {
         values[key] = JSON.parse(fields[key])
@@ -132,10 +141,13 @@ export async function resolveUploadOptions(
   const defaults = accountUploadOptions(account, config)
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
+    // Compared as merged, because one naming option can undo the other.
+    const { expiresAt: _expiresAt, ...choices } = request
+    const asked = mergeUploadOptions(defaults, profileOptions, choices, now)
     for (const key of Object.keys(
       uploadProfileOptionsSchema.shape
     ) as (keyof typeof profileOptions)[]) {
-      if (request[key] !== undefined && !sameOption(request[key], bound[key]))
+      if (!sameOption(asked[key], bound[key]))
         throw new UploadError(
           'This token cannot override its upload profile.',
           403
@@ -187,9 +199,11 @@ export function applyUploadOverrides(
       'The upload profile cannot change after upload starts.',
       403
     )
+  const naming = namingChoice(request)
   if (
-    request.randomizeFileUrls !== undefined &&
-    request.randomizeFileUrls !== resolved.randomizeFileUrls
+    naming.randomizeFileUrls !== undefined &&
+    (naming.randomizeFileUrls !== resolved.randomizeFileUrls ||
+      naming.nameTemplate !== (resolved.nameTemplate ?? null))
   )
     throw new UploadError(
       'The naming strategy cannot change after upload starts.'
@@ -200,7 +214,10 @@ export function applyUploadOverrides(
     ) as (keyof typeof resolved)[]) {
       if (
         key in request &&
-        !sameOption(request[key as keyof UploadRequestOptions], resolved[key])
+        !sameOption(
+          request[key as keyof UploadRequestOptions],
+          resolved[key as keyof ResolvedUploadOptions]
+        )
       )
         throw new UploadError(
           'This token cannot override its upload profile.',

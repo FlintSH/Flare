@@ -30,7 +30,7 @@ curl --fail-with-body --silent --show-error \
   "$FLARE_URL/api/files" | jq -r '.data.pageUrl'
 ```
 
-Use `X-Upload-Profile` to select a saved profile, or bind the token to that profile in the dashboard. A bound token keeps your script's policy on the Flare side; the script only needs to send the file.
+Use `X-Upload-Profile` to select a saved profile, or bind the token to that profile in the dashboard. A bound token keeps your script's policy on the Flare side; the script only needs to send the file. To name a single upload yourself, send a [name pattern](./files#select-a-profile-and-folder-before-sending-bytes) such as `X-Upload-Name-Template: shot-{date}-{words:2}`.
 
 ## Upload from Node.js
 

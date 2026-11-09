@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { Fragment, useRef, useState } from 'react'
 
 import {
   AlertCircle,
@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/select'
 
 import { apiRequest } from '@/lib/client/request'
+import { nameTemplateProblem } from '@/lib/files/name-template'
 import {
   PROFILE_NAME_MAX_LENGTH,
   PROFILE_TAG_LIMIT,
@@ -48,6 +49,7 @@ import { useAccountRefresh } from '@/hooks/use-account-query'
 import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
+import { NamePatternField, STARTING_NAME_PATTERN } from './name-pattern-field'
 import { UPLOAD_PROFILES, useUploadProfiles } from './profile-picker'
 
 // Profiles and recipes are insets inside their cards; both lists share it.
@@ -57,8 +59,10 @@ const listItemClassName =
 const tagTriggerClassName =
   'flex h-9 w-full items-center justify-between gap-2 whitespace-nowrap rounded-md border border-control bg-transparent px-3 py-2 text-left text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 md:text-sm'
 
+// File naming is one control over two options: a pattern, chosen here as
+// `pattern`, is saved as `nameTemplate` instead of `randomizeFileUrls`.
 const controls: {
-  key: Exclude<keyof UploadProfileOptions, 'tagIds'>
+  key: Exclude<keyof UploadProfileOptions, 'tagIds' | 'nameTemplate'>
   label: string
   choices: [string, string][]
 }[] = [
@@ -95,6 +99,7 @@ const controls: {
     choices: [
       ['false', 'Keep original name'],
       ['true', 'Random name'],
+      ['pattern', 'Custom pattern'],
     ],
   },
   {
@@ -232,6 +237,9 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     !!editing &&
     name.trim() === editing.name &&
     sameOptions(options, editing.options)
+  const patternProblem =
+    options.nameTemplate !== undefined &&
+    nameTemplateProblem(options.nameTemplate) !== null
 
   return (
     <div className="space-y-6">
@@ -446,46 +454,69 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               />
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
-              {controls.map((control) => (
-                <div key={control.key} className="space-y-2">
-                  <Label htmlFor={`profile-${control.key}`}>
-                    {control.label}
-                  </Label>
-                  <Select
-                    value={
-                      options[control.key] === undefined
-                        ? 'inherit'
-                        : String(options[control.key])
-                    }
-                    onValueChange={(value) =>
-                      setOptions((current) => {
-                        const next = { ...current }
-                        if (value === 'inherit') delete next[control.key]
-                        else
-                          Object.assign(next, {
-                            [control.key]:
-                              control.key === 'randomizeFileUrls'
-                                ? value === 'true'
-                                : value,
+              {controls.map((control) => {
+                const naming = control.key === 'randomizeFileUrls'
+                const pattern = naming ? options.nameTemplate : undefined
+                return (
+                  <Fragment key={control.key}>
+                    <div className="space-y-2">
+                      <Label htmlFor={`profile-${control.key}`}>
+                        {control.label}
+                      </Label>
+                      <Select
+                        value={
+                          pattern !== undefined
+                            ? 'pattern'
+                            : options[control.key] === undefined
+                              ? 'inherit'
+                              : String(options[control.key])
+                        }
+                        onValueChange={(value) =>
+                          setOptions((current) => {
+                            const next = { ...current }
+                            if (naming) delete next.nameTemplate
+                            if (value === 'inherit' || value === 'pattern')
+                              delete next[control.key]
+                            else
+                              Object.assign(next, {
+                                [control.key]: naming
+                                  ? value === 'true'
+                                  : value,
+                              })
+                            if (value === 'pattern')
+                              next.nameTemplate =
+                                current.nameTemplate ?? STARTING_NAME_PATTERN
+                            return next
                           })
-                        return next
-                      })
-                    }
-                  >
-                    <SelectTrigger id={`profile-${control.key}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">Inherit</SelectItem>
-                      {control.choices.map(([value, label]) => (
-                        <SelectItem value={value} key={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+                        }
+                      >
+                        <SelectTrigger id={`profile-${control.key}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="inherit">Inherit</SelectItem>
+                          {control.choices.map(([value, label]) => (
+                            <SelectItem value={value} key={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {pattern !== undefined && (
+                      <NamePatternField
+                        value={pattern}
+                        onChange={(nameTemplate) =>
+                          setOptions((current) => ({
+                            ...current,
+                            nameTemplate,
+                          }))
+                        }
+                      />
+                    )}
+                  </Fragment>
+                )
+              })}
               <div className="space-y-2">
                 <Label htmlFor="profile-tags">Tags</Label>
                 <Popover>
@@ -677,7 +708,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               <Button
                 className="w-full sm:w-auto"
                 onClick={() => void save()}
-                disabled={busy || !name.trim() || unchanged}
+                disabled={busy || !name.trim() || unchanged || patternProblem}
               >
                 {busy ? 'Saving…' : 'Save profile'}
               </Button>

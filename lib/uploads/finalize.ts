@@ -40,7 +40,10 @@ export async function prepareUploadDestination(
 ) {
   const displayName = filename
   // A taken URL gets its suffix when the upload is published, under the lock.
-  const urlSafeName = urlSafeFilename(filename, options.randomizeFileUrls)
+  const urlSafeName = urlSafeFilename(filename, {
+    randomize: options.randomizeFileUrls,
+    template: options.nameTemplate,
+  })
   if (!urlSafeName || urlSafeName.includes('/') || urlSafeName.includes('\\'))
     throw new UploadError('Invalid filename.')
   setAuditTarget({ type: 'file', name: displayName })

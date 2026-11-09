@@ -39,11 +39,46 @@ Fields not explicitly set by a starter still inherit your account or instance de
 | Visibility      | Inherit, Public, Private                              | Who can open new uploads.                                         |
 | Expiration      | Inherit, none, one hour, one day, one week, one month | A relative lifetime calculated when the upload starts.            |
 | When it expires | Inherit, Delete file, Make private                    | Whether expiration removes the stored file or keeps it privately. |
-| File naming     | Inherit, original name, random name                   | The filename portion of new file URLs.                            |
+| File naming     | Inherit, original name, random name, custom pattern   | The filename portion of new file URLs.                            |
 | Share page      | Inherit, Minimal, Framed, Delivery                    | The presentation used by new share pages.                         |
 | Tags            | Your selected tags                                    | Organizational labels applied to new uploads.                     |
 
 Passwords and folder destinations are chosen separately for individual uploads. They are not stored in profiles. A random URL name is not an access restriction: choose private visibility or password protection when access should be restricted.
+
+## Name uploads with a pattern
+
+Choose **File naming → Custom pattern** to decide what the filename part of new URLs looks like. A pattern is text with placeholders in braces. With `shot-{date}-{random:4}`, a PNG uploaded on 14 March 2026 gets a URL name like `shot-2026-03-14-x7Kp.png`.
+
+<Screenshot src="/screenshots/handbook/name-pattern.webp" alt="Upload profile editor with File naming set to Custom pattern, the pattern shot-{date}-{random:4}, an example name beneath it, and a row of placeholder buttons" caption="The example under the pattern updates as you type. The buttons insert a placeholder at the cursor." />
+
+1. Open **Profile → Uploads** and select or create a profile.
+2. Set **File naming** to **Custom pattern**. The **Name pattern** field appears with `{date}-{random}` to start from.
+3. Type your pattern, or use the placeholder buttons to insert one at the cursor.
+4. Check the example under the field, then choose **Save profile**.
+
+| Placeholder   | Becomes                                                                                             | Example               |
+| ------------- | --------------------------------------------------------------------------------------------------- | --------------------- |
+| `{name}`      | The original filename, made URL-safe the same way as **Keep original name**, without its extension. | `team-photo`          |
+| `{random}`    | Six random letters and digits. `{random:10}` gives ten; any length from 1 to 32 works.              | `x7Kp2a`              |
+| `{words}`     | Three random words joined by hyphens. `{words:2}` gives two; any number from 1 to 6 works.          | `amber-otter-lantern` |
+| `{date}`      | The date the upload started.                                                                        | `2026-03-14`          |
+| `{time}`      | The time the upload started, as hours, minutes and seconds.                                         | `092653`              |
+| `{year}`      | Four digits. `{month}`, `{day}`, `{hour}`, `{minute}` and `{second}` are two digits each.           | `2026`                |
+| `{timestamp}` | The upload's start as Unix time in seconds.                                                         | `1773480413`          |
+
+What to know before relying on a pattern:
+
+- **Allowed text.** Around the placeholders you can type letters, digits, hyphens and underscores, up to 100 characters in all. Spaces, dots, slashes and other characters are refused, and the field says which one to remove. Capital letters you type are kept.
+- **Extension.** Flare adds the uploaded file's extension after the pattern, by the same rule as other names, so don't write one. A file without a recognized extension gets none.
+- **Time zone.** Dates and times are UTC, not your local time. A screenshot taken at 9 pm in New York is dated the next day.
+- **Repeated names.** A pattern doesn't need a random part. If a URL name is already used in your account, Flare adds a hyphen and 12 random characters before the extension rather than replacing the older file. With the pattern `latest`, the first PNG is `latest.png` and the next is something like `latest-3f9c2a71-b04.png`.
+- **Length.** A name longer than 200 characters before its extension is cut to 200.
+- **Privacy.** `{words}` draws from 256 words, so `{words:3}` has about 16.7 million combinations. Like a random name, a pattern is not an access restriction.
+- **Display names.** Only the URL name changes. The library keeps showing the original filename, and [filename tag rules](./tags#automatic-tags) keep checking it.
+
+A pattern replaces the choice between original and random names. A profile with a pattern uses it even when your account default is **Randomize file URLs**, and a profile set to **Keep original name** or **Random name** never inherits a pattern. Account upload defaults offer only original or random names. To use a pattern for every upload, save it in a profile and choose **Make default**.
+
+**Save profile** stays unavailable while the pattern has a problem. Existing files keep their URLs when you add or change a pattern. Integrations can send a pattern with a single upload instead; see [the upload API](../api/files#select-a-profile-and-folder-before-sending-bytes).
 
 ## Understand the order of settings
 
@@ -59,7 +94,7 @@ The browser's profile picker offers three approaches:
 - **Account settings only:** bypass the saved default profile.
 - **A named profile:** use that profile for this upload.
 
-The summary beneath the picker shows effective visibility, expiration, and filename behavior. The upload or paste form's visibility control can then override that upload's visibility.
+The summary beneath the picker shows effective visibility, expiration, and filename behavior. For a profile with a name pattern it shows the pattern, as in **Filenames from shot-{date}-{random:4}**. The upload or paste form's visibility control can then override that upload's visibility.
 
 [Creating or extracting an archive](./archives#choose-an-upload-profile-deliberately) has a separate default: **Private (no profile)** creates private files without expiration and bypasses your account's saved default profile. You can explicitly select an owned profile in either archive dialog. Its normal settings and permissions then apply to the new outputs, while **Save to** independently chooses the destination. Review a public profile carefully: it can expose extracted files or the contents of a newly packaged archive even when the source files were private.
 
@@ -78,7 +113,7 @@ Server limits, file restrictions, and quotas apply regardless of profiles. A pro
 Under **Profile → Uploads → Account upload defaults**, you can set:
 
 - **Vanity URL:** use a memorable path in place of the account's generated ID.
-- **Randomize file URLs:** choose random names for future uploads unless a profile overrides it.
+- **Randomize file URLs:** choose random names for future uploads unless a profile overrides it. A [name pattern](#name-uploads-with-a-pattern) is a profile setting.
 - **When files expire:** choose delete or set private as the default expiry action.
 - **Default expiration:** disabled, one hour, one day, one week, or one month.
 
@@ -126,5 +161,7 @@ A saved profile can hold a setting this version of Flare doesn't have, such as t
 ```
 
 Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger file, and `POST /api/upload-profiles` answers `413` to a larger request, whether it carries a recipe or a new profile. Recipes with tags contain account-specific tag IDs. Those tags must belong to the importing account and still exist. Remove tags from a recipe intended for another account, then let that person select their own labels after import. Unsupported versions and unknown fields are rejected.
+
+A profile with a name pattern exports it as `"nameTemplate": "shot-{date}-{random:4}"` in place of `randomizeFileUrls`. A recipe that carries a pattern together with `"randomizeFileUrls": true` is refused, because the two contradict each other. Versions of Flare from before name patterns treat `nameTemplate` as an unknown field and refuse the recipe, so share such a recipe only with instances that have this feature.
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.

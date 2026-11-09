@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { nameTemplateProblem } from '@/lib/files/name-template'
 import { newFilePasswordSchema } from '@/lib/files/password-policy'
 import { HttpError } from '@/lib/http/errors'
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
@@ -16,6 +17,12 @@ export const PROFILE_NAME_MAX_LENGTH = 80
 /** The most tags a profile, or one upload, can select. */
 export const PROFILE_TAG_LIMIT = 20
 
+/** A pattern for new URL names, such as `shot-{date}-{random:4}`. */
+export const nameTemplateSchema = z.string().superRefine((value, ctx) => {
+  const problem = nameTemplateProblem(value)
+  if (problem) ctx.addIssue({ code: 'custom', message: problem })
+})
+
 /**
  * Fields this version doesn't know, such as the retired copy format, are left
  * out; a known field with a bad value is not.
@@ -25,11 +32,29 @@ export const uploadProfileOptionsSchema = z.object({
   expiration: expirationSchema.optional(),
   expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
   randomizeFileUrls: z.boolean().optional(),
+  nameTemplate: nameTemplateSchema.optional(),
   shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
   tagIds: z.array(z.string().min(1).max(100)).max(PROFILE_TAG_LIMIT).optional(),
 })
 
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
+
+/**
+ * Naming is one choice written with two options. The most specific layer that
+ * names a strategy decides it whole: a pattern replaces original or random
+ * names, and a layer that only sets `randomizeFileUrls` drops a pattern it
+ * would have inherited.
+ */
+export function namingChoice(layer: {
+  randomizeFileUrls?: boolean
+  nameTemplate?: string | null
+}): { randomizeFileUrls?: boolean; nameTemplate?: string | null } {
+  if (layer.nameTemplate != null)
+    return { randomizeFileUrls: false, nameTemplate: layer.nameTemplate }
+  if (layer.randomizeFileUrls !== undefined)
+    return { randomizeFileUrls: layer.randomizeFileUrls, nameTemplate: null }
+  return {}
+}
 
 /**
  * Any other field is refused, except the retired copy format: older clients
@@ -39,6 +64,21 @@ export function requestFields<Shape extends z.ZodRawShape>(shape: Shape) {
   const fields = z.strictObject(shape)
   return fields
     .extend({ copyFormat: z.unknown().optional() })
+    .refine(
+      (value) => {
+        const naming = value as {
+          randomizeFileUrls?: unknown
+          nameTemplate?: unknown
+        }
+        return (
+          naming.nameTemplate === undefined || naming.randomizeFileUrls !== true
+        )
+      },
+      {
+        path: ['nameTemplate'],
+        message: 'Choose a name pattern or random names, not both.',
+      }
+    )
     .transform((value) => {
       const { copyFormat: _retired, ...sent } = value as {
         copyFormat?: unknown
@@ -104,7 +144,11 @@ export const uploadRequestOptionsSchema = requestFields(
 )
 
 export type UploadRequestOptions = z.infer<typeof uploadRequestOptionsSchema>
-export type ResolvedUploadOptions = Required<UploadProfileOptions> & {
+/** Every profile option decided. No pattern is `null`, not an absent field. */
+export type EffectiveUploadOptions = Required<
+  Omit<UploadProfileOptions, 'nameTemplate'>
+> & { nameTemplate: string | null }
+export type ResolvedUploadOptions = EffectiveUploadOptions & {
   profileId: string | null
   /** Request-only destination; older in-flight uploads may omit it. */
   folderId?: string | null
@@ -115,11 +159,12 @@ export type ResolvedUploadOptions = Required<UploadProfileOptions> & {
   password: string | null
 }
 
-export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
+export const UPLOAD_DEFAULTS: EffectiveUploadOptions = {
   visibility: 'PUBLIC',
   expiration: 'DISABLED',
   expiryAction: 'DELETE',
   randomizeFileUrls: false,
+  nameTemplate: null,
   shareStyle: 'framed',
   tagIds: [],
 }
@@ -138,9 +183,24 @@ export function expirationDate(
   return date.toISOString()
 }
 
+/** Account defaults under a profile's choices, as a summary or a hash reads them. */
+export function effectiveUploadOptions(
+  account: UploadProfileOptions = {},
+  profile: UploadProfileOptions = {}
+): EffectiveUploadOptions {
+  return {
+    ...UPLOAD_DEFAULTS,
+    ...account,
+    ...namingChoice(account),
+    ...profile,
+    ...namingChoice(profile),
+  }
+}
+
 export function mergeUploadOptions(
   account: UploadProfileOptions,
-  profile: UploadProfileOptions,
+  // A resolved upload is merged again when its chunks complete.
+  profile: UploadProfileOptions | ResolvedUploadOptions,
   request: UploadRequestOptions,
   now = new Date()
 ): ResolvedUploadOptions {
@@ -149,8 +209,11 @@ export function mergeUploadOptions(
     copyFormat: undefined,
     ...UPLOAD_DEFAULTS,
     ...account,
+    ...namingChoice(account),
     ...profile,
+    ...namingChoice(profile),
     ...request,
+    ...namingChoice(request),
   }
   const expiresAt =
     request.expiresAt !== undefined

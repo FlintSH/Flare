@@ -189,6 +189,12 @@ export async function initializeChunkUpload(
     selection.folderId !== bodyOptions.folderId
   )
     throw new UploadError('Conflicting upload folder selections.')
+  if (
+    selection.nameTemplate !== undefined &&
+    bodyOptions.nameTemplate !== undefined &&
+    selection.nameTemplate !== bodyOptions.nameTemplate
+  )
+    throw new UploadError('Conflicting name pattern selections.')
   const options = await resolveUploadOptions(user, {
     ...bodyOptions,
     ...selection,

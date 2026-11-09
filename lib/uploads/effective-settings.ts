@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 
 import type { FlareConfig } from '@/lib/config'
 
-import { UPLOAD_DEFAULTS, type UploadProfileOptions } from './schema'
+import { type UploadProfileOptions, effectiveUploadOptions } from './schema'
 
 export function accountUploadOptions(
   account: {
@@ -30,7 +30,7 @@ export function effectiveUploadRevision(
   profile: UploadProfileOptions,
   canShare: boolean
 ) {
-  const effective = { ...UPLOAD_DEFAULTS, ...account, ...profile }
+  const effective = effectiveUploadOptions(account, profile)
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -41,6 +41,8 @@ export function effectiveUploadRevision(
         expiration: effective.expiration,
         expiryAction: effective.expiryAction,
         randomizeFileUrls: effective.randomizeFileUrls,
+        // Left out without a pattern, so revisions from before patterns hold.
+        nameTemplate: effective.nameTemplate ?? undefined,
         shareStyle: effective.shareStyle,
         tagIds: [...new Set(effective.tagIds)].sort(),
       })

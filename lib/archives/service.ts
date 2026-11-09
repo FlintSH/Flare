@@ -517,6 +517,7 @@ async function stageOutput(
     destination = await prepareUploadDestination(actor.user, name, {
       ...options,
       randomizeFileUrls: true,
+      nameTemplate: null,
     })
   }
   const type = mimeType ?? (await sniffType(diskPath, name))

@@ -93,7 +93,7 @@ const features = [
   [
     'Personalize',
     'Upload profiles',
-    'Reuse visibility, expiration, URL naming, tags, and share-page preferences across clients.',
+    'Reuse visibility, expiration, URL name patterns, tags, and share-page preferences across clients.',
     '/guide/upload-profiles',
   ],
   [

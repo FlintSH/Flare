@@ -1,10 +1,12 @@
 import { UpdateProfileSchema } from '@/types/dto/profile'
+import { createHash } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { errorResponse } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
+import { effectiveUploadRevision } from '@/lib/uploads/effective-settings'
 import { uploadRoutes } from '@/lib/uploads/http'
 import { uploadLinks } from '@/lib/uploads/links'
 import {
@@ -494,6 +496,249 @@ describe('portable profile and upload policy contracts', () => {
     expect(() =>
       uploadRecipeSchema.parse({ ...recipe, script: 'alert(1)' })
     ).toThrow()
+  })
+})
+
+describe('name patterns in upload options', () => {
+  const patternProfile = (options: object) =>
+    database.uploadProfile.findFirst.mockResolvedValue({
+      id: 'profile-one',
+      options,
+      updatedAt: now,
+    })
+  const tokenUser = {
+    ...user,
+    apiToken: {
+      id: 'token',
+      scopes: ['files:upload'],
+      profileId: 'profile-one',
+    },
+  }
+
+  it('accepts a pattern in profiles, recipes and requests, and explains a bad one', () => {
+    const options = { nameTemplate: 'shot-{date}-{random:4}' }
+    expect(uploadProfileOptionsSchema.parse(options)).toEqual(options)
+    expect(
+      uploadProfileInputSchema.parse({ name: 'Shots', options }).options
+    ).toEqual(options)
+    expect(
+      uploadRecipeSchema.parse({
+        format: 'flare-upload-profile',
+        version: 1,
+        profile: { name: 'Shots', options },
+      }).profile.options
+    ).toEqual(options)
+    expect(parseUploadFields({ nameTemplate: '{words:2}' })).toEqual({
+      nameTemplate: '{words:2}',
+    })
+    expect(parseUploadFields({ nameTemplate: '' })).toEqual({})
+
+    const refused = uploadProfileInputSchema.safeParse({
+      name: 'Shots',
+      options: { nameTemplate: '{date}/{random}' },
+    })
+    expect(refused.error?.issues[0]?.message).toMatch('Remove “/”.')
+    for (const nameTemplate of ['', null, 7])
+      expect(
+        uploadRequestOptionsSchema.safeParse({ nameTemplate }).success
+      ).toBe(false)
+  })
+
+  it('reads a pattern for one upload from its header or query before streaming', () => {
+    const request = (query: string, header?: string) =>
+      new Request(`http://flare.test/api/files${query}`, {
+        method: 'POST',
+        headers: header ? { 'X-Upload-Name-Template': header } : {},
+      })
+    expect(requestUploadOptions(request('', '{date}-{words:2}'))).toEqual({
+      nameTemplate: '{date}-{words:2}',
+    })
+    expect(
+      requestUploadOptions(request('?nameTemplate=%7Bname%7D-%7Brandom%3A4%7D'))
+    ).toEqual({ nameTemplate: '{name}-{random:4}' })
+    expect(
+      requestUploadOptions(request('?nameTemplate=%7Bdate%7D', '{date}'))
+    ).toEqual({ nameTemplate: '{date}' })
+    expect(() =>
+      requestUploadOptions(request('?nameTemplate=%7Bdate%7D', '{time}'))
+    ).toThrow('Conflicting name pattern selections.')
+    expect(() => requestUploadOptions(request('', '{date}.png'))).toThrow(
+      'Remove “.”.'
+    )
+    expect(requestUploadOptions(request('?nameTemplate='))).toEqual({})
+  })
+
+  it('refuses a pattern together with random names, but not with original names', () => {
+    const both = uploadRequestOptionsSchema.safeParse({
+      nameTemplate: '{date}',
+      randomizeFileUrls: true,
+    })
+    expect(both.error?.issues[0]).toMatchObject({
+      path: ['nameTemplate'],
+      message: 'Choose a name pattern or random names, not both.',
+    })
+    expect(
+      uploadRequestOptionsSchema.parse({
+        nameTemplate: '{date}',
+        randomizeFileUrls: false,
+      })
+    ).toEqual({ nameTemplate: '{date}', randomizeFileUrls: false })
+  })
+
+  it('answers an upload whose pattern is wrong with the reason', async () => {
+    const failure = await resolveUploadOptions(user, {
+      nameTemplate: '{uuid}',
+    }).catch((error) => error)
+    const response = errorResponse(failure, uploadRoutes)
+    expect(response.status).toBe(400)
+    expect((await response.json()).error).toMatch(
+      '{uuid} is not a placeholder.'
+    )
+  })
+
+  it('lets the most specific layer that names a strategy decide it whole', () => {
+    const naming = (...layers: Parameters<typeof mergeUploadOptions>) => {
+      const { randomizeFileUrls, nameTemplate } = mergeUploadOptions(...layers)
+      return { randomizeFileUrls, nameTemplate }
+    }
+    expect(naming({}, {}, {})).toEqual({
+      randomizeFileUrls: false,
+      nameTemplate: null,
+    })
+    expect(
+      naming({ randomizeFileUrls: true }, { nameTemplate: '{date}' }, {})
+    ).toEqual({ randomizeFileUrls: false, nameTemplate: '{date}' })
+    expect(
+      naming({}, { nameTemplate: '{date}' }, { randomizeFileUrls: true })
+    ).toEqual({ randomizeFileUrls: true, nameTemplate: null })
+    expect(
+      naming({}, { nameTemplate: '{date}' }, { randomizeFileUrls: false })
+    ).toEqual({ randomizeFileUrls: false, nameTemplate: null })
+    expect(
+      naming({}, { randomizeFileUrls: true }, { nameTemplate: '{words}' })
+    ).toEqual({ randomizeFileUrls: false, nameTemplate: '{words}' })
+    expect(
+      naming({}, { nameTemplate: '{date}' }, { visibility: 'PRIVATE' })
+    ).toEqual({ randomizeFileUrls: false, nameTemplate: '{date}' })
+    // A profile saved by hand with both keeps its pattern.
+    expect(
+      naming({}, { nameTemplate: '{date}', randomizeFileUrls: true }, {})
+    ).toEqual({ randomizeFileUrls: false, nameTemplate: '{date}' })
+  })
+
+  it('uses a profile pattern over the account’s random names', async () => {
+    patternProfile({ nameTemplate: '{date}-{random}' })
+    await expect(resolveUploadOptions(user)).resolves.toMatchObject({
+      randomizeFileUrls: false,
+      nameTemplate: '{date}-{random}',
+    })
+    await expect(
+      resolveUploadOptions(user, { randomizeFileUrls: true })
+    ).resolves.toMatchObject({ randomizeFileUrls: true, nameTemplate: null })
+    await expect(
+      resolveUploadOptions(user, { profileId: null })
+    ).resolves.toMatchObject({ randomizeFileUrls: true, nameTemplate: null })
+  })
+
+  it('keeps a bound token on its profile’s naming, pattern or not', async () => {
+    patternProfile({ nameTemplate: '{date}-{random}' })
+    for (const request of [
+      { randomizeFileUrls: false },
+      { randomizeFileUrls: true },
+      { nameTemplate: '{name}' },
+    ])
+      await expect(
+        resolveUploadOptions(tokenUser, request)
+      ).rejects.toMatchObject({
+        status: 403,
+        message: 'This token cannot override its upload profile.',
+      })
+    await expect(
+      resolveUploadOptions(tokenUser, { nameTemplate: '{date}-{random}' })
+    ).resolves.toMatchObject({ nameTemplate: '{date}-{random}' })
+
+    // The account names files at random and the profile says nothing.
+    patternProfile({ visibility: 'PRIVATE' })
+    await expect(
+      resolveUploadOptions(tokenUser, { nameTemplate: '{name}' })
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      resolveUploadOptions(tokenUser, { randomizeFileUrls: false })
+    ).rejects.toMatchObject({ status: 403 })
+    await expect(
+      resolveUploadOptions(tokenUser, { randomizeFileUrls: true })
+    ).resolves.toMatchObject({ randomizeFileUrls: true, nameTemplate: null })
+  })
+
+  it('refuses a different naming choice once an upload has started', async () => {
+    patternProfile({ nameTemplate: '{date}-{random}' })
+    const resolved = await resolveUploadOptions(user)
+    for (const request of [
+      { randomizeFileUrls: false },
+      { randomizeFileUrls: true },
+      { nameTemplate: '{name}' },
+    ])
+      expect(() => applyUploadOverrides(user, resolved, request)).toThrow(
+        'The naming strategy cannot change after upload starts.'
+      )
+    expect(
+      applyUploadOverrides(user, resolved, { nameTemplate: '{date}-{random}' })
+    ).toMatchObject({ nameTemplate: '{date}-{random}' })
+    expect(
+      applyUploadOverrides(user, resolved, { visibility: 'PUBLIC' })
+    ).toMatchObject({ visibility: 'PUBLIC', nameTemplate: '{date}-{random}' })
+    expect(() =>
+      applyUploadOverrides(tokenUser, resolved, { randomizeFileUrls: false })
+    ).toThrow('The naming strategy cannot change after upload starts.')
+  })
+
+  it('completes an upload that started before patterns existed', async () => {
+    patternProfile({ visibility: 'PRIVATE' })
+    const { nameTemplate: _later, ...started } =
+      await resolveUploadOptions(user)
+    const earlier = started as typeof started & { nameTemplate: null }
+    expect(
+      applyUploadOverrides(user, earlier, { randomizeFileUrls: true })
+    ).toMatchObject({ randomizeFileUrls: true, nameTemplate: null })
+    expect(() =>
+      applyUploadOverrides(user, earlier, { nameTemplate: '{name}' })
+    ).toThrow('The naming strategy cannot change after upload starts.')
+  })
+
+  it('changes a profile’s reviewed revision only when a pattern is involved', () => {
+    const revision = (profile: object) =>
+      effectiveUploadRevision('alice', 'profile-one', {}, profile, true)
+    // The digest Flare computed for these settings before patterns existed.
+    expect(revision({ visibility: 'PRIVATE' })).toBe(
+      createHash('sha256')
+        .update(
+          JSON.stringify({
+            version: 1,
+            userId: 'alice',
+            profileId: 'profile-one',
+            visibility: 'PRIVATE',
+            expiration: 'DISABLED',
+            expiryAction: 'DELETE',
+            randomizeFileUrls: false,
+            shareStyle: 'framed',
+            tagIds: [],
+          })
+        )
+        .digest('hex')
+    )
+    expect(revision({ nameTemplate: '{date}' })).not.toBe(revision({}))
+    expect(revision({ nameTemplate: '{date}' })).not.toBe(
+      revision({ nameTemplate: '{words}' })
+    )
+    expect(
+      effectiveUploadRevision(
+        'alice',
+        'profile-one',
+        { nameTemplate: '{date}' },
+        { randomizeFileUrls: false },
+        true
+      )
+    ).toBe(revision({}))
   })
 })
 

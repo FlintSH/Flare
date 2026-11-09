@@ -64,7 +64,7 @@ In the tag editor, enable **Add automatically**, select a source, and enter a ph
 
 Matching ignores capitalization. Punctuation is literal: `invoice-2026` looks for that phrase, and `*.png` does not mean “all PNG files.” Rules do not use wildcards, regular expressions, or an external AI service.
 
-Randomized URLs do not prevent filename rules from working. The rule checks the upload's original display name, not its randomized URL name.
+Randomized URLs and [name patterns](./upload-profiles#name-uploads-with-a-pattern) do not prevent filename rules from working. The rule checks the upload's original display name, not its URL name.
 
 <Screenshot src="/evidence/vault-tags/automatic-rule.jpg" alt="Receipts tag configured to automatically match filenames containing receipt" caption="Automatic rules match a literal phrase in a filename or extracted image text." />
 

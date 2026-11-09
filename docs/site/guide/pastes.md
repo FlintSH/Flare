@@ -53,7 +53,7 @@ Logs and configuration snippets can contain passwords, access tokens, email addr
 
 ## Use profiles for repeatable sharing
 
-The paste form uses the same [upload profiles](./upload-profiles) as other uploads. A profile can choose visibility, relative expiration and its action, randomized URL naming, share-page style, and tags.
+The paste form uses the same [upload profiles](./upload-profiles) as other uploads. A profile can choose visibility, relative expiration and its action, randomized or [patterned](./upload-profiles#name-uploads-with-a-pattern) URL naming, share-page style, and tags.
 
 There is no separate expiration picker on the paste form. To create pastes with a recurring lifetime, choose a profile that defines it. After creation, you can adjust the individual paste under **Files → file menu → Manage expiration**.
 

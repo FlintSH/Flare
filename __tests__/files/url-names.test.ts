@@ -83,6 +83,19 @@ describe('upload URL names', () => {
     expect(await urlName('.env')).toBe('env')
   })
 
+  it('names an upload from its pattern, in both its URL and its storage path', async () => {
+    const destination = await prepareUploadDestination(owner, 'Photo.JPG', {
+      ...options(true),
+      nameTemplate: 'shot-{year}-{random:8}',
+    })
+    expect(destination.urlSafeName).toMatch(/^shot-\d{4}-[A-Za-z0-9]{8}\.jpg$/)
+    expect(destination.urlPath).toBe(`/owner/${destination.urlSafeName}`)
+    expect(destination.filePath).toMatch(
+      new RegExp(`^uploads/owner/[0-9a-f-]{36}/${destination.urlSafeName}$`)
+    )
+    expect(destination.displayName).toBe('Photo.JPG')
+  })
+
   it('applies the same extension rule to randomized names', async () => {
     expect(await urlName('Photo.JPG', true)).toMatch(
       new RegExp(`^${RANDOM}\\.jpg$`)

@@ -1,5 +1,11 @@
 import { nanoid } from 'nanoid'
 
+import {
+  type NameSources,
+  liveNameSources,
+  renderNameTemplate,
+} from './name-template'
+
 // The part after the last dot is an extension only when it looks like one.
 // Anything else, such as `notes 2026.10.25 final`, stays part of the name.
 const EXTENSION = /^[A-Za-z0-9]{1,16}$/
@@ -20,23 +26,39 @@ export function generateRandomFileName(originalName: string): string {
   return withExtension(nanoid(6), splitExtension(originalName).extension)
 }
 
+/** How a new file's URL name is chosen. A pattern decides it alone. */
+export interface UrlNaming {
+  randomize?: boolean
+  template?: string | null
+}
+
 /**
  * The filename part of a new file's URL: lowercase ASCII letters, digits and
  * hyphens, plus a recognized extension. A name with no ASCII letters or digits
- * gets a random base instead of a bare dot-file such as `.png`.
+ * gets a random base instead of a bare dot-file such as `.png`. A pattern can
+ * also write capitals and underscores, and `{name}` stands for that same base.
  *
  * Uniqueness is not decided here. Publication (lib/uploads/finalize.ts) checks
  * the URL under the owner's row lock and adds a suffix when it is taken.
  */
 export function urlSafeFilename(
   originalName: string,
-  randomize: boolean = false
+  { randomize = false, template }: UrlNaming = {},
+  sources: Omit<NameSources, 'name'> = liveNameSources()
 ): string {
-  if (randomize) return generateRandomFileName(originalName)
+  if (randomize && !template) return generateRandomFileName(originalName)
   const { stem, extension } = splitExtension(originalName)
   const base = stem
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
+  if (template)
+    return withExtension(
+      renderNameTemplate(template, {
+        ...sources,
+        name: base || sources.chars(6),
+      }),
+      extension
+    )
   return withExtension(base || nanoid(6), extension)
 }

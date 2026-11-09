@@ -373,11 +373,25 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "X-Upload-Name-Template",
+            "in": "header",
+            "required": false,
+            "description": "A name pattern for this upload, such as shot-{date}-{random:4}. Must agree with query/body selection.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 100 }
+          },
+          {
             "name": "profileId",
             "in": "query",
             "required": false,
             "description": "Owned profile ID or none. Must agree with header.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "nameTemplate",
+            "in": "query",
+            "required": false,
+            "description": "A name pattern for this upload, URL-encoded. Must agree with header.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 100 }
           },
           {
             "name": "folderId",
@@ -564,11 +578,25 @@
             "schema": { "type": "string" }
           },
           {
+            "name": "X-Upload-Name-Template",
+            "in": "header",
+            "required": false,
+            "description": "A name pattern for this upload, such as shot-{date}-{random:4}. Must agree with query/body selection.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 100 }
+          },
+          {
             "name": "profileId",
             "in": "query",
             "required": false,
             "description": "Owned profile ID or none. Must agree with header.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "nameTemplate",
+            "in": "query",
+            "required": false,
+            "description": "A name pattern for this upload, URL-encoded. Must agree with header.",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 100 }
           },
           {
             "name": "folderId",
@@ -1609,6 +1637,13 @@
             "type": "boolean",
             "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
           },
+          "nameTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A pattern for the URL name, up to 100 characters: letters, digits, hyphens and underscores around the placeholders {name}, {random}, {random:1-32}, {words}, {words:1-6}, {date}, {time}, {year}, {month}, {day}, {hour}, {minute}, {second} and {timestamp}. Dates and times are UTC, and the file's extension is added after the pattern. It replaces original or random naming, so it cannot be sent with randomizeFileUrls true. Select before bytes are written: in chunk initialization, or for a multipart upload with the X-Upload-Name-Template header or nameTemplate query.",
+            "example": "shot-{date}-{random:4}"
+          },
           "shareStyle": {
             "type": "string",
             "enum": ["minimal", "framed", "delivery"]
@@ -1672,6 +1707,13 @@
             "enum": ["true", "false"],
             "description": "May only repeat the already selected naming option; set naming in the profile/account before upload."
           },
+          "nameTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "May only repeat the already selected name pattern; choose one with the X-Upload-Name-Template header, the nameTemplate query, or the profile before upload.",
+            "example": "shot-{date}-{random:4}"
+          },
           "shareStyle": {
             "type": "string",
             "enum": ["minimal", "framed", "delivery"]
@@ -1726,6 +1768,13 @@
           "randomizeFileUrls": {
             "type": "boolean",
             "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "nameTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "A pattern for the URL name, up to 100 characters: letters, digits, hyphens and underscores around the placeholders {name}, {random}, {random:1-32}, {words}, {words:1-6}, {date}, {time}, {year}, {month}, {day}, {hour}, {minute}, {second} and {timestamp}. Dates and times are UTC, and the file's extension is added after the pattern. It replaces original or random naming, so it cannot be sent with randomizeFileUrls true. Select before bytes are written: in chunk initialization, or for a multipart upload with the X-Upload-Name-Template header or nameTemplate query.",
+            "example": "shot-{date}-{random:4}"
           },
           "shareStyle": {
             "type": "string",
@@ -1812,6 +1861,13 @@
           "randomizeFileUrls": {
             "type": "boolean",
             "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "nameTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "May only repeat the name pattern selected when the upload started.",
+            "example": "shot-{date}-{random:4}"
           },
           "shareStyle": {
             "type": "string",
@@ -1902,6 +1958,13 @@
           "randomizeFileUrls": {
             "type": "boolean",
             "description": "Select before bytes are written. Supported in chunk initialization; multipart uploads use the selected profile/account setting."
+          },
+          "nameTemplate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "May only repeat the name pattern selected when the upload started.",
+            "example": "shot-{date}-{random:4}"
           },
           "shareStyle": {
             "type": "string",
