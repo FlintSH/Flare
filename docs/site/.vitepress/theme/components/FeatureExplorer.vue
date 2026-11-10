@@ -121,6 +121,12 @@ const features = [
     '/guide/encryption',
   ],
   [
+    'Share',
+    'Encrypt existing files',
+    'Files from before encryption stay plain until you choose. The server encrypts your private files, or all of them, without a download. Public files get a new link, and a file with a password is private until you set one again.',
+    '/guide/encryption#files-from-before-encryption',
+  ],
+  [
     'Personalize',
     'Passphrase & recovery phrase',
     'Sign in with a passphrase that never leaves your browser, keep a 24-word recovery phrase, and unlock your encryption keys on each device.',

@@ -174,11 +174,17 @@ This protects your files from now on. It does not undo the past: the server stor
 
 After you have set up your keys, a line above your library says how many files are stored readable. Choose **Choose** to open the question, or close the line to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files.
 
+<Screenshot src="/screenshots/encryption/existing-files-prompt.webp" alt="File library with a line above it that reads 6 files from before encryption are stored readable, The server can encrypt them for you, with a Choose button and a close button" caption="The question appears above your library one time. Closing it puts it off until you next open Flare." />
+
 1. Read the table. It counts your private files, your public files and your files with a password, and says what encryption changes for each.
 2. Pick **Private files** (the suggestion), **All files** or **None**.
 3. Choose **Encrypt**. You can keep using Flare right away.
 
+<Screenshot src="/screenshots/encryption/existing-files-choice.webp" alt="Dialog titled Encrypt your existing files with a table of private, public and password files and what encryption changes for each, three choices with Private files selected, a note that backups from before may still contain the files, and a button Encrypt 4 files" caption="The table counts your own files. Private files is the suggestion: nothing you shared changes." />
+
 A small status at the edge of the page shows **Encrypting existing files** with a count while the server works. If your folders or tags still have to be converted, it says **Preparing folders and tags** first: your browser does that part, so keep Flare open with your keys unlocked until the count starts. The server then continues even if you close the tab. Images get their thumbnails from the server during this work; image text and tag rules are finished by your browser afterwards, like for any [file that arrived without them](#what-your-browser-does-instead).
+
+<Screenshot src="/screenshots/encryption/existing-files-progress.webp" alt="File library with four plain files and a small status at the bottom left that reads Encrypting existing files, 0 of 4" caption="The status at the edge of the page counts the files while the server works. You can keep using Flare." />
 
 You can change your answer at any time under **Profile → Your data → Files from before encryption**, with **Change what is encrypted**. Choosing **None** later stops what has not started. It does not turn encrypted files back into plain files; nothing can.
 
@@ -193,7 +199,9 @@ A plain file has **Encrypt** in its menu in the library, and **Select** offers *
 
 ### If a file could not be encrypted
 
-The status turns into **could not be encrypted** and opens a list with the reason for each file and **Try again**. A file on that list is unchanged and still plain. The most common reason is storage that did not answer; if the list says the stored file is missing, tell your administrator.
+The status turns into **could not be encrypted**. Choose it to open a list with the reason for each file and **Try again**. A file on that list is unchanged and still plain. The most common reason is storage that did not answer; if the list says the stored file is missing, tell your administrator.
+
+<Screenshot src="/screenshots/encryption/existing-files-failed.webp" alt="Dialog titled Encrypt your existing files with a red box that reads 1 file could not be encrypted, the name of the file, the reason The stored file is missing, a note that these files are unchanged and still plain, and a Try again button" caption="A file that failed is listed with its reason. It is still the plain file it was." />
 
 ## What does not work yet
 

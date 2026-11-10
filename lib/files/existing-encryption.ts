@@ -529,8 +529,14 @@ async function verifyCiphertext(input: {
 }
 
 type SwitchResult =
-  | { outcome: FileEncryptionResult; purgeImages?: boolean; archive?: boolean }
-  | { outcome: 'lost' | 'postponed' }
+  | {
+      outcome: 'encrypted'
+      /** The queued deletion of the plaintext object in the storage that was read. */
+      cleanupId: string
+      purgeImages: boolean
+      archive: boolean
+    }
+  | { outcome: 'skipped' | 'gone' | 'lost' | 'postponed' }
 
 /**
  * Step 5. Everything that makes the file an encrypted file is one
@@ -744,13 +750,14 @@ async function switchFile(input: {
         WHERE id = ${job.userId}
       `
       // The plaintext object, in the storage that delivery read it from.
-      await tx.storageDeletion.create({
+      const cleanup = await tx.storageDeletion.create({
         data: {
           ownerId: job.userId,
           path: input.sourcePath,
           provider: input.sourceTarget.provider,
           target: input.sourceTarget,
         },
+        select: { id: true },
       })
       // A copy that the row records in a different storage is plaintext too.
       const recorded = parseStorageTarget(file.storageTarget)
@@ -788,6 +795,7 @@ async function switchFile(input: {
       await input.steps.beforeCommit?.()
       return {
         outcome: 'encrypted',
+        cleanupId: cleanup.id,
         purgeImages: file.visibility === 'PUBLIC' && isImage,
         archive: ARCHIVE_TYPE.test(file.mimeType),
       }
@@ -997,28 +1005,16 @@ export async function processFileEncryption(
     written = null
     await steps.afterCommit?.()
 
-    // Step 6. The queued deletion of step 5 covers a failure here.
+    // Step 6. The queued deletion of step 5 covers a failure here: the
+    // storage worker deletes the object later.
+    const queued = { id: result.cleanupId, status: 'pending' }
     try {
       await storage.deleteFile(file.path)
-      await prisma.storageDeletion.deleteMany({
-        where: {
-          ownerId: job.userId,
-          path: file.path,
-          status: 'pending',
-          provider: target.provider,
-        },
-      })
+      await prisma.storageDeletion.deleteMany({ where: queued })
     } catch (error) {
       if (isMissingObject(error))
         await prisma.storageDeletion
-          .deleteMany({
-            where: {
-              ownerId: job.userId,
-              path: file.path,
-              status: 'pending',
-              provider: target.provider,
-            },
-          })
+          .deleteMany({ where: queued })
           .catch(() => undefined)
     }
     if (result.purgeImages) await purgeImageOptimizerCache()
