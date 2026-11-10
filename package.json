@@ -77,6 +77,7 @@
     "@simplewebauthn/server": "^14.0.3",
     "@tanstack/react-query": "^5.103.2",
     "@tanstack/react-virtual": "^3.14.13",
+    "@tesseract.js-data/eng": "1.0.0",
     "@uiw/react-codemirror": "^4.25.11",
     "@zxcvbn-ts/core": "4.2.0",
     "@zxcvbn-ts/language-common": "4.1.3",

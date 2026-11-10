@@ -3,11 +3,19 @@
 import { useState } from 'react'
 
 import {
+  RefusedRequest,
   readAnswer,
   refusal,
   retryable,
   sendRequest,
 } from '@/lib/client/request'
+import type { DecryptedContent } from '@/lib/e2ee/client/file-worker'
+import type { OpenedFile } from '@/lib/e2ee/client/files'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
+import {
+  type EncryptedImage,
+  extractEncryptedText,
+} from '@/lib/ocr/encrypted-client'
 
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
 
@@ -61,6 +69,47 @@ async function requestOcr(
   return { kind: 'error', message: answer?.error ?? FAILED, canRetry: true }
 }
 
+/**
+ * An encrypted image, which only a browser that has its key can read
+ * (docs/e2ee-spec.md, section 9.6.2).
+ */
+export interface EncryptedOcrSource {
+  file: EncryptedImage
+  opened: OpenedFile
+  /** Only the owner's page stores the text it reads (section 9.6.3). */
+  store: boolean
+  /** The plaintext, if the page has decrypted the image already. */
+  content?: () => DecryptedContent | null
+}
+
+/** Reads an encrypted image in this browser, or opens the owner's stored text. */
+async function readEncrypted(
+  url: string,
+  source: EncryptedOcrSource,
+  signal: AbortSignal
+): Promise<OcrOutcome> {
+  try {
+    const result = await extractEncryptedText(url, source.file, source.opened, {
+      store: source.store,
+      content: source.content?.(),
+      signal,
+    })
+    // Tag rules on image text run on the new text in the background.
+    if (source.store && result.stored) requestMaintenance('index', 'pending')
+    return { kind: 'text', text: result.text, confidence: result.confidence }
+  } catch (error) {
+    if (signal.aborted) throw error
+    return {
+      kind: 'error',
+      message:
+        error instanceof RefusedRequest
+          ? error.message
+          : 'This browser couldn’t read text from the image. Try again.',
+      canRetry: retryable(error),
+    }
+  }
+}
+
 export type OcrDialogState = {
   text: string | null
   confidence: number | null
@@ -99,7 +148,11 @@ export function ocrDialogState(outcome: OcrOutcome | null): OcrDialogState {
  * failed requests with a way to ask again. Nothing happens after the
  * component that asked has gone.
  */
-export function useOcr(url: string | undefined) {
+export function useOcr(
+  url: string | undefined,
+  /** Set for an encrypted image: this browser reads it, not the server. */
+  encrypted?: EncryptedOcrSource | null
+) {
   const lifetime = useRequestLifetime()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -109,9 +162,13 @@ export function useOcr(url: string | undefined) {
     const { signal } = lifetime.current
     if (!url || signal.aborted) return
     setLoading(true)
-    const state = await requestOcr(url, signal).then(ocrDialogState, () =>
-      ocrDialogState(null)
-    )
+    // Reading in the browser takes a few seconds: the dialog shows that.
+    if (encrypted) setOpen(true)
+    const state = await (
+      encrypted
+        ? readEncrypted(url, encrypted, signal)
+        : requestOcr(url, signal)
+    ).then(ocrDialogState, () => ocrDialogState(null))
     if (signal.aborted) return
     setResult(state)
     setOpen(true)
@@ -126,6 +183,12 @@ export function useOcr(url: string | undefined) {
       isOpen: open,
       onOpenChange: setOpen,
       isLoading: loading,
+      ...(encrypted && {
+        loadingText: 'Reading the image in your browser…',
+        footnote: encrypted.store
+          ? 'Read in your browser. The text is saved encrypted, so search finds this image.'
+          : 'Read in your browser. The text is not sent to the server.',
+      }),
       text: result.text,
       confidence: result.confidence,
       notice: result.notice,

@@ -75,6 +75,7 @@ import { thumbnailKind } from '@/lib/files/thumbnail-client'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
+import { canReadText } from '@/lib/ocr/encrypted-client'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
 import { useEncryptedFile } from '@/hooks/use-encrypted-file'
@@ -355,7 +356,13 @@ function OpenFileCard({
     'delete' | 'password' | 'visibility' | null
   >(null)
   const urls = fileUrls(file)
-  const ocr = useOcr(urls.ocr)
+  // The server reads a plain image. This browser reads an encrypted one,
+  // and stores the text sealed (docs/e2ee-spec.md, section 9.6).
+  const readable = opened ? canReadText(opened.type) : false
+  const ocr = useOcr(
+    urls.ocr,
+    opened && readable ? { file, opened, store: true } : null
+  )
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
   const [downloading, setDownloading] = useState(false)
@@ -599,7 +606,7 @@ function OpenFileCard({
     },
     password: { run: () => handlePasswordDialogOpenChange(true) },
     expiration: { run: () => setIsExpiryModalOpen(true) },
-    ...(isImage && {
+    ...((isImage || readable) && {
       ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
     }),
     delete: { run: () => setIsDeleteDialogOpen(true) },

@@ -1,5 +1,8 @@
+import { z } from 'zod'
+
 import { listPendingWork } from '@/lib/files/library-records'
 import { requireSession } from '@/lib/http/access'
+import { parseInput } from '@/lib/http/request'
 import { apiResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
@@ -20,5 +23,9 @@ export const GET = api(async (request) => {
   const { user } = await requireSession(request, 'files.read', {
     refuseApiCredentials: true,
   })
-  return apiResponse(await listPendingWork(user.id))
+  const { after } = parseInput(
+    z.strictObject({ after: z.string().min(1).max(128).optional() }),
+    Object.fromEntries(new URL(request.url).searchParams)
+  )
+  return apiResponse(await listPendingWork(user.id, after ?? null))
 })

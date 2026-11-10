@@ -17,6 +17,7 @@ import {
 
 import { DERIVING_FILE_KEY } from '@/components/encryption/file-password'
 import { UnlockDialog } from '@/components/encryption/unlock-dialog'
+import { EncryptedOcrButton } from '@/components/file/encrypted-ocr'
 import { setEncryptedFileTitle } from '@/components/file/encrypted-title'
 import { PreviewPlaceholder } from '@/components/file/viewer/components/preview-placeholder'
 import { TextView } from '@/components/file/viewer/components/text-content'
@@ -57,6 +58,7 @@ import {
   safeRendering,
 } from '@/lib/files/safe-render'
 import { fileUrls } from '@/lib/files/urls'
+import { canReadText } from '@/lib/ocr/encrypted-client'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useToast } from '@/hooks/use-toast'
@@ -654,6 +656,15 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
               <Copy className="h-4 w-4" aria-hidden="true" />
               Copy text
             </Button>
+          )}
+          {opened && canReadText(opened.type) && (
+            <EncryptedOcrButton
+              file={file}
+              opened={opened}
+              store={file.isOwner}
+              content={() => content.current}
+              className={cn(buttonClassName, 'col-span-2')}
+            />
           )}
         </div>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">

@@ -236,9 +236,16 @@ export async function recordFileWork(
       throw new HttpError(409, 'No key of this account opens this file.')
     await storeSealedData(tx, file.id, work)
     if (work.rulesApplied) await applyRuleTags(tx, file, work.ruleTagIds ?? [])
+    // A new text can match a tag rule on text. A client that stores the
+    // text without the rules leaves them for the background work.
+    const rulesWait =
+      Boolean(work.sealedOcrText) &&
+      !work.rulesApplied &&
+      (await accountHasSealedTags(tx, userId))
     return tx.file.update({
       where: { id: file.id },
       data: {
+        ...(rulesWait ? { rulesPending: true } : {}),
         ...(work.sealedOcrText || work.ocr ? { ocrPending: false } : {}),
         ...(work.sealedThumbnail || work.thumbnail
           ? { thumbnailPending: false }
@@ -276,7 +283,11 @@ const pendingSelect = {
  * wait in all. A file that failed `PENDING_ATTEMPT_LIMIT` times is left
  * out, so a browser never loops on it.
  */
-export async function listPendingWork(userId: string) {
+export async function listPendingWork(
+  userId: string,
+  /** Lists the files after this ID, so a browser can pass ones it failed on. */
+  after: string | null = null
+) {
   const where: Prisma.FileWhereInput = {
     userId,
     unreadable: false,
@@ -290,7 +301,7 @@ export async function listPendingWork(userId: string) {
   const [total, files] = await Promise.all([
     prisma.file.count({ where }),
     prisma.file.findMany({
-      where,
+      where: { ...where, ...(after ? { id: { gt: after } } : {}) },
       orderBy: { id: 'asc' },
       take: PENDING_PAGE_SIZE,
       select: pendingSelect,

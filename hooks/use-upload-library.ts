@@ -5,8 +5,13 @@ import { useCallback } from 'react'
 import { makeThumbnail } from '@/lib/files/thumbnail-client'
 import { ownedFolderKeys } from '@/lib/folders/owned'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
+import { rememberLocalFile } from '@/lib/library/local-files'
 import { matchingRuleTagIds } from '@/lib/tags/owned'
-import type { UploadLibrary, UploadOptions } from '@/lib/uploads/client'
+import {
+  type UploadLibrary,
+  type UploadOptions,
+  isReadableImage,
+} from '@/lib/uploads/client'
 
 import { useFolders } from '@/hooks/use-folders'
 import { useTags } from '@/hooks/use-tags'
@@ -47,7 +52,10 @@ export function useUploadLibrary() {
               { name }
             ),
         }),
-        uploaded() {
+        uploaded({ id, file, plain }) {
+          // The text of a new image is read from the file this page still
+          // holds, after the upload, so the link is ready at once.
+          if (!plain && isReadableImage(file.type)) rememberLocalFile(id, file)
           // A file whose visibility the server chose may still need its
           // folder stanza, and every upload can leave work for this browser.
           requestMaintenance('folders', 'index', 'pending')

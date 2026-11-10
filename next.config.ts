@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '/*': ['./uploads/**/*', './tmp/**/*'],
   },
+  // Text recognition in the browser loads its worker, its WebAssembly core
+  // and the language data from Flare itself. The route reads them from the
+  // installed packages, which no import names.
+  outputFileTracingIncludes: {
+    '/api/ocr/[version]/[asset]': [
+      './node_modules/tesseract.js/dist/worker.min.js',
+      './node_modules/tesseract.js-core/tesseract-core*.wasm.js',
+      './node_modules/.pnpm/tesseract.js-core@*/node_modules/tesseract.js-core/tesseract-core*.wasm.js',
+      './node_modules/.pnpm/tesseract.js@*/node_modules/tesseract.js-core/tesseract-core*.wasm.js',
+      './node_modules/@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz',
+    ],
+  },
   async headers() {
     return [
       {

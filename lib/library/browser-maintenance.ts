@@ -6,22 +6,30 @@ import {
   type OldStanzas,
   migrateStanzas,
 } from '@/lib/e2ee/client/rotation'
+import { forgetThumbnail } from '@/lib/e2ee/client/thumbnails'
 import { unwrapperFor } from '@/lib/e2ee/client/unwrappers'
+import { fetchDecrypted } from '@/lib/files/encrypted-client'
+import { normalizedType } from '@/lib/files/safe-render'
+import { makeThumbnail } from '@/lib/files/thumbnail-client'
 import {
   type FolderRepairs,
   type RepairsApi,
   repairFolders,
 } from '@/lib/folders/repairs'
 import type { FolderView } from '@/lib/folders/schema'
+import { recognizeImage } from '@/lib/ocr/browser'
 import { tagsApi } from '@/lib/tags/browser'
 import { sealPlainTags } from '@/lib/tags/client'
+import { type OwnedTagView, ownedTagViews } from '@/lib/tags/owned'
 
+import { takeLocalFile } from './local-files'
 import {
   type JobContext,
   type JobRunner,
   type MaintenanceJob,
   createMaintenance,
 } from './maintenance'
+import { type PendingFile, processPendingWork } from './pending-work'
 
 /**
  * The background work of this browser tab for the unlocked account: the
@@ -99,10 +107,57 @@ async function runTagConversion({ keys, signal, report }: Context) {
   if (await sealPlainTags(tagsApi, keys, { signal })) libraryChanged?.()
 }
 
+async function runPendingWork({ keys, signal, report, unpaused }: Context) {
+  const unwrapper = await unwrapperFor(keys)
+  let tags: Promise<readonly OwnedTagView[] | null> | null = null
+  let changed = false
+  let textChanged = false
+  await processPendingWork({
+    pending: (after) =>
+      apiRequest<{ total: number; files: PendingFile[] }>(
+        `/api/files/pending${after ? `?after=${encodeURIComponent(after)}` : ''}`
+      ),
+    work: (id, body) =>
+      apiRequest(`/api/files/${encodeURIComponent(id)}/work`, { body }),
+    unwrap: (records) => unwrapper.unwrap(records),
+    // Rules run only when this browser read every tag of the account.
+    tags: () =>
+      (tags ??= tagsApi.tags().then((views) => {
+        const owned = ownedTagViews(views, keys)
+        return owned.some((tag) => tag.locked) ? null : owned
+      })),
+    plaintext: async (file, opened, maxBytes, abort) => {
+      // A file this page uploaded a moment ago is still in memory.
+      const local = takeLocalFile(file.id)
+      if (local && local.size <= maxBytes) return local
+      const content = await fetchDecrypted(file, opened, {
+        signal: abort,
+        maxBytes,
+      })
+      return new Blob(content.parts, { type: normalizedType(opened.type) })
+    },
+    thumbnail: makeThumbnail,
+    recognize: (image, abort) => recognizeImage(image, { signal: abort }),
+    signal,
+    unpaused,
+    report: (done, total) =>
+      report({ label: 'Finishing new files', done, total }),
+    changed: (file, body) => {
+      changed = true
+      if (body.sealedThumbnail) forgetThumbnail(file.id)
+      if (body.sealedOcrText) textChanged = true
+    },
+  })
+  if (changed) libraryChanged?.()
+  // New text belongs in the local search cache.
+  if (textChanged) requestMaintenance('index')
+}
+
 const runners: Partial<Record<MaintenanceJob, JobRunner<StoredAccountKeys>>> = {
   tags: runTagConversion,
   folders: runFolderRepairs,
   migration: runStanzaMigration,
+  pending: runPendingWork,
 }
 
 /** Adds the runner of a job. Each feature registers its own. */
