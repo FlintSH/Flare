@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 4. Not implemented. Not reviewed.             |
+| Status  | Draft 5. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -452,12 +452,19 @@ A challenge for one use does not.
 
 ### 6.7 Passphrase change
 
-1. The client authenticates with the old passphrase and gets `root_entropy`.
-2. The client makes a new `passphrase_salt`, `auth_public_key`, `wrap_key`
-   and `wrapped_root` (section 5.4).
-3. The client sends them in a signed request (section 6.6).
+A passphrase change is always a key rotation (section 8.3). There is no
+procedure that changes the passphrase and keeps `root_entropy`.
 
-The account key does not change. No file changes.
+**Reason:** a person who knew the old passphrase possibly has
+`wrapped_root`. That person then has `root_entropy`, and a new passphrase
+gives no protection. The user cannot know if this occurred. One procedure
+prevents the selection of the wrong one.
+
+Results for the user:
+
+- Each passphrase change gives a new mnemonic. The user must save it.
+- Each passphrase change cancels the bearer tokens. The user installs a new
+  configuration for each script client (section 8.3.5).
 
 ### 6.8 Recovery
 
@@ -465,12 +472,13 @@ Recovery is for a user who lost the passphrase and has the mnemonic.
 
 1. The user proves control of the account to the server. Email reset is one
    method.
-2. The user types the mnemonic. The client decodes `root_entropy`.
-3. The client calculates `account_public_key` from `root_entropy` and
-   compares it with the stored one.
-4. The client makes a new `passphrase_salt`, `auth_public_key`, `wrap_key`
-   and `wrapped_root`.
-5. The client sends them in a signed request.
+2. The user types the mnemonic. The client decodes the old `root_entropy`.
+3. The client calculates `account_public_key` from it and compares it with
+   the stored one. If they are different, reject.
+4. The client does the rotation procedure of section 8.3.3 from step 2. The
+   mnemonic replaces the old passphrase as the source of the old keys.
+
+Recovery sets a new passphrase, thus recovery is a key rotation too.
 
 A reset by email or by an administrator restores sign-in only. It must not
 restore keys. Without the mnemonic, the encrypted files stay unreadable.
@@ -648,17 +656,19 @@ has `root_entropy`. That person can calculate each key that comes from it. A
 new key from the same `root_entropy` gives no protection. Only a new
 `root_entropy` does.
 
-#### 8.3.1 When a passphrase change is sufficient
+#### 8.3.1 One procedure
 
-A passphrase change (section 6.7) keeps `root_entropy`. It is sufficient
-only if the attacker did not get `wrapped_root`. For example, the second
-factor stopped the sign-in of the attacker.
+Three operations use the rotation procedure:
 
-If the user is not sure, the user must rotate.
+- a passphrase change (section 6.7),
+- recovery with the mnemonic (section 6.8),
+- a rotation that the user requests.
+
+No operation changes the passphrase without a rotation.
 
 #### 8.3.2 When the user must rotate
 
-- A different person knows the passphrase and possibly signed in.
+- A different person knows the passphrase.
 - A different person saw the mnemonic.
 - A device with an open session is lost, or malicious code ran in a session.
 - A person copied the database, and the passphrase is possibly weak.
@@ -666,9 +676,10 @@ If the user is not sure, the user must rotate.
 #### 8.3.3 Rotation procedure
 
 1. The client asks for the passphrase and gets the old `root_entropy` and
-   the old `account_private_key` (section 6.2).
+   the old `account_private_key` (section 6.2). In recovery, the mnemonic
+   gives them (section 6.8).
 2. The client asks for a new passphrase. The strength check of section 5.2.1
-   applies.
+   applies. The new passphrase must be different from the old one.
 3. The client makes a new `root_entropy`, a new account key pair, a new
    `passphrase_salt`, a new `auth_public_key`, a new `wrap_key` and a new
    `wrapped_root` (section 5.4).
@@ -904,3 +915,4 @@ file with a link preview cannot be encrypted.
 | 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                |
 | 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password. |
 | 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                           |
+| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                        |
