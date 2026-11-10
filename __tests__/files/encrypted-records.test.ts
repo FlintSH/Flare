@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 
-import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import {
   accountKeysFromPrivateKey,
   base64urlDecode,
@@ -29,7 +28,6 @@ import {
 import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { HttpError } from '@/lib/http/errors'
 import {
-  assertEncryptedUploader,
   parseEncryptedInit,
   splitEncryptedFields,
 } from '@/lib/uploads/encrypted'
@@ -369,27 +367,5 @@ describe('start of an encrypted chunked upload', () => {
         parseEncryptedInit({ ...init, header: changed(wire.header, 0, 0) })
       ).status
     ).toBe(400)
-  })
-})
-
-describe('who can send an encrypted upload in this release', () => {
-  const user = { credential: 'session' } as AuthenticatedUser
-
-  it('is a browser session, not a token', () => {
-    expect(() => assertEncryptedUploader(user)).not.toThrow()
-    expect(
-      refusal(() =>
-        assertEncryptedUploader({ ...user, credential: 'upload-token' })
-      ).status
-    ).toBe(403)
-    expect(
-      refusal(() =>
-        assertEncryptedUploader({
-          ...user,
-          credential: 'token',
-          apiToken: { id: 't', scopes: ['files:upload'], profileId: null },
-        })
-      ).status
-    ).toBe(403)
   })
 })

@@ -710,7 +710,6 @@ async function seed() {
       ...record.columns,
       roles: { connect: { systemKey: 'administrator' } },
       urlId: ALEX.urlId,
-      uploadToken: `${ALEX.id}-public-disposable-upload-token`,
     },
   })
   // What the account had before encryption: a folder and a tag with plain

@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { timingSafeEqual } from 'node:crypto'
 
 import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
@@ -24,8 +25,17 @@ export type AuthenticatedUser = {
   randomizeFileUrls: boolean
   /** The browser session cookie, a named token or the legacy upload token. */
   credential: 'session' | 'token' | 'upload-token'
-  apiToken?: { id: string; scopes: string[]; profileId: string | null }
+  apiToken?: {
+    id: string
+    scopes: string[]
+    profileId: string | null
+    /** Issued before end-to-end encryption: its uploads are plain files. */
+    predatesEncryption: boolean
+  }
 }
+
+/** The legacy upload token is recorded as used at most once in this time. */
+const LEGACY_USE_INTERVAL_MS = 3_600_000
 
 export async function getAuthenticatedUser(
   req: Request
@@ -69,21 +79,66 @@ export async function getAuthenticatedUser(
         id: token.id,
         scopes: token.scopes,
         profileId: token.profileId,
+        predatesEncryption: token.predatesEncryption,
       },
     }
   }
   const session = await getAccessSession()
-  if (session?.user) return accountUser({ id: session.user.id }, 'session')
-  if (suppliedToken)
-    return accountUser({ uploadToken: suppliedToken }, 'upload-token')
+  if (session?.user) {
+    const found = await accountUser({ id: session.user.id }, 'session')
+    if (!found) return null
+    const {
+      uploadTokenHash: _hash,
+      uploadTokenUsedAt: _usedAt,
+      ...user
+    } = found
+    return user
+  }
+  if (suppliedToken) return legacyTokenUser(suppliedToken)
   return null
+}
+
+/**
+ * The account behind the upload token from before end-to-end encryption
+ * (docs/e2ee-spec.md, section 14.4). The database holds the SHA-256 of the
+ * token, like a named token, so the lookup is by the hash of what the
+ * request sent. The stored and the calculated hash are compared again in
+ * constant time, so the answer does not depend on how the index compares.
+ */
+async function legacyTokenUser(
+  suppliedToken: string
+): Promise<AuthenticatedUser | null> {
+  const hash = hashApiToken(suppliedToken)
+  const found = await accountUser({ uploadTokenHash: hash }, 'upload-token')
+  if (!found) return null
+  const { uploadTokenHash, uploadTokenUsedAt, ...user } = found
+  if (
+    !uploadTokenHash ||
+    uploadTokenHash.length !== hash.length ||
+    !timingSafeEqual(Buffer.from(uploadTokenHash), Buffer.from(hash))
+  )
+    return null
+  // The application warns the owner while an old configuration is in use.
+  // Best effort, and at most one write in each interval.
+  const now = Date.now()
+  if (
+    !uploadTokenUsedAt ||
+    now - uploadTokenUsedAt.getTime() > LEGACY_USE_INTERVAL_MS
+  )
+    await prisma.user
+      .updateMany({
+        where: { id: user.id, uploadTokenHash: hash },
+        data: { uploadTokenUsedAt: new Date(now) },
+      })
+      .catch(() => {})
+  return user
 }
 
 /** The account behind a browser session or the legacy upload token, unless it must verify its email first. */
 async function accountUser(
   where: Prisma.UserWhereUniqueInput,
   credential: 'session' | 'upload-token'
-): Promise<AuthenticatedUser | null> {
+) {
   const user = await prisma.user.findUnique({
     where,
     select: {
@@ -99,6 +154,8 @@ async function accountUser(
       emailVerificationSource: true,
       emailExempt: true,
       createdAt: true,
+      uploadTokenHash: true,
+      uploadTokenUsedAt: true,
     },
   })
   if (!user || requiresEmailVerification(user, await getEmailConfig()))

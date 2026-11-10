@@ -107,6 +107,8 @@ These belong to the app runtime or build tooling, rather than saved instance con
 | `METICULOUS_BACKEND_RECORDER_MODE`       | `replay` enables the backend replay path used by visual tests                                               |
 | `VERCEL_ENV`                             | A platform marker; `preview` enables recording eligibility when a recording token is present                |
 
+`FLARE_UPLOAD_CONFIG`, `FLARE_UPLOAD_TOKEN`, `FLARE_UPLOAD_ORIGIN` and `FLARE_UPLOAD_PASSWORD` are not server settings. The [flare-upload](/guide/screenshot-tools#install-flare-upload) program reads them on a person's own machine, and the scripts that Flare writes for an encrypted profile use `FLARE_UPLOAD_CONFIG`. Setting them on the server does nothing.
+
 The Dockerfile also sets Corepack/pnpm installation variables (`COREPACK_ENABLE_DOWNLOAD_PROMPT`, `COREPACK_HOME`, `pnpm_config_verify_deps_before_run`, and `HUSKY`) to make its packaged runtime work: the startup script's pnpm commands use the pnpm release and dependencies built into the image and never start an install. They are not Flare feature controls. Earlier images set `npm_config_verify_deps_before_run`, which pnpm 11 ignores, so each of those commands first compared the installed dependencies with the lockfile and would have tried to install them had they differed. Build identity arguments `FLARE_RELEASE_CHANNEL` and `FLARE_COMMIT_SHA` are baked into the official image by release workflows.
 
 Meticulous's hosted CI workflow has been retired. Its recorder variables and disposable test image remain available for [local visual testing](/contributing#local-visual-testing-with-meticulous); ordinary production recording still requires explicit opt-in and a recording token. `METICULOUS_API_TOKEN` authenticates the optional CLI, not Flare's server or users, and is no longer required as a repository Actions secret.
@@ -139,7 +141,7 @@ Every variable in the following tables also accepts a `_FILE` variant. For examp
 | ------------------------------------------ | --------- | ------------------------------------------------------------------------------ |
 | `FLARE_EMAIL_RECOVERY_ENABLED`             | `false`   | Password recovery for verified local accounts                                  |
 | `FLARE_EMAIL_RECOVERY_TOKEN_MINUTES`       | `30`      | `5`–`120` minutes                                                              |
-| `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN` | `false`   | Rotate the legacy upload token after a successful password reset               |
+| `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN` | `false`   | Revoke the upload token from before encryption after a successful reset        |
 | `FLARE_EMAIL_VERIFICATION_MODE`            | `off`     | `off`, `optional`, `new_users`, `all_users`                                    |
 | `FLARE_EMAIL_VERIFICATION_GRACE_DAYS`      | `7`       | `0`–`90` days for existing users when all-user enforcement is activated        |
 | `FLARE_EMAIL_VERIFICATION_ADMIN_CREATED`   | `inherit` | `inherit` or `exempt` for accounts created by administrators                   |
@@ -190,6 +192,7 @@ These defaults describe a new instance before your setup choices. Existing insta
 | Invite member limits            | 5 active invites per person; 1 use per invite; 30-day longest expiry  | [Invite links](/admin/users#set-member-limits)                    |
 | Let everyone create invites     | Off; stored as the Everyone role's `invites.create` grant             | [Invite links](/admin/users#choose-who-can-invite)                |
 | Background OCR                  | Enabled                                                               | [General settings](/admin/#general)                               |
+| Forbid plain uploads            | Off: people can choose a plain upload                                 | [Access settings](/admin/#forbid-plain-uploads)                   |
 | Credits footer                  | Shown                                                                 | [Appearance](/admin/appearance)                                   |
 | Storage provider                | Local                                                                 | [Storage](/hosting/storage)                                       |
 | S3 credentials / endpoint       | Empty; force path style off                                           | [S3](/hosting/storage#s3-compatible-storage)                      |

@@ -55,7 +55,6 @@ async function seed() {
         ...(await createAccountRecord('Security-demo-only-2026!')).columns,
         roles: { connect: { systemKey: 'administrator' } },
         urlId: id,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

@@ -54,7 +54,7 @@ export const ACTION_PERMISSIONS = {
   viewLinks: routeNeeds('GET', '/api/urls'),
   /** Download the account's files and links in one archive. */
   exportAccount: routeNeeds('GET', '/api/profile/export'),
-  /** Download a screenshot tool, which carries the upload token, and upload with it. */
+  /** Create a screenshot tool configuration, which carries a new upload token, and upload with it. */
   uploaderTools: [...uploadFiles, UPLOADER_DOWNLOAD_PERMISSION],
 } as const satisfies Record<string, readonly Permission[]>
 

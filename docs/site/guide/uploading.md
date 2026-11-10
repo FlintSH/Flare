@@ -20,6 +20,8 @@ Files you upload in the browser are encrypted on your device before they are sen
 
 The choice applies to every file in the batch. [Encrypted and plain files](./encryption) explains what the server still sees and what does not work yet for encrypted files.
 
+When you select an [upload profile](./upload-profiles#encryption), the form shows that profile's Encryption setting first: **Plain** for a profile set to Plain. What you select afterwards is what is used. On a server whose administrator [forbids plain uploads](/admin/#forbid-plain-uploads), the form has no choice and says that the server accepts encrypted uploads only.
+
 Encrypting needs your keys. If the form says your encryption keys are locked, choose **Unlock** and enter your [passphrase](./passphrase). Until then **Upload** stays disabled for an encrypted batch. Files dropped elsewhere in Flare are encrypted too; with locked keys the drop is refused with a message and nothing is sent.
 
 Large files are encrypted and sent in parts of about 5 MB, so the browser never holds the whole file in memory. While a batch is being sent, **Cancel upload** stops it. Files already finished stay in your library; the file in progress is not stored.

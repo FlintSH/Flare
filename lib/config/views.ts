@@ -1,6 +1,10 @@
 import type { PublicSettings } from '@/types/dto/settings'
 
 import { redactEmailConfig } from '@/lib/email/schema'
+import {
+  ACCEPTED_PROTOCOL_VERSIONS,
+  plainUploadsForbidden,
+} from '@/lib/uploads/encryption-policy'
 
 import type { FlareConfig } from './index'
 
@@ -49,6 +53,10 @@ export function keepSavedCredentials(settings: Record<string, unknown>) {
 export function publicSettings(config: FlareConfig): PublicSettings {
   return {
     version: config.version,
+    encryption: {
+      protocolVersions: [...ACCEPTED_PROTOCOL_VERSIONS],
+      forbidPlainUploads: plainUploadsForbidden(config),
+    },
     settings: {
       general: {
         registrations: {

@@ -89,7 +89,6 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         name: 'Admin',
         password: 'fixture-only',
         urlId: 'admin',
-        uploadToken: 'admin-fixture',
         roles: { connect: { id: builtins.administrator.id } },
       },
     })
@@ -100,7 +99,6 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         name: 'Member',
         password: 'fixture-only',
         urlId: 'member',
-        uploadToken: 'member-fixture',
       },
     })
     authentication.userId = 'admin'
@@ -212,7 +210,7 @@ suite.sequential('roles against disposable PostgreSQL', () => {
     const peer = await role('Peer', ['users.read'], 50)
     await assign('member', manager.id)
     const newcomer = await prisma.user.create({
-      data: { id: 'newcomer', urlId: 'newcomer', uploadToken: 'newcomer' },
+      data: { id: 'newcomer', urlId: 'newcomer' },
     })
     authentication.userId = 'member'
     authentication.permissions = ['roles.manage', 'users.roles', 'users.read']
@@ -626,7 +624,6 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         email: 'operator@example.test',
         password: 'original-hash',
         urlId: 'oper1',
-        uploadToken: 'operator-fixture',
         roles: { connect: { id: sensitive.id } },
       },
     })
@@ -670,7 +667,6 @@ suite.sequential('roles against disposable PostgreSQL', () => {
       data: {
         id: 'legacy',
         urlId: 'legac',
-        uploadToken: 'legacy-fixture',
         roles: { connect: { id: legacy.id } },
       },
     })
@@ -994,7 +990,6 @@ suite.sequential('roles against disposable PostgreSQL', () => {
         email: `${id}@example.test`,
         password: 'fixture-only',
         urlId: id,
-        uploadToken: id,
         avatarStoragePath: `uploads/avatars/${id}.jpg`,
         avatarStorageTarget: await cleanupTarget(),
       },

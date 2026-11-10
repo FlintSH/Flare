@@ -176,8 +176,9 @@ function ChangePassphraseDialog({
                 <strong className="font-medium">
                   Every API token is deleted
                 </strong>{' '}
-                and your upload token is replaced. Screenshot tools and scripts
-                stop uploading until you install their configuration again.
+                and an upload token from before encryption is revoked.
+                Screenshot tools and scripts stop uploading until you create a
+                new configuration for each.
               </li>
               <li>
                 <strong className="font-medium">

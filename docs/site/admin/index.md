@@ -8,16 +8,16 @@ Flare gives administrators control over who can join, how files are stored, what
 
 ## Find the right control
 
-| Section                   | What you can do                                                                                                                   | Detailed guide                           |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| **Settings → General**    | Enable background image OCR, show credits, inspect installed version and update information                                       | [General](#general)                      |
-| **Settings → Access**     | Open/close registration, set the closed-registration message, choose who can invite and member invite limits, configure OIDC      | [Users](/admin/users), [SSO](/admin/sso) |
-| **Settings → Storage**    | Select local/S3 storage, set maximum file size, enable storage quotas                                                             | [Storage](/hosting/storage)              |
-| **Settings → Appearance** | Brand the instance, design light/dark themes and share pages, import/export packs, edit legacy colors/favicon and custom CSS/HTML | [Appearance](/admin/appearance)          |
-| **Settings → Email**      | Configure SMTP, test delivery, enable recovery and verification, inspect the outbox                                               | [Email](/admin/email)                    |
-| **Roles**                 | Create, organize, and combine permission groups; delegate account, content, or settings work                                      | [Roles and permissions](/admin/roles)    |
-| **Audit log**             | Search instance events and inspect actors, filenames, processing outcomes, and administrative changes; requires `audit.read`      | [Audit log](/admin/audit)                |
-| **Users**                 | Create/edit accounts, change roles, moderate content, remove avatars, inspect email access, review and revoke invite links        | [Users and roles](/admin/users)          |
+| Section                   | What you can do                                                                                                                                    | Detailed guide                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Settings → General**    | Enable background image OCR, show credits, inspect installed version and update information                                                        | [General](#general)                                                 |
+| **Settings → Access**     | Open/close registration, set the closed-registration message, choose who can invite and member invite limits, configure OIDC, forbid plain uploads | [Users](/admin/users), [SSO](/admin/sso), [Encryption](#encryption) |
+| **Settings → Storage**    | Select local/S3 storage, set maximum file size, enable storage quotas                                                                              | [Storage](/hosting/storage)                                         |
+| **Settings → Appearance** | Brand the instance, design light/dark themes and share pages, import/export packs, edit legacy colors/favicon and custom CSS/HTML                  | [Appearance](/admin/appearance)                                     |
+| **Settings → Email**      | Configure SMTP, test delivery, enable recovery and verification, inspect the outbox                                                                | [Email](/admin/email)                                               |
+| **Roles**                 | Create, organize, and combine permission groups; delegate account, content, or settings work                                                       | [Roles and permissions](/admin/roles)                               |
+| **Audit log**             | Search instance events and inspect actors, filenames, processing outcomes, and administrative changes; requires `audit.read`                       | [Audit log](/admin/audit)                                           |
+| **Users**                 | Create/edit accounts, change roles, moderate content, remove avatars, inspect email access, review and revoke invite links                         | [Users and roles](/admin/users)                                     |
 
 Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`; Audit log at `/dashboard/audit`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
 
@@ -57,6 +57,33 @@ OCR processing outcomes can be investigated in [Audit log](./audit); the audit d
 ### Instance information
 
 View the installed version and release channel. Official rolling images include a commit identity and check for newer rolling releases. A custom image needs the corresponding build metadata to show it accurately. Update notices are informational; deploy a new image through your hosting system to upgrade.
+
+## Encryption
+
+**Settings → Access → Encryption** needs `settings.security` to change. Files are encrypted in the browser, or by the [flare-upload](/guide/screenshot-tools) program, before they reach the server. There is no switch that turns encryption off, for the instance or for a user.
+
+### Forbid plain uploads
+
+By default people can still choose a [plain upload](/guide/encryption#choose-encrypted-or-plain), for one file or through an upload profile, when a link must show its content in a preview on other sites. Turn on **Forbid plain uploads** to refuse every upload that is not encrypted. It is off on a new instance and after an upgrade.
+
+<Screenshot src="/screenshots/preferences/settings-encryption.png" alt="The Encryption card in Access settings with the Forbid plain uploads switch turned on and marked as changed" caption="Forbid plain uploads is in Settings → Access. It takes effect when you save." />
+
+With the switch on:
+
+| Where                                                     | What happens                                                                                                                                                                |
+| --------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Upload form and paste form                                | The **Encryption** choice is not shown. Every upload is encrypted.                                                                                                          |
+| Upload profiles                                           | **Plain** cannot be selected. A profile that is already Plain stays as it is and its uploads are refused.                                                                   |
+| Tools with a token for a Plain profile                    | Refused with `403` and the code `plain_uploads_forbidden`.                                                                                                                  |
+| Tool configurations and API tokens from before encryption | Refused in the same way. They can only send plain files, so they stop uploading until the person [creates a new configuration](/guide/screenshot-tools#old-configurations). |
+| Archive extraction and archive creation                   | Refused: the server would write plain files.                                                                                                                                |
+| Uploads already in progress                               | A chunked plain upload that started before the save is refused when it completes.                                                                                           |
+
+The switch does not touch files that are plain already: they stay readable by the server, keep their link previews, and can still be viewed, downloaded and deleted. It does not encrypt anything by itself.
+
+Before you turn it on, tell people who use screenshot tools. Each of them needs flare-upload and a new configuration first, or their captures stop arriving. The public settings (`GET /api/settings`) say whether the switch is on, so a tool can tell its user why an upload was refused.
+
+Turning it off again restores the Plain choice at once. Uploads that were refused in between are not kept or retried.
 
 ## Save changes deliberately
 

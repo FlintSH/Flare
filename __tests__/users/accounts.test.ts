@@ -104,16 +104,17 @@ describe('createAccount', () => {
     expect(mocks.sendAccountToken).not.toHaveBeenCalled()
   })
 
-  it('makes the first account an administrator and mints its upload token', async () => {
+  it('makes the first account an administrator and mints no upload token', async () => {
     // findFirst finds no account, so setup has not created one yet.
     await createAccount(tx, { ...account, roleIds: ['moderator'] })
     const { data } = mocks.tx.user.create.mock.calls[0][0]
     expect(data.roles).toEqual({
       connect: [{ id: 'moderator' }, { id: 'administrator' }],
     })
-    expect(data.uploadToken).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-    )
+    // A new account has no token from before encryption. Its tools get a
+    // named token with their configuration (docs/e2ee-spec.md, section 14.4).
+    expect(data).not.toHaveProperty('uploadToken')
+    expect(data).not.toHaveProperty('uploadTokenHash')
   })
 
   it('sends a verification link to a typed address when the settings ask for one', async () => {
@@ -172,7 +173,9 @@ describe('changeCredentials', () => {
       password: 'new-hash',
       pendingEmail: null,
       pendingEmailOldConfirmed: false,
-      uploadToken: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      // The old upload token is revoked. No new one is issued.
+      uploadTokenHash: null,
+      uploadTokenUsedAt: null,
       sessionVersion: { increment: 1 },
     })
     // The caller saves the change in its one update of the row.
@@ -197,7 +200,7 @@ describe('changeCredentials', () => {
       emailVerificationSource: 'email',
     })
     expect(proven).not.toHaveProperty('password')
-    expect(proven).not.toHaveProperty('uploadToken')
+    expect(proven).not.toHaveProperty('uploadTokenHash')
     expect(typed).toMatchObject({
       email: 'typed@example.test',
       emailVerified: null,

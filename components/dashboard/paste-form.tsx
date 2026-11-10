@@ -42,7 +42,12 @@ import { useToast } from '@/hooks/use-toast'
 import { useUploadLibrary } from '@/hooks/use-upload-library'
 import { useUploadEncryption } from '@/hooks/use-upload-queue'
 
-export function PasteForm() {
+export function PasteForm({
+  plainUploadsForbidden = false,
+}: {
+  /** The administrator forbids plain uploads, so the choice is not shown. */
+  plainUploadsForbidden?: boolean
+}) {
   const [content, setContent] = useState('')
   const [filename, setFilename] = useState('')
   const canShare = allows(usePermissions().user, 'shareFiles')
@@ -51,7 +56,11 @@ export function PasteForm() {
     undefined
   )
   const [password, setPassword] = useState('')
-  const [encryption, setEncryption] = useState<EncryptionMode>('encrypted')
+  // Shown first as the selected upload profile says; the choice made here
+  // wins (docs/e2ee-spec.md, section 11.2).
+  const [chosenEncryption, setEncryption] =
+    useState<EncryptionMode>('encrypted')
+  const encryption = plainUploadsForbidden ? 'encrypted' : chosenEncryption
   const encrypted = encryption === 'encrypted'
   const keys = useUploadEncryption()
   const libraryFor = useUploadLibrary()
@@ -204,6 +213,7 @@ export function PasteForm() {
         value={profileId}
         onChange={setProfileId}
         disabled={isSubmitting}
+        onEncryptionChange={setEncryption}
       />
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -313,6 +323,7 @@ export function PasteForm() {
         onChange={setEncryption}
         disabled={isSubmitting}
         locked={keys.locked}
+        plainForbidden={plainUploadsForbidden}
         noun="paste"
       />
       {error && (

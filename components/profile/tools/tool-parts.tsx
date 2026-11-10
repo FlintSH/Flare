@@ -1,15 +1,10 @@
-import type { ReactNode } from 'react'
+'use client'
 
-import { Terminal } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 
-export interface UploaderToolProps {
-  /** Select this upload profile instead of following account defaults. */
-  profileId?: string
-  profileName?: string
-  /** Only a small button named after the tool, for a row of tools. */
-  compact?: boolean
-  disabled?: boolean
-}
+import { Check, Copy, Terminal } from 'lucide-react'
+
+import { Button } from '@/components/ui/button'
 
 /** A tool in the Screenshot tools card: what it is, and its action. */
 export function ToolRow({
@@ -22,7 +17,10 @@ export function ToolRow({
   action: ReactNode
 }) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"
+      data-tool={title}
+    >
       <div className="min-w-0 space-y-1">
         <h3 className="text-sm font-medium">{title}</h3>
         <p className="text-pretty text-sm text-muted-foreground">
@@ -56,6 +54,43 @@ export function DependencyNotice({ commands }: { commands: string[] }) {
             ))}
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/** A value to paste into a tool's settings, with a button that copies it. */
+export function CopyableValue({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="flex items-stretch gap-2">
+        {/* One line that scrolls: a wrapped argument reads as two. */}
+        <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-md border bg-muted/50 px-2 py-1.5 font-mono text-xs leading-relaxed">
+          {value}
+        </code>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-auto shrink-0"
+          aria-label={`Copy ${label.toLowerCase()}`}
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(value)
+              .then(() => setCopied(true))
+              .catch(() => setCopied(false))
+          }}
+        >
+          {copied ? <Check /> : <Copy />}
+        </Button>
       </div>
     </div>
   )

@@ -61,7 +61,6 @@
                       "tags": [],
                       "hasPassword": false,
                       "encrypted": false,
-                      "encrypted": false,
                       "expiresAt": null,
                       "expiryAction": null
                     }
@@ -269,7 +268,7 @@
         "operationId": "uploadFile",
         "summary": "Upload one file",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; accounts with quotas.bypass or Administrator are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage.",
+        "description": "Requires the files:upload scope. Stream one multipart file. Select profile/folder in headers or query and naming in profile/account defaults before sending bytes. All upload limits and quota apply; accounts with quotas.bypass or Administrator are exempt from the default quota but not file-size limits. No multipart idempotency key is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. The Encryption setting of the resolved upload profile decides what a token may send: an encrypted upload to a plain profile, or a plain upload to an encrypted one (the default, also without a profile), returns 403 with the code profile_requires_plain or profile_requires_encrypted. A token created before the upgrade to end-to-end encryption uploads plain files only (token_predates_encryption for an encrypted upload). If the administrator forbids plain uploads, each plain upload returns 403 plain_uploads_forbidden.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
@@ -280,7 +279,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "data": { "$ref": "#/components/schemas/UploadLinks" },
+                    "data": {
+                      "oneOf": [
+                        { "$ref": "#/components/schemas/UploadLinks" },
+                        { "$ref": "#/components/schemas/EncryptedUploadLinks" }
+                      ]
+                    },
                     "success": { "const": true, "type": "boolean" }
                   },
                   "required": ["data", "success"]
@@ -365,9 +369,24 @@
                 "example": "60"
               }
             }
+          },
+          "409": {
+            "description": "An encrypted upload whose account stanza is not for the current account public key (code account_key_not_current, after a passphrase change or key rotation), or an account without keys (account_keys_missing).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           }
         },
         "parameters": [
+          {
+            "name": "X-Flare-Encrypted",
+            "in": "header",
+            "required": false,
+            "description": "true marks an encrypted upload: the body then follows EncryptedMultipartUploadRequest. Omit it for a plain upload.",
+            "schema": { "type": "string", "enum": ["true"] }
+          },
           {
             "name": "X-Upload-Profile",
             "in": "header",
@@ -402,7 +421,12 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/MultipartUploadRequest"
+                "oneOf": [
+                  { "$ref": "#/components/schemas/MultipartUploadRequest" },
+                  {
+                    "$ref": "#/components/schemas/EncryptedMultipartUploadRequest"
+                  }
+                ]
               }
             }
           }
@@ -474,7 +498,7 @@
         "operationId": "initializeChunkUpload",
         "summary": "Initialize a chunk upload",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Records the actual storage target in server-side session metadata; clients cannot override that provenance.",
+        "description": "Requires the files:upload scope. Size is positive bytes. Snapshots upload options. Unknown JSON properties are rejected except the retired copyFormat field, which is ignored. Sessions depend on application temporary storage. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Records the actual storage target in server-side session metadata; clients cannot override that provenance. The Encryption setting of the resolved upload profile decides what a token may send: an encrypted upload to a plain profile, or a plain upload to an encrypted one (the default, also without a profile), returns 403 with the code profile_requires_plain or profile_requires_encrypted. A token created before the upgrade to end-to-end encryption uploads plain files only (token_predates_encryption for an encrypted upload). If the administrator forbids plain uploads, each plain upload returns 403 plain_uploads_forbidden.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
@@ -556,6 +580,14 @@
                 "example": "60"
               }
             }
+          },
+          "409": {
+            "description": "An encrypted upload whose account stanza is not for the current account public key (code account_key_not_current, after a passphrase change or key rotation), or an account without keys (account_keys_missing).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
           }
         },
         "parameters": [
@@ -593,7 +625,12 @@
           "description": "JSON request.",
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/ChunkInitRequest" }
+              "schema": {
+                "oneOf": [
+                  { "$ref": "#/components/schemas/ChunkInitRequest" },
+                  { "$ref": "#/components/schemas/EncryptedChunkInitRequest" }
+                ]
+              }
             }
           }
         },
@@ -988,7 +1025,12 @@
             "description": "Success.",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/UploadLinks" },
+                "schema": {
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/UploadLinks" },
+                    { "$ref": "#/components/schemas/EncryptedUploadLinks" }
+                  ]
+                },
                 "example": {
                   "url": "https://files.example.com/abc123/screenshot.png",
                   "pageUrl": "https://files.example.com/abc123/screenshot.png",
@@ -1559,9 +1601,15 @@
     "schemas": {
       "Error": {
         "type": "object",
-        "properties": { "error": { "type": "string" } },
+        "properties": {
+          "error": { "type": "string" },
+          "code": {
+            "type": "string",
+            "description": "Present when a client can act on the refusal. Upload routes use: account_key_not_current, account_keys_missing, protocol_version_not_accepted, profile_requires_encrypted, profile_requires_plain, plain_uploads_forbidden, token_predates_encryption."
+          }
+        },
         "required": ["error"],
-        "description": "Upload/authentication failures use this shape; no success property is required."
+        "description": "Upload/authentication failures use this shape; no success property is required. Some upload refusals add a machine-readable code."
       },
       "ApiError": {
         "type": "object",
@@ -2380,6 +2428,225 @@
               }
             }
           }
+        }
+      },
+      "EncryptedMultipartUploadRequest": {
+        "type": "object",
+        "description": "An encrypted upload, sent with the header X-Flare-Encrypted: true. The client encrypts; the server stores ciphertext and never receives the file key, the name or the type. Fields that are not listed, such as name, filename, mimeType or password, return 400. docs/e2ee-spec.md specifies the bytes and clients/flare-upload/SERVER-CONTRACT.md the request.",
+        "properties": {
+          "header": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 37,
+            "description": "base64url of the 26-byte file header. The uploaded bytes must start with it."
+          },
+          "sealedMetadata": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 5466,
+            "description": "base64url of record_version (0x01) and the sealed name and type. At most 4097 bytes."
+          },
+          "accountStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 132,
+            "description": "base64url of record_version (0x01) and the 96-byte account stanza."
+          },
+          "stanzaAccountPublicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 45,
+            "description": "base64url of the 32-byte account public key the stanza is for. Must be the current key of the account, or the answer is 409 account_key_not_current."
+          },
+          "passwordStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 292,
+            "description": "Optional. base64url of record_version (0x01) and the 216-byte password stanza."
+          },
+          "rulesApplied": {
+            "type": "string",
+            "enum": ["true", "false"],
+            "description": "Whether the uploader applied the tag rules. Accepted and not stored in this release."
+          },
+          "isImage": {
+            "type": "string",
+            "enum": ["true", "false"],
+            "description": "Whether the file is an image. Accepted and not stored in this release."
+          },
+          "folderStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 132,
+            "description": "Optional. base64url of record_version (0x01) and the 96-byte folder stanza of a public file. Accepted and not stored in this release."
+          },
+          "folderPublicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 44,
+            "description": "Optional. base64url of the 32-byte folder public key the folder stanza is for. Accepted and not stored in this release."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token. Multipart uses an empty string or the literal string null for null."
+          },
+          "tagIds": {
+            "type": "string",
+            "description": "JSON-encoded array of at most 20 owned tag IDs, for example [\"TAG_ID\"]."
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "The encrypted file: the 26-byte header, then the stored chunks. The part must have the filename \"encrypted\" and the type application/octet-stream."
+          }
+        },
+        "required": [
+          "header",
+          "sealedMetadata",
+          "accountStanza",
+          "stanzaAccountPublicKey",
+          "file"
+        ]
+      },
+      "EncryptedChunkInitRequest": {
+        "type": "object",
+        "description": "Start of an encrypted chunked upload. filename, mimeType and password are refused. The records, the size, the profile Encryption setting and the account key are checked now, before any part is sent.",
+        "properties": {
+          "encrypted": { "type": "boolean", "const": true },
+          "size": {
+            "type": "integer",
+            "minimum": 58,
+            "description": "Length of the encrypted file in bytes: 26 + plaintext length + 32 for each 64 KiB chunk."
+          },
+          "header": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 37,
+            "description": "base64url of the 26-byte file header. The uploaded bytes must start with it."
+          },
+          "sealedMetadata": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 5466,
+            "description": "base64url of record_version (0x01) and the sealed name and type. At most 4097 bytes."
+          },
+          "accountStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 132,
+            "description": "base64url of record_version (0x01) and the 96-byte account stanza."
+          },
+          "stanzaAccountPublicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 45,
+            "description": "base64url of the 32-byte account public key the stanza is for. Must be the current key of the account, or the answer is 409 account_key_not_current."
+          },
+          "passwordStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 292,
+            "description": "Optional. base64url of record_version (0x01) and the 216-byte password stanza."
+          },
+          "rulesApplied": {
+            "type": "string",
+            "enum": ["true", "false"],
+            "description": "Whether the uploader applied the tag rules. Accepted and not stored in this release."
+          },
+          "isImage": {
+            "type": "string",
+            "enum": ["true", "false"],
+            "description": "Whether the file is an image. Accepted and not stored in this release."
+          },
+          "folderStanza": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 132,
+            "description": "Optional. base64url of record_version (0x01) and the 96-byte folder stanza of a public file. Accepted and not stored in this release."
+          },
+          "folderPublicKey": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "maxLength": 44,
+            "description": "Optional. base64url of the 32-byte folder public key the folder stanza is for. Accepted and not stored in this release."
+          },
+          "visibility": {
+            "type": "string",
+            "enum": ["PUBLIC", "PRIVATE"],
+            "description": "Public without a profile override. Private content requires an eligible browser session; this bearer token does not authorize content downloads."
+          },
+          "expiration": {
+            "type": "string",
+            "enum": ["DISABLED", "HOUR", "DAY", "WEEK", "MONTH"],
+            "description": "Relative expiration; omission inherits. DISABLED explicitly disables it. MONTH increments the UTC calendar month."
+          },
+          "expiryAction": {
+            "type": "string",
+            "enum": ["DELETE", "SET_PRIVATE"],
+            "description": "Action when expiration is processed. Inherits the profile/account default."
+          },
+          "expiresAt": {
+            "type": "string",
+            "description": "Future ISO 8601 timestamp with timezone; null disables expiration. Overrides relative expiration. Forbidden for a profile-bound token. Multipart uses an empty string or the literal string null for null."
+          },
+          "tagIds": {
+            "type": "string",
+            "description": "JSON-encoded array of at most 20 owned tag IDs, for example [\"TAG_ID\"]."
+          },
+          "profileId": {
+            "type": "string",
+            "description": "Owned profile ID, or null to bypass the account default. A profile-bound token cannot switch profiles. Multipart uses an empty string or the literal string null for null. Select with X-Upload-Profile or the profileId query before sending bytes."
+          },
+          "folderId": {
+            "type": "string",
+            "description": "Owned destination folder ID, or null for unfiled. A request-only selection, fixed at initialization. Multipart uses an empty string or the literal string null for null. Select with X-Upload-Folder or the folderId query before sending bytes."
+          }
+        },
+        "required": [
+          "encrypted",
+          "size",
+          "header",
+          "sealedMetadata",
+          "accountStanza",
+          "stanzaAccountPublicKey"
+        ]
+      },
+      "EncryptedUploadLinks": {
+        "type": "object",
+        "description": "The answer for an encrypted upload: no name and no type. The client makes the share link by adding # and the base64url file key (or #p. and the link secret) to pageUrl. The server never has that part.",
+        "properties": {
+          "encrypted": { "type": "boolean", "const": true },
+          "id": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "pageUrl": { "type": "string", "format": "uri" },
+          "size": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Stored bytes."
+          }
+        },
+        "required": ["encrypted", "id", "url", "pageUrl", "size"],
+        "example": {
+          "encrypted": true,
+          "id": "cm_example",
+          "url": "https://files.example.com/abc123/e_3kGq0v8mJtYw2nHc5sLp7A",
+          "pageUrl": "https://files.example.com/abc123/e_3kGq0v8mJtYw2nHc5sLp7A",
+          "size": 204890
         }
       }
     }

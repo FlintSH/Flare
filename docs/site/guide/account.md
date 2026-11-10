@@ -85,7 +85,7 @@ Changing your username does not automatically change file URL paths. For a memor
 An account signs in with a **passphrase** that never leaves your browser, and has a 24-word **recovery phrase**. Both belong to the encryption keys of your account. [Passphrase and recovery phrase](./passphrase) explains them in full; this section is the short version for **Profile → Account → Passphrase and recovery**.
 
 - **Show recovery phrase** asks for your passphrase and shows the 24 words again.
-- **Change passphrase** makes new keys for your account. It ends every session, including the one you are using, deletes every API token, replaces your upload token, and gives you a new recovery phrase. The dialog lists this before it asks for anything. [Read the steps and the consequences](./passphrase#change-your-passphrase) first; screenshot tools need their configuration installed again afterwards.
+- **Change passphrase** makes new keys for your account. It ends every session, including the one you are using, deletes every API token, revokes the upload token from before encryption if you still had one, and gives you a new recovery phrase. The dialog lists this before it asks for anything. [Read the steps and the consequences](./passphrase#change-your-passphrase) first; screenshot tools need their configuration installed again afterwards.
 
 A passphrase change asks for your current passphrase and nothing else. Two-factor authentication, recovery codes, passkeys, and a passkey requirement stay as they are, so the next sign-in still asks for them.
 
@@ -180,7 +180,7 @@ Inspect the archive and open important files before deleting their originals. A 
 
 ## Integrations and connected tools
 
-**Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
+**Profile → Uploads** contains the [screenshot tools](./screenshot-tools). Each configuration you create there has its own upload token, listed in **Integrations** as **Upload tools: profile name**, where you can revoke it. An account from before encryption also has one older upload token. Flare cannot show it, and the card offers to [revoke it](./screenshot-tools#old-configurations) once your tools have new configurations.
 
 **Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 

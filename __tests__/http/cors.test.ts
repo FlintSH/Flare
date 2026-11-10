@@ -128,6 +128,10 @@ describe('preflight', () => {
     expect(response.headers.get('Access-Control-Allow-Headers')).toContain(
       'Authorization'
     )
+    // A web app with a token can send an encrypted upload.
+    expect(response.headers.get('Access-Control-Allow-Headers')).toContain(
+      'X-Flare-Encrypted'
+    )
     expect(response.headers.get('Access-Control-Max-Age')).toBe('600')
     expect(response.headers.get('Vary')).toBe('Origin')
     expect(response.headers.has('Access-Control-Allow-Credentials')).toBe(false)

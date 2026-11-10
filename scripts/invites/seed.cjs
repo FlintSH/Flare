@@ -93,7 +93,6 @@ async function seed() {
         ...(await createAccountRecord('Invite-demo-only-2026!')).columns,
         roles: systemKey ? { connect: { systemKey } } : undefined,
         urlId,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   console.log('Created isolated invite demonstration accounts.')

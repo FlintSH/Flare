@@ -66,6 +66,7 @@ What other sites can reach:
 - **Every method a named token can call**, listed in the [scope reference](#scope-reference). The token's scopes and its owner's role permissions apply exactly as they do elsewhere. Browsers send a preflight `OPTIONS` request first; Flare answers it for these routes and caches it in the browser for 10 minutes.
 - **File content for anonymous visitors**, with `GET` and `HEAD`: `/{userUrlId}/{filename}/raw`, `/{userUrlId}/{filename}/direct`, `/api/files/{path}`, and `/api/files/{id}/download`, `/thumbnail` and `/ocr`. Public files work, password-protected ones with the `password` query value. Private files stay unavailable to other sites: named tokens [don't unlock file content](./endpoint-inventory#file-content-and-access-checks), and a page can't read an answer that Flare's session cookie authorized.
 - **Response headers** an app needs: `Retry-After` on API routes, and `Accept-Ranges`, `Content-Disposition` and `Content-Range` on file content.
+- **Request headers** an upload uses: `Authorization`, `Content-Type`, `X-Upload-Profile`, `X-Upload-Folder`, `X-Flare-Paste`, and `X-Flare-Encrypted` for an [encrypted upload](./files#encrypted-uploads-from-a-token), which a web app can send as the dashboard does.
 
 What stays on Flare's own pages:
 
@@ -85,7 +86,7 @@ Flare's own pages call these routes with the browser's session cookie. A browser
 
 Named tokens and the legacy upload token are never checked this way, because a browser doesn't attach them on its own. Send their JSON as `application/json` all the same, as the examples here do.
 
-Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/chunks`, `POST /api/files/chunks/{uploadId}/complete`, `POST /api/files/{id}/expiry`, `POST /api/urls` and `POST /api/profile/upload-token`, and read their JSON whatever type it was sent as. A page on another subdomain of the same site could therefore upload files, create short links, schedule expirations or replace the upload token in a signed-in visitor's account. They also checked the origin and type of legacy-token requests to the folder and tag routes, which now accept those like other token requests.
+Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/chunks`, `POST /api/files/chunks/{uploadId}/complete`, `POST /api/files/{id}/expiry`, `POST /api/urls` and the since removed `POST /api/profile/upload-token`, and read their JSON whatever type it was sent as. A page on another subdomain of the same site could therefore upload files, create short links, schedule expirations or replace the upload token in a signed-in visitor's account. They also checked the origin and type of legacy-token requests to the folder and tag routes, which now accept those like other token requests.
 
 ## Scope reference
 
@@ -104,7 +105,7 @@ The `{uploadId}` and `{id}` path segments in these routes accept letters, digits
 
 Named tokens do not authorize the following operations:
 
-- Creating or revoking tokens, managing webhooks, or retrieving the account upload token.
+- Creating or revoking tokens, managing webhooks, or revoking the legacy account upload token.
 - Enrolling or disabling two-factor authentication, replacing recovery codes, or registering/managing passkeys.
 - Editing accounts, server settings, branding, email policy, or users.
 - Creating or editing upload profiles, folders, or tags.
@@ -147,13 +148,24 @@ Bindings apply to the profile's resolved sharing, expiration, naming, style, and
 
 New uploads use the profile's current settings. Chunked uploads keep the option snapshot selected when they start. Removing a bound profile does not turn the token into an unrestricted token; uploads fail until the connection is replaced with a valid configuration.
 
+The profile's **Encryption** setting decides what a token may send: encrypted uploads for an `encrypted` profile, which is the default, and plain uploads for a `plain` one. A token created after the upgrade to end-to-end encryption needs a `plain` profile to upload plain files. [Which uploads a token may send](./files#which-uploads-a-token-may-send) has the table and the error codes.
+
 ## Named tokens and the account upload token
 
-Flare also has an older account upload token. Generated ShareX, iTake, Flameshot, Spectacle, and Bash configurations use it for compatibility. Regenerating it invalidates existing generated configurations, so download them again afterward.
+Accounts from before end-to-end encryption have one older account upload token. Configurations for ShareX, iTake, Flameshot, Spectacle and Bash that were downloaded before the upgrade contain it and keep working. Accounts created after the upgrade have none.
 
-`GET /api/profile/upload-token` returns `{ "uploadToken": "…" }`, and `POST` replaces the token and returns the new one. Both answer with `Cache-Control: private, no-store`, like the generated configurations, so browsers and shared caches don't keep the credential; earlier versions sent no caching header. A password reset replaces the token too when the administrator turned on **Rotate upload tokens after a password reset**.
+**The endpoint that returned this token is removed.** `GET /api/profile/upload-token` used to answer `{ "uploadToken": "…" }` and `POST` replaced the token and returned the new one. Both now answer `404`. Flare stores only the SHA-256 of the token, as it does for named tokens, so nothing can return it, and no new token of this kind is issued. An integration that fetched a credential this way needs a [named token](#create-a-token) instead, which is shown once when it is created.
 
-The legacy credential is accepted by the shared account authentication helper and does not have the named-token scope allowlist. Its supported route surface is therefore broader than `files:upload` on routes that use that helper, but current role permissions still restrict each request. It still does not satisfy routes that explicitly require a browser session or an administrator session. Prefer scoped named tokens for new custom integrations.
+What remains is session-only and returns no credential:
+
+- `GET /api/profile/upload-tools` answers `{ "origin": "…", "legacyToken": { "active": true, "lastUsedAt": "…", "hasNewConfiguration": false } }`: the public address that a tool configuration uses, whether the old token still works, when an upload last used it (to the hour), and whether the account has a newer upload token.
+- `DELETE /api/profile/upload-tools/legacy-token` revokes the old token. It cannot be undone.
+
+Both need a browser session with `tokens.manage` and refuse a request that carries an `Authorization` header. A passphrase change, a key rotation, or an account reset revokes the old token too, and a password reset does when the administrator turned on **Revoke old upload tokens after a reset**.
+
+The legacy credential is accepted by the shared account authentication helper and does not have the named-token scope allowlist. Its supported route surface is therefore broader than `files:upload` on routes that use that helper, but current role permissions still restrict each request. It still does not satisfy routes that explicitly require a browser session or an administrator session. Its uploads are always plain files, and it cannot send an encrypted upload. Prefer scoped named tokens for new integrations.
+
+The configuration files of the built-in tools are no longer served by `GET` or `POST /api/profile/sharex`, `/itake`, `/flameshot`, `/spectacle` and `/bash`. Those routes are removed: the browser writes the files from a token that Flare shows once, and the server holds no token to put in them. See [screenshot tools](/guide/screenshot-tools#create-a-configuration).
 
 ## Two-factor authentication and passkeys
 
@@ -177,6 +189,8 @@ The last-used timestamp is best-effort activity metadata, not a full audit log. 
 | A previously working account loses API access       | Check whether the administrator now requires email verification. A user who must verify their email cannot use named or legacy token authentication until eligible again. Also check current role grants: removing an operation’s permission stops both kinds of token.                                                  |
 | `403` says you lack permission                      | Ask the administrator to review the owner’s current role grants. Token scope alone does not grant account authority.                                                                                                                                                                                                     |
 | `403` mentions an upload profile                    | Remove conflicting overrides, select the bound profile, and confirm it still exists.                                                                                                                                                                                                                                     |
+| `403` with a `code`                                 | The upload does not match a setting: `profile_requires_encrypted`, `profile_requires_plain`, `plain_uploads_forbidden` or `token_predates_encryption`. See [which uploads a token may send](./files#which-uploads-a-token-may-send).                                                                                     |
+| `404` from `/api/profile/upload-token`              | The endpoint is removed. Flare cannot return an upload token; create a named token.                                                                                                                                                                                                                                      |
 | A web app on another site gets `Failed to fetch`    | The instance hasn't allowed the app's origin. Ask the operator to add it to [`FLARE_CORS_ORIGINS`](#call-flare-from-a-web-app), written exactly as the browser sends it, such as `http://localhost:5173`. Session-only routes never work from another site, and a page can't read answers the session cookie authorized. |
 | `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                                                                    |
 

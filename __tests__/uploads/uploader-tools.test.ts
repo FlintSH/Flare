@@ -3,88 +3,105 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import {
-  ProfileToolDownloads,
-  ProfileTools,
-} from '@/components/profile/tools/profile-tools'
+import { UploaderToolRows } from '@/components/profile/tools/profile-tools'
 
 import { saveResponseAsFile } from '@/lib/client/save-file'
 import {
   SPECTACLE_CAPTURE_MODES,
   SPECTACLE_RECORDING_MODES,
   UPLOADER_CLIENT_IDS,
+  UPLOAD_PROGRAM_RELEASES_URL,
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
+import type { UploaderConfiguration } from '@/lib/uploads/uploader-clients/render'
 
-const session = vi.hoisted(() => ({ permissions: [] as string[] }))
-vi.mock('next-auth/react', () => ({
-  useSession: () => ({
-    data: { user: { id: 'owner', permissions: session.permissions } },
-    status: 'authenticated',
-  }),
-}))
-
+const rows = (configuration: UploaderConfiguration | null) =>
+  renderToStaticMarkup(React.createElement(UploaderToolRows, { configuration }))
+const titles = (html: string) =>
+  [...html.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map((match) => match[1])
+/** Each button with its text, and whether it is disabled. */
 const buttons = (html: string) =>
-  [...html.matchAll(/<button[^>]*>([^<]*)<\/button>/g)].map((match) => match[1])
+  [
+    ...html.matchAll(/<button([^>]*)>(?:<svg.*?<\/svg>)?([^<]*)<\/button>/g),
+  ].map(
+    (match) => `${match[2]}${/\sdisabled=""/.test(match[1]) ? ' (off)' : ''}`
+  )
 
-describe('uploader tools in the profile editor', () => {
-  const render = (permissions: string[]) => {
-    session.permissions = permissions
-    return renderToStaticMarkup(
-      React.createElement(ProfileToolDownloads, {
-        profileId: 'screenshots',
-        profileName: 'Screenshots',
-      })
-    )
-  }
+const plain: UploaderConfiguration = {
+  origin: 'https://flare.test',
+  token: 'flr_configuration-token',
+  profile: { id: 'screens', name: 'Chat screenshots' },
+  encryption: 'plain',
+  accountPublicKey: null,
+  folder: null,
+}
+const encrypted: UploaderConfiguration = {
+  ...plain,
+  encryption: 'encrypted',
+  accountPublicKey: new Uint8Array(32),
+}
 
-  it.each([
-    [['uploadProfiles.manage']],
-    [['uploadProfiles.manage', 'tokens.manage']],
-    [['uploadProfiles.manage', 'files.upload']],
-  ])('are hidden from roles that cannot use them: %j', (permissions) => {
-    expect(render(permissions)).toBe('')
-  })
-
-  it('offer every client, like the Screenshot tools card', () => {
-    const html = render([
-      'uploadProfiles.manage',
-      'files.upload',
-      'tokens.manage',
-    ])
-    expect(html).toContain('Use this profile in your tools')
-    expect(buttons(html)).toEqual([
-      'ShareX',
-      'Bash',
-      'Flameshot',
-      'Spectacle',
-      'iTake',
-    ])
-    expect(buttons(html).toSorted()).toEqual(
-      UPLOADER_CLIENT_IDS.map((id) => uploaderClients[id].label).toSorted()
-    )
-  })
-
-  it('the Screenshot tools card lists the clients in registry order', () => {
-    session.permissions = ['files.upload', 'tokens.manage']
-    const html = renderToStaticMarkup(React.createElement(ProfileTools))
-    const titles = [...html.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map(
-      (match) => match[1]
-    )
-    expect(titles).toEqual([
+describe('the Screenshot tools card', () => {
+  it('lists the helper program first, then the clients in registry order', () => {
+    expect(titles(rows(null))).toEqual([
+      'flare-upload',
       'ShareX',
       'iTake',
       'Flameshot',
       'Spectacle',
       'Bash script',
     ])
-    expect(buttons(html).slice(0, 5)).toEqual([
+    expect(titles(rows(null)).slice(1)).toHaveLength(UPLOADER_CLIENT_IDS.length)
+  })
+
+  it('keeps every download off until a configuration exists: a file needs a token', () => {
+    expect(buttons(rows(null))).toEqual([
+      'Download configuration (off)',
+      'Download config (off)',
+      'Set up iTake (off)',
+      'Download script (off)',
+      'Download script (off)',
+      'Download script (off)',
+    ])
+  })
+
+  it('offers each declarative configuration for a plain profile, as before', () => {
+    const html = rows(plain)
+    expect(buttons(html)).toEqual([
+      'Download configuration',
       'Download config',
       'Set up iTake',
       'Download script',
       'Download script',
       'Download script',
     ])
+    expect(html).not.toContain('cannot encrypt')
+  })
+
+  it('offers no format that cannot encrypt for an encrypted profile, and says why', () => {
+    const html = rows(encrypted)
+    expect(buttons(html)).toEqual([
+      'Download configuration',
+      'Set up ShareX',
+      'Set up iTake (off)',
+      'Download script',
+      'Download script',
+      'Download script',
+    ])
+    expect(html).toContain(
+      'A ShareX uploader file describes one web request and cannot encrypt'
+    )
+    expect(html).toContain(
+      'an iTake uploader file describes one web request and cannot encrypt'
+    )
+    // The token is in the files, never in the page.
+    expect(html).not.toContain(plain.token)
+  })
+
+  it('links to the release assets and never to a program file', () => {
+    const html = rows(encrypted)
+    expect(html).toContain(`href="${UPLOAD_PROGRAM_RELEASES_URL}"`)
+    expect(html).not.toMatch(/href="[^"]*\.(exe|msi|dmg|sh)"/)
   })
 })
 

@@ -57,7 +57,7 @@ suite('vault tags against disposable PostgreSQL', () => {
     await prisma.user.deleteMany()
     for (const id of ['tag-owner', 'tag-other']) {
       await prisma.user.create({
-        data: { id, name: id, urlId: id, uploadToken: id },
+        data: { id, name: id, urlId: id },
       })
     }
     authentication.userId = 'tag-owner'

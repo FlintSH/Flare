@@ -7,6 +7,7 @@ import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes } from '@/lib/config/limits'
 import { prisma } from '@/lib/database/prisma'
+import { plainUploadsForbidden } from '@/lib/uploads/encryption-policy'
 import { formatBytes } from '@/lib/utils'
 
 import { requireDashboardPage } from '../page-access'
@@ -42,6 +43,7 @@ export default async function UploadPage() {
           user={user}
           maxSize={maxSizeBytes}
           formattedMaxSize={formatBytes(maxSizeBytes)}
+          plainUploadsForbidden={plainUploadsForbidden(config)}
         />
       </div>
     </div>

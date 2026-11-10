@@ -733,8 +733,8 @@ export function EmailSettings({
             )}
             {toggle(
               'recovery.rotateUploadToken',
-              'Rotate upload tokens after a password reset',
-              'Invalidates upload tool credentials as well as existing sessions. Users will need to reconfigure their upload tools.'
+              'Revoke old upload tokens after a reset',
+              'Revokes the account upload token from before encryption as well as existing sessions. Tools that still use an old configuration stop uploading until they get a new one.'
             )}
           </section>
           <section className="space-y-4">

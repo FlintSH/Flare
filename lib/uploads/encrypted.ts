@@ -1,6 +1,5 @@
 import { z } from 'zod'
 
-import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import {
   type EncryptedRecords,
   type EncryptedRecordsWire,
@@ -12,21 +11,6 @@ import {
 } from '@/lib/files/encrypted'
 
 import { requestFields, uploadRequestOptionFields } from './schema'
-
-/**
- * Who can send an encrypted upload in this release: a signed-in browser.
- * Named tokens and the account upload token send plain files, as the
- * screenshot tool configurations that hold them always did
- * (docs/e2ee-spec.md, section 14.4). The program for script clients
- * (section 10.2) lifts this limit.
- */
-export function assertEncryptedUploader(user: AuthenticatedUser) {
-  if (user.credential !== 'session')
-    throw new EncryptedUploadError(
-      'Encrypted uploads need a browser session. Uploads with a token are plain files.',
-      403
-    )
-}
 
 const RECORD_KEYS = new Set(Object.keys(encryptedUploadFields))
 /** The options an encrypted upload can set. A server password is not one. */

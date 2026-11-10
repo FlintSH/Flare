@@ -112,7 +112,6 @@ suite.sequential('invites against disposable PostgreSQL', () => {
         email: `${id}@example.test`,
         password: 'fixture-only',
         urlId: id.slice(0, 5).padEnd(5, '0'),
-        uploadToken: `${id}-fixture`,
         roles: { connect: roleIds.map((roleId) => ({ id: roleId })) },
       },
     })

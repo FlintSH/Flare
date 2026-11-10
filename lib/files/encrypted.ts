@@ -139,8 +139,9 @@ export interface EncryptedRecords {
 }
 
 export class EncryptedUploadError extends HttpError {
-  constructor(message: string, status = 400) {
-    super(status, message)
+  /** `code` goes into the error body, for a script client to act on. */
+  constructor(message: string, status = 400, code?: string) {
+    super(status, message, code ? { body: { code } } : {})
     this.name = 'EncryptedUploadError'
   }
 }
@@ -158,11 +159,13 @@ function checked<Result>(what: string, read: () => Result): Result {
     return read()
   } catch (error) {
     if (!isE2eeError(error)) throw error
-    throw new EncryptedUploadError(
-      error.reason === 'unknown_version'
-        ? `${what} has a version this server does not accept.`
-        : `${what} is not valid.`
-    )
+    if (error.reason === 'unknown_version')
+      throw new EncryptedUploadError(
+        `${what} has a version this server does not accept.`,
+        400,
+        'protocol_version_not_accepted'
+      )
+    throw new EncryptedUploadError(`${what} is not valid.`)
   }
 }
 
@@ -357,7 +360,8 @@ export function assertStanzaForAccount(
   if (!accountPublicKey)
     throw new EncryptedUploadError(
       'Set up your encryption keys before uploading encrypted files.',
-      409
+      409,
+      'account_keys_missing'
     )
   if (
     accountPublicKey.length !== records.stanzaAccountPublicKey.length ||
@@ -365,9 +369,12 @@ export function assertStanzaForAccount(
       (byte, index) => accountPublicKey[index] === byte
     )
   )
+    // A script client reads the code and asks for a new configuration
+    // (section 8.3.6).
     throw new EncryptedUploadError(
-      'The upload was encrypted for a different account key. Reload the page and try again.',
-      409
+      'The upload was encrypted for a different account key. Reload the page and try again. A tool needs a new configuration.',
+      409,
+      'account_key_not_current'
     )
 }
 

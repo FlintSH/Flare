@@ -19,6 +19,7 @@ import {
   ENCRYPTED_FILE_TYPE,
   type EncryptedRecordsWire,
   EncryptedUploadError,
+  assertStanzaForAccount,
   encryptedDestination,
   parseEncryptedRecords,
 } from '@/lib/files/encrypted'
@@ -35,11 +36,8 @@ import type { StorageTarget } from '@/lib/storage/targets'
 
 import { assertFits, uploadCapacity } from './capacity'
 import { uploadDisplayName } from './display-name'
-import {
-  assertEncryptedUploader,
-  isEncryptedInit,
-  parseEncryptedInit,
-} from './encrypted'
+import { isEncryptedInit, parseEncryptedInit } from './encrypted'
+import { assertUploadEncryption } from './encryption-policy'
 import {
   cleanupUncommittedUpload,
   enqueueUploadProcessing,
@@ -177,7 +175,7 @@ const initSchema = requestFields({
   size: z.number().int().positive(),
 })
 
-async function readInit(req: Request, user: AuthenticatedUser) {
+async function readInit(req: Request) {
   const body = await readJson(req)
   if (!isEncryptedInit(body)) {
     const {
@@ -191,7 +189,6 @@ async function readInit(req: Request, user: AuthenticatedUser) {
     if (!filename) throw new UploadError('Invalid filename.')
     return { filename, mimeType, size, bodyOptions, encrypted: null }
   }
-  assertEncryptedUploader(user)
   const { size, encrypted, bodyOptions } = parseEncryptedInit(body)
   return {
     filename: null,
@@ -206,10 +203,8 @@ export async function initializeChunkUpload(
   req: Request,
   user: AuthenticatedUser
 ) {
-  const { filename, mimeType, size, bodyOptions, encrypted } = await readInit(
-    req,
-    user
-  )
+  const { filename, mimeType, size, bodyOptions, encrypted } =
+    await readInit(req)
   const selection = requestUploadOptions(req)
   if (
     selection.profileId !== undefined &&
@@ -227,7 +222,27 @@ export async function initializeChunkUpload(
     ...bodyOptions,
     ...selection,
   })
-  assertFits(uploadCapacity(await getConfig(), user, user.storageUsed), size)
+  const config = await getConfig()
+  // Before any part is sent. Completion checks again under its locks.
+  assertUploadEncryption({
+    user,
+    encrypted: encrypted !== null,
+    profileEncryption: options.encryption,
+    config,
+  })
+  if (encrypted) {
+    // A tool with the key of before a rotation learns it now, not after it
+    // sent each part (docs/e2ee-spec.md, section 8.3.6).
+    const account = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { accountPublicKey: true },
+    })
+    assertStanzaForAccount(
+      parseEncryptedRecords(encrypted),
+      account?.accountPublicKey ?? null
+    )
+  }
+  assertFits(uploadCapacity(config, user, user.storageUsed), size)
   const destination =
     filename === null
       ? encryptedDestination(user, randomUUID())

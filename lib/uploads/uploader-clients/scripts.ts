@@ -6,10 +6,20 @@ import {
   uploaderClients,
 } from '.'
 
-interface ScriptTarget {
-  uploadUrl: URL
-  token: string
-}
+/**
+ * How a script uploads. A `request` script sends one curl request with the
+ * token in it and cannot encrypt. A `helper` script starts `flare-upload`
+ * with its own configuration file (docs/e2ee-spec.md, section 10.4).
+ */
+export type ScriptTarget =
+  | { transport: 'request'; uploadUrl: string; token: string }
+  | {
+      transport: 'helper'
+      /** The address of the server, for messages. */
+      origin: string
+      /** The file name of the `flare-upload` configuration. */
+      configFile: string
+    }
 
 const lines = (...parts: (string | false)[]) =>
   parts.filter((part) => part !== false).join('\n')
@@ -32,9 +42,21 @@ for cmd in "\${dependencies[@]}"; do
 done`
 }
 
-function credentials({ token, uploadUrl }: ScriptTarget) {
-  return `UPLOAD_TOKEN="${token}"
-API_URL="${uploadUrl}"`
+function credentials(target: ScriptTarget) {
+  if (target.transport === 'helper')
+    return `# flare-upload reads the server, the token and the public key of your
+# account from this file. Save the configuration you downloaded there and
+# keep it private: chmod 600.
+FLARE_UPLOAD_CONFIG="\${FLARE_UPLOAD_CONFIG:-\${XDG_CONFIG_HOME:-$HOME/.config}/flare-upload/${target.configFile}}"
+API_URL="${target.origin}"
+
+if [ ! -f "$FLARE_UPLOAD_CONFIG" ]; then
+  echo "Error: No flare-upload configuration at $FLARE_UPLOAD_CONFIG"
+  echo "Download it from Flare (Profile, Upload tools) and save it there."
+  exit 1
+fi`
+  return `UPLOAD_TOKEN="${target.token}"
+API_URL="${target.uploadUrl}"`
 }
 
 function createTempFile(template: string, comment = 'Create temp file') {
@@ -57,21 +79,44 @@ fi`
  * Uploads `file` and leaves the share link in `$URL`, or exits with the
  * reason. curl's status is read before anything else runs.
  */
-function upload({
-  file,
-  type,
-  removeFile = false,
-  notice,
-}: {
-  file: string
-  type?: string
-  /** Remove the uploaded file afterwards, whether or not the upload worked. */
-  removeFile?: boolean
-  notice?: 'Screenshot' | 'Recording'
-}) {
+function upload(
+  target: ScriptTarget,
+  {
+    file,
+    type,
+    removeFile = false,
+    notice,
+  }: {
+    file: string
+    type?: string
+    /** Remove the uploaded file afterwards, whether or not the upload worked. */
+    removeFile?: boolean
+    notice?: 'Screenshot' | 'Recording'
+  }
+) {
   const notify = (message: string) =>
     notice !== undefined &&
     `  notify-send "${notice} Upload Failed" "${message}"`
+  if (target.transport === 'helper')
+    // flare-upload encrypts the file on this machine if its configuration
+    // says so, uploads it and prints the link. Its errors go to the terminal.
+    return lines(
+      `URL=$(flare-upload --config "$FLARE_UPLOAD_CONFIG" "${file}")
+UPLOAD_STATUS=$?`,
+      removeFile &&
+        `
+# Clean up temporary file
+rm -f "${file}"`,
+      `
+# flare-upload prints the reason on standard error and exits with a code
+if [ $UPLOAD_STATUS -ne 0 ] || [ -z "$URL" ]; then
+  echo "Upload failed: flare-upload exited with code $UPLOAD_STATUS"`,
+      notify(
+        'flare-upload exited with code $UPLOAD_STATUS. Run this script in a terminal to see the reason.'
+      ),
+      `  exit 1
+fi`
+    )
   return lines(
     `RESPONSE=$(curl -s -X POST \\
   -H "Authorization: Bearer $UPLOAD_TOKEN" \\
@@ -112,11 +157,38 @@ fi`
   )
 }
 
-function shareLink(useWayland: boolean, notice: 'Screenshot' | 'Recording') {
+function shareLink(
+  target: ScriptTarget,
+  useWayland: boolean,
+  notice: 'Screenshot' | 'Recording'
+) {
+  // The link of an encrypted file is its key. A notification can stay in a
+  // history that other programs read, so it does not show the link.
+  const notification =
+    target.transport === 'helper'
+      ? 'Link copied to clipboard'
+      : 'URL copied to clipboard: $URL'
   return `echo -n "$URL" | ${useWayland ? 'wl-copy' : 'xsel -ib'}
 echo "${notice} uploaded successfully: $URL"
-notify-send "${notice} Uploaded" "URL copied to clipboard: $URL"`
+notify-send "${notice} Uploaded" "${notification}"`
 }
+
+const copyWithAnyTool = `# Try to copy to clipboard using various clipboard tools
+if command -v wl-copy >/dev/null 2>&1; then
+  # Wayland
+  echo -n "$URL" | wl-copy
+elif command -v xsel >/dev/null 2>&1; then
+  # X11 with xsel
+  echo -n "$URL" | xsel -ib
+elif command -v xclip >/dev/null 2>&1; then
+  # X11 with xclip
+  echo -n "$URL" | xclip -selection clipboard
+elif command -v pbcopy >/dev/null 2>&1; then
+  # macOS
+  echo -n "$URL" | pbcopy
+else
+  echo "Note: No clipboard tool found. Install wl-copy, xsel, xclip, or pbcopy for automatic clipboard copy."
+fi`
 
 export function bashScript(target: ScriptTarget) {
   return `#!/bin/bash
@@ -155,12 +227,17 @@ if [ ! -f "$1" ]; then
   exit 1
 fi
 
-${dependencyCheck(uploaderClients.bash.dependencies({}))}
+${dependencyCheck(uploaderClients.bash.dependencies({}, target.transport))}
 
 # Environment setup
 ${credentials(target)}
 
-# Detect mimetype
+${
+  target.transport === 'helper'
+    ? `# Upload the file
+echo "Uploading file..."
+${upload(target, { file: '$1' })}`
+    : `# Detect mimetype
 MIMETYPE=$(file --mime-type -b "$1")
 if [ $? -ne 0 ]; then
   echo "Error: Failed to detect file mimetype"
@@ -170,24 +247,10 @@ fi
 # Upload the file
 echo "Uploading file..."
 echo "Detected mimetype: $MIMETYPE"
-${upload({ file: '$1', type: '$MIMETYPE' })}
+${upload(target, { file: '$1', type: '$MIMETYPE' })}`
+}
 
-# Try to copy to clipboard using various clipboard tools
-if command -v wl-copy >/dev/null 2>&1; then
-  # Wayland
-  echo -n "$URL" | wl-copy
-elif command -v xsel >/dev/null 2>&1; then
-  # X11 with xsel
-  echo -n "$URL" | xsel -ib
-elif command -v xclip >/dev/null 2>&1; then
-  # X11 with xclip
-  echo -n "$URL" | xclip -selection clipboard
-elif command -v pbcopy >/dev/null 2>&1; then
-  # macOS
-  echo -n "$URL" | pbcopy
-else
-  echo "Note: No clipboard tool found. Install wl-copy, xsel, xclip, or pbcopy for automatic clipboard copy."
-fi
+${copyWithAnyTool}
 
 echo "File uploaded successfully!"
 echo "URL: $URL"
@@ -195,12 +258,13 @@ echo "URL has been copied to clipboard (if a clipboard tool was available)"
 exit 0`
 }
 
-const uploadScreenshot = upload({
-  file: '$TEMP_FILE',
-  type: 'image/png',
-  removeFile: true,
-  notice: 'Screenshot',
-})
+const uploadScreenshot = (target: ScriptTarget) =>
+  upload(target, {
+    file: '$TEMP_FILE',
+    type: 'image/png',
+    removeFile: true,
+    notice: 'Screenshot',
+  })
 
 export function flameshotScript(
   target: ScriptTarget,
@@ -245,7 +309,7 @@ export function flameshotScript(
 # Enable debug output
 # set -x
 
-${dependencyCheck(uploaderClients.flameshot.dependencies(options))}
+${dependencyCheck(uploaderClients.flameshot.dependencies(options, target.transport))}
 
 ${lines(
   '# Environment setup',
@@ -266,9 +330,9 @@ ${requireCapture}
 
 # Upload the screenshot
 echo "Uploading screenshot to $API_URL..."
-${uploadScreenshot}
+${uploadScreenshot(target)}
 
-${shareLink(options.useWayland, 'Screenshot')}
+${shareLink(target, options.useWayland, 'Screenshot')}
 exit 0`
 }
 
@@ -320,7 +384,7 @@ function spectacleScreenshotScript(
 # Enable debug output
 # set -x
 
-${dependencyCheck(uploaderClients.spectacle.dependencies(options))}
+${dependencyCheck(uploaderClients.spectacle.dependencies(options, target.transport))}
 
 ${credentials(target)}
 
@@ -343,9 +407,9 @@ ${requireCapture}
 
 # Upload the screenshot
 echo "Uploading screenshot to $API_URL..."
-${uploadScreenshot}
+${uploadScreenshot(target)}
 
-${shareLink(useWayland, 'Screenshot')}
+${shareLink(target, useWayland, 'Screenshot')}
 exit 0`
 }
 
@@ -385,7 +449,7 @@ function spectacleRecordingScript(
 #
 # ===========================================
 
-${dependencyCheck(uploaderClients.spectacle.dependencies(options))}
+${dependencyCheck(uploaderClients.spectacle.dependencies(options, target.transport))}
 
 ${credentials(target)}
 
@@ -453,9 +517,9 @@ upload_recording() {
   # Upload the recording
   echo "Uploading recording to $API_URL..."
   MIME_TYPE=$(get_video_mime_type "$RECORDING_FILE")
-${indent(upload({ file: '$RECORDING_FILE', type: '$MIME_TYPE', notice: 'Recording' }))}
+${indent(upload(target, { file: '$RECORDING_FILE', type: '$MIME_TYPE', notice: 'Recording' }))}
 
-${indent(shareLink(useWayland, 'Recording'))}
+${indent(shareLink(target, useWayland, 'Recording'))}
 }
 
 # Handle command line arguments

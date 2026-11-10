@@ -14,6 +14,7 @@ import {
 import { findOwnedProfile, missingUploadProfile } from './profiles'
 import {
   type ResolvedUploadOptions,
+  UPLOAD_OVERRIDE_KEYS,
   type UploadRequestOptions,
   mergeUploadOptions,
   uploadProfileOptionsSchema,
@@ -132,9 +133,7 @@ export async function resolveUploadOptions(
   const defaults = accountUploadOptions(account, config)
   if (boundProfile) {
     const bound = mergeUploadOptions(defaults, profileOptions, {}, now)
-    for (const key of Object.keys(
-      uploadProfileOptionsSchema.shape
-    ) as (keyof typeof profileOptions)[]) {
+    for (const key of UPLOAD_OVERRIDE_KEYS) {
       if (request[key] !== undefined && !sameOption(request[key], bound[key]))
         throw new UploadError(
           'This token cannot override its upload profile.',
@@ -195,13 +194,8 @@ export function applyUploadOverrides(
       'The naming strategy cannot change after upload starts.'
     )
   if (user.apiToken?.profileId) {
-    for (const key of Object.keys(
-      uploadProfileOptionsSchema.shape
-    ) as (keyof typeof resolved)[]) {
-      if (
-        key in request &&
-        !sameOption(request[key as keyof UploadRequestOptions], resolved[key])
-      )
+    for (const key of UPLOAD_OVERRIDE_KEYS) {
+      if (key in request && !sameOption(request[key], resolved[key]))
         throw new UploadError(
           'This token cannot override its upload profile.',
           403

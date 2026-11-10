@@ -66,6 +66,8 @@ export async function newFileLibraryState(
     visibility: FileVisibility
     folderId: string | null
     automaticOcr: boolean
+    /** The uploader is a script client: it cannot make a new folder stanza. */
+    dropUnusableFolderStanza?: boolean
   }
 ) {
   const sealedTags = await accountHasSealedTags(tx, input.userId)
@@ -76,40 +78,50 @@ export async function newFileLibraryState(
       sealed: null,
       ruleTagIds: [] as string[],
     }
-  if (library.folderStanza) {
-    // Section 8.4.3: a private file must not have a folder stanza, and a
-    // stanza for a key that the folder no longer has opens nothing.
-    if (input.visibility !== 'PUBLIC')
-      throw new EncryptedUploadError(
-        'A private file cannot have a folder stanza.'
-      )
+  // Section 8.4.3: a private file must not have a folder stanza, and a
+  // stanza for a key that the folder no longer has opens nothing. A browser
+  // gets the reason and sends the upload again with the current key. A
+  // script client has the folder key of its configuration and cannot make a
+  // new stanza, so its file is stored without one: the browser of the owner
+  // makes the stanza later (section 9.4.7).
+  let folderStanza = library.folderStanza
+  if (folderStanza) {
+    const refuse = (error: Error) => {
+      if (!input.dropUnusableFolderStanza) throw error
+      folderStanza = null
+    }
     const folder = input.folderId
       ? await tx.vaultFolder.findFirst({
           where: { id: input.folderId, userId: input.userId },
           select: { folderPublicKey: true, rekeyPending: true },
         })
       : null
-    if (!folder)
-      throw new EncryptedUploadError(
-        'A folder stanza needs a file that is in a folder.'
+    if (input.visibility !== 'PUBLIC')
+      refuse(
+        new EncryptedUploadError('A private file cannot have a folder stanza.')
       )
-    if (
+    else if (!folder)
+      refuse(
+        new EncryptedUploadError(
+          'A folder stanza needs a file that is in a folder.'
+        )
+      )
+    else if (
       folder.rekeyPending ||
-      !sameStoredBytes(
-        folder.folderPublicKey,
-        library.folderStanza.folderPublicKey
-      )
+      !sameStoredBytes(folder.folderPublicKey, folderStanza.folderPublicKey)
     )
-      throw new HttpError(
-        409,
-        'The keys of this folder changed. Reload the page, or install a new configuration for your upload tool, and try again.',
-        { body: { code: 'stale_folder_key' } }
+      refuse(
+        new HttpError(
+          409,
+          'The keys of this folder changed. Reload the page and try again.',
+          { body: { code: 'stale_folder_key' } }
+        )
       )
   }
   return {
     columns: {
-      folderStanza: library.folderStanza?.stanza ?? null,
-      folderStanzaPublicKey: library.folderStanza?.folderPublicKey ?? null,
+      folderStanza: folderStanza?.stanza ?? null,
+      folderStanzaPublicKey: folderStanza?.folderPublicKey ?? null,
       rulesPending: sealedTags && !library.rulesApplied,
       ocrPending:
         input.automaticOcr && library.isImage && !library.sealedOcrText,

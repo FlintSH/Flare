@@ -283,7 +283,12 @@ describe('tags at the shared upload commit boundary', () => {
 
 describe('token-bound profiles at the upload commit', () => {
   it('refuses a token whose profile was removed, with its own answer and before writing', async () => {
-    const token = { id: 'token', scopes: ['files:upload'], profileId: 'bound' }
+    const token = {
+      id: 'token',
+      scopes: ['files:upload'],
+      profileId: 'bound',
+      predatesEncryption: false,
+    }
     mocks.tx.apiToken.findUnique.mockResolvedValue({
       ...token,
       userId: 'alice',

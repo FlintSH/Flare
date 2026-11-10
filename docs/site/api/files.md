@@ -17,6 +17,8 @@ Archive uploads use the same upload contract and remain single stored files. [Ar
 
 Send one file in the `file` field. Use a separate request for each file. This route streams file bytes to storage; it does not require the entire file to fit in application memory.
 
+This request uploads a **plain** file. A token created after the upgrade to end-to-end encryption may send it only through an upload profile whose **Encryption** is **Plain**; [which uploads a token may send](#which-uploads-a-token-may-send) has the rules, and [encrypted uploads from a token](#encrypted-uploads-from-a-token) the other request.
+
 ```sh
 curl --fail-with-body \
   -H "Authorization: Bearer $FLARE_TOKEN" \
@@ -457,9 +459,9 @@ The [audit log](/admin/audit) records a request-level `http.get` outcome with th
 
 ## Encrypted files
 
-**Uploads made with a token are plain files and are unchanged.** `POST /api/files` and the chunked routes behave exactly as before for a named token or the account upload token: the request, the response, the stored bytes and the file's address. Screenshot tool configurations need no change.
+**Tokens from before the upgrade keep uploading plain files, unchanged.** For a named token or the account upload token that existed before the upgrade to end-to-end encryption, `POST /api/files` and the chunked routes behave as before: the request, the response, the stored bytes and the file's address. Screenshot tool configurations that were installed before the upgrade keep working. **A token created after the upgrade sends encrypted uploads by default** and needs an upload profile set to **Plain** to send plain ones; see [which uploads a token may send](#which-uploads-a-token-may-send).
 
-Files uploaded in the browser are [encrypted on the device](/guide/encryption) by default. The server then stores ciphertext and has no name and no type. This affects what a token integration reads:
+Files are [encrypted on the device](/guide/encryption) by default: in the browser, or by the [`flare-upload`](/guide/screenshot-tools) program for a tool or a script. The server then stores ciphertext and has no name and no type. This affects what a token integration reads:
 
 - **`GET /api/files` lists them with `encrypted: true`**, `name: ""`, `mimeType: "application/octet-stream"`, a `urlPath` that ends in a random file ID such as `/abc123/e_3kGq0v8mJtYw2nHc5sLp7A`, and `size` as the ciphertext size. Each such row also has an `encryption` object of base64url records. A plain file has `encrypted: false` and no `encryption` object.
 - **`search`, `types` and `sortBy=name` cannot match encrypted files.** The server cannot read their names or types: a search skips them, a type filter sees only `application/octet-stream`, and an order by name puts them together at one end. Pass `encrypted=false` to list plain files only, or `encrypted=true` for the encrypted ones. `GET /api/files/types` lists the types of plain files only.
@@ -471,9 +473,53 @@ Files uploaded in the browser are [encrypted on the device](/guide/encryption) b
 
 Nothing a token can call returns a key, because the server has none. An integration cannot decrypt an encrypted file without the owner's account key or the file's share link.
 
-### What the browser sends
+### Which uploads a token may send
 
-These contracts belong to the dashboard and need a **browser session**. A request with any token that asks for an encrypted upload answers `403`. They are documented so operators and reviewers can see what crosses the wire; a script client is a later release.
+A tool has no upload dialog, so the **Encryption** setting of its [upload profile](/guide/upload-profiles#encryption) decides whether its uploads must be encrypted or plain. The server cannot encrypt; it refuses the upload that does not match, so a wrong configuration cannot upload plain files by mistake.
+
+| Credential                                                    | Encrypted upload                  | Plain upload                        |
+| ------------------------------------------------------------- | --------------------------------- | ----------------------------------- |
+| Named token, profile with `encryption: "encrypted"` (default) | Accepted                          | `403` `profile_requires_encrypted`  |
+| Named token, profile with `encryption: "plain"`               | `403` `profile_requires_plain`    | Accepted                            |
+| Named token, no profile                                       | Accepted                          | `403` `profile_requires_encrypted`  |
+| Named token created before the upgrade                        | `403` `token_predates_encryption` | Accepted, whatever the profile says |
+| Legacy account upload token                                   | `403` `token_predates_encryption` | Accepted, whatever the profile says |
+| Browser session                                               | Accepted                          | Accepted: the dialog's choice wins  |
+| Any, with **Forbid plain uploads** on                         | As above                          | `403` `plain_uploads_forbidden`     |
+
+"The profile" is the one the upload resolves to: the token's bound profile, else the one named in `X-Upload-Profile`, else the account's default profile. A token that resolves to no profile takes the default, `encrypted`. To upload plain files with a new token, create a profile with **Encryption** set to **Plain** and [bind the token to it](./authentication#bind-uploads-to-a-profile) or select it per request:
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $FLARE_TOKEN" \
+  -H "X-Upload-Profile: $PLAIN_PROFILE_ID" \
+  -F 'file=@./changelog.txt;type=text/plain' \
+  "$FLARE_URL/api/files"
+```
+
+The refusal is a `403` whose body has the message and a `code` a client can act on:
+
+```json
+{
+  "error": "This upload profile takes encrypted uploads, and this upload is not encrypted. Upload with flare-upload, or use a token whose upload profile is set to Plain.",
+  "code": "profile_requires_encrypted"
+}
+```
+
+The check runs before the file is stored, and again when the file is published, with the settings as they are then. `encryption` is a setting of the profile only: no upload request can set it, and sending it as an upload option answers `400`. `GET /api/upload-profiles` (session only) returns it in each profile's `options` when it is `plain`, and `POST`/`PUT` accept `"encryption": "encrypted"` or `"plain"`.
+
+An administrator can [forbid plain uploads](/admin/#forbid-plain-uploads) for the instance. `GET /api/settings`, which needs no credential, then answers `data.encryption.forbidPlainUploads: true`.
+
+### Encrypted uploads from a token
+
+A named token with `files:upload` sends an encrypted upload with **the same request the browser sends**: one contract, with a bearer token in place of the session cookie. Encrypting is the client's work. [`flare-upload`](https://github.com/FlintSH/flare/tree/main/clients/flare-upload) does it; its [`SERVER-CONTRACT.md`](https://github.com/FlintSH/flare/blob/main/clients/flare-upload/SERVER-CONTRACT.md) states each request field by field, and [`docs/e2ee-spec.md`](https://github.com/FlintSH/flare/blob/main/docs/e2ee-spec.md) specifies the bytes with shared test vectors in `lib/e2ee/vectors/v1.json`. A client of your own needs four things:
+
+1. **The account public key, from the owner, not from the server.** The Upload tools card writes it into a configuration from the owner's unlocked browser. A client that asked the server for the key would encrypt to whatever key a compromised server gave it. No endpoint for tokens returns it.
+2. **The protocol version check.** `GET /api/settings` answers `data.encryption.protocolVersions`, for example `[1]`. A client that does not find its version there must stop and tell its user to update.
+3. **The request below**, with the records it made.
+4. **The share link**, which the client makes itself: the page address of the answer, then `#` and the base64url file key, or `#p.` and the link secret for a file with a password. The server never has that part.
+
+A client has no private key. Anyone who knows the account public key can make a file that decrypts correctly, so an upload is not proof of who made it.
 
 The body of an encrypted upload is the encrypted file itself: a 26-byte header (`FLAREE2E`, a format version, a chunk size, a random nonce prefix) followed by 64 KiB chunks, each with a 32-byte tag. Four records travel with it, each base64url:
 
@@ -484,6 +530,8 @@ The body of an encrypted upload is the encrypted file itself: a 26-byte header (
 | `accountStanza`          | The file key, wrapped for the account public key.                      |
 | `stanzaAccountPublicKey` | The account public key the stanza is for.                              |
 | `passwordStanza`         | Optional. The file key wrapped for a password and a link secret.       |
+
+`sealedMetadata`, `accountStanza` and `passwordStanza` start with the `record_version` byte `0x01`; `header` and the key do not.
 
 The same request can carry what the uploader did for the library, and says what it did not do. Every field is optional:
 
@@ -508,14 +556,25 @@ The server reads none of the sealed records. From the declarations it sets three
 | `ocrPending`       | `isImage` is `true`, no `sealedOcrText` came, and the instance has [automatic OCR](/admin/#background-image-ocr) on. |
 | `thumbnailPending` | No `sealedThumbnail` came and `thumbnail` is not `none`.                                                             |
 
-A plain upload carries none of these fields. It gets `rulesPending` when the account has a sealed tag, because the server cannot read a sealed rule.
+`flare-upload` sends `rulesApplied: false` and `isImage`, because it applies no tag rule, makes no thumbnail and reads no text. A plain upload carries none of these fields. It gets `rulesPending` when the account has a sealed tag, because the server cannot read a sealed rule.
 
 `folderStanza` is refused with `400` for a private file or a file without a folder, and with `409` and `"code": "stale_folder_key"` when `folderPublicKey` is not the key the folder has now, for example after its owner stopped sharing it. A public upload into a folder without a stanza is accepted: the owner's browser makes the stanza later.
 
 - **One request:** `POST /api/files` with the header `X-Flare-Encrypted: true`. The multipart file part must be named `encrypted` with the type `application/octet-stream`; the records and the usual options (`visibility`, `expiresAt`, `expiryAction`, `tagIds`) are form fields. Any other field, such as `name` or `password`, is refused with `400`.
 - **In parts:** `POST /api/files/chunks` with `encrypted: true`, `size` (the ciphertext size), the records and the usual options. `filename`, `mimeType` and `password` are refused. Parts and completion are the same routes as for a plain upload.
 
-Before it publishes the file, the server checks what it can: that the stored bytes start with `header`, that the header has the right magic value, version and chunk size, that the stored size is a length an encrypted file can have, that each record has a possible length and version, and that `stanzaAccountPublicKey` is the uploader's current account public key. A failure answers `400`, or `409` for a key that is no longer current, and the stored bytes are removed. The server cannot check that the records open: it has no key.
+Before it publishes the file, the server checks what it can: that the stored bytes start with `header`, that the header has the right magic value, version and chunk size, that the stored size is a length an encrypted file can have, that each record has a possible length and version, and that `stanzaAccountPublicKey` is the uploader's current account public key. A failure answers `400`, or `409` for a key that is no longer current, and the stored bytes are removed. The server cannot check that the records open: it has no key. A chunked upload is checked at its start as well, so a client with an old key learns it before it sends a part.
+
+Errors that a script client acts on carry a `code`:
+
+| Status | `code`                          | Meaning                                                                                                                                                        |
+| ------ | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `409`  | `account_key_not_current`       | The stanza is for a key that is not the account's current key. The owner changed their passphrase or rotated their keys. The client needs a new configuration. |
+| `409`  | `account_keys_missing`          | The account has no keys yet.                                                                                                                                   |
+| `400`  | `protocol_version_not_accepted` | The header or a record has a version this server does not accept.                                                                                              |
+| `403`  | See the table above             | The upload does not match the profile's Encryption setting, plain uploads are forbidden, or the token is from before the upgrade.                              |
+
+A key rotation also deletes every named token of the account, so a client usually sees `401` first. Both mean the same to its user: create a new configuration.
 
 It does not sniff a type, run tag rules, or read text from these files: it stores what the client sealed and marks the rest as [waiting](#work-that-waits-for-the-owner-s-browser). Quota counts the ciphertext.
 
@@ -531,7 +590,7 @@ The answer has no name and no type:
 }
 ```
 
-The browser appends the key after `#` to make the share link. The server never sees that part.
+The client appends the key after `#` to make the share link. The server never sees that part. `flare-upload` takes only the path of `pageUrl` and puts it behind the origin of its own configuration, so a server cannot move the key to another host.
 
 ### Read the records of one file
 

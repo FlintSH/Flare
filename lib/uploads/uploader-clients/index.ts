@@ -2,20 +2,42 @@ import { z } from 'zod'
 
 import type { Permission } from '@/lib/permissions/catalog'
 
-/** Every download carries the account upload token. */
+/** Every configuration carries a new upload token. */
 export const UPLOADER_DOWNLOAD_PERMISSION: Permission = 'tokens.manage'
+
+/** Where people get the `flare-upload` program: the release assets of the project. */
+export const UPLOAD_PROGRAM_RELEASES_URL =
+  'https://github.com/FlintSH/flare/releases'
 
 /** The share-page link in an upload response: `apiResponse(uploadLinks(…))`. */
 export const SHARE_LINK_PATH = 'data.pageUrl'
 
+/**
+ * How a generated file uploads.
+ *
+ * - `request`: the file describes or sends one HTTP request with the token
+ *   in it. It cannot encrypt, so it is for a `plain` upload profile only
+ *   (docs/e2ee-spec.md, section 10.4).
+ * - `helper`: the file starts the `flare-upload` program, which reads its
+ *   own configuration file, encrypts if that file says so, and prints the
+ *   link.
+ */
+export type UploaderTransport = 'request' | 'helper'
+
 interface UploaderClient<Shape extends z.ZodRawShape> {
   label: string
-  /** POST clients send their options as a JSON body; GET clients have none. */
-  method: 'GET' | 'POST'
   options: z.ZodObject<Shape>
   defaults: z.infer<z.ZodObject<Shape>>
+  /**
+   * Whether the tool can start a program. A tool that only reads a
+   * declarative description of a request cannot, and so cannot encrypt.
+   */
+  runsPrograms: boolean
   /** Commands the generated script checks for before it does anything. */
-  dependencies: (options: z.infer<z.ZodObject<Shape>>) => string[]
+  dependencies: (
+    options: z.infer<z.ZodObject<Shape>>,
+    transport: UploaderTransport
+  ) => string[]
   /** The downloaded file's name, after the account-name prefix. */
   fileName: (options: z.infer<z.ZodObject<Shape>>) => string
   contentType: 'application/json' | 'text/plain'
@@ -25,11 +47,18 @@ const uploaderClient = <Shape extends z.ZodRawShape>(
   client: UploaderClient<Shape>
 ) => client
 
+/** What uploads: curl with jq to read the answer, or the helper program. */
+const transportDependencies = (transport: UploaderTransport) =>
+  transport === 'helper' ? ['flare-upload'] : ['curl', 'jq']
+
 /** Screenshot scripts copy the link with the session's clipboard tool. */
-const screenshotDependencies = (tool: string, useWayland: boolean) => [
+const screenshotDependencies = (
+  tool: string,
+  useWayland: boolean,
+  transport: UploaderTransport
+) => [
   tool,
-  'curl',
-  'jq',
+  ...transportDependencies(transport),
   useWayland ? 'wl-copy' : 'xsel',
 ]
 
@@ -65,25 +94,27 @@ export const SPECTACLE_RECORDING_MODES = {
 const clients = {
   sharex: uploaderClient({
     label: 'ShareX',
-    method: 'GET',
     options: z.object({}),
     defaults: {},
+    // Through an action of a task; see the ShareX steps of the handbook.
+    runsPrograms: true,
     dependencies: () => [],
     fileName: () => 'sharex.sxcu',
     contentType: 'application/json',
   }),
   itake: uploaderClient({
     label: 'iTake',
-    method: 'GET',
     options: z.object({}),
     defaults: {},
+    // An .itup file describes one HTTP request and nothing else.
+    runsPrograms: false,
     dependencies: () => [],
     fileName: () => 'itake.itup',
     contentType: 'application/json',
   }),
   flameshot: uploaderClient({
     label: 'Flameshot',
-    method: 'POST',
+    runsPrograms: true,
     options: z.object({
       useWayland: z.boolean(),
       /** Hyprland compatibility: Flameshot can't detect Hyprland, so the
@@ -91,14 +122,14 @@ const clients = {
       useCompositor: z.boolean(),
     }),
     defaults: { useWayland: false, useCompositor: false },
-    dependencies: ({ useWayland }) =>
-      screenshotDependencies('flameshot', useWayland),
+    dependencies: ({ useWayland }, transport) =>
+      screenshotDependencies('flameshot', useWayland, transport),
     fileName: () => 'flameshot.sh',
     contentType: 'text/plain',
   }),
   spectacle: uploaderClient({
     label: 'Spectacle',
-    method: 'POST',
+    runsPrograms: true,
     options: z.object({
       scriptType: z.enum(['screenshot', 'recording']),
       useWayland: z.boolean(),
@@ -116,17 +147,20 @@ const clients = {
       captureMode: 'region',
       recordingMode: 'region',
     },
-    dependencies: ({ useWayland }) =>
-      screenshotDependencies('spectacle', useWayland),
+    dependencies: ({ useWayland }, transport) =>
+      screenshotDependencies('spectacle', useWayland, transport),
     fileName: ({ scriptType }) => `spectacle-${scriptType}.sh`,
     contentType: 'text/plain',
   }),
   bash: uploaderClient({
     label: 'Bash',
-    method: 'GET',
     options: z.object({}),
     defaults: {},
-    dependencies: () => ['curl', 'jq', 'file'],
+    runsPrograms: true,
+    dependencies: (_options, transport) =>
+      transport === 'helper'
+        ? transportDependencies(transport)
+        : [...transportDependencies(transport), 'file'],
     fileName: () => 'upload.sh',
     contentType: 'text/plain',
   }),
@@ -146,21 +180,3 @@ export const uploaderClients: {
 
 /** In the order the dashboard lists them. */
 export const UPLOADER_CLIENT_IDS = Object.keys(clients) as UploaderClientId[]
-
-export function uploaderClientRequest<Id extends UploaderClientId>(
-  id: Id,
-  options: UploaderOptions<Id>,
-  profileId?: string
-): [string, RequestInit] {
-  const url = `/api/profile/${id}${profileId ? `?profileId=${encodeURIComponent(profileId)}` : ''}`
-  return uploaderClients[id].method === 'GET'
-    ? [url, {}]
-    : [
-        url,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(options),
-        },
-      ]
-}

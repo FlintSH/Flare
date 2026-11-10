@@ -158,11 +158,6 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     path: '/api/profile/export',
     permissions: ['profile.export', 'files.read', 'links.read'],
   },
-  {
-    methods: ['GET', 'POST'],
-    path: '/api/profile/upload-token',
-    permissions: ['tokens.manage'],
-  },
 ]
 
 function bearerRoute(method: string, pathname: string) {

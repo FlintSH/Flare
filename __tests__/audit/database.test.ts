@@ -74,7 +74,6 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         id: 'audit-actor',
         name: 'Alex',
         urlId: 'audit-actor',
-        uploadToken: 'fixture-secret',
       },
     })
   })
@@ -1131,7 +1130,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       })
       await tx.user.update({
         where: { id: 'audit-actor' },
-        data: { password: 'password-secret', uploadToken: 'token-secret' },
+        data: { password: 'password-secret', uploadTokenHash: 'token-secret' },
       })
     })
     const events = await base.auditEvent.findMany()
@@ -1146,7 +1145,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     expect(
       events.find((event) => event.action === 'user.update')?.details
-    ).toMatchObject({ changedFields: ['password', 'uploadToken'] })
+    ).toMatchObject({ changedFields: ['password', 'uploadTokenHash'] })
   })
 
   it('retains filenames on tag changes and failure outcomes for failed email delivery', async () => {
@@ -1339,7 +1338,6 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         id: 'file-owner',
         name: 'Sam',
         urlId: 'file-owner',
-        uploadToken: 'owner-fixture-secret',
         storageUsed: 5,
       },
     })

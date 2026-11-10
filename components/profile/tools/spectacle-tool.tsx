@@ -36,22 +36,18 @@ import {
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
 
-import { DependencyNotice, ToolRow, type UploaderToolProps } from './tool-parts'
+import { DependencyNotice, ToolRow } from './tool-parts'
 import { useUploaderDownload } from './use-uploader-download'
 
 const spectacle = uploaderClients.spectacle
 
-export function SpectacleTool({
-  profileId,
-  compact,
-  disabled,
-}: UploaderToolProps) {
+export function SpectacleTool() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const form = useForm<UploaderOptions<'spectacle'>>({
     resolver: zodResolver(spectacle.options),
     defaultValues: spectacle.defaults,
   })
-  const { download, isLoading } = useUploaderDownload('spectacle', {
+  const { download, ready, transport } = useUploaderDownload('spectacle', {
     ready: {
       title: 'Spectacle script ready',
       description:
@@ -69,31 +65,31 @@ export function SpectacleTool({
   const dialog = (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size={compact ? 'sm' : 'default'}
-          disabled={disabled}
-        >
-          {compact ? spectacle.label : 'Download script'}
+        <Button variant="outline" disabled={!ready}>
+          Download script
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Spectacle upload script</DialogTitle>
           <DialogDescription>
-            Choose your KDE capture options. Your upload token is already
-            included in the script.
+            Choose your KDE capture options.{' '}
+            {transport === 'request'
+              ? 'Your upload token is included in the script.'
+              : 'The script starts flare-upload, which encrypts each capture on this machine.'}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(async (options) => {
-              if (await download(options, profileId)) setIsDialogOpen(false)
+            onSubmit={form.handleSubmit((options) => {
+              if (download(options)) setIsDialogOpen(false)
             })}
             className="space-y-6"
           >
-            <DependencyNotice commands={spectacle.dependencies(values)} />
+            <DependencyNotice
+              commands={spectacle.dependencies(values, transport ?? 'helper')}
+            />
 
             <div className="space-y-4">
               <div>
@@ -298,10 +294,8 @@ export function SpectacleTool({
                 >
                   Reset options
                 </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading
-                    ? 'Downloading…'
-                    : `Download ${scriptType === 'screenshot' ? 'screenshot' : 'recording'} script`}
+                <Button type="submit">
+                  {`Download ${scriptType === 'screenshot' ? 'screenshot' : 'recording'} script`}
                 </Button>
               </div>
             </DialogFooter>
@@ -310,8 +304,6 @@ export function SpectacleTool({
       </DialogContent>
     </Dialog>
   )
-  if (compact) return dialog
-
   return (
     <ToolRow
       title="Spectacle"

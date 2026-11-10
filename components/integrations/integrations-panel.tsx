@@ -61,6 +61,8 @@ type Token = {
   expiresAt: string | null
   revokedAt: string | null
   lastUsedAt: string | null
+  /** Issued before end-to-end encryption: its uploads are plain files. */
+  predatesEncryption: boolean
 }
 type Hook = { id: string; name: string; url: string; enabled: boolean }
 type Delivery = {
@@ -78,6 +80,8 @@ type Snapshot = {
   webhooks: Hook[]
   deliveries: Delivery[]
   profiles: { id: string; name: string }[]
+  /** The upload token from before encryption still works. */
+  legacyUploadToken?: boolean
 }
 // Card titles that are also headings, so each card is reachable by heading.
 const cardTitle = 'font-semibold leading-none tracking-tight'
@@ -284,8 +288,8 @@ export function IntegrationsPanel({
             </Link>
           }
         >
-          ShareX, iTake, Flameshot, Spectacle, and Bash have ready-to-use
-          downloads with your upload token included. No API key setup needed.
+          ShareX, Flameshot, Spectacle, iTake, and Bash get a configuration with
+          its own upload token. No API key to create here.
         </Tip>
       )}
       {error && (
@@ -455,6 +459,22 @@ export function IntegrationsPanel({
                   </div>
                 </form>
               )}
+              {data?.legacyUploadToken && (
+                <p
+                  className="rounded-xl border border-warning/30 bg-warning/5 p-3 text-pretty text-xs leading-relaxed"
+                  data-legacy-token-note
+                >
+                  Your upload token from before encryption still works, and
+                  tools that use it upload plain files.{' '}
+                  <Link
+                    href="/dashboard/profile?section=uploads"
+                    className="font-medium underline underline-offset-4"
+                  >
+                    Replace it under Screenshot tools
+                  </Link>
+                  .
+                </p>
+              )}
               {/* Each token is an inset, like each webhook beside it. */}
               <div className="space-y-3">
                 {!data && (
@@ -464,7 +484,8 @@ export function IntegrationsPanel({
                 )}
                 {data?.tokens.length === 0 && (
                   <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                    No API tokens yet. Built-in tool downloads work without one.
+                    No API tokens yet. A screenshot tool configuration creates
+                    its own.
                   </p>
                 )}
                 {data?.tokens.map((token) => {
@@ -500,6 +521,18 @@ export function IntegrationsPanel({
                                     {
                                       key: 'expires',
                                       text: `Expires ${new Date(token.expiresAt).toLocaleDateString()}`,
+                                    },
+                                  ]
+                                : []),
+                              // A token from before encryption belongs to a
+                              // tool that cannot encrypt (spec, section 14.4).
+                              ...(!token.revokedAt &&
+                              token.predatesEncryption &&
+                              token.scopes.includes('files:upload')
+                                ? [
+                                    {
+                                      key: 'plain',
+                                      text: 'From before encryption: uploads plain files only',
                                     },
                                   ]
                                 : []),

@@ -1,0 +1,154 @@
+name: flare-upload
+
+# Builds and tests the flare-upload program (clients/flare-upload) for each
+# platform, and keeps each binary with its SHA-256 as an artifact.
+#
+# With a release tag, the binaries also become assets of that GitHub
+# release. That is where people get the program: Flare links to the
+# releases page and never downloads or starts a program itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'clients/flare-upload/**'
+      - 'lib/e2ee/vectors/**'
+      - '.github/workflows/flare-upload.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'clients/flare-upload/**'
+      - 'lib/e2ee/vectors/**'
+      - '.github/workflows/flare-upload.yml'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Attach the binaries to this existing release, for example v3.1.0'
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      release_tag:
+        description: 'Attach the binaries to this existing release'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: clients/flare-upload
+    shell: bash
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Static Linux binaries: no libc of the machine is needed.
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            musl: true
+            lint: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-24.04-arm
+            musl: true
+          - target: x86_64-apple-darwin
+            os: macos-15-intel
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            exe: .exe
+    env:
+      CARGO_TERM_COLOR: always
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install the C toolchain for musl
+        if: matrix.musl
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+
+      # rust-toolchain.toml names the exact compiler; rustup installs it.
+      - name: Install the Rust toolchain
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add "$TARGET"
+          rustc --version
+          cargo --version
+
+      - name: Check the formatting and the lints
+        if: matrix.lint
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets --target "$TARGET" -- -D warnings
+
+      # Every shared vector of lib/e2ee/vectors/v1.json, the mock server and
+      # the built program itself.
+      - name: Test
+        run: cargo test --locked --target "$TARGET"
+
+      - name: Build the release binary
+        run: cargo build --release --locked --target "$TARGET"
+
+      - name: Run the self-test of the release binary
+        run: ./target/$TARGET/release/flare-upload${{ matrix.exe }} --self-test
+
+      - name: Package the binary with its SHA-256
+        run: |
+          mkdir -p dist
+          name="flare-upload-$TARGET${{ matrix.exe }}"
+          cp "target/$TARGET/release/flare-upload${{ matrix.exe }}" "dist/$name"
+          cd dist
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$name" > "$name.sha256"
+          else
+            shasum -a 256 "$name" > "$name.sha256"
+          fi
+          cat "$name.sha256"
+
+      - name: Keep the binary as an artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flare-upload-${{ matrix.target }}
+          path: clients/flare-upload/dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  release-assets:
+    name: Attach the binaries to the release
+    needs: build
+    if: inputs.release_tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    defaults:
+      run:
+        working-directory: .
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+    steps:
+      # The GitHub CLI of the runner: no action that is not in this
+      # repository's other workflows.
+      - name: Download the artifacts of this run
+        run: gh run download "$GITHUB_RUN_ID" --dir artifacts --pattern 'flare-upload-*'
+
+      - name: Collect the files and one checksum list
+        run: |
+          mkdir release
+          find artifacts -type f -exec cp {} release/ \;
+          cd release
+          cat ./*.sha256 > flare-upload-SHA256SUMS
+          sha256sum --check flare-upload-SHA256SUMS
+          ls -l
+
+      - name: Upload to the release
+        run: gh release upload "$RELEASE_TAG" release/* --clobber

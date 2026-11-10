@@ -209,7 +209,9 @@ The [passphrase guide](/guide/passphrase#troubleshooting) lists what users see. 
 
 **A user lost the passphrase.** You cannot set or read it. With recovery by email enabled and a verified address, the user [resets it from an emailed link](/guide/passphrase#forgot-your-passphrase), with the recovery phrase to keep access to encrypted files or without it to keep only the account. Without email recovery, enable it, or the account stays closed. An account that never set up keys still has a password, which **Users → Edit** can replace.
 
-**A user changed the passphrase and tools stopped uploading.** That is the design: new keys cancel every API token and the upload token. The user installs the tool configurations again.
+**A user changed the passphrase and tools stopped uploading.** That is the design: new keys cancel every API token and the upload token from before encryption, and a configuration pins the old account key. The user [creates new configurations](/guide/screenshot-tools#create-a-configuration).
+
+**Screenshot tools answer `403` after an upgrade or a settings change.** The message names the reason. `plain_uploads_forbidden`: **Forbid plain uploads** is on, and configurations from before encryption can only send plain files. `profile_requires_encrypted` or `profile_requires_plain`: the tool does not match the Encryption setting of its upload profile. `token_predates_encryption`: an old token tried an encrypted upload. In each case the person creates a new configuration; see [old configurations](/guide/screenshot-tools#old-configurations).
 
 ## Authenticator and passkey sign-in
 

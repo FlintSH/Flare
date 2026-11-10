@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import {
   accountKeysFromPrivateKey,
   base64urlDecode,
+  base64urlEncode,
   storedLengthOf,
 } from '@/lib/e2ee'
 import { newEncryptedFile } from '@/lib/e2ee/client/files'
@@ -153,14 +154,79 @@ describe('an encrypted upload in one request', () => {
     })
   })
 
-  it('refuses a token: uploads with a token are plain in this release', async () => {
-    for (const credential of ['upload-token', 'token'] as const) {
-      mocks.account.mockResolvedValue({ ...user, credential })
+  it('takes the same request from a bearer token as from the browser', async () => {
+    // Section 10.2: a script client sends what the browser sends.
+    mocks.account.mockResolvedValue({
+      ...user,
+      credential: 'token',
+      apiToken: {
+        id: 'token',
+        scopes: ['files:upload'],
+        profileId: null,
+        predatesEncryption: false,
+      },
+    })
+    const response = await send()
+    expect(response.status).toBe(200)
+    expect(mocks.finalize.mock.calls[0][0].encrypted).not.toBeNull()
+    expect((await response.json()).data.encrypted).toBe(true)
+  })
+
+  it('refuses a token from before encryption, with a code a tool can read, before storing a byte', async () => {
+    for (const credentials of [
+      { credential: 'upload-token' },
+      {
+        credential: 'token',
+        apiToken: {
+          id: 'token',
+          scopes: ['files:upload'],
+          profileId: null,
+          predatesEncryption: true,
+        },
+      },
+    ] as const) {
+      mocks.account.mockResolvedValue({ ...user, ...credentials })
       const response = await send()
-      expect(response.status, credential).toBe(403)
+      expect(response.status, credentials.credential).toBe(403)
+      expect(await response.json()).toMatchObject({
+        code: 'token_predates_encryption',
+      })
     }
     expect(mocks.uploadStream).not.toHaveBeenCalled()
     expect(mocks.finalize).not.toHaveBeenCalled()
+  })
+
+  it('passes the declarations of an uploader on with the records', async () => {
+    const folderPublicKey = base64urlEncode(
+      Uint8Array.from({ length: 32 }, () => 9)
+    )
+    const response = await send({
+      fields: {
+        ...created.records,
+        rulesApplied: 'false',
+        isImage: 'true',
+        folderStanza: base64urlEncode(
+          Uint8Array.from({ length: 97 }, (_, index) => (index ? 7 : 1))
+        ),
+        folderPublicKey,
+        thumbnail: 'none',
+      },
+    })
+    expect(response.status).toBe(200)
+    const passed = mocks.finalize.mock.calls[0][0]
+    expect(passed.encrypted.library).toMatchObject({
+      rulesApplied: false,
+      isImage: true,
+      noThumbnail: true,
+      sealedOcrText: null,
+      sealedThumbnail: null,
+      ruleTagIds: [],
+    })
+    expect(passed.encrypted.library.folderStanza.stanza).toHaveLength(97)
+    const refused = await send({
+      fields: { ...created.records, rulesApplied: 'maybe' },
+    })
+    expect(refused.status).toBe(400)
   })
 
   it('refuses a file part that carries a real name or type', async () => {

@@ -1,63 +1,78 @@
 'use client'
 
-import { useState } from 'react'
-
-import { RefusedRequest, refusal } from '@/lib/client/request'
-import { saveResponseAsFile } from '@/lib/client/save-file'
+import { saveBlobAsFile } from '@/lib/client/save-file'
 import {
   type UploaderClientId,
   type UploaderOptions,
-  uploaderClientRequest,
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
+import {
+  renderUploaderFile,
+  transportFor,
+  uploaderAvailable,
+} from '@/lib/uploads/uploader-clients/render'
 
 import { useToast } from '@/hooks/use-toast'
+
+import { useUploaderConfiguration } from './configuration'
 
 interface Notice {
   title: string
   description: string
 }
 
+/** Saves text as a file that the browser downloads and never opens. */
+export function saveTextAsFile(text: string, filename: string) {
+  saveBlobAsFile(
+    new Blob([text], { type: 'application/octet-stream' }),
+    filename
+  )
+}
+
 /**
- * Downloads a client's file and saves it under the server's filename. The
- * tool's own notices announce the result; a failure shows the server's reason
- * when it gives one.
+ * Writes a tool's file in this browser from the configuration of the card
+ * and saves it. The server never writes one: it has only the hash of the
+ * token (docs/e2ee-spec.md, section 14.4).
  */
 export function useUploaderDownload<Id extends UploaderClientId>(
   id: Id,
   notices: { ready: Notice; failed: Notice }
 ) {
-  const [isLoading, setIsLoading] = useState(false)
+  const configuration = useUploaderConfiguration()
   const { toast } = useToast()
+  const client = uploaderClients[id]
 
-  /** Resolves to whether the file was saved. */
-  async function download(options: UploaderOptions<Id>, profileId?: string) {
-    const client = uploaderClients[id]
-    setIsLoading(true)
+  /** Whether the file was saved. */
+  function download(options: UploaderOptions<Id>) {
+    if (!configuration) return false
     try {
-      const response = await fetch(
-        ...uploaderClientRequest(id, options, profileId)
+      const stem = (configuration.profile?.name ?? '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      saveTextAsFile(
+        renderUploaderFile(id, configuration, options),
+        `flare-${stem ? `${stem}-` : ''}${client.fileName(options)}`
       )
-      if (!response.ok)
-        throw await refusal(response, notices.failed.description)
-      await saveResponseAsFile(response, `flare-${client.fileName(options)}`)
       toast(notices.ready)
       return true
     } catch (error) {
       console.error(`${client.label} download failed:`, error)
-      toast({
-        title: notices.failed.title,
-        description:
-          error instanceof RefusedRequest
-            ? error.message
-            : notices.failed.description,
-        variant: 'destructive',
-      })
+      toast({ ...notices.failed, variant: 'destructive' })
       return false
-    } finally {
-      setIsLoading(false)
     }
   }
 
-  return { download, isLoading }
+  return {
+    download,
+    /** No configuration yet: the card creates one first. */
+    ready: configuration !== null,
+    /** Whether this tool has a file for the configuration's profile. */
+    available: configuration
+      ? uploaderAvailable(id, configuration.encryption)
+      : true,
+    encryption: configuration?.encryption ?? null,
+    transport: configuration ? transportFor(configuration.encryption) : null,
+    configuration,
+  }
 }

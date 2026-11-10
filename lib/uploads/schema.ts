@@ -17,16 +17,38 @@ export const PROFILE_NAME_MAX_LENGTH = 80
 export const PROFILE_TAG_LIMIT = 20
 
 /**
- * Fields this version doesn't know, such as the retired copy format, are left
- * out; a known field with a bad value is not.
+ * Whether uploads through a profile are encrypted by the client or sent as
+ * plain files (docs/e2ee-spec.md, section 11.2).
  */
-export const uploadProfileOptionsSchema = z.object({
+export const uploadEncryptionSchema = z.enum(['encrypted', 'plain'])
+export type UploadEncryption = z.infer<typeof uploadEncryptionSchema>
+
+/** The profile options that one upload request can also set. */
+const overridableOptionFields = {
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
   expiration: expirationSchema.optional(),
   expiryAction: z.enum(['DELETE', 'SET_PRIVATE']).optional(),
   randomizeFileUrls: z.boolean().optional(),
   shareStyle: z.enum(['minimal', 'framed', 'delivery']).optional(),
   tagIds: z.array(z.string().min(1).max(100)).max(PROFILE_TAG_LIMIT).optional(),
+}
+
+/** The names of those options, for the checks of a token bound to a profile. */
+export const UPLOAD_OVERRIDE_KEYS = Object.keys(
+  overridableOptionFields
+) as (keyof typeof overridableOptionFields)[]
+
+/**
+ * Fields this version doesn't know, such as the retired copy format, are left
+ * out; a known field with a bad value is not.
+ *
+ * `encryption` belongs to the profile only. A request cannot set it: the
+ * request is encrypted or it is not, and the server compares that with the
+ * profile. A profile without the field is `encrypted`.
+ */
+export const uploadProfileOptionsSchema = z.object({
+  ...overridableOptionFields,
+  encryption: uploadEncryptionSchema.optional(),
 })
 
 export type UploadProfileOptions = z.infer<typeof uploadProfileOptionsSchema>
@@ -92,7 +114,7 @@ export type UploadProfileView = {
 }
 
 export const uploadRequestOptionFields = {
-  ...uploadProfileOptionsSchema.shape,
+  ...overridableOptionFields,
   profileId: z.string().min(1).max(100).nullable().optional(),
   folderId: z.string().min(1).max(128).nullable().optional(),
   password: newFilePasswordSchema.nullable().optional(),
@@ -122,6 +144,7 @@ export const UPLOAD_DEFAULTS: Required<UploadProfileOptions> = {
   randomizeFileUrls: false,
   shareStyle: 'framed',
   tagIds: [],
+  encryption: 'encrypted',
 }
 
 export function expirationDate(

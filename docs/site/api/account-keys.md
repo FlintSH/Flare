@@ -184,7 +184,7 @@ On success, in one transaction:
 
 - the account record and the keyring are replaced;
 - **every browser session ends, including the one that made the request.** The response says `signInAgain: true`, and the client signs in with the new passphrase. The specification asks for the other sessions to end; Flare ends all of them, because moving the session version on is also what stops a sign-in that verified the old key a moment earlier;
-- **every named API token of the account is deleted and its legacy upload token is replaced.** Install new tokens in each script and upload tool;
+- **every named API token of the account is deleted and its legacy upload token is revoked.** No new legacy token is issued. Create a new configuration for each upload tool, which also pins the new account public key, and install new tokens in each script;
 - pending challenges, unused email links, and a pending email address change are cancelled.
 
 The authenticator, recovery codes, passkeys, and the passkey requirement are not changed. The route is limited to the 20 management attempts per account per 15 minutes, and to 30 rotation attempts per account and 100 per IP.

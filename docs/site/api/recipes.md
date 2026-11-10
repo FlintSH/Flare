@@ -13,6 +13,8 @@ The Node.js examples use Node 20+ built-ins. Save each complete JavaScript examp
 
 **Scope:** `files:upload` · **Tools:** cURL; jq if extracting a field
 
+These recipes send plain files, which the server can read. A token created after the upgrade to end-to-end encryption needs an upload profile with **Encryption** set to **Plain** for them: bind the token to one, or select it with `X-Upload-Profile`. Otherwise the answer is `403` with the code `profile_requires_encrypted`; see [which uploads a token may send](./files#which-uploads-a-token-may-send). For encrypted uploads from a shell, `flare-upload ./screenshot.png` replaces the `curl` command and prints the share link with its key; see [screenshot tools and scripts](/guide/screenshot-tools#install-flare-upload).
+
 ```sh
 curl --fail-with-body \
   -H "Authorization: Bearer $FLARE_TOKEN" \

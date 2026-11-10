@@ -64,7 +64,6 @@ export async function createUser(
       id,
       name: id,
       urlId: id,
-      uploadToken: randomUUID(),
       email: `${id}@example.com`,
       ...(keys?.columns ?? {}),
     },

@@ -18,7 +18,6 @@ async function seed() {
       password: await bcrypt.hash('Flare-test-only-2026!', 10),
       roles: { connect: { systemKey: 'administrator' } },
       urlId: 'meticulous-test',
-      uploadToken: 'meticulous-local-fixture-upload-token',
     },
   })
   const config = await prisma.config.findUnique({

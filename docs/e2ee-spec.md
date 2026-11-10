@@ -1691,6 +1691,17 @@ without verification. A compromised server could give a different key.
 The procedure is the same as section 10.1. A script client frequently
 skips step 7 (section 9.7). The bearer token authorizes step 8.
 
+**PROPOSED.** Before an encrypted upload, the script client requests the
+list of protocol versions that the server accepts (section 1.5.3, rule 5).
+The list is in the public settings of the server. The request has no bearer
+token. If the list does not contain the protocol version of the script
+client, the script client sends no upload and tells the user to update.
+
+**PROPOSED.** The server rejects an upload whose account stanza is for a
+different key than the current `account_public_key` (section 8.3.6). The
+error code is `account_key_not_current`. The script client then tells the
+user to install a new configuration.
+
 ### 10.3 Share link
 
 **AGREED**
@@ -1735,6 +1746,10 @@ finds a prefix that it does not know must tell the user to update (section
 - The browser does not send the part after `#` to the server.
 - The uploading client makes the link. It knows the secret and it gets
   `file_id` from the server.
+- **PROPOSED.** A script client makes the link from the address of the
+  server in its configuration and from the path that the server returns.
+  It does not use a host that the server returns. Thus a compromised server
+  cannot make the script client put a key in a link to a different site.
 - A person who has the link (and the password, if there is one) can read the
   file until the file is deleted.
 - Account key rotation does not change `file_key`. Share links continue to
@@ -1790,6 +1805,23 @@ always a plain upload (section 14.4).
 
 If the administrator forbids plain uploads (section 11.1), the server
 rejects each plain upload, also from an old token.
+
+**PROPOSED.** These rules settle what the text above does not say.
+
+1. The rule of the server applies to an upload with a bearer token. A
+   script client has no upload dialog, thus its upload profile decides.
+2. An upload from the application has the selection of the upload dialog.
+   That selection is explicit and it wins. The upload profile sets only the
+   value that the dialog shows first. The server does not compare an upload
+   from the application with the profile.
+3. An upload with a bearer token that selects no profile uses the default
+   profile of the account. If the account has no default profile, the value
+   is `encrypted`. Thus a plain upload with a bearer token needs a profile
+   with the value `plain`.
+4. A request cannot set `encryption`. It is a setting of the profile only.
+5. The server gives the reason of a rejection as an error code that a
+   script client can read: `profile_requires_encrypted`,
+   `profile_requires_plain` or `plain_uploads_forbidden`.
 
 ### 11.3 Link preview of an encrypted file
 
@@ -2105,6 +2137,22 @@ An old configuration cannot encrypt. The server accepts its uploads as
 plain files. The application shows a warning until the user installs a new
 configuration. The screenshot tools of each user thus continue to operate
 after the upgrade.
+
+**PROPOSED.** These rules complete the procedure.
+
+1. A named bearer token from before the migration is an old token too. The
+   migration marks each of them. The uploads of a marked token are plain
+   files, and the `encryption` setting of its upload profile does not
+   apply.
+2. The server rejects an encrypted upload with an old token. The error code
+   is `token_predates_encryption`.
+3. An account that is created after the migration gets no upload token of
+   the old type.
+4. The user can revoke the old upload token. A key rotation revokes it
+   (section 8.3.3, step 8). The server makes no new token of the old type.
+5. The application writes each new configuration in the browser. The
+   server has only the hash of the token, and `account_public_key` must
+   come from the client (section 10.2).
 
 ## 15. Open questions
 
