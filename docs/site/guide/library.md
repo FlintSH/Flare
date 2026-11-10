@@ -23,18 +23,25 @@ A card shows up to two labels: two tags, or the folder and one tag. **+N** count
 
 The server sends the library no names for encrypted files. Your browser opens each name and type with your account key, so an encrypted file looks like any other once your keys are unlocked. A small shield on each card says which kind it is: a checked shield for **Encrypted**, a crossed shield for **Plain**.
 
-<Screenshot src="/screenshots/encryption/library-encrypted.webp" alt="File library with five encrypted files showing their names, file-type icons and a shield mark" caption="With your keys unlocked, encrypted files show their real names." />
+<Screenshot src="/screenshots/encryption/library-encrypted.webp" alt="File library with two folders and a row of cards: a plain image with a crossed shield and two tags, then an encrypted video and two encrypted images with their names, thumbnails, tags and a checked shield" caption="With your keys unlocked, encrypted files show their real names, their tags and the thumbnails your browser made." />
 
 When your keys are locked in this browser, for example after signing in with a passkey or single sign-on, each encrypted file is a placeholder that says **Unlock your keys to see this file**. Choose **Unlock** on a card or in the notice at the top and enter your [passphrase](./passphrase).
 
-<Screenshot src="/screenshots/encryption/library-locked.webp" alt="File library with locked keys: each encrypted file is a placeholder with a lock, its size and an Unlock button" caption="Locked keys leave a placeholder with the size and date, which the server does know." />
+<Screenshot src="/screenshots/encryption/library-locked.webp" alt="File library with locked keys: a notice with an Unlock button, two folders shown as Encrypted folder, two plain images, one with tags shown as Encrypted tag, and encrypted files as placeholders with a lock, their size and an Unlock button" caption="Locked keys leave a placeholder with the size and date, which the server does know. Folder and tag names are sealed too." />
 
 For an encrypted file in this release:
 
 - **Copy link**, **Download file**, **Change visibility**, **Manage expiration**, **Move to folder**, **Edit tags**, the password dialog and **Delete file** work. Download decrypts in your browser and saves the file only after it passed its integrity check.
-- The card shows a file-type icon, not a thumbnail, and opens the share page instead of the image viewer.
-- **Extract text (OCR)** and **Browse archive** are not offered, and **Create archive** is disabled while the selection includes an encrypted file.
-- **Search** and the **File type** filter do not find encrypted files. The server searches names and types, and it has neither. The library says so while a search is active.
+- **Thumbnails.** An image or a video shows a thumbnail that your browser made when you uploaded the file: a WebP image at most 480 pixels wide or tall, sealed with the file's key. The card decrypts it in your browser and keeps it in memory only. A file from a screenshot tool gets its thumbnail the next time you open Flare. A video thumbnail needs a format your browser can play, and a video over 150 MB or an image over 25 MB that arrived without one keeps its file-type icon. The card opens the share page instead of the image viewer.
+- **Extract text (OCR)** is offered for PNG, JPEG, WebP, GIF and BMP images. Your browser reads the image; see [Read text in images with OCR](#read-text-in-images-with-ocr).
+- **Search**, the **File type** filter and the name orders cover encrypted files. Your browser does that part; see [Search and narrow the results](#search-and-narrow-the-results).
+- **Browse archive** is not offered, and **Create archive** is disabled while the selection includes an encrypted file.
+
+### After a reset without your recovery phrase
+
+If you [reset your passphrase without the recovery phrase](./passphrase), no key of your account opens the encrypted files you had. Each of them stays in the library as **Unreadable file** with its size, its date and a **Delete** button. Nothing else can be done with it from your account. A person who has the file's share link can still open it until you delete it. Plain files are not affected. Folders and tags come back as **Folder** and **Tag** with a short code in place of their sealed names; rename them.
+
+<Screenshot src="/screenshots/encryption/library-unreadable.webp" alt="File library after a reset: two folders named Folder with a short code, a plain image that still opens, and encrypted files shown as Unreadable file with a lock, the line This file was encrypted for keys that were reset, and a Delete button" caption="After a reset without the recovery phrase, plain files stay and each encrypted file can only be deleted." />
 
 ## Scroll through your library
 
@@ -72,13 +79,25 @@ Filters in the page address remain bookmark settings. If an old folder or tag fi
 
 Type in the search field to find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.
 
+One search covers plain and encrypted files, in one list:
+
+- The server searches the names and image text of your plain files, as before. It receives what you typed.
+- Your browser searches your encrypted files. It keeps their sealed records in a local cache, opens the names and the image text into memory when your keys unlock, and tests them there with the same rule. The server is not told which encrypted files matched.
+- The **File type** filter and the **Name** orders work the same way, because a type and a name are sealed too. The filter lists the real types of your encrypted files.
+
+Right after you unlock, a line under the search field reads **Opening encrypted files** with a count while your browser works through the cache, and results can still grow. On a new device the first run downloads every sealed record, about 1 to 5 KB per file with image text; later runs only fetch what changed. With your keys locked, a search covers plain files only and says so.
+
+<Screenshot src="/screenshots/encryption/library-search-text.webp" alt="Library search for invoice 7741 with one result, an encrypted image of a letter whose picture contains the words, tagged Bills" caption="A search for words inside an encrypted image. Your browser found it; the server only stores the sealed text." />
+
+The cache is ciphertext in your browser's private storage for this site. It never holds a decrypted name or text. Signing out deletes it, and Flare works without it in a private window, where it fetches the records again in each session. View and download counts on cards in these merged views are as of the last time the file changed, so they can lag.
+
 Use the controls beside search to narrow the current library:
 
 | Control         | Choices and behavior                                                                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Folder**      | All files, Unfiled, or the direct contents of a folder. Opening a folder does not merge its subfolders' contents into the results.                                                                                                                     |
 | **Tags**        | Choose a tag, return to all tags, or find untagged files.                                                                                                                                                                                              |
-| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, or most/least downloaded.                                                                                                                                                                          |
+| **Sort**        | Newest/oldest, largest/smallest, most/least viewed, most/least downloaded, or by name A to Z and Z to A. Names sort without regard to case, with numbers by value.                                                                                     |
 | **Visibility**  | Public, private, and password-protected. Multiple checked choices are alternatives: public plus password-protected includes files matching either choice.                                                                                              |
 | **File type**   | Select the MIME types present in your library. These are grouped into images, videos, audio, documents, and other files. Documents include PDF, text, code, and CSV types, such as `application/json`, and office documents; archives are other files. |
 | **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                                                                                                              |
@@ -168,7 +187,7 @@ With `files.read` and `files.upload`, **Create archive** packages up to 100 sele
 
 ## Read text in images with OCR
 
-For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the card shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
+For a plain image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the card shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
 
 If the administrator enables automatic OCR, images can be processed after upload without a manual request. Upload completion does not mean OCR has completed. Manual extraction remains useful when automatic processing is disabled.
 
@@ -185,6 +204,19 @@ Flare reads one image at a time, and requests and automatic processing share tha
 <Screenshot src="/screenshots/workspace/files-ocr.png" alt="Dialog showing text extracted from an image" caption="OCR makes text inside an image available to copy and search." />
 
 Administrators with `audit.read` can inspect OCR start, completion, and failure events alongside the file’s other activity in [Audit log](/admin/audit). Those audit details do not include extracted text. Ask for an investigation when processing repeatedly fails; do not assume a successful upload also completed OCR.
+
+### Encrypted images are read in your browser
+
+The server cannot read an encrypted image, so your browser does. It runs the same recognition program, tesseract.js, in a background worker. The program and its English language data, about 7 MB, come from your Flare instance and are cached by your browser; no other site is contacted.
+
+- **At upload.** If the administrator enabled automatic OCR, your browser reads each PNG, JPEG, WebP, GIF or BMP image right after it uploads, seals the text with the file's key and stores it. The link is ready before the reading finishes. The status at the edge of the page reads **Finishing new files** meanwhile, and its pause button stops the work until you resume it.
+- **Files from a screenshot tool** have no text when they arrive. Your browser downloads and reads each one the next time you open Flare with your keys unlocked. Until then search does not find their text.
+- **On request.** **Extract text (OCR)** opens the stored text at once, or reads the image if there is none. The first reading in a session takes a few seconds longer while the program loads. Images over 25 MB are not read.
+- **On a share page.** A visitor who chooses **Extract text** gets the stored text if you have one. If not, the visitor's browser reads the image. That result stays in their browser: only you can store text for your file.
+
+<Screenshot src="/screenshots/encryption/ocr-browser.webp" alt="Extracted text dialog for an encrypted image showing the text OVERDUE INVOICE 7741, a Copy text button and the line Read in your browser. The text is saved encrypted, so search finds this image." caption="Text of an encrypted image, read by your browser and stored sealed." />
+
+The messages in the table above belong to server OCR. For an encrypted image the dialog shows **Reading the image in your browser…** and then the text, or **This browser couldn’t read text from the image**.
 
 OCR supports images, not a general PDF or office-document indexing workflow. Results depend on legibility, resolution, and the recognition language. Review extracted text before using it as an exact transcription. Flare's current OCR worker uses English recognition.
 

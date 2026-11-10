@@ -141,6 +141,18 @@ Inspect delivery history under Profile → Integrations. Confirm the receiver re
 
 Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK=true`. Redirecting a webhook URL is not a substitute for setting its final destination. If all existing webhooks fail after a secret change, check the encryption key before changing receiver signatures. [API and webhook documentation](/api/).
 
+## Text is not read from encrypted images
+
+The owner's browser reads encrypted images, not the server, so server logs show nothing about it. Check in this order:
+
+1. **Automatic OCR is on** in Settings → General. With it off, only **Extract text (OCR)** on one image reads it.
+2. **The owner has opened Flare with their keys unlocked** since the upload. A file from a screenshot tool waits for that.
+3. **The recognition files load.** In the browser's network panel, `/api/ocr/…/worker.min.js`, a `tesseract-core…wasm.js` file and `eng.traineddata.gz` must answer `200` from your own origin. A `404` means the image was built without the `tesseract.js` or `@tesseract.js-data/eng` package; rebuild from the repository's lockfile.
+4. **Nothing strips the worker's policy.** The browser console reports a Content Security Policy error when a proxy replaced the `Content-Security-Policy` header of `/api/ocr/` responses with a stricter one. The header Flare sends there allows script and connections from its own origin and WebAssembly compilation, and nothing else.
+5. **The file is small enough and of a readable kind.** Browsers read PNG, JPEG, WebP, GIF and BMP images up to 25 MB.
+
+After three failed tries on one file, browsers stop retrying it by themselves. The console of the owner's browser logs each failure with the file's ID and the reason.
+
 ## OCR, expiration, or delivery jobs seem delayed
 
 Flare's application process must remain running for background work. Check startup logs, database reachability, memory pressure, and whether the host sleeps the service. OCR is enabled in Settings → General and may be opted out for an upload. Processing an image takes time and does not guarantee useful extracted text.

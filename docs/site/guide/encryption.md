@@ -15,10 +15,10 @@ This page describes what ships in this release. Encryption arrives in stages, an
 
 The upload form and the paste form have one **Encryption** choice:
 
-| Choice                              | What the server stores                | Link preview on other sites             | Server features                                                                |
-| ----------------------------------- | ------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------ |
-| **Encrypted** (default)             | Ciphertext, with no name and no type  | Generic: "Encrypted file"               | None that read content. See [what does not work yet](#what-does-not-work-yet). |
-| **Plain** (can show a link preview) | The file as it is, with name and type | The image, video or filename, as before | Thumbnails, text from images, tag rules, archives, direct video links          |
+| Choice                              | What the server stores                | Link preview on other sites             | Server features                                                                            |
+| ----------------------------------- | ------------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------ |
+| **Encrypted** (default)             | Ciphertext, with no name and no type  | Generic: "Encrypted file"               | Your browser does the work. See [what your browser does](#what-your-browser-does-instead). |
+| **Plain** (can show a link preview) | The file as it is, with name and type | The image, video or filename, as before | Thumbnails, text from images, tag rules, archives, direct video links                      |
 
 <Screenshot src="/screenshots/encryption/upload-choice.webp" alt="The upload form with the Encryption choice set to Encrypted and a line saying that the server cannot read the file or its name" caption="Encrypted is the default. The line under the choice says what each option costs." />
 
@@ -32,14 +32,18 @@ For an encrypted file the server knows:
 
 - the size of the ciphertext, which is the file size plus 26 bytes and 32 bytes for every 64 KiB,
 - the upload time, each access time, and the network address of each visitor,
-- the owner, the visibility, the expiration, the folder and the tags you give it,
+- the owner, the visibility and the expiration,
+- which folder it is in and which tags it has, by their IDs,
 - the view and download counts,
 - whether it has a password,
-- the length of its name, roughly, from the size of the sealed name.
+- whether it has a thumbnail and stored image text, and that the uploader said it is an image,
+- the length of its name and of its image text, roughly, from the sizes of the sealed records.
 
-The server does not have the name, the type, the content, the key, or the password.
+The server does not have the name, the type, the content, the image text, the thumbnail, the key, or the password.
 
-Tag names and folder names are not encrypted in this release. If you tag an encrypted file, the tag's name is visible to the server.
+For your library as a whole, the server also knows the shape of your folder tree, which folders are shared, how many tags you have, and which file has which tag. It does not have a folder's name, a tag's name, or a tag's rule: your browser seals those too. See [Folders](./folders#folder-names-are-encrypted) and [Tags](./tags#tag-names-and-rules-are-encrypted).
+
+When you search, the server receives what you typed, because it searches your plain files. It is not told which encrypted files matched. If you then open one of them, the server can see that request like any other.
 
 ## A link is the key
 
@@ -89,16 +93,27 @@ A PDF preview needs a browser that opens PDFs inside an isolated frame. Chrome, 
 
 Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download.
 
+## What your browser does instead
+
+The server cannot read an encrypted file, so the features that need its content run in your browser. They work while your keys are unlocked.
+
+| Feature                | How it works for an encrypted file                                                                                                                                            |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Thumbnails             | Your browser makes a small WebP image at upload and seals it. [Library cards](./library#encrypted-files-in-the-library) decrypt it in memory.                                 |
+| Text from images (OCR) | Your browser reads the image with a recognition program that Flare serves itself, and stores the text sealed. See [OCR](./library#encrypted-images-are-read-in-your-browser). |
+| Search, type filter    | Your browser searches names and image text in memory, from a local cache of sealed records. See [Search](./library#search-and-narrow-the-results).                            |
+| Automatic tag rules    | Your browser applies them, at upload and later for files that arrived without it. See [Tags](./tags#rules-run-in-your-browser).                                               |
+| Shared folder links    | The link carries the folder's key. A visitor's browser opens the folder, the folders inside it and their files. See [Folders](./folders#share-a-folder).                      |
+
+Work that needs your browser waits for it. A file that another device or a tool uploaded without your keys gets its thumbnail, its image text and its automatic tags the next time you open Flare with your keys unlocked.
+
+<Screenshot src="/screenshots/encryption/library-work.webp" alt="File library where three encrypted images still show a file-type icon, with a small status at the bottom left reading Finishing new files, 0 of 3, and a pause button" caption="Files that arrived without a thumbnail or text are finished in the background. The status at the edge of the page shows the progress and can pause the work." />
+
 ## What does not work yet
 
-These features read file content on the server, so they do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.
+These features do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.
 
-- **Thumbnails.** Encrypted files show a file-type icon in the library, not a preview.
-- **Text from images (OCR)** and searching inside images.
-- **Search and the file type filter.** They do not find encrypted files, because the server cannot read names or types.
-- **Automatic tag rules** that match filenames or image text.
 - **Archive tools:** browsing, extracting and creating archives.
-- **Shared folder links.** An encrypted file in a shared folder is not listed on the folder's public page.
 - **Video streaming.** A video is downloaded and decrypted whole before it plays.
 - **Uploads from screenshot tools and API tokens.** They are plain.
 
@@ -109,5 +124,6 @@ Your [data export](./account) contains encrypted files as ciphertext, named by t
 - **The served application.** Your browser runs the code that Flare's server sends. Someone who controls the server can change that code to capture keys. This is true of every web application. An administrator's **Custom head** setting is such code too.
 - **Your passphrase.** Someone with a copy of the database can try passphrases against your account offline. A long passphrase is your protection.
 - **Files that others make for you.** Encrypting to your account needs only your public key, which the server has. A file in your library proves nothing about who made it.
-- **Metadata.** Sizes, times, addresses and counts are visible, as listed above.
+- **Metadata.** Sizes, times, addresses, counts, your folder structure and which file has which tag are visible, as listed above.
+- **Someone adding to a shared folder.** Putting a file into a shared folder's list needs only the folder's public key, which the server has.
 - **A compromised server hiding or replaying records.** It can hide a file or serve an older password setting. It cannot forge a file's content under an existing link.

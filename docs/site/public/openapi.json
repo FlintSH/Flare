@@ -167,14 +167,14 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Case-insensitive filename or OCR-text match.",
+            "description": "Case-insensitive filename or OCR-text match. Encrypted files never match: the server has neither their names nor their text.",
             "schema": { "type": "string" }
           },
           {
             "name": "sortBy",
             "in": "query",
             "required": false,
-            "description": "Sort order; unknown values fall back to newest.",
+            "description": "Sort order; unknown values fall back to newest. name and name-desc order by the stored name. An encrypted file has no stored name, so these orders put encrypted files together at one end.",
             "schema": {
               "type": "string",
               "default": "newest",
@@ -184,6 +184,7 @@
                 "largest",
                 "smallest",
                 "name",
+                "name-desc",
                 "most-viewed",
                 "least-viewed",
                 "most-downloaded",
@@ -195,7 +196,7 @@
             "name": "types",
             "in": "query",
             "required": false,
-            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
+            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg. The stored type of every encrypted file is application/octet-stream.",
             "schema": { "type": "string" }
           },
           {
@@ -232,6 +233,13 @@
             "required": false,
             "description": "Owned tag ID or untagged. Excluded tags do not count.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "encrypted",
+            "in": "query",
+            "required": false,
+            "description": "true lists only files that were encrypted in a browser, false only plain files. Any other value answers 400.",
+            "schema": { "type": "string", "enum": ["true", "false"] }
           },
           {
             "name": "galleryAnchor",
@@ -407,7 +415,7 @@
         "operationId": "listFileTypes",
         "summary": "List MIME types present in your account",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Sorted distinct stored MIME types, not an allowlist of permitted upload types. The token owner must currently have files.read; role revocation applies on the next request.",
+        "description": "Requires the files:read scope. Sorted distinct stored MIME types of plain files, not an allowlist of permitted upload types. The server has no type for an encrypted file, so encrypted files add nothing to this list. The token owner must currently have files.read; role revocation applies on the next request.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "responses": {
@@ -1313,14 +1321,14 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Case-insensitive filename or OCR-text match.",
+            "description": "Case-insensitive filename or OCR-text match. Encrypted files never match: the server has neither their names nor their text.",
             "schema": { "type": "string" }
           },
           {
             "name": "sortBy",
             "in": "query",
             "required": false,
-            "description": "Sort order; unknown values fall back to newest.",
+            "description": "Sort order; unknown values fall back to newest. name and name-desc order by the stored name. An encrypted file has no stored name, so these orders put encrypted files together at one end.",
             "schema": {
               "type": "string",
               "default": "newest",
@@ -1330,6 +1338,7 @@
                 "largest",
                 "smallest",
                 "name",
+                "name-desc",
                 "most-viewed",
                 "least-viewed",
                 "most-downloaded",
@@ -1341,7 +1350,7 @@
             "name": "types",
             "in": "query",
             "required": false,
-            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg.",
+            "description": "Comma-separated exact MIME types, for example image/png,image/jpeg. The stored type of every encrypted file is application/octet-stream.",
             "schema": { "type": "string" }
           },
           {
@@ -1378,6 +1387,13 @@
             "required": false,
             "description": "Owned tag ID or untagged. Excluded tags do not count.",
             "schema": { "type": "string" }
+          },
+          {
+            "name": "encrypted",
+            "in": "query",
+            "required": false,
+            "description": "true lists only files that were encrypted in a browser, false only plain files. Any other value answers 400.",
+            "schema": { "type": "string", "enum": ["true", "false"] }
           },
           {
             "name": "groupBy",
@@ -2102,6 +2118,18 @@
               }
             },
             "required": ["header", "sealedMetadata", "passwordStanza"]
+          },
+          "unreadable": {
+            "type": "boolean",
+            "description": "Present and true for an encrypted file that no key of the account opens, after a reset without the recovery phrase."
+          },
+          "thumbnailPending": {
+            "type": "boolean",
+            "description": "Present and true while an encrypted file waits for a thumbnail from the browser of its owner."
+          },
+          "ocrPending": {
+            "type": "boolean",
+            "description": "Present and true while an encrypted image waits for the browser of its owner to read its text."
           },
           "expiresAt": {
             "type": ["string", "null"],

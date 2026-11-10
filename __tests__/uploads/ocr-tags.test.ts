@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
     update: vi.fn(),
     updateMany: vi.fn(),
   },
+  // Whether the account has a tag whose rule only a browser can read.
+  sealedTag: vi.fn(),
   queryRaw: vi.fn(),
   transaction: vi.fn(),
   recognize: vi.fn(),
@@ -29,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     file: mocks.file,
+    vaultTag: { findFirst: mocks.sealedTag },
     $transaction: mocks.transaction,
   },
 }))
@@ -94,6 +97,7 @@ beforeEach(async () => {
     data: { text: ' Receipt 123 ', confidence: 95 },
   })
   mocks.checkFileAccess.mockResolvedValue({ allowed: true })
+  mocks.sealedTag.mockResolvedValue(null)
   mocks.applyAutomaticTags.mockResolvedValue(1)
   mocks.file.findUnique.mockImplementation(async () => ({ ...file }))
   mocks.file.update.mockImplementation(async ({ data }) => {
@@ -161,6 +165,27 @@ describe('tags after OCR', () => {
       expect(file.ocrTagsPendingAt).toBeNull()
     }
   )
+
+  it('leaves the rules of sealed tags to the browser of the owner', async () => {
+    // The server cannot read a sealed rule, so new text makes the file wait.
+    mocks.sealedTag.mockResolvedValue({ id: 'sealed-tag' })
+    await processImageOCRTask({ fileId: 'file', filePath: 'image.png' })
+    expect(mocks.sealedTag).toHaveBeenCalledWith({
+      where: { userId: 'owner', sealedTagMetadata: { not: null } },
+      select: { id: true },
+    })
+    expect(mocks.file.update).toHaveBeenNthCalledWith(1, {
+      where: { id: 'file' },
+      data: {
+        ocrText: 'Receipt 123',
+        ocrConfidence: 95,
+        isOcrProcessed: true,
+        ocrTagsPendingAt: now,
+        rulesPending: true,
+        pendingAttempts: 0,
+      },
+    })
+  })
 
   it('preserves extracted text and pending work when tagging fails', async () => {
     mocks.applyAutomaticTags.mockRejectedValue(

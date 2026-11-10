@@ -183,8 +183,25 @@ Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `enc
 
 **What changes for people.** Uploads made in the browser are encrypted by default from this release on. Existing files stay plain. Each person needs their [account keys](#account-key-migration) set up and unlocked to upload. Uploads from screenshot tools, the account upload token and API tokens stay plain and need no change. [Encrypted and plain files](/guide/encryption) is the page for users, including what does not work yet for encrypted files.
 
+### Encrypted library migration
+
+Migration `20261112000000_e2ee_library` adds what the library features of encrypted files store. It only adds columns, two triggers and one table, and touches no existing row.
+
+| Table            | Added                                                                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VaultFolder`    | `folderPublicKey`, `sealedFolderMetadata`, `sealedFolderPrivateKey`, `parentFolderStanza`, `parentStanzaPublicKey`, `rekeyPending`. A folder with keys has an empty `name`.                          |
+| `VaultTag`       | `sealedTagMetadata`. A sealed tag has an empty `name` and no rule columns.                                                                                                                           |
+| `File`           | `folderStanza`, `folderStanzaPublicKey`, `rulesPending`, `ocrPending`, `thumbnailPending`, `pendingAttempts`, `unreadable`, and `syncSeq`, a sequence number that moves when a listed value changes. |
+| `FileSealedData` | New. One row per encrypted file that has a sealed thumbnail or sealed image text.                                                                                                                    |
+
+Folder and tag names are not rewritten by the migration. Each person's browser seals their own names the first time they unlock their keys after the upgrade, and the server then deletes the plain name in that request. Accounts that never return keep plain names. Do not script a bulk change of `VaultFolder.name` or `VaultTag.name`: a check constraint ties an empty name to its sealed record.
+
+A trigger on `File` deletes a folder stanza when a file becomes private or changes folder, whoever makes the change, and moves `syncSeq`. A trigger on `VaultFileTag` and `FileSealedData` moves `syncSeq` when a file's tags or image text change. Nothing reads `syncSeq` but the browsers' local search cache, which also repairs itself when it disagrees with the server, so a restore from backup needs no extra step.
+
 **What changes for you.**
 
+- **Text recognition for encrypted images runs in browsers.** Flare serves the tesseract.js worker, its WebAssembly core and the English language data itself, under `/api/ocr/`, from the `tesseract.js` and `@tesseract.js-data/eng` packages in the image. No browser contacts another site for them, and they are public files that need no session. If a proxy or CDN in front of Flare rewrites response headers, keep the `Content-Security-Policy` header of these responses: the recognition worker takes its policy from it. Server OCR for plain images still downloads its language data from a public CDN the first time it runs, as before.
+- **The database is larger per encrypted file.** A sealed thumbnail is typically 5 to 40 KB and at most 256 KB, and sealed image text is the size of the text plus 57 bytes. Both are in `FileSealedData`, not in storage.
 - **Storage holds ciphertext for encrypted files.** The object key is `uploads/{urlId}/{uuid}/{fileId}`, with a random file ID and no filename. A stored object starts with the 8 bytes `FLAREE2E`. You cannot inspect, scan, deduplicate or thumbnail these objects, and neither can antivirus or DLP tooling that reads the bucket.
 - **Back up the database and the storage together.** An encrypted object is useless without its `File` row, which holds the sealed name and the stanza that carries its key, and without the owner's account record. A storage-only restore yields unnamed ciphertext. Restore both from the same point in time.
 - **You cannot recover an encrypted file for a user.** If they lose their passphrase and their recovery phrase, their encrypted files are unreadable for everyone. Plain files are unaffected.

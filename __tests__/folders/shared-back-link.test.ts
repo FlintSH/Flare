@@ -123,7 +123,7 @@ describe('sharedFolderBackLink', () => {
       sharedFolderBackLink(file, `${origin}/s/folders/${token}`)
     ).resolves.toEqual({
       href: `/s/folders/${token}`,
-      label: 'Shared folder',
+      label: 'the shared folder',
       history: true,
     })
   })

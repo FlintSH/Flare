@@ -15,7 +15,11 @@ const mocks = vi.hoisted(() => ({
   applyPendingOcrTags: vi.fn(),
 }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
+  prisma: {
+    file: { findUnique: mocks.findUnique, update: mocks.update },
+    // No sealed tag: no rule waits for the browser of the owner.
+    vaultTag: { findFirst: async () => null },
+  },
 }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: mocks.getStorageProvider,

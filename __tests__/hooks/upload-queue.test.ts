@@ -15,6 +15,10 @@ const harness = vi.hoisted(() => ({
   refresh: vi.fn(),
   upload: vi.fn(),
   invalidate: vi.fn(async () => {}),
+  // What the browser does for the library around an upload: one object per
+  // destination, here the same for all.
+  library: { folder: null, thumbnail: async () => null, uploaded: () => {} },
+  libraryFor: vi.fn(),
 }))
 
 // One render is enough: the hook's actions work on the queue, not on render state.
@@ -43,6 +47,9 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: harness.invalidate }),
 }))
 vi.mock('@/hooks/use-toast', () => ({ toast: harness.toast }))
+vi.mock('@/hooks/use-upload-library', () => ({
+  useUploadLibrary: () => harness.libraryFor,
+}))
 vi.mock('@/lib/uploads/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/uploads/client')>()),
   uploadFile: harness.upload,
@@ -78,6 +85,7 @@ beforeEach(() => {
   uploading = []
   harness.keys = { status: 'unlocked' }
   vi.clearAllMocks()
+  harness.libraryFor.mockImplementation(() => harness.library)
   harness.upload.mockImplementation(
     (file: File, options: UploadOptions) =>
       new Promise((resolve, reject) =>
@@ -145,10 +153,15 @@ describe('useUploadQueue', () => {
     // The retry keeps the destination, and encrypts for the same account.
     const sent = {
       folderId: 'folder-1',
+      library: harness.library,
       encryptFor: harness.accountPublicKey,
       signal: expect.any(AbortSignal),
     }
     expect(retried.map(({ options }) => options)).toEqual([sent, sent])
+    // The library work is made for the destination of the batch.
+    expect(harness.libraryFor).toHaveBeenLastCalledWith({
+      folderId: 'folder-1',
+    })
     await vi.waitFor(() =>
       expect(lastToast()).toMatchObject({
         title: 'Upload complete',
@@ -198,6 +211,8 @@ describe('useUploadQueue', () => {
     const plain = queue.uploadFiles([file('b.txt')], {}, { plain: true })
     const second = await started()
     expect('encryptFor' in second.options).toBe(false)
+    // A plain upload still tells the library, which runs the tag rules.
+    expect(second.options.library).toBe(harness.library)
     second.resolve(response(second.file))
     await plain
   })

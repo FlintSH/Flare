@@ -737,6 +737,15 @@ the passphrase never reaches the server.
 Share links of the old encrypted files continue to work. They do not depend
 on the account key.
 
+**PROPOSED.** The old account key sealed each `sealed_folder_private_key`
+and each `sealed_tag_metadata`. A reset loses them. In step 4 the server
+also does this for each folder that has keys and for each tag that has a
+sealed record: it deletes the keys, the sealed records and the stanzas, and
+it stores a placeholder name. It deletes the `share_token` of such a folder,
+because the key in the old link opens nothing that the new owner key can
+continue. The folder keeps its files and its place in the tree. The browser
+of the owner makes new keys at the next unlock (section 9.4.7).
+
 ## 7. File encryption
 
 **AGREED** for the structure. **PROPOSED** for the byte layout.
@@ -1290,6 +1299,12 @@ https://{host}/s/folders/{share_token}#{base64url(folder_private_key)}
   direct files. The project owner confirmed that the old behaviour was not
   intentional.
 
+**PROPOSED.** The part after `#` has no prefix in protocol version 1. A `.`
+in that part shows the prefix of a later version, as in section 10.3. The
+address of a folder below the shared folder has the identifier of that
+folder as a query parameter. The part after `#` stays the private key of the
+shared folder.
+
 Procedure for the visitor:
 
 1. The client requests the list with `share_token`. The server returns
@@ -1351,6 +1366,13 @@ file private or delete it.
 The work of steps 2 and 3 increases with the number of files and folders
 below the folder.
 
+**PROPOSED.** In step 1 the server marks the folder and each folder below
+it. A marked folder gives no stanza to a visitor and accepts one new key
+pair. When the server stores the new key pair, it deletes the mark and each
+stanza that was for the old `folder_public_key`. The server refuses a new
+`share_token` for a folder that has the mark. Thus a new link exists only
+after step 2 is done for that folder.
+
 #### 9.4.6 Decisions
 
 - A shared folder link always includes the folders below it. No link shows
@@ -1358,6 +1380,32 @@ below the folder.
 - Each public file in a folder has a folder stanza, also when the folder is
   not shared. The owner can then share the folder with no work for each
   file, and a script client does not need to know if a folder is shared.
+
+#### 9.4.7 Records that the browser of the owner makes later
+
+**PROPOSED**
+
+Some changes leave a folder or a file without a record that only the owner
+can make:
+
+- A folder from before encryption has no key pair.
+- A folder whose sharing stopped waits for a new key pair (section 9.4.5).
+- A folder got a new parent, or its parent got a new key pair. Its
+  `parent_folder_stanza` is for a key that the parent does not have.
+- A public file is in a folder and has no folder stanza for the current
+  `folder_public_key`. A moderator, the expiry of a file, a script client
+  without the folder key and a move by a client that stopped can cause this.
+
+The server stores for each stanza the public key that it is for. Thus the
+server can list these cases without a key. The browser of the owner
+requests the list when the account is unlocked and after each such change.
+It makes the records and sends them. The server accepts a stanza only for
+the key that the folder has at that time.
+
+For a folder from before encryption, the browser makes the key pair and
+`sealed_folder_metadata` from the plain name. The server deletes the plain
+name when it stores them. The browser does the same for a tag from before
+encryption (section 9.5.2).
 
 ### 9.5 Tags
 
@@ -1507,6 +1555,23 @@ Results for the user:
 - The text of such a file is not in the search before step 2 is done.
 - Step 2 downloads each image one time. Step 3 is fast.
 
+**PROPOSED.** Additions to this section:
+
+- A plain file gets `rules_pending` too, if the account has a tag with a
+  sealed record. The server can read the name of a plain file. It cannot
+  read the rule. Thus the browser of the owner applies the rules to plain
+  files. For a plain image, the server sets the flag again when it has read
+  the text.
+- When the owner stores `sealed_ocr_text` and does not send tag references
+  in the same request, the server sets `rules_pending`. A rule on text can
+  match the new text.
+- A client that cannot do the work for a file tells the server. The server
+  counts each failed attempt. After 3 failed attempts the server does not
+  list the file in step 1. Thus no client repeats the work without end. The
+  owner can still request the work for that file.
+- The uploading client can tell the server that no thumbnail is possible
+  for a file. The server then does not set `thumbnail_pending`.
+
 ### 9.8 Search
 
 **AGREED** for the structure. **PROPOSED** for the storage details.
@@ -1536,6 +1601,27 @@ the browser.
   each session. A private window of some browsers has no OPFS.
 - The browser can delete the cache when storage is low. The client must
   operate correctly without it.
+
+**PROPOSED.** Details of the update:
+
+- The server gives each encrypted file a sequence number. The number
+  increases when a value changes that the cache keeps: a sealed record of
+  the file, its stanzas, its tags, its folder, its visibility. The view
+  count and the download count do not change the number.
+- The client requests the records with a number greater than the largest
+  number in its cache.
+- Each answer contains the count of the encrypted files of the account and
+  the sum of their sequence numbers. The client calculates both values for
+  its cache. If they are different, the cache missed a deleted file or a
+  change. The client then requests the identifier and the number of each
+  file and corrects only the differences.
+- The cache also keeps the values of section 9.2 for each file. The server
+  has them already. The client needs them to apply the other filters of a
+  view to the search result and to show the result.
+- The client asks the server for the plain files that match a view, and
+  merges them with its own result. The client does not tell the server
+  which encrypted files matched. The server gets the search text for the
+  plain files, as today.
 
 #### 9.8.2 Plaintext in memory
 

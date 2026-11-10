@@ -12,8 +12,11 @@ const MAX_DEPTH = 64
 
 const TOKEN = /^[A-Za-z0-9_-]{20,100}$/
 
-/** The label of a shared folder whose name only the link's key opens. */
-export const SHARED_FOLDER_LABEL = 'Shared folder'
+/**
+ * What "Back to …" calls a shared folder whose name only the link's key
+ * opens.
+ */
+export const SHARED_FOLDER_LABEL = 'the shared folder'
 
 /** A folder as a shared folder page gets it. */
 export interface SharedFolderNode {

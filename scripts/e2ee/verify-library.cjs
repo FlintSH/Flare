@@ -560,14 +560,37 @@ function watchPage(page) {
 async function shot(page, name) {
   if (!screenshots) return
   await mkdir(screenshots, { recursive: true })
-  await page.waitForTimeout(300)
-  await page.screenshot({
-    path: path.join(
+  // Some steps use a tall phone viewport so that every row is on screen.
+  // The picture is of the real phone size.
+  const size = page.viewportSize()
+  const file = (suffix = '') =>
+    path.join(
       screenshots,
-      `${name}-${mobile ? 'mobile' : 'desktop'}-${theme}.png`
-    ),
-    fullPage: mobile && !(await page.getByRole('dialog').count()),
-  })
+      `${name}-${mobile ? 'mobile' : 'desktop'}-${theme}${suffix}.png`
+    )
+  if (!mobile || !size) {
+    await page.waitForTimeout(300)
+    await page.screenshot({ path: file() })
+    return
+  }
+  if (size.height !== 844)
+    await page.setViewportSize({ width: 390, height: 844 })
+  await page.waitForTimeout(300)
+  await page.screenshot({ path: file() })
+  // The whole page too, when it is longer than the phone. The library only
+  // renders the rows on screen, so the picture needs a screen that tall.
+  const height = await page.evaluate(
+    () => document.documentElement.scrollHeight
+  )
+  if (height > 844 && !(await page.getByRole('dialog').count())) {
+    await page.setViewportSize({ width: 390, height: Math.min(height, 6000) })
+    await page.waitForTimeout(300)
+    await page.screenshot({ path: file('-full') })
+  }
+  if (page.viewportSize().height !== size.height) {
+    await page.setViewportSize(size)
+    await page.waitForTimeout(200)
+  }
 }
 
 async function api(ctx, route, method = 'GET', data, expected = 200) {
@@ -826,6 +849,8 @@ async function openFolder(page, name) {
 }
 
 async function createFolder(page, name) {
+  // The folders of the account show their names once the keys are read.
+  await expect(page.getByText('Encrypted folder')).toHaveCount(0)
   await page.getByRole('button', { name: 'New folder' }).click()
   const dialog = page.getByRole('dialog')
   await dialog.locator('#folder-name').fill(name)
@@ -1717,11 +1742,24 @@ async function testLocked(alex) {
       })
   )
   await page.goto(`${origin}/dashboard?search=harbor`)
+  // Soon after a sign-in the unlock prompt opens by itself, one time.
+  await expect(page.locator('[data-unlock-banner]')).toBeVisible()
+  const prompt = page.getByRole('dialog', {
+    name: 'Unlock your encryption keys',
+  })
+  // The prompt needs the session, which can arrive after the banner. While
+  // it is open the page behind it is hidden from assistive technology.
+  await expect(async () => {
+    if (await prompt.isVisible().catch(() => false)) {
+      await prompt.getByRole('button', { name: 'Not now', exact: true }).click()
+      await expect(prompt).toHaveCount(0)
+    }
+    await expect(
+      page.getByRole('link', { name: `Open ${PLAIN.name}`, exact: true })
+    ).toBeVisible({ timeout: 3000 })
+  }).toPass({ timeout: 45_000 })
   await expect(
     page.locator('[data-encrypted-search-note="locked"]')
-  ).toBeVisible()
-  await expect(
-    page.getByRole('link', { name: `Open ${PLAIN.name}`, exact: true })
   ).toBeVisible()
   await shot(page, 'search-locked')
   await page.goto(`${origin}/dashboard`)
@@ -1940,6 +1978,11 @@ async function testReset(browser, alex) {
   await reset.getByRole('button', { name: /I lost my recovery phrase/ }).click()
   await reset.locator('#reset-passphrase').fill(RESET_PASSPHRASE)
   await reset.locator('#reset-confirmation').fill(RESET_PASSPHRASE)
+  // The form refuses a submit while it still measures the passphrase.
+  await expect(reset.locator('[data-strength-score]')).toHaveAttribute(
+    'data-strength-score',
+    /[34]/
+  )
   await reset.getByLabel(/can never be\s+opened again/).check()
   await reset.getByRole('button', { name: 'Reset account keys' }).click()
   const mnemonic = await shared.saveRecoveryPhrase(reset, expect)

@@ -71,7 +71,10 @@ export function OcrDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          {/* Room for the close button beside a long file name. */}
+          <DialogTitle className="break-words px-6 sm:pl-0">
+            {dialogTitle}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           {isLoading ? (

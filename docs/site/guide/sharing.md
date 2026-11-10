@@ -41,7 +41,7 @@ For an encrypted file, **Copy link** gives a link whose last part, after `#`, is
 
 <Screenshot src="/screenshots/encryption/share-missing-key.webp" alt="Share page of an encrypted file opened without the part after the hash, saying This link is missing its key" caption="Without the part after #, the page can say only that the key is missing." />
 
-Public files can be opened by anyone who obtains their URL, including someone a recipient forwards it to. Flare does not make your whole library public merely because an individual file is public. [Sharing a folder](./folders#share-a-folder) explicitly creates a listing of that folder's direct public files.
+Public files can be opened by anyone who obtains their URL, including someone a recipient forwards it to. Flare does not make your whole library public merely because an individual file is public. [Sharing a folder](./folders#share-a-folder) explicitly creates a listing of the public files in that folder and in the folders inside it.
 
 ## Protect a link with a password
 
@@ -169,5 +169,5 @@ Owners with `files.read` and accounts with `content.read` bypass file-password p
 :::
 
 ::: details Will disabling a folder link revoke the file links inside it?
-No. It stops that folder-share route. Individual public file links continue to work. Make individual files private or delete them if those links should stop working too.
+No. It stops that folder-share route, and your browser gives the folder new keys so the old link's key opens nothing. Individual public file links continue to work, including for a visitor who opened the shared page: that page gave them each listed file's key. Make individual files private or delete them if those links should stop working too.
 :::

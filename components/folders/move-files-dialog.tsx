@@ -45,6 +45,7 @@ export function MoveFilesDialog({
   const {
     folders,
     keys,
+    keysLoading,
     loading,
     error: loadError,
     reload,
@@ -261,7 +262,9 @@ export function MoveFilesDialog({
               <Button
                 type="submit"
                 size="sm"
-                disabled={busy || destinationUnavailable || !name.trim()}
+                disabled={
+                  busy || keysLoading || destinationUnavailable || !name.trim()
+                }
               >
                 Create folder
               </Button>

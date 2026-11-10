@@ -31,5 +31,7 @@ export function useFolders() {
     () => ownedFolderViews(items, keys),
     [items, keys]
   )
-  return { folders, keys, ...list }
+  // While the key state is still being read, a form waits: it cannot yet
+  // tell a locked browser from one that is about to have its keys.
+  return { folders, keys, keysLoading: account.status === 'loading', ...list }
 }

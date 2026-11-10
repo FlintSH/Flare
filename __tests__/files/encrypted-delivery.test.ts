@@ -209,11 +209,28 @@ describe('serving the ciphertext of an encrypted file', () => {
     ).not.toHaveBeenCalled()
   })
 
-  it('has no thumbnail and no text recognition', async () => {
+  it('has no server thumbnail, and answers the sealed text instead of reading the image', async () => {
     expect(
       (await thumbnailGET(get('/api/files/file-1/thumbnail'), byId)).status
     ).toBe(400)
-    expect((await ocrGET(get('/api/files/file-1/ocr'), byId)).status).toBe(400)
+    // No text was stored: the client that has the file key reads the image.
+    const none = await ocrGET(get('/api/files/file-1/ocr'), byId)
+    expect(none.status).toBe(200)
+    expect(none.headers.get('cache-control')).toBe('private, no-store')
+    expect(await none.json()).toEqual({
+      success: true,
+      encrypted: true,
+      sealedOcrText: null,
+    })
+    // The record of the owner's browser comes back as it is stored.
+    const sealedOcrText = new Uint8Array(80).fill(9)
+    state.file = row({ sealedData: { sealedOcrText } })
+    const stored = await ocrGET(get('/api/files/file-1/ocr'), byId)
+    expect(await stored.json()).toEqual({
+      success: true,
+      encrypted: true,
+      sealedOcrText: Buffer.from(sealedOcrText).toString('base64url'),
+    })
   })
 
   it('ignores a ?password= value: the server checks no password for it', async () => {

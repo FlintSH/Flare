@@ -51,7 +51,7 @@ const features = [
   [
     'Organize',
     'Folders & subfolders',
-    'Give files a home, move them in bulk, and share direct public contents in a folder gallery.',
+    'Give files a home, move them in bulk, and share a folder with the folders inside it through one link. Folder names are encrypted.',
     '/guide/folders',
   ],
   [
@@ -87,7 +87,7 @@ const features = [
   [
     'Organize',
     'OCR',
-    'Extract text from images in the background for searching and automatic tagging.',
+    'Extract text from images for searching and automatic tagging: on the server for plain images, in your browser for encrypted ones.',
     '/guide/tags',
   ],
   [
@@ -117,7 +117,7 @@ const features = [
   [
     'Share',
     'Encrypted files',
-    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and a password is part of the key.',
+    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and your browser makes thumbnails, reads image text, applies tag rules and searches.',
     '/guide/encryption',
   ],
   [

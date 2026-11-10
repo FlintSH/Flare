@@ -48,7 +48,15 @@ export function TagManager({
 }) {
   const lifetime = useRequestLifetime()
   const { user } = usePermissions()
-  const { tags, keys, loading, error: loadError, reload, changed } = useTags()
+  const {
+    tags,
+    keys,
+    keysLoading,
+    loading,
+    error: loadError,
+    reload,
+    changed,
+  } = useTags()
   const { toast } = useToast()
   const [editing, setEditing] = useState<TagView | 'new' | null>(null)
   const [name, setName] = useState('')
@@ -398,7 +406,12 @@ export function TagManager({
               </Button>
               <Button
                 type="submit"
-                disabled={busy || !name.trim() || (automatic && !phrase.trim())}
+                disabled={
+                  busy ||
+                  keysLoading ||
+                  !name.trim() ||
+                  (automatic && !phrase.trim())
+                }
               >
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {existing ? 'Save tag' : 'Create tag'}

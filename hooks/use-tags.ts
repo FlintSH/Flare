@@ -30,7 +30,7 @@ export function useTags() {
     () => ownedTagViews(items, keys),
     [items, keys]
   )
-  return { tags, keys, ...list }
+  return { tags, keys, keysLoading: account.status === 'loading', ...list }
 }
 
 /**

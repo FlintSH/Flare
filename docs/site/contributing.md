@@ -452,6 +452,27 @@ pnpm exec vitest run __tests__/e2ee/client
 
 They check Argon2id through WebAssembly against the real-parameter vector and the other passphrase vectors of `lib/e2ee/vectors/v1.json` and against the pure JavaScript implementation, the state machine of the key store, the signed request against the server's verifier, rotation and recovery material, and the strength check.
 
+### Encrypted library browser checks
+
+`scripts/e2ee/verify-library.cjs` drives the library features of encrypted files in headless Chromium against a production build: conversion of plain folders and tags at the first unlock, folders with keys, a shared folder link opened signed out, stop sharing, moving and deleting folders, sealed tags and rules, files left as a script client leaves them, thumbnails, text recognition in the browser, search with the local cache, sign-out, key rotation with the stanza migration, and a reset. It uses the same recording proxy as the check below, on other ports and its own database:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_library_local'
+export NEXTAUTH_URL='http://localhost:3096'
+export NEXTAUTH_SECRET='public-disposable-e2ee-library-demo-secret-2026'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3095
+# In another terminal, with the same DATABASE_URL:
+node scripts/e2ee/verify-library.cjs
+```
+
+The run needs a database that it starts empty: create it again before each run. At the end it opens every record with independent code and fails if any request held an account, file or folder private key, a link secret or fragment, a passphrase or file password, the name of an encrypted file, a folder name, a tag name or rule, or text read from an image. It also fails if any page or worker asked a site other than the instance, which covers the recognition worker, its WebAssembly core and its language data, and it reads the browser's origin private file system to check that the search cache holds no plaintext and is gone after sign-out.
+
+It simulates one thing: a script client's upload is an ordinary browser upload whose flags are then set and whose sealed records are deleted in the database, because token uploads of encrypted files are a later change. The reset uses a reset link that the script writes to the database in place of an email. `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as below, and the video thumbnail needs the same `ffmpeg`. A mobile capture is the 390×844 screen; when the page is longer, a second image whose name ends in `-full` shows all of it, taken with a screen that tall because the library only renders the rows on screen.
+
+The database-backed unit suites of these features read `FLARE_LIBRARY_DATABASE_URL`, a disposable database named `flare_library_test_local` or `flare_library_test_ci`.
+
 ### Encrypted file browser checks
 
 `scripts/e2ee/verify-files.cjs` drives [encrypted files](/guide/encryption) in headless Chromium against a production build: upload, library, download, share pages, passwords, pastes, link previews, hostile content, the moderator view, short links and the page script policy. It seeds two accounts with keys into a disposable database named exactly `flare_e2ee_files_local` and removes them at the next run.

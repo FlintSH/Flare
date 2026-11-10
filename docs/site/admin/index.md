@@ -41,6 +41,13 @@ Reading instance settings needs `settings.read`; changing General needs `setting
 
 OCR extracts text from uploaded images so it can be searched and used by OCR-based tag rules. It is enabled by default. Disable **Background OCR processing** if you do not need it or want to reduce processing work on a small server.
 
+The switch covers both kinds of file, and the work happens in different places:
+
+- **Plain images** are read by the server, one at a time, as before.
+- **Encrypted images** are read in the browser of their owner, because the server holds only ciphertext. That costs your server nothing but serving the recognition program and its language data, about 7 MB that each browser caches. With the switch off, browsers do not read new images by themselves either.
+
+In both cases a person can still choose **Extract text (OCR)** on one image.
+
 OCR processing outcomes can be investigated in [Audit log](./audit); the audit details do not include extracted text. Changing this switch does not erase existing OCR text. Upload options can opt individual uploads out of OCR, and extracting text is asynchronous. A successful upload does not mean text recognition is already finished or that the image contains recognizable text.
 
 ### Credits

@@ -42,7 +42,14 @@ export function FolderDialog({
   onCreated: (folder: FolderView) => void
   onDeleted: (folder: FolderView) => void
 }) {
-  const { folders, keys, loading, error: loadError, changed } = useFolders()
+  const {
+    folders,
+    keys,
+    keysLoading,
+    loading,
+    error: loadError,
+    changed,
+  } = useFolders()
   const snapshot = action.kind === 'create' ? null : action.folder
   const current = folders.find((folder) => folder.id === snapshot?.id)
   const existing = current ?? snapshot
@@ -222,7 +229,7 @@ export function FolderDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={busy || unavailable || !name.trim()}
+                disabled={busy || unavailable || keysLoading || !name.trim()}
               >
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {existing ? 'Save name' : 'Create folder'}
@@ -347,7 +354,7 @@ export function FolderDialog({
               </Button>
               <Button
                 variant={token ? 'destructive' : 'default'}
-                disabled={busy || unavailable}
+                disabled={busy || unavailable || keysLoading}
                 onClick={() => void share(!token)}
               >
                 {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

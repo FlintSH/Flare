@@ -462,9 +462,11 @@ The [audit log](/admin/audit) records a request-level `http.get` outcome with th
 Files uploaded in the browser are [encrypted on the device](/guide/encryption) by default. The server then stores ciphertext and has no name and no type. This affects what a token integration reads:
 
 - **`GET /api/files` lists them with `encrypted: true`**, `name: ""`, `mimeType: "application/octet-stream"`, a `urlPath` that ends in a random file ID such as `/abc123/e_3kGq0v8mJtYw2nHc5sLp7A`, and `size` as the ciphertext size. Each such row also has an `encryption` object of base64url records. A plain file has `encrypted: false` and no `encryption` object.
-- **`search`, `types` and `sortBy=name` cannot match encrypted files.** The server cannot read their names or types. Filter on `encrypted` in your own code if you need only plain files.
+- **`search`, `types` and `sortBy=name` cannot match encrypted files.** The server cannot read their names or types: a search skips them, a type filter sees only `application/octet-stream`, and an order by name puts them together at one end. Pass `encrypted=false` to list plain files only, or `encrypted=true` for the encrypted ones. `GET /api/files/types` lists the types of plain files only.
+- **Three more fields can appear on an encrypted row:** `unreadable: true` after a [reset without the recovery phrase](/guide/passphrase#i-lost-my-recovery-phrase), and `thumbnailPending: true` or `ocrPending: true` while that work [waits for the owner's browser](#work-that-waits-for-the-owner-s-browser). They are left out when false.
+- **Tags on a row have an empty `name`** when the tag is sealed. The `id` is what filters and assignments use.
 - **`hasPassword` is `true`** for an encrypted file with a password stanza, as for a plain file with a server password.
-- **The bytes are ciphertext.** `/api/files/{path}` and `/api/files/{id}/download` send them as `application/octet-stream` attachments, with byte ranges, and never redirect to signed storage. `/raw` and `/direct` answer `404`, thumbnails and OCR answer `400`, and a `password` query value is ignored.
+- **The bytes are ciphertext.** `/api/files/{path}` and `/api/files/{id}/download` send them as `application/octet-stream` attachments, with byte ranges, and never redirect to signed storage. `/raw` and `/direct` answer `404`, the thumbnail route answers `400`, the OCR route answers with sealed text only, and a `password` query value is ignored.
 - **Webhooks** send `data.name` and `data.mimeType` as `null` for them. See [version 2](./webhooks#version-2).
 
 Nothing a token can call returns a key, because the server has none. An integration cannot decrypt an encrypted file without the owner's account key or the file's share link.
@@ -483,12 +485,39 @@ The body of an encrypted upload is the encrypted file itself: a 26-byte header (
 | `stanzaAccountPublicKey` | The account public key the stanza is for.                              |
 | `passwordStanza`         | Optional. The file key wrapped for a password and a link secret.       |
 
+The same request can carry what the uploader did for the library, and says what it did not do. Every field is optional:
+
+| Field             | Content                                                                                                                                                           |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `folderStanza`    | The file key, or for a file with a password the link secret, wrapped for the public key of the file's folder. 97 bytes with its version byte.                     |
+| `folderPublicKey` | The folder public key that `folderStanza` is for. Required with it.                                                                                               |
+| `sealedThumbnail` | A WebP thumbnail sealed with a key derived from the file key. At most 256 KiB.                                                                                    |
+| `thumbnail`       | `none`: no thumbnail can be made for this file. Not together with `sealedThumbnail`.                                                                              |
+| `sealedOcrText`   | The text read from an image, sealed with a key derived from the file key. At most 256 KiB.                                                                        |
+| `isImage`         | `true` or `false`: the file is an image that text can be read from.                                                                                               |
+| `rulesApplied`    | `true` or `false`: the client applied the owner's tag rules.                                                                                                      |
+| `ruleTagIds`      | The IDs of the tags those rules gave: comma-separated, or a list in the JSON body of a chunked upload. Up to 100. IDs that are not the owner's tags are left out. |
+
+In the multipart form these are text fields, with `true` and `false` as text. In the JSON body that starts a chunked upload the two flags can also be JSON booleans.
+
+The server reads none of the sealed records. From the declarations it sets three flags on the file, the same way for every credential:
+
+| Flag               | Set when                                                                                                             |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `rulesPending`     | `rulesApplied` is not `true` and the account has a sealed tag.                                                       |
+| `ocrPending`       | `isImage` is `true`, no `sealedOcrText` came, and the instance has [automatic OCR](/admin/#background-image-ocr) on. |
+| `thumbnailPending` | No `sealedThumbnail` came and `thumbnail` is not `none`.                                                             |
+
+A plain upload carries none of these fields. It gets `rulesPending` when the account has a sealed tag, because the server cannot read a sealed rule.
+
+`folderStanza` is refused with `400` for a private file or a file without a folder, and with `409` and `"code": "stale_folder_key"` when `folderPublicKey` is not the key the folder has now, for example after its owner stopped sharing it. A public upload into a folder without a stanza is accepted: the owner's browser makes the stanza later.
+
 - **One request:** `POST /api/files` with the header `X-Flare-Encrypted: true`. The multipart file part must be named `encrypted` with the type `application/octet-stream`; the records and the usual options (`visibility`, `expiresAt`, `expiryAction`, `tagIds`) are form fields. Any other field, such as `name` or `password`, is refused with `400`.
 - **In parts:** `POST /api/files/chunks` with `encrypted: true`, `size` (the ciphertext size), the records and the usual options. `filename`, `mimeType` and `password` are refused. Parts and completion are the same routes as for a plain upload.
 
 Before it publishes the file, the server checks what it can: that the stored bytes start with `header`, that the header has the right magic value, version and chunk size, that the stored size is a length an encrypted file can have, that each record has a possible length and version, and that `stanzaAccountPublicKey` is the uploader's current account public key. A failure answers `400`, or `409` for a key that is no longer current, and the stored bytes are removed. The server cannot check that the records open: it has no key.
 
-It does not sniff a type, run filename tag rules, or queue text recognition for these files. Quota counts the ciphertext.
+It does not sniff a type, run tag rules, or read text from these files: it stores what the client sealed and marks the rest as [waiting](#work-that-waits-for-the-owner-s-browser). Quota counts the ciphertext.
 
 The answer has no name and no type:
 
@@ -525,9 +554,102 @@ Anyone who may fetch the ciphertext may read these: a visitor of a public file, 
 
 **`PATCH /api/files/{id}`** with `{ "passwordStanza": "<base64url>" }` stores a new password stanza for an encrypted file, and `{ "passwordStanza": null }` removes it. Only the owner's session may send it; `content.update` is not enough, because only the owner's browser can make the stanza. `password` is refused for an encrypted file, and `passwordStanza` for a plain one.
 
+### Sealed thumbnail and image text
+
+**`GET /api/files/{id}/sealed-thumbnail`** · Browser session or anonymous, under the file's access rules
+
+Answers the sealed thumbnail as `application/octet-stream`, or `204` when the file has none. A client that has the file key opens it and gets a WebP image. The bytes came from whoever uploaded the file, so a client should show them only as an image.
+
+**`GET /api/files/{id}/ocr`** for an encrypted file answers `{ "success": true, "encrypted": true, "sealedOcrText": "<base64url>" }`, or `null` in place of the record when no text is stored. The server never reads the image. Sealed text and thumbnails are stored only by the upload request or by [the owner's session](#work-that-waits-for-the-owner-s-browser): a visitor who has the file key can make a valid record, and the server does not take it.
+
 ### Read a byte range
 
 The stored chunk `n` starts at byte `26 + n × 65568` of the ciphertext and holds 65536 bytes of content and a 32-byte tag; the last chunk is shorter. To read plaintext bytes, a client requests the chunks that contain them with one `Range` header and checks each tag before it uses a byte. A range proves nothing about the end of the file unless it includes the last chunk.
+
+## The encrypted library
+
+These contracts belong to the dashboard. They need a browser session and refuse tokens. They are documented so operators and reviewers can see what crosses the wire.
+
+### Folders with keys
+
+Each folder of an account that has keys has an X25519 key pair made in the owner's browser. `GET /api/folders` lists a folder with `name: ""` and a `keys` object:
+
+```json
+{
+  "id": "f3a91c0e5d7b42a6f08e19c4",
+  "name": "",
+  "parentId": null,
+  "fileCount": 4,
+  "shareToken": null,
+  "keys": {
+    "folderPublicKey": "…",
+    "sealedFolderMetadata": "AQ…",
+    "sealedFolderPrivateKey": "AQ…",
+    "parentFolderStanza": null,
+    "parentStanzaPublicKey": null,
+    "rekeyPending": false
+  }
+}
+```
+
+`sealedFolderMetadata` holds the name, sealed with a key from the folder private key. `sealedFolderPrivateKey` is the owner's copy of the private key, sealed with a key from the account private key. `parentFolderStanza` is the private key wrapped for the parent's public key, which is how a link for a folder opens the folders inside it. A folder from before encryption has `keys: null` and a plain `name` until its owner's browser converts it.
+
+- **`POST /api/folders`** takes `{ "parentId", "folderPublicKey", "sealedFolderMetadata", "sealedFolderPrivateKey" }` and, for a folder inside another, `parentFolderStanza` with `parentFolderPublicKey`. A plain `{ "name" }` answers `409` for an account that has keys, and key records answer `409` for one that has none. A parent stanza for a key that the parent no longer has answers `409` with `"code": "stale_folder_key"`.
+- **`PATCH /api/folders/{id}`** renames with `{ "sealedFolderMetadata" }`. `{ "sharing": false }` deletes the share token and marks the folder and every folder below it `rekeyPending`. `{ "sharing": true }` answers `409` with `"code": "rekey_pending"` until the owner's browser stored new keys.
+- **`PUT /api/folders/keys`** takes `{ "folders": [{ "id", "folderPublicKey", "sealedFolderMetadata", "sealedFolderPrivateKey" }], "parentStanzas": [{ "id", "parentFolderStanza", "parentFolderPublicKey" }] }`, up to 200 of each. A folder takes keys only when it has none or is `rekeyPending`; anything else answers `409` with `"code": "keys_exist"`. Storing keys deletes the plain name and every stanza that was made for the old key.
+- **`PUT /api/files/folder-stanzas`** takes `{ "stanzas": [{ "fileId", "folderStanza", "folderPublicKey" }] }` and answers `{ "stored": 2, "skipped": ["…"] }`.
+- **`GET /api/folders/repairs`** answers `{ "folderKeys": ["…"], "parentStanzas": [{ "id", "parentId" }], "fileStanzas": [{ "id", "folderId", "header", "sealedMetadata", "accountStanza", "stanzaAccountPublicKey", "passwordStanza" }], "more": false }`.
+
+The database deletes a file's folder stanza when the file becomes private, changes folder, or changes its password stanza without a new folder stanza in the same change. That holds for every writer: a moderator, the expiry worker and `POST /api/files/folders` included.
+
+A shared folder page gets its list from the server render of `/s/folders/{token}`, optionally with `?folder={id}` for a folder below the shared one and `?page=`. No API route serves it. The list has sealed names, the parent stanza of each folder below, and for each public encrypted file its header, sealed name and folder stanza. The key is in the address after `#` and is never sent.
+
+### Tags with keys
+
+`GET /api/tags` lists a sealed tag with `name: ""`, `ruleSource: null`, `ruleText: null` and `sealed`, the base64url `sealed_tag_metadata` that holds the name and the rule. A tag from before encryption has `sealed: null`.
+
+- **`POST /api/tags`** and **`PATCH /api/tags/{id}`** take `{ "sealedTagMetadata" }` for an account that has keys. The plain form answers `409` for such an account, and the sealed form `409` for an account without keys.
+- **`PUT /api/tags/sealed`** takes `{ "tags": [{ "id", "sealedTagMetadata" }] }` and answers `{ "sealed": 3 }`. It changes only tags that are still plain.
+- **`POST /api/tags/{id}/apply`** with `{ "fileIds": [...] }` adds the tag to those of the caller's files that do not have it. A file the tag was removed from by hand stays without it.
+
+The server cannot refuse a duplicate sealed name or apply a sealed rule. The browser does both.
+
+### Work that waits for the owner's browser
+
+**`GET /api/files/pending`** answers `{ "total": 12, "files": [...] }`. An encrypted entry has `id`, `urlPath`, `size`, the three flags, `encryption` with the account stanza, and `sealedOcrText` if text is stored. A plain entry has `id`, `name`, `mimeType`, `ocrText`, `ocrProcessed` and `rulesPending`.
+
+**`POST /api/files/{id}/work`** stores what the browser did. Every field is optional, and at least one is required:
+
+| Field             | Effect                                                                                                    |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `sealedThumbnail` | Stored. Clears `thumbnailPending`.                                                                        |
+| `thumbnail`       | `none`: clears `thumbnailPending` without a thumbnail.                                                    |
+| `sealedOcrText`   | Stored. Clears `ocrPending`. Without `rulesApplied`, sets `rulesPending` if the account has a sealed tag. |
+| `ocr`             | `none`: clears `ocrPending` without text, for a file that is not a readable image.                        |
+| `rulesApplied`    | `true`: clears `rulesPending`, and adds `ruleTagIds` where the file does not have them.                   |
+| `failed`          | `true`: counts one failed attempt. After three, `GET /api/files/pending` stops listing the file.          |
+
+A sealed record for a plain file answers `400`, and for an unreadable file `409`.
+
+### Search records
+
+**`GET /api/files/sync`** has three forms:
+
+- `?since={n}&limit={1-500}` answers `{ "records": [...], "more": false, "state": { "count": 812, "sum": "9914573" } }`. Each record is the row of `GET /api/files` for one encrypted file, with `seq` and `sealedOcrText`. Records come in the order of `seq`, a number that moves whenever a listed value of the file, its tags or its image text changes. Views and downloads do not move it.
+- `?ids=a,b,c`, up to 100, answers the records of those files.
+- `?index=1&after={id}` answers `{ "entries": [["id", 41], …], "more": false }`, 5,000 per page.
+
+`state` is the count of the account's encrypted files and the sum of their `seq`. A cache whose own count and sum differ has missed a deleted file or a change, and repairs itself from the index. Unreadable files are in none of these answers.
+
+**`GET /api/files/order`** takes the filters of `GET /api/files`, lists plain files only, and answers `{ "keys": [["id", "2026-03-01T10:00:00.000Z"], …], "more": false }`. The second value is what `sortBy` orders by: the upload time, the size, a count or the name.
+
+### Rotation and reset
+
+`POST /api/auth/e2ee/rotation` and `POST /api/auth/e2ee/recovery` take two more fields, described in [account keys](./account-keys): `folders`, a new `sealedFolderPrivateKey` for each folder that has keys, and `tags`, a new `sealedTagMetadata` for each sealed tag. A request that does not cover exactly those folders and tags answers `409` with `"code": "library_records_incomplete"`, and nothing is changed.
+
+After a rotation **`GET /api/files/stanzas`** answers `{ "stanzas": [{ "id", "header", "sealedMetadata", "accountStanza", "stanzaAccountPublicKey" }], "remaining": 3400, "oldKeys": ["…"] }` and **`PUT /api/files/stanzas`** takes `{ "stanzaAccountPublicKey", "stanzas": [{ "id", "accountStanza" }] }`, up to 100. When `oldKeys` no longer names an old key, the browser stores a keyring without it through `PUT /api/auth/e2ee/keyring`.
+
+`POST /api/auth/e2ee/reset` sets `unreadable` on every encrypted file of the account, clears their flags and folder stanzas, and turns each folder with keys and each sealed tag back into a plain one named `Folder` or `Tag` with the last six characters of its ID, without a share link.
 
 ## Chunked uploads
 

@@ -31,6 +31,16 @@ For a particular sharing workflow, download the client from a saved [upload prof
 Keep these configurations and scripts private. Do not commit them to a public repository or attach them to a support issue without removing the token. Anyone with a working credential may be able to use the access it grants. Flare sends every download with `Cache-Control: private, no-store`, so browsers and proxies don't cache a copy. Delete downloaded files you no longer use.
 :::
 
+## Automatic tags and image text for tool uploads
+
+Your [automatic tag rules](./tags#rules-run-in-your-browser) are encrypted, so the server cannot apply them when a tool uploads a file. Tags that an [upload profile](./upload-profiles) adds are applied at once, because a profile names tags by ID. Everything that depends on a rule happens the next time you open Flare in a browser with your keys unlocked:
+
+- the file gets the tags of the rules that match its name,
+- a rule on image text runs once the server has read a plain image,
+- a status at the edge of the page reads **Finishing new files** while your browser works.
+
+If Flare stays open in a tab, it picks up new uploads about once a minute and whenever you return to the tab.
+
 ## ShareX on Windows
 
 1. Install and open ShareX.

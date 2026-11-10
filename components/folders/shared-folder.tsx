@@ -459,7 +459,10 @@ export function SharedFolder({
           <p className="text-balance text-sm text-muted-foreground">
             {opened.status === 'opening'
               ? 'Opening folder…'
-              : `${total} ${total === 1 ? 'file' : 'files'} · Open a file to preview or download it.`}
+              : problem && !total
+                ? // A count of what the key did not open would read as an empty folder.
+                  'This folder is encrypted.'
+                : `${total} ${total === 1 ? 'file' : 'files'} · Open a file to preview or download it.`}
           </p>
         </div>
       </div>

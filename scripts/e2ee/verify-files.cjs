@@ -851,10 +851,17 @@ async function testLibrary(alex, keys) {
   await expect(page.locator('[data-file-encryption="encrypted"]')).toHaveCount(
     Object.keys(uploaded).length
   )
-  // No thumbnail and no server OCR is asked for an encrypted image.
+  // The server makes no thumbnail and reads no text of an encrypted image:
+  // the page asks for the sealed thumbnail only, which this browser opens.
   assert.ok(
-    !requests.some((request) => /\/thumbnail|\/ocr/.test(request.target)),
-    'The library asked for a thumbnail or OCR of an encrypted file'
+    !requests.some((request) =>
+      /^\/api\/files\/[^/]+\/(thumbnail|ocr)(\?|$)/.test(request.target)
+    ),
+    'The library asked the server for a thumbnail or OCR of an encrypted file'
+  )
+  assert.ok(
+    requests.some((request) => /\/sealed-thumbnail$/.test(request.target)),
+    'The library did not ask for a sealed thumbnail'
   )
   await shot(page, 'library-unlocked')
 
@@ -892,17 +899,23 @@ async function testLibrary(alex, keys) {
     )
   }
   results.push(
-    'The library shows the decrypted names of encrypted files, marks them as encrypted, asks the server for no thumbnail and no OCR, offers no archive or OCR action for them, and "Download file" saves the 11 MiB file and a text file byte for byte as they were uploaded, under their real names'
+    'The library shows the decrypted names of encrypted files, marks them as encrypted, asks the server for no thumbnail and no OCR of them (only for the sealed thumbnail), offers no archive action for them and no OCR for a file that is not an image, and "Download file" saves the 11 MiB file and a text file byte for byte as they were uploaded, under their real names'
   )
 
-  // Search runs on the server, which has no names of encrypted files. The
-  // library says so instead of showing an unexplained empty result.
+  // The server has no names of encrypted files, so the browser searches
+  // them: the file shows, and the request for the plain matches carries
+  // the search and no encrypted file.
   await page.getByPlaceholder('Search your files…').fill('budget')
-  await expect(page.locator('[data-encrypted-search-note]')).toBeVisible()
-  await expect(page.getByText('No files match your search')).toBeVisible()
-  await shot(page, 'library-search-note')
+  await expect(
+    page.getByRole('link', { name: `Open ${fixtures.text.name}`, exact: true })
+  ).toBeVisible()
+  await expect(page.locator('[data-file-encryption="encrypted"]')).toHaveCount(
+    1
+  )
+  await expect(page.locator('[data-encrypted-search-note]')).toHaveCount(0)
+  await shot(page, 'library-search-encrypted')
   results.push(
-    'A search for the name of an encrypted file finds nothing, and the library says that search does not find encrypted files yet'
+    'A search for a part of the name of an encrypted file finds it: the browser searches the names it decrypted'
   )
 
   // Locked: the key store is emptied, as on another device.

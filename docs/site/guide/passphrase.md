@@ -100,7 +100,12 @@ Before you start, know what it cancels:
 - **You get a new recovery phrase.** The old one stops working.
 - An unfinished email address change and links that Flare already emailed you are cancelled.
 
-Your files, two-factor authentication, recovery codes, passkeys, and passkey requirement do not change.
+Your files, folders, tags, two-factor authentication, recovery codes, passkeys, and passkey requirement do not change. Share links of files and folders keep working.
+
+Two things happen to your library, both without any action from you:
+
+- **Folder keys and tags are sealed again for the new key.** The same request that changes the passphrase carries a new sealed copy of each folder's key and of each tag's name and rule. If Flare says the request does not cover every folder and tag, another tab changed one while you worked: reload the page and start again.
+- **Your files move to the new key in the background.** Each encrypted file has a small record that gives its key to your account key. After you sign in again, your browser opens each record with the old key and makes one for the new key. A status at the edge of the page reads **Updating file keys** with a count. You can use Flare meanwhile, close the tab, or sign in on another device; the work continues where it stopped. When no file is left on the old key, your browser tells the server to forget that old key.
 
 1. Open **Profile → Account → Passphrase and recovery** and choose **Change passphrase**.
 2. Read the list and choose **Continue**.
@@ -135,6 +140,13 @@ If Flare says the phrase is valid but not the current one of this account, you t
 You can keep the account. It gets new keys, and **no key of the account opens the files it encrypted before, for you or for anyone else. Not an administrator, not the operator of the server, not the Flare project.** Files that are not encrypted, your settings, your two-factor authentication, and your passkeys are kept.
 
 Tick the confirmation, choose a new passphrase, choose **Reset account keys**, and save the new recovery phrase.
+
+After the reset your library looks like this:
+
+- Each encrypted file you had is still listed, as **Unreadable file**, with a **Delete** button. Delete the ones you do not want counted against your storage. A person who has such a file's own share link can still open it until you delete it, because that link carries the file's key.
+- Folders and tags keep their files, but their names were sealed with the old key and are lost. They come back as **Folder** and **Tag** with a short code; rename them. Automatic tag rules are lost and need to be entered again.
+- Shared folder links stop working. Share the folder again to get a new link.
+- Plain files are as they were.
 
 <Screenshot src="/screenshots/encryption/reset-warning.webp" alt="Reset page for a lost recovery phrase, with a red warning that encrypted files stay unreadable for good, new passphrase fields, a confirmation checkbox, and a Reset account keys button" caption="A reset needs an explicit confirmation. Nothing is changed before it." />
 

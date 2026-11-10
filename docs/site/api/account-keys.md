@@ -74,18 +74,18 @@ Mutation bodies require `Content-Type: application/json` and are limited to **64
 }
 ```
 
-| Method and path                          | Authentication                                                | Request body                                        | Response                                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------- | --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/auth/e2ee/challenge`          | Public.                                                       | `{ "identifier": "…" }`                             | `{ "method": "passphrase", "passphraseSalt", "protocolVersion", "challenge" }`, or `{ "method": "password" }`.         |
-| `POST /api/auth/e2ee/session-challenge`  | Session; the account has keys.                                | None; a body is ignored.                            | `{ "challenge", "identifier", "passphraseSalt", "protocolVersion", "accountPublicKey" }`.                              |
-| `POST /api/auth/e2ee/unlock`             | Session and an unlock signature.                              | `{ "challenge", "signature" }`                      | `{ "accountPublicKey", "protocolVersion", "wrappedRoot", "sealedKeyring" }`.                                           |
-| `GET /api/auth/e2ee/keys`                | Session.                                                      | None.                                               | `{ "hasKeys", "identifier", "protocolVersion", "accountPublicKey", "hasKeyring" }`.                                    |
-| `POST /api/auth/e2ee/keys`               | Session from a sign-in in the last five minutes; no keys yet. | `{ "account" }`                                     | `{ "ok": true }`.                                                                                                      |
-| `POST /api/auth/e2ee/rotation`           | Session, a signed request, and a passphrase proof.            | `{ "account", "sealedKeyring", "passphraseProof" }` | `{ "ok": true, "signInAgain": true }`.                                                                                 |
-| `PUT /api/auth/e2ee/keyring`             | Session and a signed request.                                 | `{ "sealedKeyring" }`                               | `{ "ok": true }`.                                                                                                      |
-| `POST /api/auth/e2ee/recovery/challenge` | An email reset link.                                          | `{ "token": "…" }`                                  | `{ "hasKeys": true, "accountPublicKey", "protocolVersion", "sealedKeyring", "challenge" }`, or `{ "hasKeys": false }`. |
-| `POST /api/auth/e2ee/recovery`           | An email reset link and a signed request.                     | `{ "token", "account", "sealedKeyring" }`           | `{ "message": "…" }`.                                                                                                  |
-| `POST /api/auth/e2ee/reset`              | An email reset link.                                          | `{ "token", "account" }`                            | `{ "message": "…" }`.                                                                                                  |
+| Method and path                          | Authentication                                                | Request body                                                           | Response                                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/auth/e2ee/challenge`          | Public.                                                       | `{ "identifier": "…" }`                                                | `{ "method": "passphrase", "passphraseSalt", "protocolVersion", "challenge" }`, or `{ "method": "password" }`.                            |
+| `POST /api/auth/e2ee/session-challenge`  | Session; the account has keys.                                | None; a body is ignored.                                               | `{ "challenge", "identifier", "passphraseSalt", "protocolVersion", "accountPublicKey" }`.                                                 |
+| `POST /api/auth/e2ee/unlock`             | Session and an unlock signature.                              | `{ "challenge", "signature" }`                                         | `{ "accountPublicKey", "protocolVersion", "wrappedRoot", "sealedKeyring" }`.                                                              |
+| `GET /api/auth/e2ee/keys`                | Session.                                                      | None.                                                                  | `{ "hasKeys", "identifier", "protocolVersion", "accountPublicKey", "hasKeyring" }`.                                                       |
+| `POST /api/auth/e2ee/keys`               | Session from a sign-in in the last five minutes; no keys yet. | `{ "account" }`                                                        | `{ "ok": true }`.                                                                                                                         |
+| `POST /api/auth/e2ee/rotation`           | Session, a signed request, and a passphrase proof.            | `{ "account", "sealedKeyring", "passphraseProof", "folders", "tags" }` | `{ "ok": true, "signInAgain": true }`.                                                                                                    |
+| `PUT /api/auth/e2ee/keyring`             | Session and a signed request.                                 | `{ "sealedKeyring" }`                                                  | `{ "ok": true }`.                                                                                                                         |
+| `POST /api/auth/e2ee/recovery/challenge` | An email reset link.                                          | `{ "token": "…" }`                                                     | `{ "hasKeys": true, "accountPublicKey", "protocolVersion", "sealedKeyring", "folders", "tags", "challenge" }`, or `{ "hasKeys": false }`. |
+| `POST /api/auth/e2ee/recovery`           | An email reset link and a signed request.                     | `{ "token", "account", "sealedKeyring", "folders", "tags" }`           | `{ "message": "…" }`.                                                                                                                     |
+| `POST /api/auth/e2ee/reset`              | An email reset link.                                          | `{ "token", "account" }`                                               | `{ "message": "…" }`.                                                                                                                     |
 
 `sealedKeyring` is a stored-form string or `null`, and the field itself is required wherever it appears. The session routes also work for an account that must still verify its email address, because an account sets up and unlocks its keys before anything else.
 
@@ -189,7 +189,14 @@ On success, in one transaction:
 
 The authenticator, recovery codes, passkeys, and the passkey requirement are not changed. The route is limited to the 20 management attempts per account per 15 minutes, and to 30 rotation attempts per account and 100 per IP.
 
-The request does not yet carry new sealed records for folders and tags. Those arrive with encrypted folders and tags, and until then a body that carries them is refused as an unknown field.
+The request also carries the records of the library that are sealed with a key from the account key (section 8.3.3, step 6):
+
+- `folders`: `[{ "id", "sealedFolderPrivateKey" }]`, a new sealed copy of the private key of each folder that has keys. The key pairs of the folders do not change.
+- `tags`: `[{ "id", "sealedTagMetadata" }]`, the name and rule of each sealed tag, sealed again.
+
+Both default to empty lists. The request must cover exactly the folders that have keys and the tags that are sealed, no fewer and no others. If it does not, the answer is `409` with `code: "library_records_incomplete"` and nothing changes: a record left out would stay sealed with a key the account no longer has. The body can be up to 4 MiB, for up to 5,000 folders and 2,000 tags.
+
+Account stanzas of files are not part of the request. The browser moves them to the new key afterwards, in batches, through [`/api/files/stanzas`](./files#rotation-and-reset), and then stores a keyring without the old key.
 
 ### Keyring update
 
