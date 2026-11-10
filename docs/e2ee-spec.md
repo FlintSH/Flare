@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 14. Not implemented. Not reviewed.            |
+| Status  | Draft 15. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -176,8 +176,9 @@ These limits are accepted. The public documentation must state them.
 
 1. **Served code.** The server supplies the browser application. An attacker
    who changes the served code can steal keys. No web application can prevent
-   this. Script clients with a pinned public key do not have this limit for
-   uploads.
+   this. The "Custom head" setting of an administrator is served code too
+   (section 13.1). Script clients with a pinned public key do not have this
+   limit for uploads.
 2. **No sender authentication.** A person who knows the account public key can
    create a file that decrypts correctly. The server always knows this key.
    This is deliberate. It gives deniability and it keeps secrets off the
@@ -480,8 +481,10 @@ The client must ask for the passphrase before each of these operations:
 A signed request authorizes an operation that changes key material. It is
 an addition to the session. It does not replace the session.
 
-A signed request must not create a session or a bearer token. See section
-15, question 5.
+A signed request must not create a session or a bearer token. The browser
+stores the account private key. A person who steals it must not be able to
+sign in without the passphrase and without the second factor. No client in
+this document needs such a sign-in.
 
 Procedure:
 
@@ -576,18 +579,21 @@ safe to use.
 
 ### 7.2 Header
 
-| Field             | Size     | Content                                                                    |
-| ----------------- | -------- | -------------------------------------------------------------------------- |
-| `magic`           | 8 bytes  | ASCII `FLAREE2E`                                                           |
-| `format_version`  | 1 byte   | `0x01`                                                                     |
-| `chunk_size_log2` | 1 byte   | `16`. The chunk size is 65536 bytes.                                       |
-| `nonce_prefix`    | 16 bytes | `random(16)`                                                               |
-| `metadata_length` | 4 bytes  | Length of `sealed_metadata`, little-endian.                                |
-| `sealed_metadata` | variable | `seal(metadata_key, random(24), magic \|\| format_version, file_metadata)` |
+| Field             | Size     | Content                              |
+| ----------------- | -------- | ------------------------------------ |
+| `magic`           | 8 bytes  | ASCII `FLAREE2E`                     |
+| `format_version`  | 1 byte   | `0x01`                               |
+| `chunk_size_log2` | 1 byte   | `16`. The chunk size is 65536 bytes. |
+| `nonce_prefix`    | 16 bytes | `random(16)`                         |
 
-`file_metadata` is the encrypted metadata of the file (section 9).
+The header has 26 bytes. It does not change after the upload.
 
-`header_hash = blake3_hash(header)` is the hash of all header bytes.
+`header_hash = blake3_hash(header)` is the hash of the 26 header bytes.
+
+**Reason for a header without the file name:** `header_hash` is in each
+chunk tag and in each stanza. If the name were in the header, a new name
+would need a new tag for each chunk and a new stanza for each recipient.
+The name is in a separate record (section 9.1).
 
 ### 7.3 Content
 
@@ -625,7 +631,7 @@ which has a limit of 256 GiB in the common variant.
 - `final_flag` prevents truncation.
 - `header_hash` in the tag prevents the move of a chunk to a different file.
 - A client can read one chunk without the others. The stored chunk starts at
-  offset `length(header) + chunk_index * 65568`.
+  offset `26 + chunk_index * 65568`.
 
 ## 8. Stanzas
 
@@ -968,28 +974,43 @@ type the password to read the file.
 
 **Goal:** the server must not learn what a file is from its name or type.
 
-**Idea:** put the name and the type in the encrypted file header. Leave only
-the values that the server needs for its work.
+**Idea:** encrypt the name and the type with a key from `file_key`. Leave
+visible only the values that the server needs for its work.
 
 **Restriction:** the file name is in the URL, the storage path, the audit
 records and the database today. The server searches and sorts by name.
 
 ### 9.1 Encrypted metadata
 
-`file_metadata` in the file header is a JSON object with these fields:
+`file_metadata` is a JSON object with these fields:
 
 | Field  | Content            |
 | ------ | ------------------ |
 | `name` | The file name      |
 | `type` | The full MIME type |
 
+`sealed_metadata = seal(metadata_key, random(24), header_hash, file_metadata)`
+
 A person who has `file_key` can read `file_metadata`. The server cannot.
 
-The server keeps a copy of the file header in the database. The header
-contains `sealed_metadata`. The server sends the header in each list of
-files. Without the copy, a list would need a read of each file in the
-storage. The client needs the full header to calculate `header_hash`, and it
-needs `header_hash` to open a stanza.
+`sealed_metadata` is not part of the stored file. The server keeps it in
+the database, together with a copy of the 26-byte header. The server sends
+both in each list of files. The client needs the header to calculate
+`header_hash`, and it needs `header_hash` to open a stanza and
+`sealed_metadata`.
+
+The server must accept a `sealed_metadata` only:
+
+- in the upload request of the file, or
+- from a session of the owner.
+
+Results:
+
+- The owner can change the name of a file with a new `sealed_metadata`. The
+  content and the stanzas do not change. Flare has no rename function today.
+  This format permits one.
+- A stored file does not contain its name. A person who restores a file
+  from the storage only, without the database, gets a file without a name.
 
 ### 9.2 Metadata that stays visible to the server
 
@@ -1284,7 +1305,7 @@ text. The data can be large. An estimate for 50 000 screenshots is 50 MB to
 
 #### 9.8.1 Local cache of encrypted records
 
-The client keeps the header, the account stanza and
+The client keeps the header, `sealed_metadata`, the account stanza and
 `sealed_ocr_text` of each file in the Origin Private File System (OPFS) of
 the browser.
 
@@ -1328,7 +1349,7 @@ files" operation of a tag rule.
 **AGREED**
 
 1. Make `file_key`.
-2. Build the header (section 7.2).
+2. Build the header (section 7.2) and `sealed_metadata` (section 9.1).
 3. Encrypt the content (section 7.3).
 4. Make an account stanza for the account of the user (section 8.1).
 5. If the file is public and in a folder, make a folder stanza (section
@@ -1336,8 +1357,8 @@ files" operation of a tag rule.
 6. If the file has a password, make a password stanza (section 8.2).
 7. If the client did the work, make `sealed_ocr_text` (section 9.6) and
    `sealed_thumbnail` (section 12.1), and apply the tag rules (section 9.5).
-8. Send the encrypted file, the stanzas and the results of step 7 to the
-   server. Tell the server which work of step 7 is done.
+8. Send the encrypted file, `sealed_metadata`, the stanzas and the results
+   of step 7 to the server. Tell the server which work of step 7 is done.
 9. The server returns the file identifier.
 
 ### 10.2 Upload from a script client
@@ -1604,9 +1625,10 @@ it.
    permits scripts and WebAssembly only from the origin of the application.
    The framework of Flare puts inline scripts in each page. Thus the policy
    must permit an inline script only if it has the random nonce of that
-   response. It must block each other inline script.
-2. **PROPOSED.** The "Custom head" setting must not accept `script` or
-   `base` elements (section 13.1).
+   response. It must block each other inline script. The scripts of the
+   "Custom head" setting get the nonce (section 13.1).
+2. **AGREED.** The "Custom head" setting continues to operate as today,
+   with scripts (section 13.1).
 3. **AGREED.** The server must not write a file key or a share link fragment
    to a log, an audit record, a webhook or a URL query.
 4. **AGREED.** A moderator permission must not give access to encrypted
@@ -1617,51 +1639,35 @@ it.
 
 ### 13.1 The "Custom head" setting
 
-**PROPOSED**. The project owner must decide.
+**AGREED** (decision of birb). The project owner can change it.
 
 An administrator can type HTML in this setting. Flare puts it in the head of
-each page, also the share pages. Today it accepts `script`, `style`, `link`,
+each page, also the share pages. It accepts `script`, `style`, `link`,
 `meta`, `base`, `noscript`, `template` and `title` elements. Administrators
 use it for analytics programs, fonts, site verification and small changes.
 
-The setting is a value in the database. A person who can write that value
-can add a script to each page. That script can read the account private key
-of each user who opens the application, and the key in each share link. No
-change of the application code is necessary. This is the easiest attack on
-the design after a compromise of the server.
+**Decision:** the setting continues to operate as today. The application
+gives the nonce of the response to each `script` element of the setting.
+Thus the Content-Security-Policy of requirement 1 permits these scripts,
+also when they come from a different origin.
 
-Proposal:
+**Reason:** in most instances the administrator is the person who operates
+the server. That person can change the code of the application. A
+restriction of this setting prevents nothing for that person, and it removes
+a function that administrators use.
 
-- The setting accepts `style`, `link`, `meta`, `title` and `noscript`.
-- The setting rejects `script` and `base`. A `base` element changes the
-  address from which the page loads its own scripts.
-- The Content-Security-Policy of requirement 1 stops a script also if a
-  person writes it directly in the database.
-- Custom CSS stays.
+**Accepted limit.** A script of this setting operates in each page. It can
+read the account private key of each user who opens the application, and
+the key in each share link. Thus these persons can read keys without a
+change of the application code:
 
-Cost: an administrator cannot add an analytics script in the settings. An
-alternative is a list of permitted script origins in an environment
-variable. A person who can change the environment can change the code too,
-thus this adds no new risk of that type. But each permitted origin can read
-keys. The documentation would have to say this.
+- a person who controls an administrator account of the application, for
+  example after a stolen session,
+- a person who can write to the database,
+- each site from which a script of this setting comes.
 
-**Objection (birb):** in most instances the administrator is the person who
-operates the server. That person can change the code. For that person the
-restriction prevents nothing.
-
-**Where the restriction does have an effect:**
-
-- an administrator account in the application that a different person
-  controls, for example after a stolen session. That person has no access to
-  the server, but can change this setting.
-- a person who can write to the database and cannot change the code.
-
-**Conflict with requirement 1.** Requirement 1 is agreed. A
-Content-Security-Policy that blocks scripts without the nonce and scripts
-from other origins stops the scripts of this setting, if the setting accepts
-them or not. Thus the two decisions are one decision: either the policy is
-strict and scripts in this setting do not operate, or the application gives
-the nonce to the scripts of this setting and permits their origins.
+This is a part of limit 1 of section 3.3. The public documentation must say
+that the "Custom head" setting is equal to a change of the application code.
 
 ## 14. Migration of an existing instance
 
@@ -1700,7 +1706,8 @@ key. The browser of the user does not have to download them.
 For each file, the server:
 
 1. makes `file_key`,
-2. builds the header with the name and the type (section 7.2),
+2. builds the header (section 7.2) and `sealed_metadata` with the name and
+   the type (section 9.1),
 3. encrypts the content (section 7.3),
 4. makes the account stanza and, if the file is public and in a folder, the
    folder stanza,
@@ -1765,25 +1772,13 @@ after the upgrade.
 
 ## 15. Open questions
 
-1. **Custom head and the Content-Security-Policy.** Section 13.1. The
-   project owner must decide.
-2. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
+1. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
    necessary.
-3. **Program for script clients.** Language, platforms and how users get it
-   (section 10.4).
-4. **Public upload links.** This feature is not merged. It must use the
+2. **Program for script clients.** A compiled program that the project
+   builds for each platform is agreed. The language and the platforms are
+   not decided (section 10.4).
+3. **Public upload links.** This feature is not merged. It must use the
    upload procedure of section 10.2.
-5. **Sign-in with the account key.** An earlier draft let a signed request
-   create a session or a bearer token. Draft 14 removes this (section 6.6).
-   Reason: the browser stores the account private key. A person who steals
-   it could sign in without the passphrase and without the second factor.
-   No client in this document needs that sign-in. The authors must confirm.
-6. **File name in the header.** The name is in the header, and
-   `header_hash` is in each chunk tag and in each stanza. Thus a new name
-   would need a new tag for each chunk and a new stanza for each recipient.
-   Flare cannot rename a file today, thus this is not a defect now. If a
-   rename function is wanted later, `sealed_metadata` must move out of the
-   header before the format is fixed.
 
 All other questions of the earlier drafts are closed. The change log shows
 when.
@@ -1807,3 +1802,4 @@ when.
 | 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                                                                                                                                                                                                                                   |
 | 13    | 2026-11-10 | Closed: file address, webhook version 2, token hashes, old tool configurations upload as plain, existing files after a prompt. Custom head stays open with the objection and the conflict with the script policy.                                                                                                                                                                                        |
 | 14    | 2026-11-10 | Review of the full document. Corrections: random nonce for `sealed_link_secret`; the folder key copy of the owner uses a secret key; a rotation needs a proof of the passphrase; a signed request cannot create a session; the script policy permits inline scripts with a nonce; the server stores the full header. New: reset without the mnemonic, limit 8, three open questions. Stale text removed. |
+| 15    | 2026-11-10 | The file name moves out of the header into a separate sealed record. The header has 26 bytes. No sign-in with the account key. The "Custom head" setting continues to operate with scripts, as an accepted limit. Reset without the mnemonic is agreed.                                                                                                                                                  |
