@@ -2272,6 +2272,95 @@ for each type of file and the default selection.
   operator must delete or replace them. The documentation must say this.
 - Files get the flag `thumbnail_pending`. The browser makes thumbnails later.
 
+**PROPOSED.** These rules complete the procedure.
+
+1. **Who starts the job.** Only a session of the owner starts the job. A
+   script client cannot start it. An administrator cannot start it for a
+   different account. The job needs the `account_public_key` and the
+   decision of that person.
+2. **The selection.** The server stores the selection of the user: `none`,
+   `private` or `all`. `private` means each private file that has no
+   server-side password. A job for `private` does not encrypt a file that
+   the owner made public or gave a password before the job got to it. The
+   user can change the selection later. The user can also request the
+   encryption of single plain files. A new selection replaces the jobs that
+   did not start. The application asks only if the account has plain files.
+3. **Before the server starts.** The server starts no file of an account
+   while a folder of the account has no `folder_public_key` or a tag has no
+   `sealed_tag_metadata`. The jobs wait. The browser of the owner makes
+   these records first.
+4. **Order of the steps for one file.** The server:
+   1. records the path of the new ciphertext object, before it writes the
+      first byte,
+   2. reads the plaintext as a stream, encrypts it, and writes the
+      ciphertext to the new path,
+   3. reads the ciphertext again and decrypts it; the length and a hash of
+      the result must be equal to those of the bytes that it read,
+   4. changes the file record in one database transaction,
+   5. deletes the plaintext object.
+
+   The transaction of step 4 locks the account and the file. It makes
+   `sealed_metadata`, the stanzas and `sealed_ocr_text` from the record as
+   it is at that time, with the `account_public_key` of that time. Thus a
+   key rotation or a change by the owner during the job cannot give an old
+   record. The same transaction records that the plaintext object must be
+   deleted. Thus a stop between step 4 and step 5 does not leave the
+   plaintext.
+
+5. **A stop at any time.** Before the transaction of rule 4, the file is the
+   plain file. After it, the file is the encrypted file. No other state
+   exists. A later attempt deletes the object that a stopped attempt wrote.
+   If the owner deletes the file during the job, the job deletes its
+   ciphertext and stops. Two workers cannot change one file: each attempt
+   has a lease, and the transaction of rule 4 checks it.
+6. **`file_key`.** `file_key` exists only in the memory of the attempt for
+   one file. The server does not store it and does not write it to a log.
+   The server erases it when the attempt ends.
+7. **Address.** The file gets a new address with a random `file_id`
+   (section 10.3). The old address gives the same response as an address
+   that never existed. The server keeps no record of the old address,
+   because the old address contains the file name.
+8. **Server-side password.** The server makes no password stanza. The
+   encrypted file has no password, and the server makes it private. The
+   server stores the visibility that the file had, and the application
+   shows a mark on the file. When the owner stores a password stanza, the
+   server sets that visibility again and removes the mark. When the owner
+   makes the file public without a password, the server removes the mark.
+   Thus the file is not open to more people than before, unless the owner
+   decides it.
+9. **Folder stanza.** A public file without a password in a folder gets a
+   `folder_file_stanza` for the `folder_public_key`. If the folder waits
+   for a new key pair (section 9.4.5), the browser of the owner makes the
+   stanza later (section 9.4.7).
+10. **Thumbnail.** This rule replaces the last limit above for images. The
+    server has the plaintext during the job. For a raster image of at most
+    25 MiB the server makes the thumbnail of section 12.1 and stores it as
+    `sealed_thumbnail`. The file then does not get `thumbnail_pending`.
+    Each other file gets `thumbnail_pending`, and so does an image for
+    which the server cannot make the thumbnail. The server does not draw
+    SVG. Thus the browser does not download each image of a large library
+    again.
+11. **Other flags.** The file gets `rules_pending`, if the account has a tag
+    with a sealed record. An image for which the server has no text gets
+    `ocr_pending`, if the instance reads the text of images.
+12. **What stays and what the server deletes.** The identifier of the file,
+    its tags, folder, visibility, expiry, counters and upload time stay.
+    The server deletes the plain name from the file record, from the
+    scheduled expiry of the file, from the audit records of the file and
+    from the stored webhook events of the file. It deletes the thumbnails
+    of the plain file that the application cached. The logs and the audit
+    record of the job contain the identifier of the file and no name.
+13. **Quota.** The server counts the size of the ciphertext. The quota does
+    not stop the encryption of a file that is stored.
+14. **Errors.** After 3 failed attempts for a file the server stops. The
+    application shows the file to the owner with a reason from a fixed
+    list. The file is still the plain file. The owner can request a new
+    attempt.
+15. **What the application must not say.** The server had the plaintext of
+    each of these files. The application and the documentation must not
+    say that the operator was never able to read a file that the server
+    encrypted.
+
 ### 14.3 Accounts that do not come back
 
 **AGREED**
