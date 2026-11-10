@@ -10,6 +10,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { PrismaClient } = require('@prisma/client')
 const { signIn } = require('../shared/passphrase-accounts.cjs')
 const axe = require('../../docs/site/node_modules/axe-core')
 const expect = baseExpect.configure({ timeout: 45000 })
@@ -184,18 +185,26 @@ async function fixtures(ctx) {
       `Upload ${name}: ${await response.text()}`
     )
   }
-  const folder = (
-    await api(ctx, '/api/folders', 'POST', {
-      name: 'Campaigns',
-      parentId: null,
+  // An account with keys keeps folder and tag names sealed, and the server
+  // refuses a plain name from a request. The fixture rows are written the
+  // way an installation from before encryption has them: the browser of the
+  // owner seals their names in the background, as it does after an upgrade.
+  // So later checks read names from the page, not from the API.
+  const prisma = new PrismaClient()
+  let folder, tag
+  try {
+    const userId = 'archive-demo-alex'
+    folder = await prisma.vaultFolder.create({
+      data: { userId, name: 'Campaigns', normalizedName: 'campaigns' },
+      select: { id: true },
     })
-  ).data
-  const tagResponse = await ctx.request.post(origin + '/api/tags', {
-    headers: { Origin: origin },
-    data: { name: 'Approved' },
-  })
-  assert.ok(tagResponse.ok(), await tagResponse.text())
-  const tag = (await tagResponse.json()).data
+    tag = await prisma.vaultTag.create({
+      data: { userId, name: 'Approved', normalizedName: 'approved' },
+      select: { id: true },
+    })
+  } finally {
+    await prisma.$disconnect()
+  }
   const profile = (
     await api(
       ctx,
@@ -414,19 +423,24 @@ async function browseAndExtract(browser, state, fixture) {
     page.getByRole('heading', { name: 'Archive extracted', exact: true })
   ).toBeVisible()
   await shot(page, 'extract-result')
+  // The wrapper is the only folder inside the destination. Its name may be
+  // sealed by now, so the page below shows it.
   const folders = (await api(ctx, '/api/folders')).data
-  const root = folders.find((folder) => folder.name === 'Field kit unpacked')
-  assert.equal(root.parentId, fixture.folder.id)
+  const wrappers = folders.filter(
+    (folder) => folder.parentId === fixture.folder.id
+  )
+  assert.equal(wrappers.length, 1)
+  const root = wrappers[0]
   const files = (await api(ctx, '/api/files?limit=100')).data
   const extracted = files.filter(
     (file) => !fixture.files.some((source) => source.id === file.id)
   )
   assert.equal(extracted.length, 4)
   assert.ok(extracted.every((file) => file.visibility === 'PRIVATE'))
-  assert.ok(
-    folders.some(
-      (folder) => folder.parentId === root.id && folder.name === 'empty'
-    )
+  // guide, images, drafts and the empty directory.
+  assert.equal(
+    folders.filter((folder) => folder.parentId === root.id).length,
+    4
   )
   const readme = extracted.find((file) => file.name === 'README.md')
   assert.equal(readme.mimeType, 'text/markdown')
@@ -436,10 +450,18 @@ async function browseAndExtract(browser, state, fixture) {
   assert.ok((await content.text()).includes('A small project handoff'))
   await page.getByRole('link', { name: 'Open folder', exact: true }).click()
   await page.waitForURL((url) => url.searchParams.get('folder') === root.id)
-  const guide = page
-    .getByRole('region', { name: 'Subfolders', exact: true })
-    .getByRole('button', { name: 'Open folder guide', exact: true })
+  const subfolders = page.getByRole('region', {
+    name: 'Subfolders',
+    exact: true,
+  })
+  const guide = subfolders.getByRole('button', {
+    name: 'Open folder guide',
+    exact: true,
+  })
   await expect(guide).toBeVisible()
+  await expect(
+    subfolders.getByRole('button', { name: 'Open folder empty', exact: true })
+  ).toBeVisible()
   await shot(page, 'extracted-folder')
   await guide.click()
   await expect(
@@ -670,12 +692,17 @@ async function additionalChecks(browser, state, fixture) {
   assert.equal(member.status(), 200)
   assert.equal(member.headers()['x-content-type-options'], 'nosniff')
   assert.deepEqual(await member.body(), fixture.png)
-  await api(
-    ctx,
-    `/api/files/${zip.id}/archive/extract`,
-    'POST',
-    { folderId: fixture.folder.id, name: 'Field kit unpacked' },
-    409
+  // The server refuses a wrapper name that it can read on a sibling. It
+  // cannot read a sealed name, so the two requests come one after the other,
+  // before a browser seals the first; the extract dialog checks sealed
+  // siblings itself (see browseAndExtract).
+  const twice = { folderId: fixture.folder.id, name: 'Extracted twice' }
+  await api(ctx, `/api/files/${zip.id}/archive/extract`, 'POST', twice)
+  const filesBefore = (await api(ctx, '/api/files?limit=100')).data.length
+  await api(ctx, `/api/files/${zip.id}/archive/extract`, 'POST', twice, 409)
+  assert.equal(
+    (await api(ctx, '/api/files?limit=100')).data.length,
+    filesBefore
   )
   await api(
     ctx,
@@ -714,6 +741,20 @@ async function additionalChecks(browser, state, fixture) {
     .click()
   await shot(mobile.page, 'mobile-extract')
   await accessibleDialog(mobile.page)
+  // A name that a folder in the destination already has is refused, also
+  // when that folder's name is sealed and only this browser can read it.
+  await mobile.page
+    .getByRole('button', { name: 'Campaigns', exact: true })
+    .click()
+  await mobile.page
+    .getByLabel('New folder name', { exact: true })
+    .fill('field kit UNPACKED')
+  await mobile.page
+    .getByRole('button', { name: 'Extract files', exact: true })
+    .click()
+  await expect(mobile.page.getByRole('alert')).toContainText(
+    'A folder with that name already exists here'
+  )
   await mobile.close()
 
   const errorDemo = await demoContext(browser, state, 'errors', false, true)

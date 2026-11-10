@@ -36,7 +36,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 32')
+  await expect(page.getByRole('status')).toContainText('3 of 34')
   await page.getByLabel('Find a capability').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()

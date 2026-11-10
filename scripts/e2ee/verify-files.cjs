@@ -853,6 +853,7 @@ async function testLibrary(alex, keys) {
   )
   // The server makes no thumbnail and reads no text of an encrypted image:
   // the page asks for the sealed thumbnail only, which this browser opens.
+  await expect(page.locator('[data-sealed-thumbnail]').first()).toBeVisible()
   assert.ok(
     !requests.some((request) =>
       /^\/api\/files\/[^/]+\/(thumbnail|ocr)(\?|$)/.test(request.target)

@@ -70,7 +70,7 @@ An empty folder's message suggests only what your role allows: uploading here, o
 
 The destination is chosen for the upload; it is not saved inside an upload profile. If a folder is removed while an upload is running, finalization can fail instead of quietly putting the file somewhere else. Choose a valid destination and retry.
 
-[Archive extraction](./archives#extract-into-your-library) creates a new wrapper folder inside the chosen destination and preserves the archive's subfolders. It requires `files.read`, `files.upload`, and `folders.manage`. With **Private (no profile)**, extracted files stay private even in a shared destination. Explicitly selecting an upload profile can instead publish them with that profile’s visibility and expiration; check the summary before confirming. Choosing **Unfiled** in that flow creates a top-level wrapper rather than leaving the extracted files unfiled.
+[Archive extraction](./archives#extract-into-your-library) creates a new wrapper folder inside the chosen destination and preserves the archive's subfolders. It requires `files.read`, `files.upload`, and `folders.manage`. With **Private (no profile)**, extracted files stay private even in a shared destination. Explicitly selecting an upload profile can instead publish them with that profile’s visibility and expiration; check the summary before confirming. Choosing **Unfiled** in that flow creates a top-level wrapper rather than leaving the extracted files unfiled. The server names the extracted folders from the archive, so they start with plain names; your browser seals them in the background like [folders from before this release](#folder-names-are-encrypted).
 
 ## Share a folder
 

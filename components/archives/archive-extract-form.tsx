@@ -28,6 +28,7 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { folderPath } from '@/lib/folders/navigation'
+import { folderNameTaken } from '@/lib/folders/owned'
 import { FOLDER_NAME_MAX_LENGTH } from '@/lib/folders/schema'
 import { libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
@@ -105,6 +106,20 @@ export function ArchiveExtractForm({
       destinationUnavailable
     )
       return
+    // The server cannot compare the name with a folder whose name is sealed.
+    // This browser reads those names, so it checks them first.
+    if (
+      folderNameTaken(
+        folders.filter((folder) => !folder.locked),
+        name.trim(),
+        folderId
+      )
+    ) {
+      setError(
+        'A folder with that name already exists here. Choose another name.'
+      )
+      return
+    }
     setBusy(true)
     onBusyChange(true)
     setError('')

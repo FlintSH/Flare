@@ -292,7 +292,7 @@ node scripts/archives/seed.cjs
 node scripts/archives/verify-ui.cjs
 ```
 
-The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with the passphrase `Archive-demo-only-2026!`; the seed creates them [with keys](#how-the-browser-suites-sign-in). The seed also raises the disposable instance's upload limit to 4 GB for the optional large-archive checks. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
+The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with the passphrase `Archive-demo-only-2026!`; the seed creates them [with keys](#how-the-browser-suites-sign-in). The suite writes its destination folder and its tag to the database with plain names, as an installation from before encryption has them, because the server refuses a plain name from an account with keys; the browser seals them during the run, so the checks read folder names from the page. The seed also raises the disposable instance's upload limit to 4 GB for the optional large-archive checks. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
 
 Set `FLARE_ARCHIVE_SCREENSHOTS` and `FLARE_ARCHIVE_VIDEOS` to separate temporary output directories to capture evidence. The primary recordings are `archive-browse-extract.webm`, `archive-create.webm`, and `archive-share-browse.webm`; inspect generated screenshots and recordings before replacing sources in `docs/images/archives/` and `.github/assets/archives/`. The shared recording uses an anonymous, unprotected public archive. Protected-file checks produce separate stills; do not capture password values or credential-bearing URLs. Preserve written transcripts in [Demos](/demos), and keep failed or incidental recordings out of Git. `FLARE_ARCHIVE_TEST_ORIGIN` can override the default `http://localhost:3062`, but must remain a disposable HTTP `localhost` origin matching the running app's `NEXTAUTH_URL`.
 
@@ -463,7 +463,11 @@ export NEXTAUTH_SECRET='public-disposable-e2ee-library-demo-secret-2026'
 pnpm exec prisma migrate deploy
 pnpm build
 pnpm exec next start -H 127.0.0.1 -p 3095
-# In another terminal, with the same DATABASE_URL:
+```
+
+In another terminal with the same `DATABASE_URL`, run:
+
+```sh
 node scripts/e2ee/verify-library.cjs
 ```
 
