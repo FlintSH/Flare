@@ -9,12 +9,17 @@ const {
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
 const { TOTP } = require('otpauth')
+const {
+  dismissUnlockPrompt,
+  submitSignIn,
+} = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 45000 })
 
 const origin = process.env.FLARE_SECURITY_TEST_ORIGIN || 'http://localhost:3061'
 if (new URL(origin).hostname !== 'localhost')
   throw new Error('Use a disposable localhost instance, matching NEXTAUTH_URL.')
-const password = 'Security-demo-only-2026!'
+// The seed gives both fixture accounts keys: this is their passphrase.
+const passphrase = 'Security-demo-only-2026!'
 const screenshots = process.env.FLARE_SECURITY_SCREENSHOTS
 const videos = process.env.FLARE_SECURITY_VIDEOS
 const results = []
@@ -105,17 +110,28 @@ async function api(
   return response.json()
 }
 
-async function passwordStep(page, account) {
-  await page.goto(origin + '/auth/login?local=1')
-  await page
-    .getByLabel('Email address', { exact: true })
-    .fill(`security-demo-${account}@example.test`)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+/** The address, then the passphrase. What follows is the caller's to check. */
+async function passphraseStep(page, account) {
+  const method = await submitSignIn(page, expect, {
+    origin,
+    email: `security-demo-${account}@example.test`,
+    secret: passphrase,
+  })
+  assert.equal(method, 'passphrase', 'The fixture account has keys')
 }
 
 async function dashboard(page) {
   await page.waitForURL('**/dashboard', { timeout: 90000 })
+}
+
+/**
+ * The dashboard after a sign-in that carries no passphrase: a passkey or a
+ * passkey recovery code. The keys stay locked and the unlock prompt opens by
+ * itself, so it is put off before the next step.
+ */
+async function lockedDashboard(page) {
+  await dashboard(page)
+  await dismissUnlockPrompt(page, expect)
 }
 
 async function profile(page) {
@@ -152,7 +168,7 @@ async function nextCode(secret) {
 }
 
 async function recoveryLogin(page, code) {
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await page
     .getByRole('button', { name: 'Use a recovery code', exact: true })
     .click()
@@ -200,14 +216,18 @@ async function reenter(page) {
 }
 
 async function proof(dialog, code) {
-  if (!(await dialog.getByLabel('Current password', { exact: true }).count())) {
-    await expect(dialog).toContainText(
-      /Your recent (passkey|recovery code|SSO) sign-in/
-    )
-    return
-  }
-  await dialog.getByLabel('Current password', { exact: true }).fill(password)
-  if (code) {
+  // A passphrase cannot be sent, so no dialog asks for one here: every
+  // change of this run follows a sign-in of the last five minutes.
+  await expect(dialog).toContainText(
+    /Your recent (passphrase|passkey|passkey recovery code|recovery code|SSO) sign-in/
+  )
+  assert.equal(await dialog.locator('input[type="password"]').count(), 0)
+  // After a passphrase sign-in an account with an authenticator still
+  // spends a code.
+  if (
+    code &&
+    (await dialog.getByText('Your recent passphrase sign-in').count())
+  ) {
     await dialog
       .getByRole('button', { name: 'Use a recovery code', exact: true })
       .click()
@@ -226,11 +246,11 @@ async function finishVideo(ctx, page, name) {
 
 async function testTotp(browser) {
   const { ctx, page } = await context(browser)
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await dashboard(page)
   await profile(page)
   await shot(page, 'security-overview', page.locator('#sign-in-security'))
-  await api(ctx, '/api/auth/security/totp/setup', 'POST', { password }, 403, {
+  await api(ctx, '/api/auth/security/totp/setup', 'POST', {}, 403, {
     Origin: 'https://untrusted.example',
   })
   await api(ctx, '/api/auth/security', 'GET', undefined, 401, {
@@ -262,7 +282,7 @@ async function testTotp(browser) {
   await stale.close()
   await reenter(page)
 
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await expect(
     page.getByRole('heading', { name: 'Verify your identity' })
   ).toBeVisible()
@@ -276,11 +296,11 @@ async function testTotp(browser) {
     .click()
   await dashboard(page)
   results.push(
-    'Authenticator enrollment, code login, password-only denial, and revocation of existing sessions'
+    'Authenticator enrollment, code login, passphrase-only denial, and revocation of existing sessions'
   )
 
   await signOut(page)
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await page
     .getByRole('button', { name: 'Use a recovery code', exact: true })
     .click()
@@ -292,7 +312,7 @@ async function testTotp(browser) {
   await dashboard(page)
   assert.equal((await api(ctx, '/api/auth/security')).recoveryCodesRemaining, 9)
   await signOut(page)
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await page
     .getByRole('button', { name: 'Use a recovery code', exact: true })
     .click()
@@ -350,7 +370,7 @@ async function testTotp(browser) {
     })
     .click()
   await reenter(page)
-  await passwordStep(page, 'alex')
+  await passphraseStep(page, 'alex')
   await dashboard(page)
   assert.equal((await api(ctx, '/api/auth/security')).twoFactorEnabled, false)
   results.push(
@@ -373,7 +393,7 @@ async function testPasskeys(browser) {
       automaticPresenceSimulation: true,
     },
   })
-  await passwordStep(page, 'jamie')
+  await passphraseStep(page, 'jamie')
   await dashboard(page)
   await profile(page)
   await page.getByRole('button', { name: 'Add a passkey', exact: true }).click()
@@ -398,7 +418,7 @@ async function testPasskeys(browser) {
     .getByRole('button', { name: 'Sign in with a passkey', exact: true })
     .click()
   const signedRequest = await assertionRequest
-  await dashboard(page)
+  await lockedDashboard(page)
   const replayContext = await browser.newContext({
     storageState: await ctx.storageState(),
   })
@@ -449,7 +469,7 @@ async function testPasskeys(browser) {
   await api(ctx, '/api/files', 'GET', undefined, 401)
   if (videos) await page.waitForTimeout(1500)
   results.push(
-    'Real WebAuthn registration and passwordless login using Chromium virtual authenticator; replay and removed credential rejected; rename and removal verified'
+    'Real WebAuthn registration and passkey login without a passphrase (keys stay locked) using Chromium virtual authenticator; replay and removed credential rejected; rename and removal verified'
   )
   await finishVideo(ctx, page, 'passkey-demo')
 }
@@ -473,7 +493,7 @@ async function testRequiredPasskeys(browser) {
     await page
       .getByRole('button', { name: 'Sign in with a passkey', exact: true })
       .click()
-    await dashboard(page)
+    await lockedDashboard(page)
   }
 
   async function openRecovery() {
@@ -539,7 +559,7 @@ async function testRequiredPasskeys(browser) {
     return codes
   }
 
-  await passwordStep(page, 'jamie')
+  await passphraseStep(page, 'jamie')
   await dashboard(page)
   await profile(page)
   await page.getByRole('button', { name: 'Add a passkey', exact: true }).click()
@@ -552,7 +572,7 @@ async function testRequiredPasskeys(browser) {
     .getByRole('button', { name: 'Create passkey', exact: true })
     .click()
   await reenter(page)
-  await passwordStep(page, 'jamie')
+  await passphraseStep(page, 'jamie')
   await dashboard(page)
   await profile(page)
   const stale = await browser.newContext({
@@ -578,7 +598,7 @@ async function testRequiredPasskeys(browser) {
   await stale.close()
   await reenter(page)
 
-  await passwordStep(page, 'jamie')
+  await passphraseStep(page, 'jamie')
   await expect(page.locator('form [role="alert"]')).toContainText(/passkey/i)
   await api(ctx, '/api/files', 'GET', undefined, 401)
   await shot(page, 'passkey-required-password')
@@ -601,7 +621,7 @@ async function testRequiredPasskeys(browser) {
   await openRecovery()
   await shot(page, 'passkey-recovery-login')
   await submitRecovery(codes[0])
-  await dashboard(page)
+  await lockedDashboard(page)
   status = await api(ctx, '/api/auth/security')
   assert.equal(status.passkeyRequired, true)
   assert.equal(status.passkeyRecoveryCodesRemaining, 9)
@@ -614,7 +634,7 @@ async function testRequiredPasskeys(browser) {
   )
   await api(ctx, '/api/files', 'GET', undefined, 401)
   await submitRecovery(codes[1])
-  await dashboard(page)
+  await lockedDashboard(page)
   await profile(page)
   if (!videos) {
     await page.setViewportSize({ width: 390, height: 844 })
@@ -653,7 +673,7 @@ async function testRequiredPasskeys(browser) {
     /invalid|unable/i
   )
   await submitRecovery(codes[0])
-  await dashboard(page)
+  await lockedDashboard(page)
   await profile(page)
   await page
     .getByRole('button', { name: 'Allow other sign-in methods', exact: true })
@@ -666,7 +686,7 @@ async function testRequiredPasskeys(browser) {
     })
     .click()
   await reenter(page)
-  await passwordStep(page, 'jamie')
+  await passphraseStep(page, 'jamie')
   await dashboard(page)
   status = await api(ctx, '/api/auth/security')
   assert.equal(status.passkeyRequired, false)
@@ -674,7 +694,7 @@ async function testRequiredPasskeys(browser) {
   await profile(page)
   if (videos) await page.waitForTimeout(1500)
   results.push(
-    'Required passkeys block password login, revoke prior sessions, preserve the last passkey, allow one-use emergency recovery with differently capitalized email, invalidate replaced recovery sets, and restore password sign-in only after explicitly disabling enforcement'
+    'Required passkeys block passphrase login, revoke prior sessions, preserve the last passkey, allow one-use emergency recovery with differently capitalized email, invalidate replaced recovery sets, and restore passphrase sign-in only after explicitly disabling enforcement'
   )
   await finishVideo(ctx, page, 'passkey-required-demo')
 }

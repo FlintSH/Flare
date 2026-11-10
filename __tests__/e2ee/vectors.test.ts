@@ -14,9 +14,11 @@ import {
   sealKeyring,
   signInSignature,
   signRequest,
+  unlockSignature,
   unwrapRoot,
   verifySignInSignature,
   verifySignedRequest,
+  verifyUnlockSignature,
   wrapRoot,
 } from '@/lib/e2ee/account'
 import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
@@ -351,6 +353,39 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
       return {
         signature: toHex(signature),
         identifier_normalized_text: normalizeIdentifier(identifier),
+      }
+    },
+
+    unlock_signature(input) {
+      const authPrivateKey = asAuthPrivateKey(bytes(input, 'auth_private_key'))
+      const authPublicKey = ed25519PublicKey<'auth_public_key'>(authPrivateKey)
+      const challenge = asChallenge(bytes(input, 'challenge'))
+      const identifier = text(input, 'identifier_text')
+      const signature = unlockSignature({
+        authPrivateKey,
+        challenge,
+        identifier,
+      })
+      expect(
+        verifyUnlockSignature({
+          authPublicKey,
+          challenge,
+          identifier,
+          signature,
+        })
+      ).toBe(true)
+      // The two requests have different context strings (section 6.3).
+      expect(
+        verifySignInSignature({
+          authPublicKey,
+          challenge,
+          identifier,
+          signature,
+        })
+      ).toBe(false)
+      return {
+        identifier_normalized_text: normalizeIdentifier(identifier),
+        signature: toHex(signature),
       }
     },
 
@@ -761,6 +796,20 @@ function assertDirection(input: Fields, opens: boolean): void {
 }
 
 const REJECT_PROCEDURES: Record<string, (input: Fields) => Rejection> = {
+  // Section 4.4, rule 11: a reader rejects a sealed empty list.
+  sealed_keyring(input) {
+    expect(text(input, 'direction_text')).toBe('open')
+    const accountPrivateKey = asAccountPrivateKey(
+      bytes(input, 'account_private_key')
+    )
+    const accountPublicKey = asAccountPublicKey(
+      bytes(input, 'account_public_key')
+    )
+    const sealedKeyring = bytes(input, 'sealed_keyring')
+    return () =>
+      openKeyring({ accountPrivateKey, accountPublicKey, sealedKeyring })
+  },
+
   file_chunk(input) {
     const context = chunkContext(input)
     const chunkIndex = integer(input, 'chunk_index')
@@ -932,6 +981,7 @@ const REJECT_REASONS: Record<string, E2eeErrorReason[]> = {
   account_stanza: STANZA_REJECT_REASONS,
   password_stanza: STANZA_REJECT_REASONS,
   folder_stanzas: STANZA_REJECT_REASONS,
+  sealed_keyring: ['bad_length'],
 }
 
 function isRejectVector(vector: Vector): boolean {
@@ -1076,6 +1126,7 @@ describe('test vectors of protocol version 1', () => {
     const emptyKeyrings = vectors.filter(
       (vector) =>
         vector.procedure === 'sealed_keyring' &&
+        !isRejectVector(vector) &&
         Array.isArray(vector.input.old_private_keys) &&
         vector.input.old_private_keys.length === 0
     )

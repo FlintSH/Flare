@@ -2,7 +2,9 @@
 // Real browser checks of the account key flows (docs/e2ee-spec.md, sections
 // 5, 6, 8.3 and 14.1) against a production build and an EMPTY disposable
 // database: the run starts with first-run setup. Every request and upload
-// is real. The two places that fake a server answer say so in their result.
+// is real. The two places that fake a server answer say so in their result,
+// and so do the stand-ins for hardware and for an identity provider:
+// Chromium's virtual authenticator, and the OIDC issuer of oidc-issuer.cjs.
 //
 // The run also proves what the browser never sends. It records every
 // request of every page, derives each secret of each account again with
@@ -23,6 +25,8 @@ const { ed25519 } = require('@noble/curves/ed25519.js')
 const { mnemonicToEntropy } = require('@scure/bip39')
 const { wordlist } = require('@scure/bip39/wordlists/english.js')
 const { argon2id } = require('hash-wasm')
+const shared = require('../shared/passphrase-accounts.cjs')
+const { startOidcIssuer } = require('./oidc-issuer.cjs')
 const expect = baseExpect.configure({ timeout: 45000 })
 
 const origin = process.env.FLARE_E2EE_TEST_ORIGIN || 'http://localhost:3091'
@@ -51,6 +55,7 @@ const SECRETS = {
   legacyNew: 'orchid tundra beacon marble 42',
   staleLegacy: 'Cobalt-pioneer-saffron-dune-66',
   invited: 'walnut ember prairie signal 85',
+  sso: 'juniper canyon velvet anchor 63',
 }
 const WEAK = 'sunshine2024'
 const users = {
@@ -60,6 +65,7 @@ const users = {
   legacyWeak: { name: 'Riley', email: 'riley@flare-e2ee.test' },
   stale: { name: 'Sam', email: 'sam@flare-e2ee.test' },
   invited: { name: 'Taylor', email: 'taylor@flare-e2ee.test' },
+  sso: { name: 'Robin', email: 'robin@flare-e2ee.test' },
 }
 
 // ---------------------------------------------------------------- secrets
@@ -326,42 +332,8 @@ async function api(ctx, route, method = 'GET', data, expected = 200) {
   return response.json().catch(() => null)
 }
 
-/** What IndexedDB holds for this origin: the one record of the key store, or null. */
-function storedKeys(page) {
-  return page.evaluate(
-    () =>
-      new Promise((resolve, reject) => {
-        const opening = indexedDB.open('flare-e2ee', 1)
-        opening.onupgradeneeded = () =>
-          opening.result.createObjectStore('account-keys')
-        opening.onerror = () => reject(opening.error)
-        opening.onsuccess = () => {
-          const database = opening.result
-          const reading = database
-            .transaction('account-keys', 'readonly')
-            .objectStore('account-keys')
-            .getAll()
-          reading.onerror = () => reject(reading.error)
-          reading.onsuccess = () => {
-            database.close()
-            const toHex = (bytes) =>
-              Array.from(bytes, (byte) =>
-                byte.toString(16).padStart(2, '0')
-              ).join('')
-            resolve(
-              reading.result.map((record) => ({
-                fields: Object.keys(record).sort(),
-                userId: record.userId,
-                accountPublicKey: toHex(record.accountPublicKey),
-                accountPrivateKey: toHex(record.accountPrivateKey),
-                oldPrivateKeys: record.oldPrivateKeys.map(toHex),
-              }))
-            )
-          }
-        }
-      })
-  )
-}
+/** What IndexedDB holds for this origin: the records of the key store. */
+const storedKeys = shared.storedKeys
 
 /** Nothing but the key store record may hold a secret: no web storage, no other database. */
 async function assertBrowserStorage(page, label) {
@@ -402,16 +374,7 @@ async function assertBrowserStorage(page, label) {
   )
 }
 
-function keysOf(mnemonic) {
-  const accountPrivateKey = deriveKey(
-    'flare e2ee v1 account seed',
-    mnemonicToEntropy(mnemonic, wordlist)
-  )
-  return {
-    accountPrivateKey: hex(accountPrivateKey),
-    accountPublicKey: hex(ed25519.getPublicKey(accountPrivateKey)),
-  }
-}
+const keysOf = shared.keysOfMnemonic
 
 /** The browser holds exactly the keys that `mnemonic` gives, and the old keys of `oldMnemonics`. */
 async function assertUnlocked(page, mnemonic, oldMnemonics = []) {
@@ -460,37 +423,14 @@ async function choosePassphrase(page, passphrase, prefix) {
  * the way a person must (the acknowledgement, then three words typed back),
  * and returns it.
  */
-async function saveRecoveryPhrase(page, name, { wrongFirst = false } = {}) {
-  const list = page.locator('[data-recovery-phrase]')
-  await expect(list).toBeVisible()
-  const words = await list.locator('[data-recovery-word]').allTextContents()
-  assert.equal(words.length, 24, 'The recovery phrase has 24 words')
-  const mnemonic = words.join(' ')
-  mnemonicToEntropy(mnemonic, wordlist) // Throws unless the checksum is valid.
-  seen.mnemonics.add(mnemonic)
-  const next = page.getByRole('button', { name: 'Continue', exact: true })
-  await expect(next).toBeDisabled()
-  if (name) await shot(page, `${name}-recovery-phrase`)
-  await page.getByLabel(/I saved my recovery phrase/).check()
-  await next.click()
-  const inputs = page.locator('input[id^="recovery-word-"]')
-  await expect(inputs).toHaveCount(3)
-  if (name) await shot(page, `${name}-recovery-phrase-check`)
-  const positions = await inputs.evaluateAll((elements) =>
-    elements.map((element) => Number(element.id.replace('recovery-word-', '')))
-  )
-  const submit = page.locator('form button[type="submit"]').last()
-  if (wrongFirst) {
-    for (let index = 0; index < 3; index++)
-      await inputs.nth(index).fill(words[(positions[index] + 1) % 24] + 'x')
-    await submit.click()
-    await expect(page.getByText('Those words do not match')).toBeVisible()
-    if (name) await shot(page, `${name}-recovery-phrase-check-wrong`)
-  }
-  for (let index = 0; index < 3; index++)
-    await inputs.nth(index).fill(words[positions[index]])
-  await submit.click()
-  return mnemonic
+function saveRecoveryPhrase(page, name, { wrongFirst = false } = {}) {
+  return shared.saveRecoveryPhrase(page, expect, {
+    wrongFirst,
+    onPhrase: (mnemonic) => seen.mnemonics.add(mnemonic),
+    capture: async (state) => {
+      if (name) await shot(page, `${name}-${state}`)
+    },
+  })
 }
 
 /** Waits for the request that follows key derivation and records how long the page took to send it. */
@@ -1572,9 +1512,373 @@ async function testAdmin(admin) {
   )
 }
 
+/** Chromium's virtual authenticator: the WebAuthn ceremonies are real, the device is not. */
+async function addVirtualAuthenticator(ctx, page) {
+  const cdp = await ctx.newCDPSession(page)
+  await cdp.send('WebAuthn.enable')
+  await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  })
+}
+
+/**
+ * The state after a sign-in that gave the browser no secret (a passkey, a
+ * passkey recovery code, SSO): a session, the locked notice, the unlock
+ * prompt open by itself, and an empty key store. Then the passphrase opens
+ * the keys of `account.mnemonic`.
+ */
+async function assertLockedThenUnlock(page, ctx, account, capture) {
+  await page.waitForURL(/\/dashboard/)
+  const banner = page.locator('[data-unlock-banner]')
+  await expect(banner).toBeVisible()
+  await expect(banner).toContainText(
+    'Your encryption keys are locked in this browser.'
+  )
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByText('Unlock your encryption keys')).toBeVisible()
+  assert.equal(
+    (await api(ctx, '/api/auth/session')).user.email,
+    account.email,
+    'The sign-in made a session'
+  )
+  const keys = await api(ctx, '/api/auth/e2ee/keys')
+  assert.equal((keys.data ?? keys).hasKeys, true, 'The account has keys')
+  await assertNoStoredKeys(page)
+  if (capture) await shot(page, capture)
+  seen.passphrases.add('not the right passphrase 9')
+  await dialog.locator('#unlock-passphrase').fill('not the right passphrase 9')
+  await dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
+  await expect(
+    dialog.getByText('That passphrase is not correct.')
+  ).toBeVisible()
+  await assertNoStoredKeys(page)
+  seen.passphrases.add(account.passphrase)
+  await dialog.locator('#unlock-passphrase').fill(account.passphrase)
+  await timed(
+    page,
+    'unlock',
+    /\/api\/auth\/e2ee\/session-challenge$/,
+    /\/api\/auth\/e2ee\/unlock$/,
+    () => dialog.getByRole('button', { name: 'Unlock', exact: true }).click()
+  )
+  await expect(dialog).toHaveCount(0)
+  await assertUnlocked(page, account.mnemonic, account.oldMnemonics ?? [])
+}
+
+/** Sections 6.3 and 6.4 after a passkey: the sign-in proves who it is and opens no key. */
+async function testPasskey(browser) {
+  const account = {
+    email: users.invited.email,
+    passphrase: SECRETS.invited,
+    mnemonic: phrases.invited,
+  }
+  const { ctx, page } = await context(browser)
+  await addVirtualAuthenticator(ctx, page)
+  await signIn(page, account.email, account.passphrase)
+  await assertUnlocked(page, account.mnemonic)
+
+  // Register a passkey. The passphrase sign-in of a moment ago is the proof.
+  const security = `${origin}/dashboard/profile#sign-in-security`
+  await page.goto(security)
+  await page.getByRole('button', { name: 'Add a passkey', exact: true }).click()
+  let dialog = page.getByRole('dialog')
+  await dialog.getByLabel('Passkey name', { exact: true }).fill('Taylor’s key')
+  await expect(
+    dialog.getByText('Your recent passphrase sign-in confirms')
+  ).toBeVisible()
+  await expect(dialog.locator('input[type="password"]')).toHaveCount(0)
+  await dialog
+    .getByRole('button', { name: 'Create passkey', exact: true })
+    .click()
+  await expect(
+    page.getByRole('heading', { name: 'Your security settings are updated' })
+  ).toBeVisible()
+  await page.getByRole('button', { name: 'Sign in again', exact: true }).click()
+  await page.waitForURL(/\/auth\/login/)
+  await assertNoStoredKeys(page)
+
+  // Sign in with the passkey: a session, and no key.
+  let before = requests.length
+  await page
+    .getByRole('button', { name: 'Sign in with a passkey', exact: true })
+    .click()
+  await assertLockedThenUnlock(page, ctx, account, 'passkey-sign-in-locked')
+  const afterPasskey = requests.slice(before).map((request) => request.url)
+  assert.ok(
+    afterPasskey.some((url) => url.endsWith('/api/auth/callback/passkey')),
+    'The sign-in used the passkey provider'
+  )
+  assert.ok(
+    !afterPasskey.some((url) => url.endsWith('/api/auth/callback/passphrase')),
+    'The unlock is no second sign-in'
+  )
+  // The unlock is no sign-in: the session still says passkey, which is what
+  // the identity checks read.
+  assert.equal((await api(ctx, '/api/auth/security')).canUseRecentPasskey, true)
+  // A second tab reads the keys that the first one unlocked.
+  const second = await ctx.newPage()
+  await second.goto(`${origin}/dashboard`)
+  await expect(
+    second.getByRole('button', { name: 'Account menu' })
+  ).toBeVisible()
+  await assertUnlocked(second, account.mnemonic)
+  await second.close()
+  results.push(
+    'A passkey of Chromium’s virtual authenticator, registered with the recent passphrase sign-in as proof, signs in without a passphrase: the session exists, the key store is empty, the locked notice shows and the unlock prompt opens by itself; a wrong passphrase leaves it locked, the right one stores exactly the account key, with no second sign-in, and a second tab reads it'
+  )
+
+  // Require the passkey. The recent passkey sign-in confirms it.
+  await page.goto(security)
+  await page
+    .getByRole('button', { name: 'Require passkey to sign in', exact: true })
+    .click()
+  dialog = page.getByRole('dialog')
+  await expect(dialog).toContainText(
+    'Passphrase, authenticator, and SSO sign-in will stop.'
+  )
+  await dialog
+    .getByRole('button', { name: 'Require passkey', exact: true })
+    .click()
+  const codesDialog = page.getByRole('dialog', {
+    name: 'Save your passkey recovery codes',
+  })
+  const codeItems = codesDialog
+    .getByRole('list', { name: 'Passkey recovery codes' })
+    .locator('li')
+  await expect(codeItems).toHaveCount(10)
+  const codes = await codeItems.allTextContents()
+  await codesDialog.getByRole('checkbox').check()
+  await codesDialog.getByRole('button', { name: 'Done', exact: true }).click()
+  await page.getByRole('button', { name: 'Sign in again', exact: true }).click()
+  await page.waitForURL(/\/auth\/login/)
+  await assertNoStoredKeys(page)
+
+  // The right passphrase is refused, and the form returns to the step that
+  // has the passkey button and the recovery code link.
+  await openLogin(page)
+  await enterIdentifier(page, account.email)
+  await page.getByLabel('Passphrase', { exact: true }).fill(account.passphrase)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await expect(page.locator('form [role="alert"]')).toContainText(
+    'This account requires a passkey.'
+  )
+  await expect(
+    page.getByRole('button', { name: 'Sign in with a passkey', exact: true })
+  ).toBeVisible()
+  await expect(page.getByLabel('Passphrase', { exact: true })).toHaveCount(0)
+  await shot(page, 'passkey-required-passphrase-refused')
+  assert.equal((await api(ctx, '/api/auth/session')).user, undefined)
+  await assertNoStoredKeys(page)
+
+  // A passkey recovery code signs in with the address alone. It opens no key either.
+  const recover = async (code) => {
+    await openLogin(page)
+    await page
+      .getByRole('button', { name: 'Use a passkey recovery code', exact: true })
+      .click()
+    await page.getByLabel('Email', { exact: true }).fill(account.email)
+    await page.getByLabel('Passkey recovery code', { exact: true }).fill(code)
+    await page
+      .getByRole('button', { name: 'Sign in with recovery code', exact: true })
+      .click()
+  }
+  before = requests.length
+  await recover(codes[0])
+  await assertLockedThenUnlock(page, ctx, account, 'passkey-recovery-locked')
+  assert.ok(
+    requests
+      .slice(before)
+      .some((request) =>
+        request.url.endsWith('/api/auth/callback/passkey-recovery')
+      )
+  )
+  let status = await api(ctx, '/api/auth/security')
+  assert.equal(status.passkeyRequired, true)
+  assert.equal(status.hasPassphrase, true)
+  assert.equal(status.passkeyRecoveryCodesRemaining, 9)
+  assert.equal(status.canUseRecentPasskeyRecovery, true)
+  await signOut(page)
+  // A used code signs nobody in.
+  await recover(codes[0])
+  await expect(page.locator('form [role="alert"]')).toContainText(
+    /invalid|unable/i
+  )
+  assert.equal((await api(ctx, '/api/auth/session')).user, undefined)
+
+  // The passkey still signs in while it is required, and the passphrase
+  // still unlocks. Then the requirement is lifted and the passphrase signs in.
+  await openLogin(page)
+  await page
+    .getByRole('button', { name: 'Sign in with a passkey', exact: true })
+    .click()
+  await assertLockedThenUnlock(page, ctx, account)
+  await page.goto(security)
+  await page
+    .getByRole('button', { name: 'Allow other sign-in methods', exact: true })
+    .click()
+  dialog = page.getByRole('dialog')
+  await dialog
+    .getByRole('button', { name: 'Allow other methods', exact: true })
+    .click()
+  await page.getByRole('button', { name: 'Sign in again', exact: true }).click()
+  await page.waitForURL(/\/auth\/login/)
+  await signIn(page, account.email, account.passphrase)
+  await assertUnlocked(page, account.mnemonic)
+  status = await api(ctx, '/api/auth/security')
+  assert.equal(status.passkeyRequired, false)
+  assert.equal(status.passkeyRecoveryCodesRemaining, 0)
+  await ctx.close()
+  results.push(
+    'With a passkey required, the right passphrase is refused and the form returns to the passkey step; a passkey recovery code signs in once with the address alone and leaves the browser locked until the passphrase unlocks it; the passkey keeps signing in; and passphrase sign-in works again only after the requirement is turned off'
+  )
+}
+
+/**
+ * SSO with a stand-in provider (oidc-issuer.cjs). Flare's side is real:
+ * discovery, the code flow with PKCE, the ID token check, the account that
+ * the first sign-in creates. The provider gives the browser no secret, so a
+ * new account must set up encryption and an account with keys must unlock.
+ */
+async function testSso(browser, admin, issuer) {
+  const before = await api(admin.ctx, '/api/settings')
+  await api(admin.ctx, '/api/settings', 'PATCH', {
+    settings: {
+      general: {
+        oidc: {
+          ...before.data.settings.general.oidc,
+          enabled: true,
+          issuer: issuer.url,
+          clientId: issuer.clientId,
+          clientSecret: issuer.clientSecret,
+          buttonText: 'Sign in with SSO',
+          autoProvision: true,
+          requireEmailVerified: true,
+          enforceSso: false,
+        },
+      },
+    },
+  })
+  const claims = {
+    sub: 'robin-at-the-stand-in-provider',
+    email: users.sso.email,
+    email_verified: true,
+    name: users.sso.name,
+  }
+  issuer.signInAs(claims)
+  const { ctx, page } = await context(browser)
+  const signInWithSso = async () => {
+    await openLogin(page)
+    await shot(page, 'sign-in-with-sso')
+    await page.getByRole('button', { name: 'Sign in with SSO' }).click()
+  }
+
+  // The first sign-in creates the account. It has no keys: key setup is the
+  // only page that opens.
+  await signInWithSso()
+  await page.waitForURL(/\/auth\/encryption/)
+  await expect(
+    page.getByRole('heading', { name: 'Set up encryption' })
+  ).toBeVisible()
+  assert.equal(
+    (await api(ctx, '/api/auth/session')).user.email,
+    users.sso.email
+  )
+  const keyStatus = await api(ctx, '/api/auth/e2ee/keys')
+  assert.equal((keyStatus.data ?? keyStatus).hasKeys, false)
+  await page.goto(`${origin}/dashboard`)
+  await page.waitForURL(/\/auth\/encryption/)
+  // The account never had a password: there is none to keep.
+  await expect(page.locator('#key-setup-passphrase')).toBeVisible()
+  await expect(page.getByLabel(/Keep my current password/)).toHaveCount(0)
+  await expect(
+    page.getByText('Your passphrase unlocks your encryption keys')
+  ).toBeVisible()
+  await shot(page, 'key-setup-sso')
+  await choosePassphrase(page, WEAK, 'key-setup')
+  await page.getByRole('button', { name: 'Set up encryption' }).click()
+  await expect(
+    page.getByText('This passphrase is too easy to guess.')
+  ).toBeVisible()
+  seen.passphrases.delete(WEAK)
+  await choosePassphrase(page, SECRETS.sso, 'key-setup')
+  await timed(page, 'key setup', null, /\/api\/auth\/e2ee\/keys$/, () =>
+    page.getByRole('button', { name: 'Set up encryption' }).click()
+  )
+  phrases.sso = await saveRecoveryPhrase(page)
+  await page.waitForURL(/\/dashboard/)
+  await assertUnlocked(page, phrases.sso)
+  assert.equal(
+    (
+      await api(ctx, '/api/auth/e2ee/challenge', 'POST', {
+        identifier: users.sso.email,
+      })
+    ).method,
+    'passphrase'
+  )
+  results.push(
+    'The first SSO sign-in (stand-in provider inside the script; Flare’s OIDC flow is real) creates an account without keys that can open only key setup, offers no password to keep, refuses a weak passphrase, and ends with a recovery phrase and exactly the account key that it gives'
+  )
+
+  // The same person again: the account has keys, the provider opens none.
+  await signOut(page)
+  await signInWithSso()
+  await assertLockedThenUnlock(
+    page,
+    ctx,
+    { email: users.sso.email, passphrase: SECRETS.sso, mnemonic: phrases.sso },
+    'sso-sign-in-locked'
+  )
+  assert.deepEqual(issuer.authorizations, [claims.sub, claims.sub])
+  // For an account with a passphrase the provider's word is no identity
+  // check, and neither is the unlock: a change asks for the passphrase.
+  const status = await api(ctx, '/api/auth/security')
+  assert.equal(status.hasPassphrase, true)
+  assert.equal(status.canUseRecentSso, false)
+  assert.equal(status.canUseRecentPassphrase, false)
+  await page.goto(`${origin}/dashboard/profile#sign-in-security`)
+  await page
+    .getByRole('button', { name: 'Set up authenticator', exact: true })
+    .click()
+  await expect(
+    page.getByRole('dialog').locator('[data-passphrase-confirmation]')
+  ).toBeVisible()
+  await shot(page, 'sso-identity-check-passphrase')
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  // The passphrase of the account signs in on the local form as well.
+  await signOut(page)
+  await signIn(page, users.sso.email, SECRETS.sso)
+  await assertUnlocked(page, phrases.sso)
+  await ctx.close()
+
+  await api(admin.ctx, '/api/settings', 'PATCH', {
+    settings: {
+      general: {
+        oidc: { ...before.data.settings.general.oidc, enabled: false },
+      },
+    },
+  })
+  results.push(
+    'A later SSO sign-in of that account gives a session and a locked browser with the unlock prompt open; a wrong passphrase leaves it locked, the right one stores the account key; an identity check then asks for the passphrase, because neither the provider nor the unlock is one; and the same passphrase signs the account in on the local form'
+  )
+}
+
 async function main() {
   const browser = await chromium.launch({ headless: true })
   const mail = await startMailSink()
+  const issuer = await startOidcIssuer({
+    redirectUri: `${origin}/api/auth/callback/oidc`,
+  })
   try {
     assert.equal(
       (await (await fetch(`${origin}/api/setup/check`)).json()).completed,
@@ -1595,6 +1899,8 @@ async function main() {
     await testRecovery(browser, jamie, mail, totpSecret)
     await testReset(browser, jamie, mail, totpSecret)
     await testAdmin(admin)
+    await testPasskey(browser)
+    await testSso(browser, admin, issuer)
     await assertBrowserStorage(admin.page, 'at the end')
     await assertBrowserStorage(jamie.page, 'at the end')
     await assertNothingSecretWasSent()
@@ -1607,6 +1913,7 @@ async function main() {
       )
   } finally {
     mail.close()
+    issuer.close()
     await browser.close()
   }
 }

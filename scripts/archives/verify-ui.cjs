@@ -10,6 +10,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
 const axe = require('../../docs/site/node_modules/axe-core')
 const expect = baseExpect.configure({ timeout: 45000 })
 
@@ -31,7 +32,8 @@ const { createLargeFixtures } = require('./large-fixtures.cjs')
 
 const screenshots = process.env.FLARE_ARCHIVE_SCREENSHOTS
 const videos = process.env.FLARE_ARCHIVE_VIDEOS
-const password = 'Archive-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Archive-demo-only-2026!'
 const results = []
 
 async function api(
@@ -95,13 +97,11 @@ async function login(browser, account = 'alex') {
     reducedMotion: 'reduce',
   })
   const page = await ctx.newPage()
-  await page.goto(origin + '/auth/login?local=1')
-  await page
-    .getByLabel('Email address', { exact: true })
-    .fill(`archive-demo-${account}@example.test`)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.waitForURL('**/dashboard', { timeout: 90000 })
+  await signIn(page, expect, {
+    origin,
+    email: `archive-demo-${account}@example.test`,
+    secret: passphrase,
+  })
   return ctx
 }
 
@@ -1213,7 +1213,9 @@ async function main() {
   try {
     const authenticated = await login(browser)
     const fixture = await fixtures(authenticated)
-    const state = await authenticated.storageState()
+    // With IndexedDB, so each later context is the same unlocked browser:
+    // the session cookie and the account keys that the sign-in opened.
+    const state = await authenticated.storageState({ indexedDB: true })
     await authenticated.close()
     if (process.env.FLARE_ARCHIVE_SHARE_ONLY !== 'true') {
       await browseAndExtract(browser, state, fixture)

@@ -8,13 +8,22 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const {
+  createAccountRecord,
+  saveRecoveryPhrase,
+  signInContext,
+} = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 45000 })
 const origin = process.env.FLARE_INVITES_TEST_ORIGIN || 'http://localhost:3073'
 if (new URL(origin).hostname !== 'localhost')
   throw new Error('Use a disposable localhost instance.')
 const screenshots = process.env.FLARE_INVITES_SCREENSHOTS
 const videos = process.env.FLARE_INVITES_VIDEOS
-const password = 'Invite-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Invite-demo-only-2026!'
+// What the people who join choose. The form measures it against their own
+// name and address, so it shares no word with them.
+const joinPassphrase = 'harbor walnut lantern comet 47'
 const results = []
 let address = 10
 
@@ -39,23 +48,13 @@ async function api(
   if (response.status() === 204) return null
   return response.json().catch(() => null)
 }
+/** A real sign-in through the form. The session and the unlocked keys stay in the context. */
 async function login(ctx, user) {
-  const csrf = await api(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: `invite-demo-${user}@example.test`,
-        password,
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-      headers: { Origin: origin },
-    }
-  )
-  const result = await response.json()
-  assert.ok(!result.url.includes('error='), 'Fixture sign-in failed')
+  await signInContext(ctx, expect, {
+    origin,
+    email: `invite-demo-${user}@example.test`,
+    secret: passphrase,
+  })
 }
 async function context(browser, { recorded = false, mobile = false } = {}) {
   const ctx = await browser.newContext({
@@ -77,10 +76,11 @@ async function context(browser, { recorded = false, mobile = false } = {}) {
       const install = () => {
         if (!document.documentElement) return
         const style = document.createElement('style')
-        // Captures blur the one-time invite token; every other control is real.
+        // Captures blur the one-time invite token and hide the words of a
+        // recovery phrase; every other control is real.
         style.textContent = `nextjs-portal { display: none !important; }${
           conceal
-            ? ' #created-invite-link { color: transparent !important; text-shadow: 0 0 7px hsl(var(--foreground)) !important; }'
+            ? ' #created-invite-link { color: transparent !important; text-shadow: 0 0 7px hsl(var(--foreground)) !important; } [data-recovery-word] { color: transparent !important; background: #8884 !important; border-radius: 4px; }'
             : ''
         }`
         document.documentElement.appendChild(style)
@@ -142,10 +142,17 @@ async function register(page, link, name, email) {
   ).toBeVisible()
   await type(page.getByLabel('Username'), name)
   await type(page.getByLabel('Email address'), email)
-  await type(page.getByLabel('Password', { exact: true }), password)
-  await type(page.getByLabel('Confirm password'), password)
+  await type(page.locator('#register-passphrase'), joinPassphrase)
+  await type(page.locator('#register-confirmation'), joinPassphrase)
+  await expect(page.locator('#register-strength')).toHaveAttribute(
+    'data-strength-score',
+    /[34]/
+  )
   await pause(page, 900)
   await page.getByRole('button', { name: 'Create account' }).click()
+  // The keys are made in the browser. The recovery phrase comes before the
+  // dashboard: the acknowledgement, then three of its words typed back.
+  await saveRecoveryPhrase(page, expect, { capture: () => pause(page) })
   await page.waitForURL('**/dashboard', { timeout: 45000 })
 }
 
@@ -272,7 +279,11 @@ async function joinFlow(browser, link) {
     anonymous,
     '/api/auth/register',
     'POST',
-    { name: 'No Invite', email: 'none@invite-demo.example', password },
+    {
+      name: 'No Invite',
+      email: 'none@invite-demo.example',
+      account: (await createAccountRecord(joinPassphrase)).wire,
+    },
     404
   )
   await anonymous.close()

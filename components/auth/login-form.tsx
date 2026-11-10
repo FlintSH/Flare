@@ -134,6 +134,17 @@ export function LoginForm({
     show({ name: 'identifier' })
   }
 
+  /**
+   * The account takes a passkey only. The message names the passkey and the
+   * passkey recovery code, and both controls are on the first step, so the
+   * form goes back to it.
+   */
+  function showPasskeyRequired() {
+    forgetSecrets()
+    show({ name: 'identifier' })
+    setError(PASSKEY_REQUIRED)
+  }
+
   function finishSignIn() {
     forgetSecrets()
     // Only allow these fixed callbacks on the current origin.
@@ -247,8 +258,7 @@ export function LoginForm({
         return
       }
       if (result?.error === SignInError.PasskeyRequired) {
-        forgetSecrets()
-        setError(PASSKEY_REQUIRED)
+        showPasskeyRequired()
         return
       }
       if (!result || result.error) {
@@ -297,12 +307,14 @@ export function LoginForm({
         return
       }
       wipePassphraseKeys(passphraseKeys)
+      if (result === 'passkey-required') {
+        showPasskeyRequired()
+        return
+      }
       setError(
-        result === 'passkey-required'
-          ? PASSKEY_REQUIRED
-          : result === 'too-many-attempts'
-            ? TOO_MANY_SIGN_IN_ATTEMPTS
-            : 'Invalid email or passphrase'
+        result === 'too-many-attempts'
+          ? TOO_MANY_SIGN_IN_ATTEMPTS
+          : 'Invalid email or passphrase'
       )
     } catch (cause) {
       setError(
@@ -334,8 +346,7 @@ export function LoginForm({
         return
       }
       if (result === 'passkey-required') {
-        forgetSecrets()
-        setError(PASSKEY_REQUIRED)
+        showPasskeyRequired()
         return
       }
       setError(

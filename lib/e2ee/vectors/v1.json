@@ -501,6 +501,71 @@
       }
     },
     {
+      "procedure": "unlock_signature",
+      "name": "lower case identifier, same inputs as the sign_in_signature vector of that name, different signature",
+      "input": {
+        "auth_private_key": "d58624be649d2083763a1b0a4af9f1b0a77f47ee9cf8c3a50b909787d3e48900",
+        "challenge": "303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+        "identifier_text": "alice@example.com"
+      },
+      "output": {
+        "identifier_normalized_text": "alice@example.com",
+        "signature": "f2cc512300513cd0821094020e94746cc755db1bbb8d1cba15e53d2ee06e6bc561c2b2432d744735354da9c7cb01dbbd86e5480e54f97637715eab4a52740d08"
+      }
+    },
+    {
+      "procedure": "unlock_signature",
+      "name": "identifier with spaces and upper case, same output as the lower case form",
+      "input": {
+        "auth_private_key": "d58624be649d2083763a1b0a4af9f1b0a77f47ee9cf8c3a50b909787d3e48900",
+        "challenge": "303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+        "identifier_text": "  Alice@Example.COM "
+      },
+      "output": {
+        "identifier_normalized_text": "alice@example.com",
+        "signature": "f2cc512300513cd0821094020e94746cc755db1bbb8d1cba15e53d2ee06e6bc561c2b2432d744735354da9c7cb01dbbd86e5480e54f97637715eab4a52740d08"
+      }
+    },
+    {
+      "procedure": "unlock_signature",
+      "name": "tab and no-break space at the ends, a fullwidth letter and mixed case, same output as the lower case form",
+      "input": {
+        "auth_private_key": "d58624be649d2083763a1b0a4af9f1b0a77f47ee9cf8c3a50b909787d3e48900",
+        "challenge": "303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f",
+        "identifier_text": "\t\uff21lice@Example.COM\u00a0"
+      },
+      "output": {
+        "identifier_normalized_text": "alice@example.com",
+        "signature": "f2cc512300513cd0821094020e94746cc755db1bbb8d1cba15e53d2ee06e6bc561c2b2432d744735354da9c7cb01dbbd86e5480e54f97637715eab4a52740d08"
+      }
+    },
+    {
+      "procedure": "unlock_signature",
+      "name": "decomposed upper case non-ASCII letter, second challenge",
+      "input": {
+        "auth_private_key": "d58624be649d2083763a1b0a4af9f1b0a77f47ee9cf8c3a50b909787d3e48900",
+        "challenge": "3870d75cc9f4a876145012bddfbdf6fb1766a869c4f642a1b0b1534c7f591abc",
+        "identifier_text": "E\u0301milie"
+      },
+      "output": {
+        "identifier_normalized_text": "\u00e9milie",
+        "signature": "5e07ac9148a9bacdf7bdd69f313257e4de62f686568a490b0b60d525e84c91796eb6b86fa0876590151a989344017de65af1f02ad296b2e925b1a1707f085203"
+      }
+    },
+    {
+      "procedure": "unlock_signature",
+      "name": "second key, U+FEFF at the start stays",
+      "input": {
+        "auth_private_key": "9eb6dcf87206790547d0c02d02221f038643898eb127b755ea4d0d6c9ea7befd",
+        "challenge": "3870d75cc9f4a876145012bddfbdf6fb1766a869c4f642a1b0b1534c7f591abc",
+        "identifier_text": "\ufeffalice@example.com"
+      },
+      "output": {
+        "identifier_normalized_text": "\ufeffalice@example.com",
+        "signature": "31112a7565ad176b789b1c8ef79085531b6b21f66924c864e3e6053d3f5dfc1e945fe28464c7ad152256c246edd30ad5fa0dda153af7dc482f9a07f764116a05"
+      }
+    },
+    {
       "procedure": "signed_request",
       "name": "POST with a JSON body",
       "input": {
@@ -1474,6 +1539,19 @@
       "output": {
         "keyring_key": "0f63e49fa29f347dac14f76dfa07e376d591b62819eb021a027efedbaabf7c82",
         "sealed_keyring": "d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e85a88ce17443f9bfee0adbe7737cdfb02eca60815e4a3f0174a083fdbb82260862d507ca20688b2c9fbaf61f1e5057b6762ca3b30803c6e037a787f861e1063d202fdff5c741d2daef7410a4158161b86037dea9d9c57795dfad90311088f1c23"
+      }
+    },
+    {
+      "procedure": "sealed_keyring",
+      "name": "rejects a sealed empty list, the tag is correct",
+      "input": {
+        "direction_text": "open",
+        "account_private_key": "ee785d63b369da7764f7eb474bdaae6da8a31e1eadb6b07615ecafbad963c03e",
+        "account_public_key": "da2c911a3d4a215cb131290d1fc43fac5eddea940852cf25ca0ce180f8adde1c",
+        "sealed_keyring": "d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9ddd890bdc6f609e2fa99e876d3df28d4b5a11f6a77f787fa5dfa36bb25142965"
+      },
+      "output": {
+        "error": true
       }
     },
     {

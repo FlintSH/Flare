@@ -13,7 +13,8 @@ A vector whose name starts with `rejects ` or `decrypt_rejects ` has the
 output `{"error": true}`. Before it is written, the strict procedure of
 reference.py must reject its input for the stated cause, and a second check
 shows that no other cause exists: a reader without the rule opens the same
-input, or the input without the change opens.
+input, or the input without the change opens. For the sealed empty keyring,
+`open` of section 4.2 accepts the box and gives the empty byte string.
 """
 
 from __future__ import annotations
@@ -209,10 +210,61 @@ def run_sign_in_signature(i: dict) -> dict:
     message = ref.sign_in_message(challenge, i["identifier_text"])
     check(len(message) == 21 + 32 + 32, "sign-in message length")
     check(ref.ed25519_verify(ref.ed25519_public_key(auth_private_key), message, signature), "sign-in signature")
+    # Section 6.3: a signature for one request is not valid for the other.
+    auth_public_key = ref.ed25519_public_key(auth_private_key)
+    ref.verify_sign_in_signature(auth_public_key, challenge, i["identifier_text"], signature)
+    expect_reason(
+        "signature", "a sign-in signature does not verify as an unlock signature",
+        ref.verify_unlock_signature, auth_public_key, challenge, i["identifier_text"], signature,
+    )
     normalized = ref.normalize_identifier(i["identifier_text"])
     check(message[53:] == ref.blake3_hash(normalized.encode("utf-8")), "sign-in message uses the normalized identifier")
     check(ref.normalize_identifier(normalized) == normalized, "normalization of the normalized identifier changes nothing")
     return {"signature": signature.hex(), "identifier_normalized_text": normalized}
+
+
+def run_unlock_signature(i: dict) -> dict:
+    """Section 6.3 step 4."""
+    auth_private_key, challenge, identifier = b(i["auth_private_key"]), b(i["challenge"]), i["identifier_text"]
+    auth_public_key = ref.ed25519_public_key(auth_private_key)
+    signature = ref.unlock_signature(auth_private_key, challenge, identifier)
+    message = ref.unlock_message(challenge, identifier)
+    normalized = ref.normalize_identifier(identifier)
+    check(len(message) == 20 + 32 + 32, "unlock message length")
+    check(
+        message == b"flare e2ee v1 unlock" + challenge + ref.blake3_hash(normalized.encode("utf-8")),
+        "unlock message uses its context string and the normalized identifier",
+    )
+    check(ref.normalize_identifier(normalized) == normalized, "normalization of the normalized identifier changes nothing")
+    check(len(signature) == 64, "unlock signature has 64 bytes")
+    check(ref.ed25519_verify(auth_public_key, message, signature), "unlock signature")
+    ref.verify_unlock_signature(auth_public_key, challenge, identifier, signature)
+    ref.verify_unlock_signature(auth_public_key, challenge, normalized, signature)
+    # Section 6.3: a signature for one request is not valid for the other.
+    expect_reason(
+        "signature", "an unlock signature does not verify as a sign-in signature",
+        ref.verify_sign_in_signature, auth_public_key, challenge, identifier, signature,
+    )
+    sign_in = ref.sign_in_signature(auth_private_key, challenge, identifier)
+    check(sign_in != signature, "the sign-in signature and the unlock signature are different")
+    ref.verify_sign_in_signature(auth_public_key, challenge, identifier, sign_in)
+    expect_reason(
+        "signature", "a sign-in signature does not verify as an unlock signature",
+        ref.verify_unlock_signature, auth_public_key, challenge, identifier, sign_in,
+    )
+    expect_reason(
+        "signature", "unlock signature, other challenge",
+        ref.verify_unlock_signature, auth_public_key, flip(challenge), identifier, signature,
+    )
+    expect_reason(
+        "signature", "unlock signature, other identifier",
+        ref.verify_unlock_signature, auth_public_key, challenge, identifier + "x", signature,
+    )
+    expect_reason(
+        "signature", "unlock signature, other key",
+        ref.verify_unlock_signature, ref.ed25519_public_key(flip(auth_private_key)), challenge, identifier, signature,
+    )
+    return {"identifier_normalized_text": normalized, "signature": signature.hex()}
 
 
 def run_signed_request(i: dict) -> dict:
@@ -496,7 +548,31 @@ def run_sealed_keyring(i: dict) -> dict:
     )
     # Section 4.4 rule 11: no sealed empty list.
     expect_reason("empty_keyring", "sealed empty keyring", ref.seal_keyring, account_private_key, account_public_key, b(i["nonce"]), [])
+    # Rule 11, the reader: the same key and nonce with an empty list. The box is correct.
+    empty = ref.seal(keyring_key, b(i["nonce"]), account_public_key, b"")
+    check(ref.open_sealed(keyring_key, account_public_key, empty) == b"", "sealed empty keyring is a correct sealed box")
+    expect_reason("empty_keyring", "reader of a sealed empty keyring", ref.open_keyring, account_private_key, account_public_key, empty)
     return {"keyring_key": keyring_key.hex(), "sealed_keyring": sealed_keyring.hex()}
+
+
+def run_sealed_keyring_rejects(i: dict, expect: dict) -> dict:
+    """Section 4.4 rule 11: a reader rejects a sealed empty list.
+
+    The second check shows that only the rule rejects it: `open` of section
+    4.2 accepts the tag and gives the empty byte string.
+    """
+    check(set(i) == {"direction_text", "account_private_key", "account_public_key", "sealed_keyring"}, "sealed_keyring rejection: input fields")
+    check(i["direction_text"] == "open", "direction_text")
+    check(expect["reason"] == "empty_keyring", "a sealed_keyring rejection is for an empty list")
+    account_private_key, account_public_key = b(i["account_private_key"]), b(i["account_public_key"])
+    sealed_keyring = b(i["sealed_keyring"])
+    check(ref.ed25519_public_key(account_private_key) == account_public_key, "keyring key pair")
+    check(len(sealed_keyring) == 56, "a sealed empty list has 56 bytes")
+    expect_reason("empty_keyring", "sealed_keyring open", ref.open_keyring, account_private_key, account_public_key, sealed_keyring)
+    keyring_key = ref.keyring_key_of(account_private_key)
+    check(ref.open_sealed(keyring_key, account_public_key, sealed_keyring) == b"", "a reader without rule 11 opens the sealed empty list")
+    check(ref.seal(keyring_key, sealed_keyring[:24], account_public_key, b"") == sealed_keyring, "the sealed empty list is made as section 8.3.3 step 5 says")
+    return dict(ERROR_OUTPUT)
 
 
 def run_folder(i: dict) -> dict:
@@ -722,6 +798,7 @@ PROCEDURES = {
     "passphrase_keys": run_passphrase_keys,
     "wrapped_root": run_wrapped_root,
     "sign_in_signature": run_sign_in_signature,
+    "unlock_signature": run_unlock_signature,
     "signed_request": run_signed_request,
     "file_keys": run_file_keys,
     "header": run_header,
@@ -837,6 +914,14 @@ def build_inputs() -> list[tuple[str, str, dict, dict | None]]:
     add("sign_in_signature", "user name with an upper case non-ASCII letter", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text=" Émilie ")
     add("sign_in_signature", "the lower case form of the non-ASCII user name, same output", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text="émilie")
 
+    # unlock_signature (section 6.3). The first vector has the key, the challenge and the identifier of
+    # the sign_in_signature vector "lower case identifier": only the context string is different.
+    add("unlock_signature", "lower case identifier, same inputs as the sign_in_signature vector of that name, different signature", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="alice@example.com")
+    add("unlock_signature", "identifier with spaces and upper case, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="  Alice@Example.COM ")
+    add("unlock_signature", "tab and no-break space at the ends, a fullwidth letter and mixed case, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="\t\uff21lice@Example.COM\u00a0")
+    add("unlock_signature", "decomposed upper case non-ASCII letter, second challenge", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text="E\u0301milie")
+    add("unlock_signature", "second key, U+FEFF at the start stays", auth_private_key=fixed("auth private key 2").hex(), challenge=challenge_b.hex(), identifier_text="\ufeffalice@example.com")
+
     # signed_request
     request_key = account_a["account_private_key"]
     add("signed_request", "POST with a JSON body", account_private_key=request_key.hex(), challenge=challenge_a.hex(), method_text="POST", path_text="/api/e2ee/keyring", body=b'{"sealed_keyring":"AQ"}'.hex())
@@ -949,6 +1034,9 @@ def build_inputs() -> list[tuple[str, str, dict, dict | None]]:
     add("sealed_keyring", "one old private key", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xD0).hex(), old_private_keys=[old_keys[2].hex()])
     add("sealed_keyring", "three old private keys, newest first", account_private_key=account_b["account_private_key"].hex(), account_public_key=account_b["account_public_key"].hex(), nonce=fixed("keyring nonce b", 24).hex(), old_private_keys=[key.hex() for key in old_keys])
     add("sealed_keyring", "two old private keys, newest first", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xD1).hex(), old_private_keys=[old_keys[1].hex(), old_keys[2].hex()])
+    # Rule 11: a correctly sealed empty list. seal_keyring refuses to make it, thus `seal` makes it here.
+    empty_keyring = ref.seal(ref.keyring_key_of(account_a["account_private_key"]), sequence(24, 0xD2), account_a["account_public_key"], b"")
+    add_rejects("sealed_keyring", "rejects a sealed empty list, the tag is correct", {"reason": "empty_keyring"}, direction_text="open", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), sealed_keyring=empty_keyring.hex())
 
     # folder
     add("folder", "folder a", folder_private_key=folder_private_key_a.hex(), account_private_key=account_a["account_private_key"].hex(), metadata_nonce=sequence(24, 0xE0).hex(), private_key_nonce=sequence(24, 0xE8).hex(), folder_metadata_text='{"name":"Screenshots"}')
@@ -1009,6 +1097,8 @@ def build_vectors() -> list[dict]:
         elif name.startswith("decrypt_rejects "):
             check(procedure == "file_chunk", "decrypt_rejects is for file_chunk")
             output = run_file_chunk_decrypt_rejects(inputs, expect)
+        elif procedure == "sealed_keyring":
+            output = run_sealed_keyring_rejects(inputs, expect)
         else:
             output = run_rejects(procedure, inputs, expect)
         vectors.append({"procedure": procedure, "name": name, "input": inputs, "output": output})
@@ -1030,7 +1120,7 @@ def check_vector_set(vectors: list[dict]) -> None:
         with_result = [v for v in by_procedure.get(procedure, []) if not is_rejection(v["name"])]
         check(len(with_result) >= 2, f"{procedure} has at least two vectors")
         has_rejection = any(is_rejection(v["name"]) for v in by_procedure[procedure])
-        expected = procedure in ("public_wrap", "account_stanza", "password_stanza", "folder_stanzas", "file_chunk")
+        expected = procedure in ("public_wrap", "account_stanza", "password_stanza", "sealed_keyring", "folder_stanzas", "file_chunk")
         check(has_rejection == expected, f"{procedure}: rejection vectors")
     for procedure in ("public_wrap", "account_stanza", "folder_stanzas"):
         names = [v["name"] for v in by_procedure[procedure]]
@@ -1041,7 +1131,16 @@ def check_vector_set(vectors: list[dict]) -> None:
         any(v["name"].startswith("decrypt_rejects a zero-length final chunk") and v["input"]["chunk_index"] > 0 for v in by_procedure["file_chunk"]),
         "file_chunk has a decrypt_rejects vector for a zero-length final chunk above index 0",
     )
-    check(all(v["input"]["old_private_keys"] for v in by_procedure["sealed_keyring"]), "no sealed_keyring vector has an empty list")
+    keyring_rejections = [v for v in by_procedure["sealed_keyring"] if is_rejection(v["name"])]
+    check(
+        all(v["input"]["old_private_keys"] for v in by_procedure["sealed_keyring"] if not is_rejection(v["name"])),
+        "no sealed_keyring vector with a result has an empty list",
+    )
+    check(
+        len(keyring_rejections) == 1 and keyring_rejections[0]["input"]["direction_text"] == "open",
+        "sealed_keyring has one rejection vector, for the reader of a sealed empty list",
+    )
+    check(len(by_procedure["unlock_signature"]) >= 3, "unlock_signature has at least three vectors")
     check(all("ephemeral_private_key" not in v["input"] for v in by_procedure["folder_stanzas"]), "folder_stanzas has no shared ephemeral key")
     # Section 4.3: the real parameters are 65536, 3, 4. Each other vector uses the fast test values.
     for procedure in ("passphrase_keys", "password_stanza"):
@@ -1111,6 +1210,43 @@ def check_vector_set(vectors: list[dict]) -> None:
         check(set(vector["output"]) == {"signature", "identifier_normalized_text"}, "sign_in_signature outputs")
         # The vectors use no character that Unicode added after version 13.
         # Only characters of Unicode 1.1: Latin, U+0301, U+2028, U+3000, U+FEFF and the fullwidth forms.
+        check(
+            all(ord(c) < 0x250 or ord(c) in (0x301, 0x2028, 0x3000, 0xFEFF) or 0xFF01 <= ord(c) <= 0xFF5E for c in vector["input"]["identifier_text"]),
+            "identifier characters are old and stable",
+        )
+    # Section 6.3: the unlock signature. Same key, challenge and identifier as a sign-in vector, different signature.
+    def vector_of(procedure: str, name: str) -> dict:
+        return next(v for v in by_procedure[procedure] if v["name"] == name)
+
+    sign_in_alice = vector_of("sign_in_signature", "lower case identifier")
+    unlock_alice = vector_of("unlock_signature", "lower case identifier, same inputs as the sign_in_signature vector of that name, different signature")
+    check(unlock_alice["input"] == sign_in_alice["input"], "one unlock vector has the inputs of a sign-in vector")
+    check(
+        unlock_alice["output"]["identifier_normalized_text"] == sign_in_alice["output"]["identifier_normalized_text"],
+        "the two vectors have the same normalized identifier",
+    )
+    check(unlock_alice["output"]["signature"] != sign_in_alice["output"]["signature"], "the two signatures are different")
+    sign_in_signatures = {v["output"]["signature"] for v in by_procedure["sign_in_signature"]}
+    check(
+        all(v["output"]["signature"] not in sign_in_signatures for v in by_procedure["unlock_signature"]),
+        "no unlock signature is a sign-in signature",
+    )
+    for name in (
+        "identifier with spaces and upper case, same output as the lower case form",
+        "tab and no-break space at the ends, a fullwidth letter and mixed case, same output as the lower case form",
+    ):
+        check(output_of("unlock_signature", name) == unlock_alice["output"], f"unlock identifier: {name}")
+    check(
+        output_of("unlock_signature", "decomposed upper case non-ASCII letter, second challenge")["identifier_normalized_text"] == "\u00e9milie",
+        "unlock, decomposed identifier",
+    )
+    check(
+        output_of("unlock_signature", "second key, U+FEFF at the start stays")["identifier_normalized_text"] == "\ufeffalice@example.com",
+        "unlock, U+FEFF stays",
+    )
+    for vector in by_procedure["unlock_signature"]:
+        check(set(vector["input"]) == {"auth_private_key", "challenge", "identifier_text"}, "unlock_signature inputs")
+        check(set(vector["output"]) == {"identifier_normalized_text", "signature"}, "unlock_signature outputs")
         check(
             all(ord(c) < 0x250 or ord(c) in (0x301, 0x2028, 0x3000, 0xFEFF) or 0xFF01 <= ord(c) <= 0xFF5E for c in vector["input"]["identifier_text"]),
             "identifier characters are old and stable",

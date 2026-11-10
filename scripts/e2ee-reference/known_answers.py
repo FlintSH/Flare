@@ -252,7 +252,7 @@ def check_ed2curve() -> int:
 
 
 def check_draft_18_rules() -> int:
-    """Rules of sections 4.2, 4.2.1 and 4.4 (3a, 3b, 7, 8, 10, 11) that have no published values.
+    """Rules of sections 4.2, 4.2.1, 4.4 (3a, 3b, 7, 8, 10, 11), 6.2 and 6.3 that have no published values.
 
     Each check uses fixed values that a person can verify by hand.
     """
@@ -322,8 +322,27 @@ def check_draft_18_rules() -> int:
     _equal("mnemonic, upper case and two spaces", ref.entropy_from_mnemonic("  ABANDON " * 23 + "Art  "), bytes(32))
     # 11: no sealed empty keyring.
     seed = bytes(range(32))
-    _expect_reject("sealed empty keyring", ref.seal_keyring, seed, ref.ed25519_public_key(seed), bytes(24), [])
-    return count + 2
+    public_key = ref.ed25519_public_key(seed)
+    _expect_reject("sealed empty keyring", ref.seal_keyring, seed, public_key, bytes(24), [])
+    # 11: a reader rejects a sealed empty list. The box is correct: `open` gives the empty byte string.
+    empty_box = ref.seal(ref.keyring_key_of(seed), bytes(24), public_key, b"")
+    _equal("sealed empty keyring opens as a sealed box", ref.open_sealed(ref.keyring_key_of(seed), public_key, empty_box), b"")
+    _expect_reject("reader of a sealed empty keyring", ref.open_keyring, seed, public_key, empty_box)
+    one_key = ref.seal(ref.keyring_key_of(seed), bytes(24), public_key, key)
+    _equal("reader of a keyring with one key", b"".join(ref.open_keyring(seed, public_key, one_key)), key)
+
+    # 6.2 and 6.3: the two context strings, written out, and the two signatures.
+    challenge, identifier = bytes(range(64, 96)), " Alice@Example.COM "
+    tail = challenge + ref.blake3_hash(b"alice@example.com")
+    _equal("sign-in message", ref.sign_in_message(challenge, identifier), b"flare e2ee v1 sign-in" + tail)
+    _equal("unlock message", ref.unlock_message(challenge, identifier), b"flare e2ee v1 unlock" + tail)
+    sign_in = ref.sign_in_signature(seed, challenge, identifier)
+    unlock = ref.unlock_signature(seed, challenge, identifier)
+    ref.verify_sign_in_signature(public_key, challenge, identifier, sign_in)
+    ref.verify_unlock_signature(public_key, challenge, identifier, unlock)
+    _expect_reject("a sign-in signature as an unlock signature", ref.verify_unlock_signature, public_key, challenge, identifier, sign_in)
+    _expect_reject("an unlock signature as a sign-in signature", ref.verify_sign_in_signature, public_key, challenge, identifier, unlock)
+    return count + 11
 
 
 def run_all() -> dict[str, int]:
@@ -335,7 +354,7 @@ def run_all() -> dict[str, int]:
         "Argon2id (reference implementation test.c)": check_argon2id(),
         "BIP39 (reference vectors)": check_bip39(),
         "ed2curve (libsodium cross-check)": check_ed2curve(),
-        "Rules of draft 18 (seal_once, canonical keys, identifier, method)": check_draft_18_rules(),
+        "Rules of draft 18 (seal_once, canonical keys, identifier, method, keyring, unlock)": check_draft_18_rules(),
     }
 
 

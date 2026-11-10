@@ -55,7 +55,9 @@ The generator stops before it writes the file if a check fails.
 - **Rules without published values.** `seal_once` is `seal` with the nonce from
   the key and without the nonce in the output. The limits of the canonical form
   of an X25519 public key. The 25 characters with White_Space. The form of
-  `method`. No sealed empty keyring.
+  `method`. No sealed empty keyring, for the writer and for the reader. The
+  messages of the sign-in signature and of the unlock signature, and that a
+  signature of one kind does not verify as the other kind.
 - **Two code paths.** `seal`, `seal_once`, the file encryption and `public_wrap`
   use library primitives (pycryptodome, libsodium through PyNaCl). `open`,
   `open_once`, the file decryption and `public_unwrap` use the pure Python
@@ -75,7 +77,13 @@ The generator stops before it writes the file if a check fails.
   cause exists. For a key that is not canonical, a reader without rule 3a of
   section 4.4 opens the same stanza and gets the secret. For a changed byte, the
   stanza before the change opens. For a chunk that breaks a rule of section 7.4,
-  the tag is correct.
+  the tag is correct. For a sealed empty keyring, `open` of section 4.2 accepts
+  the box and gives the empty byte string.
+- **Two signatures.** Each `sign_in_signature` vector is checked not to verify
+  as an unlock signature. Each `unlock_signature` vector is checked not to
+  verify as a sign-in signature. One `unlock_signature` vector has the key, the
+  challenge and the identifier of the `sign_in_signature` vector
+  `lower case identifier`; the two signatures are different.
 
 ## Rejection vectors
 
@@ -90,6 +98,7 @@ SCHEMA.md does not give each input name. This program uses these.
 | `password_stanza` | `unwrap`         | `password_text`, `link_secret`, `header_hash`, `stanza`, `memory_kib`, `passes`, `lanes`               |
 | `folder_stanzas`  | `wrap`           | `stanza_kind_text` and all inputs of a `folder_stanzas` vector. `folder_public_key` is not canonical.  |
 | `folder_stanzas`  | `unwrap`         | `stanza_kind_text`, `folder_private_key`, `stanza`, and `header_hash` or `child_folder_public_key`     |
+| `sealed_keyring`  | `open`           | `account_private_key`, `account_public_key`, `sealed_keyring` (a correctly sealed empty list)          |
 
 `stanza_kind_text` is `file`, `link_secret` or `parent`. It names the one
 stanza that the vector is about. The kinds `file` and `link_secret` have
@@ -122,7 +131,13 @@ most literal one:
   the percent-encoded form. The program does not reject other characters; it
   encodes them as UTF-8. No vector has such a path.
 - Section 4.4 rule 11: `seal_keyring` rejects an empty list. `open_keyring`
-  does not reject a sealed empty list, because the rule is for the writer.
+  checks the tag first, then rejects a sealed empty list. The vector for it has
+  a correct tag, thus only the rule rejects it.
+- Section 6.3 step 4: the identifier of the unlock signature has the form of
+  section 4.4 rule 7, as in the sign-in signature. Rule 7 names only sections
+  6.1 and 6.2 as its places, and section 6.3 says that the identifier is the one
+  that the server stores. The program normalizes the text that it gets. If the
+  server stores the normalized form, the two readings give the same bytes.
 - Section 7.3: a plaintext of `n * 65536` bytes, `n > 0`, has `n` chunks. No
   empty chunk follows the last full chunk. Section 7.4 rule 8 makes the reader
   reject the other form.

@@ -48,6 +48,7 @@ CONTEXT_ACCOUNT_SEED = "flare e2ee v1 account seed"
 CONTEXT_AUTH = "flare e2ee v1 auth"
 CONTEXT_WRAP = "flare e2ee v1 wrap"
 CONTEXT_SIGN_IN = "flare e2ee v1 sign-in"
+CONTEXT_UNLOCK = "flare e2ee v1 unlock"
 CONTEXT_REQUEST = "flare e2ee v1 request"
 CONTEXT_CONTENT_CIPHER = "flare e2ee v1 content cipher"
 CONTEXT_CONTENT_MAC = "flare e2ee v1 content mac"
@@ -549,7 +550,7 @@ def wrap_root(wrap_key: bytes, nonce: bytes, account_public_key: bytes, root_ent
 
 
 def unwrap_root(wrap_key: bytes, account_public_key: bytes, wrapped_root: bytes) -> bytes:
-    """Section 6.2 steps 9 to 11."""
+    """Section 6.3 steps 7 to 9."""
     root_entropy = open_sealed(wrap_key, account_public_key, wrapped_root)
     _need(root_entropy, 32, "root_entropy")
     account_seed = blake3_derive_key(CONTEXT_ACCOUNT_SEED, root_entropy)
@@ -559,7 +560,7 @@ def unwrap_root(wrap_key: bytes, account_public_key: bytes, wrapped_root: bytes)
 
 
 # --------------------------------------------------------------------------
-# Section 6.2 step 4 and section 6.6.
+# Section 6.2 step 4, section 6.3 step 4 and section 6.6.
 # --------------------------------------------------------------------------
 
 
@@ -570,6 +571,28 @@ def sign_in_message(challenge: bytes, identifier: str) -> bytes:
 
 def sign_in_signature(auth_private_key: bytes, challenge: bytes, identifier: str) -> bytes:
     return ed25519_sign(auth_private_key, sign_in_message(challenge, identifier))
+
+
+def verify_sign_in_signature(auth_public_key: bytes, challenge: bytes, identifier: str, signature: bytes) -> None:
+    """Section 6.2 step 6."""
+    if not ed25519_verify(auth_public_key, sign_in_message(challenge, identifier), signature):
+        raise Reject("sign-in signature is not correct", "signature")
+
+
+def unlock_message(challenge: bytes, identifier: str) -> bytes:
+    """Section 6.3 step 4. The identifier has the form of section 4.4 rule 7."""
+    _need(challenge, 32, "challenge")
+    return CONTEXT_UNLOCK.encode("ascii") + challenge + blake3_hash(encode_identifier(identifier))
+
+
+def unlock_signature(auth_private_key: bytes, challenge: bytes, identifier: str) -> bytes:
+    return ed25519_sign(auth_private_key, unlock_message(challenge, identifier))
+
+
+def verify_unlock_signature(auth_public_key: bytes, challenge: bytes, identifier: str, signature: bytes) -> None:
+    """Section 6.3 step 5."""
+    if not ed25519_verify(auth_public_key, unlock_message(challenge, identifier), signature):
+        raise Reject("unlock signature is not correct", "signature")
 
 
 def check_method(method: str) -> bytes:
@@ -930,8 +953,8 @@ def seal_keyring(
 ) -> tuple[bytes, bytes]:
     """Steps 4 and 5 with rule 11. Returns (keyring_key, sealed_keyring).
 
-    Rule 11: an account with no old key has no `sealed_keyring`. An empty
-    list is an error.
+    Rule 11: an account with no old key has no `sealed_keyring`. A client
+    must not store a sealed empty list.
     """
     _need(account_public_key, 32, "account_public_key")
     if not old_private_keys:
@@ -943,9 +966,16 @@ def seal_keyring(
 
 
 def open_keyring(account_private_key: bytes, account_public_key: bytes, sealed_keyring: bytes) -> list[bytes]:
+    """Section 8.3.3 with rule 11: a reader rejects a sealed empty list.
+
+    The tag is checked first. A sealed empty list with a correct tag is
+    rejected all the same.
+    """
     plaintext = open_sealed(keyring_key_of(account_private_key), account_public_key, sealed_keyring)
+    if len(plaintext) == 0:
+        raise Reject("a sealed empty list of old private keys is not permitted", "empty_keyring")
     if len(plaintext) % 32 != 0:
-        raise Reject("old_private_keys is not a list of 32-byte seeds")
+        raise Reject("old_private_keys is not a list of 32-byte seeds", "length")
     return [plaintext[i : i + 32] for i in range(0, len(plaintext), 32)]
 
 

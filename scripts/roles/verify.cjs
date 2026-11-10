@@ -2,11 +2,20 @@
 // Real browser/API checks against a disposable local Flare instance.
 // Run with the handbook's Playwright dependencies installed; see admin/roles.
 const assert = require('node:assert/strict')
-const { chromium } = require('../../docs/site/node_modules/@playwright/test')
+const {
+  chromium,
+  expect,
+} = require('../../docs/site/node_modules/@playwright/test')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
+// Key derivation takes a few seconds in each sign-in.
+const signInExpect = expect.configure({ timeout: 45000 })
 const origin = process.env.FLARE_ROLES_TEST_ORIGIN || 'http://127.0.0.1:3060'
 if (!['127.0.0.1', 'localhost'].includes(new URL(origin).hostname))
   throw new Error('Use a disposable local instance.')
-const password = 'Roles-demo-only-2026!'
+// The administrator chose this passphrase in first-run setup. The accounts
+// that the script creates get it as a temporary password, as an administrator
+// gives one: their first sign-in goes through key setup and keeps it.
+const secret = 'Roles-demo-only-2026!'
 const results = []
 async function api(context, path, method = 'GET', data, status = 200) {
   const response = await context.request.fetch(origin + path, {
@@ -24,11 +33,12 @@ async function login(browser, email) {
     colorScheme: 'dark',
   })
   const page = await context.newPage()
-  await page.goto(origin + '/auth/login')
-  await page.getByLabel('Email address', { exact: true }).fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.waitForURL('**/dashboard', { timeout: 60000 })
+  await signIn(page, signInExpect, {
+    origin,
+    email,
+    secret,
+    path: '/auth/login',
+  })
   return { context, page }
 }
 async function main() {
@@ -130,7 +140,7 @@ async function main() {
       await api(admin.context, '/api/users', 'POST', {
         name: 'Jamie Rivera',
         email: `jamie-${suffix}@example.test`,
-        password,
+        password: secret,
         roleIds: [creator.id],
       })
     ).data
@@ -138,7 +148,7 @@ async function main() {
       await api(admin.context, '/api/users', 'POST', {
         name: 'Sam Taylor',
         email: `sam-${suffix}@example.test`,
-        password,
+        password: secret,
         roleIds: [support.id],
       })
     ).data

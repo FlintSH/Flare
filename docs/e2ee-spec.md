@@ -400,7 +400,8 @@ the same bytes.
    characters with the Unicode property White_Space at the start and the
    end. This is not the same set as the `trim` function of JavaScript. Change to lower case with the default Unicode mapping, without a
    locale. Encode as UTF-8. Each place that uses the identifier uses this
-   form: the signature of section 6.2 and the fake salt of section 6.1.
+   form: the signatures of sections 6.2 and 6.3 and the fake salt of
+   section 6.1.
 8. **Signed request.** `method` is one or more of the letters `A` to `Z`. A
    verifier rejects each other form. `path` is the path and the query of the request line,
    in the percent-encoded form that the client sends. The server must use

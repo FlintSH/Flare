@@ -8,6 +8,7 @@ const {
   expect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signInContext } = require('../shared/passphrase-accounts.cjs')
 const origin = process.env.FLARE_AUDIT_TEST_ORIGIN || 'http://localhost:3071'
 const destination = new URL(origin)
 if (destination.hostname !== 'localhost' || destination.protocol !== 'http:')
@@ -27,21 +28,12 @@ async function json(...args) {
   return (await request(...args)).json()
 }
 async function login(ctx, user) {
-  const csrf = await json(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      headers: { Origin: origin },
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: `audit-demo-${user}@example.test`,
-        password: 'Audit-demo-only-2026!',
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-    }
-  )
-  assert.ok(!(await response.json()).url.includes('error='))
+  // The seed gives the fixture accounts keys: the secret is their passphrase.
+  await signInContext(ctx, expect, {
+    origin,
+    email: `audit-demo-${user}@example.test`,
+    secret: 'Audit-demo-only-2026!',
+  })
 }
 async function main() {
   const browser = await chromium.launch({ headless: true })

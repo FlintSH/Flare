@@ -12,13 +12,18 @@ const {
   expect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
+// Key derivation takes a few seconds in each sign-in.
+const signInExpect = expect.configure({ timeout: 45000 })
 
 const origin =
   process.env.FLARE_NAVIGATION_TEST_ORIGIN || 'http://127.0.0.1:3060'
 if (!['127.0.0.1', 'localhost'].includes(new URL(origin).hostname))
   throw new Error('Use a disposable local instance.')
-const password =
-  process.env.FLARE_NAVIGATION_PASSWORD || 'Roles-demo-only-2026!'
+// The administrator chose this passphrase in first-run setup. The accounts
+// that the script creates get it as a temporary password, as an administrator
+// gives one: their first sign-in goes through key setup and keeps it.
+const secret = process.env.FLARE_NAVIGATION_PASSWORD || 'Roles-demo-only-2026!'
 const screenshotDirectory = process.env.FLARE_NAVIGATION_SCREENSHOTS
 const workspace = ['Files', 'Upload', 'Paste', 'Links']
 const desktop = { width: 1440, height: 900 }
@@ -51,11 +56,12 @@ async function login(browser, email) {
   page.setDefaultTimeout(30000)
   const errors = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.goto(origin + '/auth/login')
-  await page.getByLabel('Email address', { exact: true }).fill(email)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.waitForURL('**/dashboard', { timeout: 90000 })
+  await signIn(page, signInExpect, {
+    origin,
+    email,
+    secret,
+    path: '/auth/login',
+  })
   return { context, page, errors }
 }
 
@@ -430,7 +436,7 @@ async function main() {
         await api(admin.context, '/api/users', 'POST', {
           name,
           email: `navigation-${name.split(' ')[1].toLowerCase()}-${stamp}@example.test`,
-          password,
+          password: secret,
           roleIds,
         })
       ).data

@@ -145,6 +145,8 @@ Email verification and role permissions still apply after passkey or emergency r
 
 <Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Login rejects the account password and directs the user to a registered passkey or dedicated passkey recovery code" caption="A correct passphrase cannot bypass the requirement. Resetting it does not restore passphrase or SSO sign-in." />
 
+After that refusal the form returns to its first step, where **Sign in with a passkey** and **Use a passkey recovery code** are.
+
 ### Turn off the requirement or replace its codes
 
 Use a passkey or dedicated passkey-recovery sign-in within five minutes before changing the requirement or replacing its recovery set. A passphrase, authenticator recovery code, or provider sign-in is insufficient. Choose **Replace passkey recovery codes → Replace codes** to replace the set, or **Allow other sign-in methods → Allow other methods** to turn the requirement off. Both changes end browser sessions. Save any replacement codes before signing in again.

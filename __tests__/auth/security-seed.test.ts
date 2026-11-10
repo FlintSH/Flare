@@ -14,7 +14,13 @@ async function runSeed(databaseUrl: string) {
     process: { env: { DATABASE_URL: databaseUrl }, exitCode: 0 },
     console: { log() {}, error() {} },
     require(id: string) {
-      if (id === 'bcryptjs') return { hash: async () => 'fixture-hash' }
+      // The seed gives each fixture account keys, made for its passphrase.
+      if (id === '../shared/passphrase-accounts.cjs')
+        return {
+          createAccountRecord: async () => ({
+            columns: { authPublicKey: 'fixture-key', password: null },
+          }),
+        }
       if (id !== '@prisma/client') throw new Error(`Unexpected module ${id}`)
       return {
         PrismaClient: class {
@@ -27,7 +33,16 @@ async function runSeed(databaseUrl: string) {
           }
           user = {
             deleteMany: async () => writes.push('fixtures deleted'),
-            upsert: async () => writes.push('fixture created'),
+            upsert: async ({
+              create,
+            }: {
+              create: { authPublicKey?: string; password?: string | null }
+            }) =>
+              writes.push(
+                create.authPublicKey && create.password === null
+                  ? 'fixture created'
+                  : 'fixture created without keys'
+              ),
           }
           authRateLimit = {
             deleteMany: async () => writes.push('limits cleared'),

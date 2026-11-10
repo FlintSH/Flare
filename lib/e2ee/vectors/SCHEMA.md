@@ -40,6 +40,7 @@ real parameters `65536`, `3`, `4`.
 | `passphrase_keys`   | `passphrase_text`, `passphrase_salt`, `memory_kib`, `passes`, `lanes`                                                                                | `passphrase_root`, `auth_private_key`, `auth_public_key`, `wrap_key`                                                                                                                                                                                             |
 | `wrapped_root`      | `wrap_key`, `nonce`, `account_public_key`, `root_entropy`                                                                                            | `wrapped_root`                                                                                                                                                                                                                                                   |
 | `sign_in_signature` | `auth_private_key`, `challenge`, `identifier_text`                                                                                                   | `signature`                                                                                                                                                                                                                                                      |
+| `unlock_signature`  | `auth_private_key`, `challenge`, `identifier_text`                                                                                                   | `identifier_normalized_text`, `signature`                                                                                                                                                                                                                        |
 | `signed_request`    | `account_private_key`, `challenge`, `method_text`, `path_text`, `body`                                                                               | `signed_message`, `signature`                                                                                                                                                                                                                                    |
 | `file_keys`         | `file_key`                                                                                                                                           | `content_cipher_key`, `content_mac_key`, `metadata_key`, `ocr_text_key`, `thumbnail_key`, `link_secret_key`                                                                                                                                                      |
 | `header`            | `nonce_prefix`                                                                                                                                       | `header`, `header_hash`                                                                                                                                                                                                                                          |
@@ -68,7 +69,11 @@ chunk; the `file_chunk` procedure has one with `"error": true` in a
 `decrypt_rejects` vector: `input` holds `file_key`, `nonce_prefix`,
 `chunk_index`, `is_final`, `stored_chunk`, and `output` is `{ "error": true }`.
 
-The `sealed_keyring` procedure has no vector with an empty list.
+The `sealed_keyring` procedure has no vector with an empty list as an input of
+the writer. It has one `rejects ...` vector for the reader: `input` holds
+`direction_text` with the value `open`, `account_private_key`,
+`account_public_key` and `sealed_keyring`, which is a correctly sealed empty
+list, and `output` is `{ "error": true }`.
 
 The `sign_in_signature` procedure has one more output, `identifier_normalized_text`.
 
@@ -84,6 +89,9 @@ Its `procedure` is the base procedure. Its `input` has `direction_text`:
   `context_text` and `associated_data` for `public_wrap`, or `header_hash`. A
   `password_stanza` vector has `password_text`, `link_secret`, `header_hash`,
   `stanza` and the Argon2id inputs.
+
+- `open`: for `sealed_keyring` only. The tag of the sealed box is correct. The
+  reader rejects it because the list is empty (section 4.4, rule 11).
 
 A `folder_stanzas` vector also has `stanza_kind_text`: `file`, `link_secret` or
 `parent`. The `parent` kind has `child_folder_public_key`.

@@ -11,6 +11,10 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const {
+  signInContext,
+  submitSignIn,
+} = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 30000 })
 const origin = process.env.FLARE_TIMELINE_TEST_ORIGIN || 'http://localhost:3064'
 const destination = new URL(origin)
@@ -38,7 +42,8 @@ if (
 
 const accountA = 'timeline-demo-alex'
 const accountB = 'timeline-demo-other'
-const password = 'Timeline-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Timeline-demo-only-2026!'
 const screenshotDirectory = process.env.FLARE_TIMELINE_SCREENSHOTS
 const schemaEvidence = process.env.FLARE_TIMELINE_SCHEMA_EVIDENCE
 const oldMarkers = [
@@ -125,26 +130,13 @@ async function api(ctx, endpoint) {
   return response.json()
 }
 
-async function apiLogin(ctx, id) {
-  const csrf = await api(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      headers: { Origin: origin },
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: `${id}@example.test`,
-        password,
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-    }
-  )
-  assert.equal(response.status(), 200)
-  assert.ok(
-    !(await response.json()).url.includes('error='),
-    'Fixture login failed'
-  )
+/** A real sign-in through the form, with a page of its own that closes afterwards. */
+async function initialLogin(ctx, id) {
+  await signInContext(ctx, expect, {
+    origin,
+    email: `${id}@example.test`,
+    secret: passphrase,
+  })
   assert.equal((await api(ctx, '/api/auth/session')).user.id, id)
 }
 
@@ -159,16 +151,11 @@ async function ready(page) {
 
 async function nativeSecondTabLogin(ctx, original, id) {
   const tab = await ctx.newPage()
-  await tab.goto(origin + '/auth/login?local=1')
-  await tab
-    .getByLabel('Email address', { exact: true })
-    .fill(`${id}@example.test`)
-  await tab.getByLabel('Password', { exact: true }).fill(password)
-  await tab
-    .locator('form')
-    .filter({ has: tab.getByLabel('Password', { exact: true }) })
-    .locator('button[type="submit"]')
-    .click()
+  await submitSignIn(tab, expect, {
+    origin,
+    email: `${id}@example.test`,
+    secret: passphrase,
+  })
   await tab.waitForURL((url) => url.pathname === '/dashboard')
   const session = await api(ctx, '/api/auth/session')
   assert.equal(session.user.id, id)
@@ -370,7 +357,7 @@ async function newScenario(browser) {
     reducedMotion: 'reduce',
     timezoneId: 'UTC',
   })
-  await apiLogin(ctx, accountA)
+  await initialLogin(ctx, accountA)
   const page = await ctx.newPage()
   page.setDefaultTimeout(30000)
   const state = { sentinel: randomUUID(), reads: [], sessions: [], errors: [] }

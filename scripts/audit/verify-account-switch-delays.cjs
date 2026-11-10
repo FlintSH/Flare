@@ -7,6 +7,10 @@ const {
   chromium,
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
+const {
+  signInContext,
+  submitSignIn,
+} = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 30000 })
 const origin = process.env.FLARE_AUDIT_TEST_ORIGIN || 'http://localhost:3071'
 const url = new URL(origin)
@@ -20,7 +24,8 @@ if (
   url.password
 )
   throw new Error('Use the origin of a disposable localhost HTTP instance.')
-const password = 'Audit-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Audit-demo-only-2026!'
 
 function deferred() {
   let resolve, reject
@@ -55,21 +60,11 @@ async function json(ctx, path) {
 }
 
 async function alexLogin(ctx) {
-  const csrf = await json(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      headers: { Origin: origin },
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: 'audit-demo-alex@example.test',
-        password,
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-    }
-  )
-  assert.ok(!(await response.json()).url.includes('error='))
+  await signInContext(ctx, expect, {
+    origin,
+    email: 'audit-demo-alex@example.test',
+    secret: passphrase,
+  })
   assert.equal(
     (await json(ctx, '/api/auth/session')).user.id,
     'audit-demo-alex'
@@ -80,16 +75,11 @@ async function secondTabLogin(ctx, original, ip) {
   await ctx.setExtraHTTPHeaders({ 'x-real-ip': ip, 'x-forwarded-for': ip })
   const tab = await ctx.newPage()
   tab.setDefaultTimeout(30000)
-  await tab.goto(origin + '/auth/login?local=1')
-  await tab
-    .getByLabel('Email address', { exact: true })
-    .fill('audit-demo-jamie@example.test')
-  await tab.getByLabel('Password', { exact: true }).fill(password)
-  await tab
-    .locator('form')
-    .filter({ has: tab.getByLabel('Password', { exact: true }) })
-    .locator('button[type="submit"]')
-    .click()
+  await submitSignIn(tab, expect, {
+    origin,
+    email: 'audit-demo-jamie@example.test',
+    secret: passphrase,
+  })
   await tab.waitForURL((next) => next.pathname === '/dashboard')
   assert.equal(
     (await json(ctx, '/api/auth/session')).user.id,
@@ -255,14 +245,14 @@ async function scenario(browser, name) {
         name: 'Set up your authenticator',
         exact: true,
       })
-      await expect(
-        dialog.getByLabel('Current password', { exact: true })
-      ).toBeEnabled()
-      await dialog
-        .getByLabel('Current password', { exact: true })
-        .fill(password)
+      // A passphrase cannot be sent: the sign-in of a moment ago is the proof.
+      await expect(dialog).toContainText(
+        'Your recent passphrase sign-in confirms your identity'
+      )
+      await expect(dialog.locator('button[type="submit"]')).toBeEnabled()
       held = await delayNext(page, '/api/auth/security', 'GET', (body) => {
-        assert.equal((body.data ?? body).hasPassword, true)
+        assert.equal((body.data ?? body).hasPassphrase, true)
+        assert.equal((body.data ?? body).canUseRecentPassphrase, true)
         assert.equal((body.data ?? body).twoFactorEnabled, false)
       })
       await dialog.locator('button[type="submit"]').click()
