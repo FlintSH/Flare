@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 7. Not implemented. Not reviewed.             |
+| Status  | Draft 8. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -786,8 +786,7 @@ pair continues to serve both purposes (section 4.1).
 
 ### 8.4 Folder keys and folder stanzas
 
-**AGREED** for the structure. **PROPOSED** for the exact strings and for the
-points that section 9.4.6 lists.
+**AGREED** for the structure. **PROPOSED** for the exact strings.
 
 **Goal:** a person who has the link of a shared folder can read the files in
 that folder and in all folders below it. Files that arrive later become
@@ -911,7 +910,7 @@ A person who has `file_key` can read `file_metadata`. The server cannot.
 
 ### 9.4 Folders
 
-**AGREED** for sections 9.4.1 to 9.4.3. **PROPOSED** for the others.
+**AGREED** for the structure. **PROPOSED** for the exact steps.
 
 A folder is not a container. It is a record in the database. A file has a
 reference to at most one folder. A folder has a reference to at most one
@@ -985,20 +984,32 @@ When the owner stops sharing a folder:
 Step 1 has an immediate effect if the server is honest. Steps 2 and 3
 protect the files that arrive later, also if the server is compromised.
 
-A visitor who opened a file before this has its `file_key`. That person can
-read that file if the person gets the ciphertext again. This is the same
-limit as for a share link of one file.
+**What stop sharing does not do.** A visitor of a shared folder gets the
+`file_key` and the file identifier of each file in the list. These two
+values are the same as the share link of that file (section 10.3). Thus a
+visitor has a share link for each file that was in the folder at that time.
+
+Stop sharing changes the keys of the folder. It does not change the
+`file_key` of a file. If the file stays public, the old visitor can open it
+with its own link.
+
+This is the same as today. Today a visitor of a shared folder sees the
+public address of each file, and that address continues to work after the
+owner stops sharing the folder.
+
+To remove the access of an old visitor to one file, the owner must make the
+file private or delete it.
 
 The work of steps 2 and 3 increases with the number of files and folders
 below the folder.
 
-#### 9.4.6 Points that are not decided
+#### 9.4.6 Decisions
 
-- If a link can show a folder without the folders below it. This needs a
-  second key for each folder.
-- If a folder that is not shared needs folder stanzas for its files. This
-  draft makes them at all times, because a script client cannot know if a
-  folder is shared.
+- A shared folder link always includes the folders below it. No link shows
+  a folder without them.
+- Each public file in a folder has a folder stanza, also when the folder is
+  not shared. The owner can then share the folder with no work for each
+  file, and a script client does not need to know if a folder is shared.
 
 ### 9.5 Tags and OCR
 
@@ -1107,7 +1118,7 @@ file with a link preview cannot be encrypted.
 
 ## 13. Open questions
 
-1. **Folders.** See section 9.4.6.
+1. **Folders.** Closed. See section 9.4.
 2. **Tags.** Do tag names get encryption under a key of the account?
 3. **OCR.** Does OCR move to the client? Where does the encrypted text go, and
    how does search use it?
@@ -1145,3 +1156,4 @@ file with a link preview cannot be encrypted.
 | 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                   |
 | 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back. |
 | 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                      |
+| 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                    |
