@@ -93,7 +93,25 @@ class MemoryStorage {
 const state = vi.hoisted(() => ({
   storage: null as unknown,
   audits: [] as Record<string, unknown>[],
+  session: null as null | { id: string },
 }))
+// The session of a route request. API credentials are refused before this.
+vi.mock('@/lib/http/access', async (original) => {
+  const actual = await original<typeof import('@/lib/http/access')>()
+  const { AccessError } = await import('@/lib/http/errors')
+  return {
+    ...actual,
+    requireSession: async (
+      request: Request,
+      _permission?: unknown,
+      options: { refuseApiCredentials?: boolean } = {}
+    ) => {
+      if (options.refuseApiCredentials) actual.refuseApiCredentials(request)
+      if (!state.session) throw new AccessError(401, 'Authentication required')
+      return { session: { user: state.session }, user: state.session }
+    },
+  }
+})
 vi.mock('@/lib/database/prisma', async () => {
   const { PrismaClient } = await import('@prisma/client')
   return {
@@ -117,6 +135,8 @@ vi.mock('@/lib/audit', () => ({
     state.audits.push(input)
   },
   setAuditTarget: () => undefined,
+  auditRequest: (_request: unknown, _settings: unknown, run: () => unknown) =>
+    run(),
 }))
 
 vi.setConfig({ testTimeout: 60_000 })
@@ -166,6 +186,7 @@ describe.skipIf(!databaseUrl)(
       state.audits.length = 0
       keys = clientKeys()
       owner = (await createUser(prisma, keys)).id
+      state.session = { id: owner }
     })
     afterAll(async () => {
       await prisma?.$disconnect()
@@ -441,12 +462,19 @@ describe.skipIf(!databaseUrl)(
         passwordPendingFrom: 'PUBLIC',
         folderStanza: null,
       })
-      // A password stanza is the decision of the owner: the mark goes away.
-      await prisma.file.update({
-        where: { id: before.id },
-        data: { passwordStanza: new Uint8Array(217).fill(1) },
+      // The owner sets a password again: the mark goes away and the file
+      // is shared as it was before.
+      await manage.updateFileSettings(
+        { as: 'owner', userId: owner },
+        before.id,
+        { passwordStanza: Buffer.alloc(217, 1).toString('base64url') }
+      )
+      const restored = await row(before.id)
+      expect(restored).toMatchObject({
+        passwordPendingFrom: null,
+        visibility: 'PUBLIC',
       })
-      expect((await row(before.id)).passwordPendingFrom).toBeNull()
+      expect(restored.passwordStanza).toHaveLength(217)
     })
 
     it('clears the mark of a pending password when the owner makes the file public', async () => {
@@ -996,6 +1024,174 @@ describe.skipIf(!databaseUrl)(
           new Date(Date.now() + job.FILE_ENCRYPTION_KEEP_DONE_MS + 1000)
         )
       ).toBe(3)
+    })
+
+    describe('the routes of the owner', () => {
+      const call = async (
+        method: 'GET' | 'PUT' | 'POST',
+        path: '/api/files/existing' | '/api/files/existing/encrypt',
+        body?: unknown,
+        headers: Record<string, string> = {}
+      ) => {
+        const route =
+          path === '/api/files/existing'
+            ? await import('@/app/api/files/existing/route')
+            : await import('@/app/api/files/existing/encrypt/route')
+        const handler = (route as Record<string, unknown>)[method] as (
+          request: Request,
+          context: unknown
+        ) => Promise<Response>
+        const response = await handler(
+          new Request(`http://localhost${path}`, {
+            method,
+            headers: { 'content-type': 'application/json', ...headers },
+            ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+          }),
+          {}
+        )
+        return { status: response.status, body: await response.json() }
+      }
+
+      it('needs a session of the owner and takes no API credential', async () => {
+        state.session = null
+        expect((await call('GET', '/api/files/existing')).status).toBe(401)
+        expect(
+          (await call('PUT', '/api/files/existing', { choice: 'all' })).status
+        ).toBe(401)
+        expect(
+          (
+            await call('POST', '/api/files/existing/encrypt', {
+              fileIds: ['a'],
+            })
+          ).status
+        ).toBe(401)
+        state.session = { id: owner }
+        for (const [method, path, body] of [
+          ['GET', '/api/files/existing', undefined],
+          ['PUT', '/api/files/existing', { choice: 'all' }],
+          ['POST', '/api/files/existing/encrypt', { fileIds: ['a'] }],
+        ] as const)
+          expect(
+            (
+              await call(method, path, body, {
+                Authorization: 'Bearer flare_x',
+              })
+            ).status
+          ).toBe(401)
+        expect(await prisma.fileEncryptionJob.count()).toBe(0)
+      })
+
+      it('refuses bodies that are not exactly the schema', async () => {
+        for (const body of [
+          {},
+          { choice: 'public' },
+          { choice: 'all', userId: 'someone-else' },
+          { choice: 'all', fileIds: ['a'] },
+        ])
+          expect((await call('PUT', '/api/files/existing', body)).status).toBe(
+            400
+          )
+        for (const body of [
+          {},
+          { fileIds: [] },
+          { fileIds: 'a' },
+          { fileIds: [1] },
+          { fileIds: ['a'], scope: 'all' },
+          { fileIds: Array.from({ length: 501 }, (_, index) => `f${index}`) },
+        ])
+          expect(
+            (await call('POST', '/api/files/existing/encrypt', body)).status
+          ).toBe(400)
+      })
+
+      it('records the choice one time and queues the files it covers', async () => {
+        const secret = await plainFile(randomBytes(10))
+        const shared = await plainFile(randomBytes(10), {
+          visibility: 'PUBLIC',
+        })
+        const first = await call('GET', '/api/files/existing')
+        expect(first.body.data).toMatchObject({
+          choice: null,
+          plain: { private: 1, public: 1, password: 0, total: 2 },
+        })
+        const chosen = await call('PUT', '/api/files/existing', {
+          choice: 'private',
+        })
+        expect(chosen.status).toBe(200)
+        expect(chosen.body.data).toMatchObject({
+          choice: 'private',
+          jobs: { waiting: 1 },
+        })
+        expect(chosen.body.data.choiceAt).toEqual(expect.any(String))
+        expect((await jobOf(secret.id)).onlyIfPrivate).toBe(true)
+        // A wider answer later replaces the jobs that wait.
+        const wider = await call('PUT', '/api/files/existing', {
+          choice: 'all',
+        })
+        expect(wider.body.data.jobs.waiting).toBe(2)
+        expect((await jobOf(shared.id)).onlyIfPrivate).toBe(false)
+        // "none" takes back what did not start.
+        const none = await call('PUT', '/api/files/existing', {
+          choice: 'none',
+        })
+        expect(none.body.data).toMatchObject({
+          choice: 'none',
+          jobs: { waiting: 0 },
+        })
+        expect(await prisma.fileEncryptionJob.count()).toBe(0)
+      })
+
+      it('queues only plain files of the session account', async () => {
+        const mine = await plainFile(randomBytes(10), { visibility: 'PUBLIC' })
+        const stranger = (await createUser(prisma, clientKeys())).id
+        const theirs = await plainFile(randomBytes(10), {}, stranger)
+        const queued = await call('POST', '/api/files/existing/encrypt', {
+          fileIds: [mine.id, theirs.id, 'no-such-file', mine.id],
+        })
+        expect(queued).toMatchObject({
+          status: 200,
+          body: { data: { queued: 1 } },
+        })
+        expect(
+          (await prisma.fileEncryptionJob.findMany()).map((one) => one.fileId)
+        ).toEqual([mine.id])
+        expect(await runOne()).toBe('encrypted')
+        expect((await row(theirs.id)).encrypted).toBe(false)
+        // An administrator who names another account in the body is refused
+        // by the schema, and a session only ever acts on its own account.
+        state.session = { id: stranger }
+        const other = await call('GET', '/api/files/existing')
+        expect(other.body.data.plain.total).toBe(1)
+        expect(other.body.data.jobs.encrypted).toBe(0)
+      })
+
+      it('refuses an account that has no keys', async () => {
+        const keyless = (await createUser(prisma, null)).id
+        await plainFile(randomBytes(10), {}, keyless)
+        state.session = { id: keyless }
+        const refused = await call('PUT', '/api/files/existing', {
+          choice: 'private',
+        })
+        expect(refused.status).toBe(409)
+        expect(refused.body.code ?? refused.body.error?.code).toBe(
+          'account_keys_missing'
+        )
+        expect(await prisma.fileEncryptionJob.count()).toBe(0)
+        const status = await call('GET', '/api/files/existing')
+        expect(status.body.data).toMatchObject({ hasKeys: false, choice: null })
+      })
+
+      it('lists a failed file with its name while it is still plain', async () => {
+        const broken = await plainFile(randomBytes(10), { name: 'gone.bin' })
+        storage.objects.delete(broken.path)
+        await call('PUT', '/api/files/existing', { choice: 'all' })
+        expect(await runOne()).toBe('failed')
+        const status = await call('GET', '/api/files/existing')
+        expect(status.body.data.failed).toEqual([
+          { fileId: broken.id, name: 'gone.bin', code: 'source_missing' },
+        ])
+        expect(status.body.data.jobs.failed).toBe(1)
+      })
     })
   }
 )

@@ -30,6 +30,7 @@ export const fileListSelect = {
   unreadable: true,
   thumbnailPending: true,
   ocrPending: true,
+  passwordPendingFrom: true,
   user: { select: { urlId: true } },
   tags: {
     where: { excluded: false },
@@ -55,6 +56,7 @@ export function fileListItem(
     unreadable,
     thumbnailPending,
     ocrPending,
+    passwordPendingFrom,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
   expiry: FileExpiry | null
@@ -80,6 +82,9 @@ export function fileListItem(
     ...(unreadable && { unreadable }),
     ...(thumbnailPending && { thumbnailPending }),
     ...(ocrPending && { ocrPending }),
+    // The server encrypted this file and could not keep its password
+    // (docs/e2ee-spec.md, section 14.2).
+    ...(passwordPendingFrom && { passwordPending: true }),
     tags: tags.map(({ tag }) => tag),
     hasPassword: Boolean(password) || Boolean(passwordStanza),
     expiresAt: expiry?.expiresAt ?? null,

@@ -63,6 +63,7 @@ const managedFileSelect = {
   path: true,
   size: true,
   encrypted: true,
+  passwordPendingFrom: true,
 } satisfies Prisma.FileSelect
 
 const accountFileSelect = {
@@ -130,6 +131,11 @@ export async function updateFileSettings(
       data.passwordStanza = passwordStanza
         ? parsePasswordStanza(passwordStanza)
         : null
+      // The server encrypted this file, could not keep its password and
+      // made it private (docs/e2ee-spec.md, section 14.2). With a password
+      // again, it is shared as it was, unless this request says otherwise.
+      if (passwordStanza && current.passwordPendingFrom && !visibility)
+        data.visibility = current.passwordPendingFrom
     }
   } else {
     if (passwordStanza !== undefined)

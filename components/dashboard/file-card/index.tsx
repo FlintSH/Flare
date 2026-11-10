@@ -69,6 +69,7 @@ import {
   decryptionProblem,
   downloadDecrypted,
 } from '@/lib/files/encrypted-client'
+import { requestFileEncryption } from '@/lib/files/existing-client'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { thumbnailKind } from '@/lib/files/thumbnail-client'
@@ -622,6 +623,9 @@ function OpenFileCard({
       },
     },
     password: { run: () => handlePasswordDialogOpenChange(true) },
+    ...(!file.encrypted && {
+      encrypt: { run: () => requestFileEncryption([file]) },
+    }),
     expiration: { run: () => setIsExpiryModalOpen(true) },
     ...((isImage || readable) && {
       ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
@@ -856,7 +860,11 @@ function OpenFileCard({
             ) : (
               <VisibilityIcon className="h-3 w-3" />
             )}
-            {file.hasPassword ? 'Protected' : visibilityLabel}
+            {file.hasPassword
+              ? 'Protected'
+              : file.passwordPending
+                ? 'Password removed'
+                : visibilityLabel}
             <span
               className="ml-0.5 inline-flex items-center border-l border-border/60 pl-1.5"
               title={

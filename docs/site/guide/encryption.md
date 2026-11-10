@@ -170,6 +170,31 @@ When the server encrypts one of your files:
 
 This protects your files from now on. It does not undo the past: the server stored these files readable until this moment, and old backups that your administrator has not yet replaced still contain them.
 
+### Choose which files to encrypt
+
+After you have set up your keys, a line above your library says how many files are stored readable. Choose **Choose** to open the question, or close the line to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files.
+
+1. Read the table. It counts your private files, your public files and your files with a password, and says what encryption changes for each.
+2. Pick **Private files** (the suggestion), **All files** or **None**.
+3. Choose **Encrypt**. You can keep using Flare right away.
+
+A small status at the edge of the page shows **Encrypting existing files** with a count while the server works. If your folders or tags still have to be converted, it says **Preparing folders and tags** first: your browser does that part, so keep Flare open with your keys unlocked until the count starts. The server then continues even if you close the tab. Images get their thumbnails from the server during this work; image text and tag rules are finished by your browser afterwards, like for any [file that arrived without them](#what-your-browser-does-instead).
+
+You can change your answer at any time under **Profile → Your data → Files from before encryption**. Choosing **None** later stops what has not started. It does not turn encrypted files back into plain files; nothing can.
+
+### Encrypt single files
+
+A plain file has **Encrypt** in its menu in the library, and **Select** offers **Encrypt** for several files at once. Flare tells you what changes for the files you picked before it starts: a new link for public files, a removed password for protected ones. This is also how you encrypt files that a screenshot tool with an old configuration uploaded.
+
+### After a public or protected file was encrypted
+
+- **A public file:** open its menu and choose **Copy link**. Send the new link to the people who had the old one.
+- **A file that had a password:** it is private now, and its card says **Password removed**. Open its menu, choose **Add password** and type a password. The file is shared again as it was, and people open it with the new link and that password. If you would rather share it without a password, change its visibility instead.
+
+### If a file could not be encrypted
+
+The status turns into **could not be encrypted** and opens a list with the reason for each file and **Try again**. A file on that list is unchanged and still plain. The most common reason is storage that did not answer; if the list says the stored file is missing, tell your administrator.
+
 ## What does not work yet
 
 These features do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.

@@ -1082,6 +1082,20 @@ export async function existingFilesStatus(userId: string) {
       libraryReadyForEncryption(prisma, userId),
     ]
   )
+  const names = new Map(
+    failed.length
+      ? (
+          await prisma.file.findMany({
+            where: {
+              userId,
+              encrypted: false,
+              id: { in: failed.map((job) => job.fileId) },
+            },
+            select: { id: true, name: true },
+          })
+        ).map((file) => [file.id, file.name])
+      : []
+  )
   const plain = { private: 0, public: 0, password: 0 }
   for (const row of kinds)
     if (row.kind in plain)
@@ -1102,8 +1116,10 @@ export async function existingFilesStatus(userId: string) {
       encrypted: count('encrypted'),
       skipped: count('skipped'),
     },
+    // A file that failed is still plain, so the server has its name.
     failed: failed.map((job) => ({
       fileId: job.fileId,
+      name: names.get(job.fileId) ?? null,
       code: (job.errorCode ?? 'internal_error') as FileEncryptionErrorCode,
     })),
     /** Files that had a server-side password and wait for a new one. */
