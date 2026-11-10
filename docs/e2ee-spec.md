@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 13. Not implemented. Not reviewed.            |
+| Status  | Draft 14. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -35,7 +35,9 @@ This document specifies:
 - the sign-in procedure that keeps the passphrase away from the server,
 - the encrypted file format,
 - the upload procedure for browsers and for script clients,
-- the share link format.
+- the share link format,
+- folders, tags, search and the other functions that use file content,
+- the migration of an existing instance.
 
 This document does not specify the user interface or the database schema.
 
@@ -78,19 +80,19 @@ This document does not use single-letter names.
 
 ### 2.1 Terms
 
-| Term          | Definition                                                            |
-| ------------- | --------------------------------------------------------------------- |
-| Client        | Software that the user controls: the browser application or a script. |
-| Server        | The Flare application, its database and its storage.                  |
-| Operator      | The person who administers the server.                                |
-| Account       | One Flare user.                                                       |
-| Passphrase    | The secret text that the user types to unlock the account keys.       |
-| Mnemonic      | A list of words that encodes the `root_entropy` of an account.        |
-| Account key   | The Ed25519 key pair of an account.                                   |
-| File key      | A random secret key that encrypts one file.                           |
-| Stanza        | A small record that contains one file key in encrypted form.          |
-| Script client | A non-browser upload tool. Examples: ShareX helper, shell script.     |
-| Plain file    | A file that the user uploads without encryption (section 11).         |
+| Term          | Definition                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Client        | Software that the user controls: the browser application or a script.                    |
+| Server        | The Flare application, its database and its storage.                                     |
+| Operator      | The person who administers the server.                                                   |
+| Account       | One Flare user.                                                                          |
+| Passphrase    | The secret text that the user types to unlock the account keys.                          |
+| Mnemonic      | A list of words that encodes the `root_entropy` of an account.                           |
+| Account key   | The Ed25519 key pair of an account.                                                      |
+| File key      | A random secret key that encrypts one file.                                              |
+| Stanza        | A small record that contains one key or one secret in encrypted form, for one recipient. |
+| Script client | A non-browser upload tool. Examples: ShareX helper, shell script.                        |
+| Plain file    | A file that the user uploads without encryption (section 11).                            |
 
 ### 2.2 Notation
 
@@ -137,6 +139,10 @@ All context strings are ASCII. A context string does not have a terminator.
 | `sealed_keyring`        | variable | The encrypted list of old account private keys. The server stores it. |
 | `folder_private_key`    | 32 bytes | X25519 private key of one folder. A shared folder link carries it.    |
 | `folder_public_key`     | 32 bytes | Its public key. The server stores it.                                 |
+| `folder_owner_key`      | 32 bytes | Key of the owner that encrypts the private key of each folder.        |
+| `tag_key`               | 32 bytes | Key of the owner that encrypts the name and the rule of each tag.     |
+| `ocr_text_key`          | 32 bytes | Encrypts the text that the recognition found in one image.            |
+| `thumbnail_key`         | 32 bytes | Encrypts the thumbnail of one file.                                   |
 
 ## 3. Threat model
 
@@ -153,7 +159,10 @@ the server at any later time. The design must limit what the attacker gets.
    encrypted file content.
 2. The same person cannot read encrypted metadata (section 9).
 3. The server never receives the passphrase.
-4. The server never receives an account private key or a file key.
+4. The server never receives an account private key. The server never
+   receives the file key of a file that a client encrypted. The one exception
+   is the migration of section 14.2, where the server encrypts a file that it
+   has as plaintext already.
 5. A moderator cannot read the encrypted files of a different account.
 6. The server cannot change a file that a share link refers to. The client
    detects the change.
@@ -185,10 +194,15 @@ These limits are accepted. The public documentation must state them.
    `wrapped_root` (section 6). It gives no protection against a database
    copy. It gives no protection against a device that received
    `wrapped_root` before.
-6. **Browser storage.** The browser keeps `account_private_key` during a
-   session. Code that runs in the page during that session can use the key.
+6. **Browser storage.** The browser keeps `account_private_key` and the old
+   private keys of the keyring during a session. Code that runs in the page
+   during that session can use these keys.
 7. **Visible metadata.** The server sees the size of each file, the time of
    each upload and each access, and the network address of each client.
+8. **Hidden and old records.** A compromised server can hide a file. It can
+   give an old version of a name, a tag, a folder list or a stanza. The
+   client cannot detect this. The server cannot make a false record that the
+   owner encrypted with a secret key.
 
 ## 4. Primitives
 
@@ -266,7 +280,8 @@ RFC 9106 gives two recommended parameter sets for Argon2id:
 
 This document uses the second set. A browser on a phone cannot supply 2 GiB.
 
-The salt is 32 bytes. RFC 9106 recommends 16 bytes or more.
+The salt is 32 bytes. RFC 9106 recommends 16 bytes for these sets. A longer
+salt is permitted.
 
 A browser without threads calculates the 4 lanes one after the other. The
 result is the same. The time is longer. The implementation must measure the
@@ -416,7 +431,7 @@ unknown identifier must have the same form and timing as a real response.
 6. The server verifies `sign_in_signature` with `auth_public_key`.
 7. The server checks the second factor.
 8. If steps 6 and 7 pass, the server creates a session and returns
-   `wrapped_root`.
+   `wrapped_root` and `sealed_keyring`.
 9. `root_entropy = open(wrap_key, account_public_key, wrapped_root)`.
 10. The client calculates `account_private_key` from `root_entropy`.
 11. The client checks that `account_private_key` gives `account_public_key`.
@@ -433,7 +448,8 @@ The server must limit the rate of step 4 for each identifier and each address.
 3. The client does steps 1 to 3 of section 6.2.
 4. The client calculates `sign_in_signature` and sends it in the session.
 5. The server does steps 5 and 6 of section 6.2.
-6. If the check passes, the server returns `wrapped_root`.
+6. If the check passes, the server returns `wrapped_root` and
+   `sealed_keyring`.
 7. The client does steps 9 to 12 of section 6.2.
 
 A session alone must not release `wrapped_root`. A person who steals a
@@ -443,7 +459,7 @@ session thus cannot start offline guesses.
 
 - The client keeps `account_private_key` in IndexedDB for the life of the
   session. It keeps the old private keys of the keyring in the same way.
-- The client deletes it on sign-out and when the session expires.
+- The client deletes these keys on sign-out and when the session expires.
 - The client must not store the passphrase, `passphrase_root`, `wrap_key` or
   `root_entropy`.
 
@@ -456,15 +472,16 @@ necessary only for rare operations.
 The client must ask for the passphrase before each of these operations:
 
 - show the mnemonic,
-- change the passphrase,
-- rotate the keys (section 8.3).
+- change the passphrase or rotate the keys. These are one operation
+  (section 8.3).
 
 ### 6.6 Signed requests
 
-Signed requests are for two purposes only:
+A signed request authorizes an operation that changes key material. It is
+an addition to the session. It does not replace the session.
 
-- to get a session or a bearer token with the account key, and
-- to authorize an operation that changes key material.
+A signed request must not create a session or a bearer token. See section
+15, question 5.
 
 Procedure:
 
@@ -510,8 +527,31 @@ Recovery is for a user who lost the passphrase and has the mnemonic.
 
 Recovery sets a new passphrase, thus recovery is a key rotation too.
 
-A reset by email or by an administrator restores sign-in only. It must not
-restore keys. Without the mnemonic, the encrypted files stay unreadable.
+### 6.9 Reset without the mnemonic
+
+**PROPOSED**
+
+This procedure is for a user who lost the passphrase and the mnemonic. It
+is also the only thing that a reset by email or by an administrator can do.
+
+1. The user proves control of the account to the server. Email reset is one
+   method.
+2. The client does the account creation of section 5.4 with a new
+   passphrase. The account gets a new `root_entropy` and new keys.
+3. The server replaces the account data. No signature with the old account
+   key is possible, thus the server accepts the request after step 1 only.
+4. The server deletes `sealed_keyring`, cancels all sessions and all bearer
+   tokens, and marks each encrypted file of the account as unreadable.
+5. The application tells the user that the old encrypted files cannot be
+   opened. The user can delete them. Plain files are not changed.
+
+A person who controls the email of the user can do this procedure. That
+person gets the account and its plain files. That person cannot read an
+encrypted file. An administrator cannot set a passphrase for a user, because
+the passphrase never reaches the server.
+
+Share links of the old encrypted files continue to work. They do not depend
+on the account key.
 
 ## 7. File encryption
 
@@ -577,6 +617,7 @@ which has a limit of 256 GiB in the common variant.
 5. The last stored chunk must have `final_flag = 0x01`. If not, reject the
    file.
 6. A chunk that is not the last one must have exactly 65536 bytes.
+7. No data must follow the last chunk. If data follows, reject the file.
 
 ### 7.5 Properties
 
@@ -648,7 +689,7 @@ Wrap:
 5. `password_key = blake3_derive_key("flare e2ee v1 password stanza", stretched_password || link_secret || owner_public_key || header_hash)`
 6. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
 7. `link_secret_key = blake3_derive_key("flare e2ee v1 link secret copy", file_key)`
-8. `sealed_link_secret = seal(link_secret_key, zeros(24), header_hash, link_secret)`
+8. `sealed_link_secret = seal(link_secret_key, random(24), header_hash, link_secret)`
 9. The stanza is `password_salt || owner_public_key || wrapped_file_key || sealed_link_secret`.
 10. The share link carries `link_secret` (section 10.3).
 
@@ -674,6 +715,11 @@ Properties:
 The owner reads the file through the account stanza. The owner does not need
 the password.
 
+The owner can change the password. The client then makes a new
+`link_secret` and a new stanza, and the old link stops. `link_secret_key`
+does not change, thus `sealed_link_secret` must have a random nonce. A zero
+nonce would use one key and one nonce for two different secrets.
+
 **Reason for `sealed_link_secret`:** the owner has `file_key`, thus the owner
 can open `sealed_link_secret` and show the share link again. Without it, the
 owner could not get the link back after the upload.
@@ -692,8 +738,8 @@ valid.
 that the user uploads from then on are safe.
 
 **Idea:** a rotation replaces `root_entropy`. All account keys come from
-`root_entropy`, thus all of them change. The client makes new stanzas for
-the old files, and the server deletes the old stanzas.
+`root_entropy`, thus all of them change. The old private keys stay in an
+encrypted list until a background task moves each old stanza to the new key.
 
 **Restriction:** a person who knows the passphrase and gets `wrapped_root`
 has `root_entropy`. That person can calculate each key that comes from it. A
@@ -734,12 +780,16 @@ the stanzas to the new key (section 8.3.4).
 3. The client makes a new `root_entropy`, a new account key pair, a new
    `passphrase_salt`, a new `auth_public_key`, a new `wrap_key` and a new
    `wrapped_root` (section 5.4).
-4. `keyring_key = blake3_derive_key("flare e2ee v1 keyring", new root_entropy)`
+4. `keyring_key = blake3_derive_key("flare e2ee v1 keyring", new account_private_key)`
 5. `sealed_keyring = seal(keyring_key, random(24), new account_public_key, old_private_keys)`.
    `old_private_keys` is the list of all old account private keys that still
    have stanzas. It includes the keys of the old keyring.
 6. The client sends the new account data and `sealed_keyring` in a request
-   that is signed with the old account key (section 6.6).
+   that has two proofs:
+   - a signature with the old account key (section 6.6), and
+   - a `sign_in_signature` with the old `auth_private_key` on a new
+     challenge (section 6.2). In recovery, the proof of section 6.8, step 1,
+     replaces this signature.
 7. The server replaces the account data. The server deletes the old
    `wrapped_root` and the old `sealed_keyring`.
 8. The server cancels all other sessions and all bearer tokens of the
@@ -748,7 +798,12 @@ the stanzas to the new key (section 8.3.4).
    mnemonic does not open the account after this step.
 
 In step 6, the client also sends a new `sealed_tag_metadata` for each tag
-(section 9.5.5).
+(section 9.5.5) and a new `sealed_folder_private_key` for each folder
+(section 8.4.2).
+
+**Reason for two proofs:** the browser stores the account private key. A
+person who steals it from the browser must not be able to rotate the account
+and lock the owner out. That person does not have the passphrase.
 
 The server returns `sealed_keyring` together with `wrapped_root` at sign-in.
 The client opens it and keeps the old private keys with the current one
@@ -770,9 +825,8 @@ Each account stanza records the `account_public_key` that it is for.
    account stanza for the current public key (section 8.1).
 3. The client sends the batch. The server replaces the old stanzas.
 4. The client does steps 1 to 3 again until no stanza is for the old key.
-5. The client makes a new `sealed_keyring` without that old key and sends it.
-   The client must have `root_entropy` for this step. Thus it occurs at the
-   next sign-in.
+5. The client makes a new `sealed_keyring` without that old key and sends it
+   in a signed request (section 6.6).
 
 The migration can stop at any time and continue in a later session. The file
 content does not change. The cost for each file is two X25519 operations and
@@ -780,8 +834,8 @@ about 100 bytes.
 
 The migration does not touch password stanzas (section 8.2).
 
-The migration also makes a new `owner_folder_stanza` for each folder
-(section 8.4.2). The key pairs of the folders do not change.
+The rotation request already contains the new `sealed_folder_private_key`
+of each folder (section 8.3.3). The key pairs of the folders do not change.
 
 #### 8.3.5 What rotation gives and does not give
 
@@ -858,11 +912,22 @@ When the client creates a folder:
 2. `folder_metadata_key = blake3_derive_key("flare e2ee v1 folder metadata", folder_private_key)`
 3. `sealed_folder_metadata = seal(folder_metadata_key, random(24), folder_public_key, folder_metadata)`.
    `folder_metadata` is a JSON object with the field `name`.
-4. `owner_folder_stanza = public_wrap(exchange_public_key, "flare e2ee v1 owner folder stanza", folder_public_key, folder_private_key)`
+4. `folder_owner_key = blake3_derive_key("flare e2ee v1 folder owner", account_private_key)`
+   `sealed_folder_private_key = seal(folder_owner_key, random(24), folder_public_key, folder_private_key)`
 5. If the folder has a parent:
    `parent_folder_stanza = public_wrap(parent folder_public_key, "flare e2ee v1 parent folder stanza", folder_public_key, folder_private_key)`
-6. Send `folder_public_key`, `sealed_folder_metadata` and the stanzas to the
-   server.
+6. Send `folder_public_key`, `sealed_folder_metadata`,
+   `sealed_folder_private_key` and the stanza to the server.
+
+**Reason for a secret key in step 4:** a public-key wrap has no sender
+authentication. If the copy of the owner were a public-key wrap, a
+compromised server could replace it with a wrap of a key pair that the
+server made. The owner would then encrypt file keys to the key of the
+server. Only the owner creates folders, thus a secret key of the owner can
+protect this copy.
+
+The client of the owner must get `folder_public_key` from
+`folder_private_key`. It must not use the copy that the server gives.
 
 The key pair of a folder does not come from the key pair of its parent. A
 person who has the key of a folder cannot calculate the key of a folder
@@ -876,7 +941,9 @@ stanza:
 `folder_file_stanza = public_wrap(folder_public_key, "flare e2ee v1 folder file stanza", header_hash, file_key)`
 
 A file with private visibility must not have a folder stanza. A shared
-folder does not show private files.
+folder does not show private files. The server must reject a folder stanza
+in the upload of a private file, and must delete the folder stanza when a
+file becomes private.
 
 A file with a password stanza (section 8.2) does not get a folder stanza for
 `file_key`. It gets this stanza:
@@ -890,7 +957,7 @@ type the password to read the file.
 
 | Person has                    | Can open                                                             |
 | ----------------------------- | -------------------------------------------------------------------- |
-| The account private key       | Each folder, through `owner_folder_stanza`.                          |
+| The account private key       | Each folder, through `sealed_folder_private_key`.                    |
 | The private key of one folder | The name of that folder, its public files, and each folder below it. |
 | The private key of one folder | Not the folders above it. Not its private files.                     |
 | Only `folder_public_key`      | Nothing. That person can add a file to the folder.                   |
@@ -918,9 +985,11 @@ records and the database today. The server searches and sorts by name.
 
 A person who has `file_key` can read `file_metadata`. The server cannot.
 
-The server keeps a copy of `sealed_metadata` in the database. The server
-sends it in each list of files. Without the copy, a list would need a read of
-each file in the storage.
+The server keeps a copy of the file header in the database. The header
+contains `sealed_metadata`. The server sends the header in each list of
+files. Without the copy, a list would need a read of each file in the
+storage. The client needs the full header to calculate `header_hash`, and it
+needs `header_hash` to open a stanza.
 
 ### 9.2 Metadata that stays visible to the server
 
@@ -937,9 +1006,9 @@ each file in the storage.
 - The server cannot search file names. The client decrypts the names and
   searches them locally.
 - The server cannot sort by name. The client sorts.
-- Tag rules that use the file name run in the client at upload time.
-- Audit records, expiry events and webhooks contain the file identifier only.
-- The `file.ready` webhook needs a new schema version.
+- Tag rules run in a client that can read the file name (section 9.7).
+- Audit records and expiry events contain the file identifier and no name.
+- The `file.ready` webhook has a new version without the name (section 12.7).
 
 ### 9.4 Folders
 
@@ -1000,10 +1069,17 @@ Procedure for the visitor:
 | Make a file public     | Make its folder stanza.                                                       |
 | Rename a folder        | Make a new `sealed_folder_metadata`.                                          |
 | Delete a folder        | Its files and folders move up one level. Make new stanzas for the new parent. |
-| Rotate the account key | Make new `owner_folder_stanza` values in the migration (section 8.3.4).       |
+| Rotate the account key | Make a new `sealed_folder_private_key` for each folder (section 8.3.3).       |
 
 A script client that puts files in a folder has `folder_public_key` of that
-folder in its configuration, together with `account_public_key`.
+folder in its configuration, together with `account_public_key`. After the
+owner stops sharing the folder (section 9.4.5), that key is old. The server
+rejects a stanza for an old folder key, and the user installs a new
+configuration.
+
+A moderator can change the visibility of a file of a different account. A
+moderator has no keys. If a moderator makes a file public, the file has no
+folder stanza until the browser of the owner makes one.
 
 #### 9.4.5 Stop sharing
 
@@ -1163,12 +1239,13 @@ For a plain file (section 11), the server does the recognition, as today.
 A script client cannot apply tag rules, and frequently cannot do the
 recognition. The browser of the owner does this work later.
 
-Each file has two flags that the server stores:
+Each file has three flags that the server stores:
 
-| Flag            | Meaning                                            |
-| --------------- | -------------------------------------------------- |
-| `rules_pending` | No client applied the tag rules to this file.      |
-| `ocr_pending`   | The file is an image and has no `sealed_ocr_text`. |
+| Flag                | Meaning                                            |
+| ------------------- | -------------------------------------------------- |
+| `rules_pending`     | No client applied the tag rules to this file.      |
+| `ocr_pending`       | The file is an image and has no `sealed_ocr_text`. |
+| `thumbnail_pending` | The file has no `sealed_thumbnail` (section 12.1). |
 
 The uploading client tells the server which work it did. The server sets
 the flags for the work that is not done. The server cannot examine the file
@@ -1207,7 +1284,7 @@ text. The data can be large. An estimate for 50 000 screenshots is 50 MB to
 
 #### 9.8.1 Local cache of encrypted records
 
-The client keeps `sealed_metadata`, the account stanza and
+The client keeps the header, the account stanza and
 `sealed_ocr_text` of each file in the Origin Private File System (OPFS) of
 the browser.
 
@@ -1254,8 +1331,14 @@ files" operation of a tag rule.
 2. Build the header (section 7.2).
 3. Encrypt the content (section 7.3).
 4. Make an account stanza for the account of the user (section 8.1).
-5. Send the encrypted file and the stanza to the server.
-6. The server returns the file identifier.
+5. If the file is public and in a folder, make a folder stanza (section
+   8.4.3).
+6. If the file has a password, make a password stanza (section 8.2).
+7. If the client did the work, make `sealed_ocr_text` (section 9.6) and
+   `sealed_thumbnail` (section 12.1), and apply the tag rules (section 9.5).
+8. Send the encrypted file, the stanzas and the results of step 7 to the
+   server. Tell the server which work of step 7 is done.
+9. The server returns the file identifier.
 
 ### 10.2 Upload from a script client
 
@@ -1267,10 +1350,12 @@ Flare.
 **Idea:** encryption to a public key needs no secret. The script has the
 public key of the account and a bearer token.
 
-A script client has two values in its configuration:
+A script client has these values in its configuration:
 
-- a bearer token, and
-- `account_public_key`.
+- a bearer token,
+- `account_public_key`,
+- the upload profile, which says if the upload is encrypted (section 11.2),
+- `folder_public_key`, if the profile puts files in a folder.
 
 The script client has no private key.
 
@@ -1278,8 +1363,8 @@ The application writes `account_public_key` into the configuration when the
 user creates it. The script client must not get the key from the server
 without verification. A compromised server could give a different key.
 
-The procedure is the same as section 10.1. The bearer token authorizes
-step 5.
+The procedure is the same as section 10.1. A script client frequently
+skips step 7 (section 9.7). The bearer token authorizes step 8.
 
 ### 10.3 Share link
 
@@ -1293,6 +1378,8 @@ thus it cannot be in the address. `file_id` replaces it.
 `file_id` is a value that the server can see. It is a random value by
 default. A name pattern of an upload profile can make it, if the pattern
 does not use the original file name.
+
+A plain file keeps its address with the file name, as today.
 
 A file without a password:
 
@@ -1359,7 +1446,14 @@ configuration for private files uses an `encrypted` profile.
 The client reads the setting and acts on it. The server cannot encrypt. The
 server must reject an encrypted upload to a `plain` profile, and a plain
 upload to an `encrypted` profile. This prevents a plain upload by mistake
-from a wrong configuration.
+from a wrong configuration. The server identifies an encrypted upload by a
+field of the request and by the `magic` value of the header.
+
+One exception exists. An upload with a token from before the migration is
+always a plain upload (section 14.4).
+
+If the administrator forbids plain uploads (section 11.1), the server
+rejects each plain upload, also from an old token.
 
 ### 11.3 Link preview of an encrypted file
 
@@ -1508,7 +1602,9 @@ it.
 
 1. **AGREED.** The application must send a Content-Security-Policy that
    permits scripts and WebAssembly only from the origin of the application.
-   It must block inline scripts.
+   The framework of Flare puts inline scripts in each page. Thus the policy
+   must permit an inline script only if it has the random nonce of that
+   response. It must block each other inline script.
 2. **PROPOSED.** The "Custom head" setting must not accept `script` or
    `base` elements (section 13.1).
 3. **AGREED.** The server must not write a file key or a share link fragment
@@ -1561,11 +1657,11 @@ restriction prevents nothing.
 - a person who can write to the database and cannot change the code.
 
 **Conflict with requirement 1.** Requirement 1 is agreed. A
-Content-Security-Policy that blocks inline scripts and scripts from other
-origins stops the scripts of this setting, if the setting accepts them or
-not. Thus the two decisions are one decision: either the policy is strict
-and scripts in this setting do not operate, or the setting keeps scripts and
-the policy has an exception for them.
+Content-Security-Policy that blocks scripts without the nonce and scripts
+from other origins stops the scripts of this setting, if the setting accepts
+them or not. Thus the two decisions are one decision: either the policy is
+strict and scripts in this setting do not operate, or the application gives
+the nonce to the scripts of this setting and permits their origins.
 
 ## 14. Migration of an existing instance
 
@@ -1586,6 +1682,11 @@ step 3.
 
 The server saw the old password before the migration. A user who does not
 trust the past of the server selects a new passphrase.
+
+During the migration, the sign-in page must know which method an account
+uses. The answer for an account that has no keys is different from the
+answer for an unknown identifier (section 6.1). Thus a person can learn that
+such an account exists. This stops when the account has keys.
 
 ### 14.2 Existing files
 
@@ -1648,7 +1749,7 @@ Today each account has one upload token. The database stores it as plain
 text. An endpoint returns it. Each screenshot tool configuration contains
 it. A person who copies the database can upload as each user.
 
-Proposal:
+Procedure:
 
 1. A database migration replaces each stored token with its hash. The old
    configurations continue to authenticate.
@@ -1672,25 +1773,39 @@ after the upgrade.
    (section 10.4).
 4. **Public upload links.** This feature is not merged. It must use the
    upload procedure of section 10.2.
+5. **Sign-in with the account key.** An earlier draft let a signed request
+   create a session or a bearer token. Draft 14 removes this (section 6.6).
+   Reason: the browser stores the account private key. A person who steals
+   it could sign in without the passphrase and without the second factor.
+   No client in this document needs that sign-in. The authors must confirm.
+6. **Reset without the mnemonic.** Section 6.9 is new. The authors must
+   confirm it.
+7. **File name in the header.** The name is in the header, and
+   `header_hash` is in each chunk tag and in each stanza. Thus a new name
+   would need a new tag for each chunk and a new stanza for each recipient.
+   Flare cannot rename a file today, thus this is not a defect now. If a
+   rename function is wanted later, `sealed_metadata` must move out of the
+   header before the format is fixed.
 
 All other questions of the earlier drafts are closed. The change log shows
 when.
 
 ## 16. Change log
 
-| Draft | Date       | Change                                                                                                                                                                                                            |
-| ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | 2026-11-10 | First draft.                                                                                                                                                                                                      |
-| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.                                                                           |
-| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                                                                               |
-| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password.                                                                |
-| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                                          |
-| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                                       |
-| 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back.                     |
-| 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                                          |
-| 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                                        |
-| 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                                       |
-| 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                                                 |
-| 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                                            |
-| 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                                            |
-| 13    | 2026-11-10 | Closed: file address, webhook version 2, token hashes, old tool configurations upload as plain, existing files after a prompt. Custom head stays open with the objection and the conflict with the script policy. |
+| Draft | Date       | Change                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | 2026-11-10 | First draft.                                                                                                                                                                                                                                                                                                                                                                                             |
+| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.                                                                                                                                                                                                                                                                  |
+| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                                                                                                                                                                                                                                                                      |
+| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password.                                                                                                                                                                                                                                                       |
+| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                                                                                                                                                                                                                                 |
+| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                                                                                                                                                                                                                              |
+| 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back.                                                                                                                                                                                                            |
+| 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                                                                                                                                                                                                                                 |
+| 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                                                                                                                                                                                                                               |
+| 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                                                                                                                                                                                                                              |
+| 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                                                                                                                                                                                                                                        |
+| 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                                                                                                                                                                                                                                   |
+| 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                                                                                                                                                                                                                                   |
+| 13    | 2026-11-10 | Closed: file address, webhook version 2, token hashes, old tool configurations upload as plain, existing files after a prompt. Custom head stays open with the objection and the conflict with the script policy.                                                                                                                                                                                        |
+| 14    | 2026-11-10 | Review of the full document. Corrections: random nonce for `sealed_link_secret`; the folder key copy of the owner uses a secret key; a rotation needs a proof of the passphrase; a signed request cannot create a session; the script policy permits inline scripts with a nonce; the server stores the full header. New: reset without the mnemonic, limit 8, three open questions. Stale text removed. |
