@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 1. Not implemented. Not reviewed.             |
+| Status  | Draft 2. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -58,8 +58,9 @@ This document does not use single-letter names.
 1. Each account has one random secret, the `root_entropy`. The user keeps it
    as a list of words (the mnemonic). All account keys come from it.
 2. The user types a passphrase. The client stretches the passphrase and
-   splits the result into two keys. The `auth_key` goes to the server as
-   proof. The `wrap_key` stays in the client and encrypts the `root_entropy`.
+   splits the result into two keys. The `auth_private_key` signs a challenge
+   as proof for the server. The `wrap_key` stays in the client and encrypts
+   the `root_entropy`.
 3. The server keeps the encrypted `root_entropy`. The server releases it only
    after the proof and the second factor are correct.
 4. Each file has its own random `file_key`. The client encrypts the file in
@@ -104,29 +105,30 @@ All context strings are ASCII. A context string does not have a terminator.
 
 ### 2.3 Names of values
 
-| Name                    | Size     | Meaning                                                     |
-| ----------------------- | -------- | ----------------------------------------------------------- |
-| `root_entropy`          | 32 bytes | Root secret of the account. The mnemonic encodes it.        |
-| `account_seed`          | 32 bytes | Seed of the account key pair.                               |
-| `account_private_key`   | 32 bytes | Ed25519 private key of the account.                         |
-| `account_public_key`    | 32 bytes | Ed25519 public key of the account.                          |
-| `exchange_private_key`  | 32 bytes | X25519 form of `account_private_key`.                       |
-| `exchange_public_key`   | 32 bytes | X25519 form of `account_public_key`.                        |
-| `passphrase_salt`       | 32 bytes | Random input to Argon2id. Not secret.                       |
-| `passphrase_root`       | 32 bytes | Output of Argon2id.                                         |
-| `auth_key`              | 32 bytes | Proof of the passphrase. The client sends it to the server. |
-| `auth_verifier`         | 32 bytes | Hash of `auth_key`. The server stores it.                   |
-| `wrap_key`              | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client.  |
-| `wrapped_root`          | 88 bytes | `root_entropy` encrypted with `wrap_key`.                   |
-| `file_key`              | 32 bytes | Random key of one file.                                     |
-| `content_cipher_key`    | 32 bytes | Encrypts the chunks of a file.                              |
-| `content_mac_key`       | 32 bytes | Authenticates the chunks of a file.                         |
-| `metadata_key`          | 32 bytes | Encrypts the name and the type of a file.                   |
-| `header_hash`           | 32 bytes | BLAKE3 hash of the file header.                             |
-| `ephemeral_private_key` | 32 bytes | X25519 private key that the sender uses for one stanza.     |
-| `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                   |
-| `shared_secret`         | 32 bytes | Output of X25519.                                           |
-| `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.             |
+| Name                    | Size     | Meaning                                                          |
+| ----------------------- | -------- | ---------------------------------------------------------------- |
+| `root_entropy`          | 32 bytes | Root secret of the account. The mnemonic encodes it.             |
+| `account_seed`          | 32 bytes | Seed of the account key pair.                                    |
+| `account_private_key`   | 32 bytes | Ed25519 private key of the account.                              |
+| `account_public_key`    | 32 bytes | Ed25519 public key of the account.                               |
+| `exchange_private_key`  | 32 bytes | X25519 form of `account_private_key`.                            |
+| `exchange_public_key`   | 32 bytes | X25519 form of `account_public_key`.                             |
+| `passphrase_salt`       | 32 bytes | Random input to Argon2id. Not secret.                            |
+| `passphrase_root`       | 32 bytes | Output of Argon2id.                                              |
+| `auth_seed`             | 32 bytes | Seed of the sign-in key pair.                                    |
+| `auth_private_key`      | 32 bytes | Ed25519 key that proves the passphrase. Never leaves the client. |
+| `auth_public_key`       | 32 bytes | Its public key. The server stores it.                            |
+| `wrap_key`              | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client.       |
+| `wrapped_root`          | 88 bytes | `root_entropy` encrypted with `wrap_key`.                        |
+| `file_key`              | 32 bytes | Random key of one file.                                          |
+| `content_cipher_key`    | 32 bytes | Encrypts the chunks of a file.                                   |
+| `content_mac_key`       | 32 bytes | Authenticates the chunks of a file.                              |
+| `metadata_key`          | 32 bytes | Encrypts the name and the type of a file.                        |
+| `header_hash`           | 32 bytes | BLAKE3 hash of the file header.                                  |
+| `ephemeral_private_key` | 32 bytes | X25519 private key that the sender uses for one stanza.          |
+| `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                        |
+| `shared_secret`         | 32 bytes | Output of X25519.                                                |
+| `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.                  |
 
 ## 3. Threat model
 
@@ -265,16 +267,29 @@ mnemonic  <->  root_entropy
 
 passphrase + passphrase_salt --Argon2id--> passphrase_root
                                              |
-                                             +-- auth_key = blake3_derive_key("flare e2ee v1 auth", passphrase_root)
+                                             +-- auth_seed = blake3_derive_key("flare e2ee v1 auth", passphrase_root)
+                                             |     |
+                                             |     +-- (auth_private_key, auth_public_key) = Ed25519 key pair from auth_seed
+                                             |
                                              +-- wrap_key = blake3_derive_key("flare e2ee v1 wrap", passphrase_root)
 ```
 
 - `root_entropy` is the root of the account. The mnemonic is the recovery key.
-- `auth_key` proves knowledge of the passphrase to the server.
+- `auth_private_key` proves knowledge of the passphrase to the server. It
+  signs a challenge. It never leaves the client.
 - `wrap_key` encrypts `root_entropy`. `wrap_key` never leaves the client.
 
 **Reason for one Argon2id operation:** two operations make the user wait two
 times. An attacker with the database needs only one operation for each guess.
+
+**Reason for a sign-in key pair:** the client cannot use the account key to
+sign in, because the account key is inside `wrapped_root`. The proof must
+come from the passphrase. A signature sends no value that a person can use
+again. The server stores a public key only, thus a copy of the database
+gives nothing that a person can present to sign in.
+
+`auth_private_key` and `wrap_key` are independent. A person who has one
+cannot calculate the other.
 
 ### 5.2 Passphrase rule
 
@@ -288,11 +303,12 @@ that the server cannot see.
 | -------------------- | -------------------------------------------------------------- | ---------------------- |
 | `account_public_key` | Account public key                                             | Yes                    |
 | `passphrase_salt`    | `random(32)`                                                   | Yes                    |
-| `auth_verifier`      | `blake3_derive_key("flare e2ee v1 auth verifier", auth_key)`   | Yes                    |
+| `auth_public_key`    | Public key of the sign-in key pair                             | Yes                    |
 | `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)` | No                     |
 
-The server must not store `auth_key`. The server stores only `auth_verifier`.
-A person who copies the database cannot sign in with `auth_verifier`.
+A person who copies the database gets `wrapped_root` and `auth_public_key`.
+That person cannot sign in. That person can test passphrases offline
+(section 3.3, limit 4).
 
 ### 5.4 Account creation
 
@@ -302,16 +318,13 @@ The client does these steps:
 2. Calculate `account_seed`, `account_private_key` and `account_public_key`.
 3. `passphrase_salt = random(32)`.
 4. `passphrase_root = Argon2id(passphrase, passphrase_salt)`.
-5. Calculate `auth_key` and `wrap_key`.
+5. Calculate `auth_private_key`, `auth_public_key` and `wrap_key`.
 6. `wrapped_root = seal(wrap_key, random(24), account_public_key, root_entropy)`.
-7. Send `account_public_key`, `passphrase_salt`, `auth_key` and
+7. Send `account_public_key`, `passphrase_salt`, `auth_public_key` and
    `wrapped_root` to the server.
 8. Show the mnemonic of `root_entropy` to the user. Tell the user to keep it
    offline.
-9. Erase `passphrase_root`, `auth_key` and `wrap_key` from memory.
-
-The server calculates `auth_verifier` from `auth_key`. Then the server
-discards `auth_key`.
+9. Erase `passphrase_root`, `auth_private_key` and `wrap_key` from memory.
 
 ## 6. Sign-in and unlock
 
@@ -320,7 +333,8 @@ discards `auth_key`.
 **Goal:** the user gets a server session and the account private key. The
 server learns nothing that opens a file.
 
-**Idea:** the client proves the passphrase with `auth_key`. The server
+**Idea:** the client proves the passphrase with a signature from
+`auth_private_key`. The server
 releases `wrapped_root` only after that proof and the second factor. The
 client opens `wrapped_root` with `wrap_key`.
 
@@ -328,10 +342,11 @@ client opens `wrapped_root` with `wrap_key`.
 cannot take it back. Thus the second factor must protect the release of
 `wrapped_root`, not only the session.
 
-### 6.1 Salt request
+### 6.1 Salt and challenge request
 
 1. The client sends the account identifier.
-2. The server returns `passphrase_salt`.
+2. The server returns `passphrase_salt` and `challenge = random(32)`. The
+   challenge is valid for one use and for 60 seconds.
 
 For an unknown identifier, the server must return a fake salt. The fake salt
 is `blake3_keyed_hash(server_secret, identifier)`. The response for an
@@ -339,12 +354,14 @@ unknown identifier must have the same form and timing as a real response.
 
 ### 6.2 Password sign-in
 
-1. The client gets `passphrase_salt` (section 6.1).
+1. The client gets `passphrase_salt` and `challenge` (section 6.1).
 2. `passphrase_root = Argon2id(passphrase, passphrase_salt)`.
-3. The client calculates `auth_key` and `wrap_key`.
-4. The client sends the identifier, `auth_key` and the second-factor response.
-5. The server calculates a verifier from the received `auth_key`.
-6. The server compares it with `auth_verifier` in constant time.
+3. The client calculates `auth_private_key` and `wrap_key`.
+4. `sign_in_signature = Ed25519_sign(auth_private_key, "flare e2ee v1 sign-in" || challenge || blake3_hash(identifier))`.
+   The client sends the identifier, `challenge`, `sign_in_signature` and the
+   second-factor response.
+5. The server deletes `challenge`.
+6. The server verifies `sign_in_signature` with `auth_public_key`.
 7. The server checks the second factor.
 8. If steps 6 and 7 pass, the server creates a session and returns
    `wrapped_root`.
@@ -352,7 +369,7 @@ unknown identifier must have the same form and timing as a real response.
 10. The client calculates `account_private_key` from `root_entropy`.
 11. The client checks that `account_private_key` gives `account_public_key`.
     If not, reject.
-12. The client erases the passphrase, `passphrase_root`, `auth_key`,
+12. The client erases the passphrase, `passphrase_root`, `auth_private_key`,
     `wrap_key` and `root_entropy`.
 
 The server must limit the rate of step 4 for each identifier and each address.
@@ -362,7 +379,7 @@ The server must limit the rate of step 4 for each identifier and each address.
 1. The user signs in with the passkey or OIDC. The server creates a session.
 2. The client asks the user for the passphrase.
 3. The client does steps 1 to 3 of section 6.2.
-4. The client sends `auth_key` in the session.
+4. The client calculates `sign_in_signature` and sends it in the session.
 5. The server does steps 5 and 6 of section 6.2.
 6. If the check passes, the server returns `wrapped_root`.
 7. The client does steps 9 to 12 of section 6.2.
@@ -414,8 +431,8 @@ A challenge for one use does not.
 ### 6.7 Passphrase change
 
 1. The client authenticates with the old passphrase and gets `root_entropy`.
-2. The client makes a new `passphrase_salt`, `auth_key`, `wrap_key` and
-   `wrapped_root` (section 5.4).
+2. The client makes a new `passphrase_salt`, `auth_public_key`, `wrap_key`
+   and `wrapped_root` (section 5.4).
 3. The client sends them in a signed request (section 6.6).
 
 The account key does not change. No file changes.
@@ -429,8 +446,8 @@ Recovery is for a user who lost the passphrase and has the mnemonic.
 2. The user types the mnemonic. The client decodes `root_entropy`.
 3. The client calculates `account_public_key` from `root_entropy` and
    compares it with the stored one.
-4. The client makes a new `passphrase_salt`, `auth_key`, `wrap_key` and
-   `wrapped_root`.
+4. The client makes a new `passphrase_salt`, `auth_public_key`, `wrap_key`
+   and `wrapped_root`.
 5. The client sends them in a signed request.
 
 A reset by email or by an administrator restores sign-in only. It must not
@@ -782,7 +799,7 @@ file with a link preview cannot be encrypted.
 1. The application must send a Content-Security-Policy that blocks inline
    scripts and scripts from other origins.
 2. The "Custom head" setting must not accept `script` or `base` elements.
-3. The server must not write `auth_key`, a file key or a share link fragment
+3. The server must not write a file key or a share link fragment
    to a log, an audit record, a webhook or a URL query.
 4. A moderator permission must not give access to encrypted content.
 5. The legacy upload token is stored without a hash today. The server must
@@ -822,3 +839,4 @@ file with a link preview cannot be encrypted.
 | ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
 | 0     | 2026-11-10 | First draft.                                                                                                                            |
 | 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations. |
+| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                     |
