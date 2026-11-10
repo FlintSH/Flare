@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 10. Not implemented. Not reviewed.            |
+| Status  | Draft 11. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -1117,7 +1117,18 @@ off, the recognition occurs only on the request of the user.
 The application must supply the recognition program and the language data
 from its own origin. It must not load them from a different site.
 
-#### 9.6.3 Plain files
+#### 9.6.3 Who can store text
+
+A visitor is not trusted. The server must accept `sealed_ocr_text` only:
+
+- in the upload request of the file, or
+- from a session of the owner.
+
+A visitor who has `file_key` can make a valid `sealed_ocr_text`. The server
+must reject it. The text that the browser of a visitor makes stays in that
+browser.
+
+#### 9.6.4 Plain files
 
 For a plain file (section 11), the server does the recognition, as today.
 
@@ -1158,24 +1169,56 @@ Results for the user:
 
 ### 9.8 Search
 
-**AGREED**
+**AGREED** for the structure. **PROPOSED** for the storage details.
 
-The server cannot search encrypted names or encrypted text. The client
-does the search.
+**Goal:** the owner can search the names and the image text of all files.
+The search must stay fast for an account with tens of thousands of files.
 
-1. The client gets `sealed_metadata` and `sealed_ocr_text` of the files.
-2. The client decrypts them and builds a search index.
-3. The client keeps the index for the session. It deletes the index on
-   sign-out, together with the keys (section 6.4).
+**Idea:** the client keeps a local copy of the encrypted records. It
+decrypts them into memory for the session and searches there.
 
-The client must use the X25519 function of the browser, not an
+**Restriction:** the server cannot search encrypted names or encrypted
+text. The data can be large. An estimate for 50 000 screenshots is 50 MB to
+250 MB of text. A download of all records in each session is too slow.
+
+#### 9.8.1 Local cache of encrypted records
+
+The client keeps `sealed_metadata`, the account stanza and
+`sealed_ocr_text` of each file in the Origin Private File System (OPFS) of
+the browser.
+
+- The cache contains ciphertext only. A person who reads the cache gets
+  nothing that the server does not have.
+- The client updates the cache in steps. It requests only the records that
+  changed after the last update.
+- The client deletes the cache on sign-out.
+- If OPFS is not available, the client gets the records from the server in
+  each session. A private window of some browsers has no OPFS.
+- The browser can delete the cache when storage is low. The client must
+  operate correctly without it.
+
+#### 9.8.2 Plaintext in memory
+
+1. A background worker of the client reads the cache.
+2. The worker opens each account stanza and gets `file_key`.
+3. The worker decrypts the names and the text and keeps them in memory.
+4. The plaintext exists only in memory. The client must not write decrypted
+   names or text to OPFS, IndexedDB or any other storage.
+
+#### 9.8.3 Search method
+
+Search today is a test for a substring, without regard to upper and lower
+case. The worker does the same test on the text in memory. No search index
+is necessary for this test.
+
+The worker must use the X25519 function of the browser, not an
 implementation in JavaScript. A test on a server computer gave 0.07 ms for
 each account stanza. That is approximately 4 seconds for 50 000 files. A
-phone is slower. The client shows the first files before the index is
-complete.
+phone is slower. The client shows the first files before the worker is
+done.
 
-The same applies to the sort by name and to the "apply to existing files"
-operation of a tag rule.
+The same method applies to the sort by name and to the "apply to existing
+files" operation of a tag rule.
 
 ## 10. Upload and share links
 
@@ -1367,3 +1410,4 @@ Today the server redirects known crawlers to the raw file.
 | 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                    |
 | 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                   |
 | 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                             |
+| 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                        |
