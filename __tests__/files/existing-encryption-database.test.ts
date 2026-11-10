@@ -48,6 +48,8 @@ class MemoryStorage {
   readonly target = { provider: 'local' as const }
   readonly objects = new Map<string, Buffer>()
   failReads = 0
+  /** Reads that end early without an error. */
+  shortReads = 0
   failWrites = 0
   corruptWrites = 0
   private get(path: string) {
@@ -62,9 +64,11 @@ class MemoryStorage {
       throw new Error(`cannot read ${path}`)
     }
     const pieces: Buffer[] = []
+    const end =
+      this.shortReads-- > 0 ? Math.floor(bytes.length / 2) : bytes.length
     // Pieces that do not line up with the 65536-byte chunks.
-    for (let at = 0; at < bytes.length; at += 50_000)
-      pieces.push(Buffer.from(bytes.subarray(at, at + 50_000)))
+    for (let at = 0; at < end; at += 50_000)
+      pieces.push(Buffer.from(bytes.subarray(at, Math.min(end, at + 50_000))))
     return Readable.from(pieces, { objectMode: false })
   }
   async uploadStream(stream: Readable, path: string) {
@@ -899,6 +903,33 @@ describe.skipIf(!databaseUrl)(
         errorCode: null,
       })
       expect(await runOne()).toBe('encrypted')
+    })
+
+    it('does not accept a read of the plaintext that ended early', async () => {
+      const content = randomBytes(300_000)
+      const before = await plainFile(content)
+      await queue()
+      // The stream gives half of the object and ends without an error.
+      storage.shortReads = 1
+      expect(await runOne()).toBe('retry')
+      expect(await jobOf(before.id)).toMatchObject({
+        status: 'pending',
+        errorCode: 'storage_read_failed',
+        ciphertextPath: null,
+      })
+      expect(await row(before.id)).toMatchObject({
+        encrypted: false,
+        path: before.path,
+      })
+      expect(storage.objects.get(before.path)!.equals(content)).toBe(true)
+      await runQueuedDeletions()
+      expect([...storage.objects.keys()]).toEqual([before.path])
+      await prisma.fileEncryptionJob.updateMany({
+        data: { availableAt: new Date() },
+      })
+      expect(await runOne()).toBe('encrypted')
+      const { content: decrypted } = await open(before.id)
+      expect(sha256(decrypted)).toBe(sha256(content))
     })
 
     it('fails at once when the plaintext object is missing or the account has no keys', async () => {

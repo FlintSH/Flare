@@ -474,6 +474,19 @@ async function writeCiphertext(input: {
       )
     throw new JobError('storage_write_failed')
   }
+  // A read that ended early without an error would pass the verification,
+  // because the ciphertext matches what was read. The plaintext object is
+  // deleted later, so every byte of it must have been read.
+  let stored: number
+  try {
+    stored = await input.storage.getFileSize(input.sourcePath)
+  } catch (error) {
+    throw new JobError(
+      isMissingObject(error) ? 'source_missing' : 'storage_read_failed',
+      !isMissingObject(error)
+    )
+  }
+  if (stored !== length) throw new JobError('storage_read_failed')
   return {
     length,
     digest: hash.digest(),

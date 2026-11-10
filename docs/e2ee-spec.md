@@ -2293,7 +2293,8 @@ for each type of file and the default selection.
    1. records the path of the new ciphertext object, before it writes the
       first byte,
    2. reads the plaintext as a stream, encrypts it, and writes the
-      ciphertext to the new path,
+      ciphertext to the new path; the number of bytes that it read must be
+      equal to the size of the plaintext object,
    3. reads the ciphertext again and decrypts it; the length and a hash of
       the result must be equal to those of the bytes that it read,
    4. changes the file record in one database transaction,

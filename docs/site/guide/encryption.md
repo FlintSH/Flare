@@ -157,7 +157,7 @@ Files that were in your library before this release are plain files, and they st
 
 When the server encrypts one of your files:
 
-- **The content, the name, the type and the image text become ciphertext** that only your keys open. The plain copy is deleted from storage after the encrypted copy was written, read back and checked.
+- **The content, the name, the type and the image text become ciphertext** that only your keys open. The plain copy is deleted from storage only after the server read the whole file, wrote the encrypted copy, read that copy back and checked it.
 - **Its tags, its folder, its visibility, its expiry, its view and download counts and its upload time stay.**
 - **Its address changes.** An encrypted file has an address without a name. For a private file nothing breaks, because nobody had a link. For a public file the old link stops and answers "not found". You copy the new link from the library.
 - **A password does not carry over.** The server only has a check value of the password you set, and an encrypted file needs the password itself to protect its key. A file that had a password is encrypted without one and made **private**, so it is never more exposed than before. The library marks it **Password removed** until you set a password again or change its visibility yourself.
