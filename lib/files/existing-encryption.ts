@@ -54,7 +54,8 @@ import { accountHasSealedTags } from './library-records'
  * 2. Journal: the path of the new ciphertext object is recorded in the job
  *    before the first byte reaches storage.
  * 3. Write: the plaintext is read as a stream, encrypted and written to that
- *    new path. The plaintext object is not touched.
+ *    new path. The plaintext object is not touched. The number of bytes
+ *    that were read must be the stored size of the plaintext object.
  * 4. Verify: the ciphertext is read back and decrypted. Its length and the
  *    hash of its plaintext must be those of the bytes that were read.
  * 5. Switch: one transaction, with the row of the account and the row of
@@ -963,6 +964,19 @@ export async function processFileEncryption(
       lost: () => lost,
       signal: abort.signal,
     })
+    // A read that ended early without an error must not become the file:
+    // the bytes that were read are the whole stored object, or the attempt
+    // stops here and the plaintext object stays.
+    let sourceBytes: number
+    try {
+      sourceBytes = await storage.getFileSize(file.path)
+    } catch (error) {
+      throw new JobError(
+        isMissingObject(error) ? 'source_missing' : 'storage_read_failed',
+        !isMissingObject(error)
+      )
+    }
+    if (sourceBytes !== pass.length) throw new JobError('storage_read_failed')
     await steps.afterWrite?.()
     await verifyCiphertext({
       storage,

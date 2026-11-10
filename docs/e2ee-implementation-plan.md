@@ -33,6 +33,39 @@ can be reviewed alone. Nothing is visible to a user before phase 3.
 | 7     | Migration of existing accounts, files and tokens                                                                                                       | 14                                                                              | 2, 3, 4    |
 | 8     | Measurements: Argon2id on a slow phone, large libraries, large files                                                                                   | 4.3, 9.8                                                                        | 2, 4       |
 
+## State on 2026-11-10
+
+Phases 1 to 7 are implemented on `feat/e2ee`. The pull request is a draft
+and no person has reviewed the cryptography or the code.
+
+| Phase | State                                                                                                                                                   |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Done. 137 shared vectors. The TypeScript library, the Python reference and the Rust client agree on the vectors of the procedures that each implements. |
+| 2     | Done.                                                                                                                                                   |
+| 3     | Done.                                                                                                                                                   |
+| 4     | Done.                                                                                                                                                   |
+| 5     | Done. Tested in Chromium only.                                                                                                                          |
+| 6     | Done. The program is built and tested on Linux x86_64 only. The workflow for the other platforms has not run.                                           |
+| 7     | Done for accounts, tokens and files. The files of an account that does not come back stay plain (specification, section 14.3).                          |
+| 8     | Partly done. Large files are measured (below). The time of Argon2id on a slow phone and a library of 20,000 files are not measured.                     |
+
+A security review in two passes read the branch on 2026-11-10. Draft 23 of
+the specification records its results. Section 15 of the specification
+lists the questions that it left open (questions 3 to 6).
+
+### Measurements
+
+On a virtual machine with 4 cores, with headless Chromium, local storage
+and the production build:
+
+| What                                                | Result                                        |
+| --------------------------------------------------- | --------------------------------------------- |
+| Upload of a 2 GiB file from the browser             | 182 s. Peak memory of the browser: 975 MiB.   |
+| Download of a 2 GiB file through the service worker | 148 s.                                        |
+| Seek to the middle of a 2-hour video of 1,445 MiB   | 0.67 s. 7.2 MiB of ciphertext in 15 requests. |
+
+Firefox, Safari, mobile browsers and S3 storage are not measured.
+
 ## Phase 1 in detail
 
 Dependencies, all pinned to exact versions:

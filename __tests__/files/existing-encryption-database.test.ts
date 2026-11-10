@@ -48,6 +48,8 @@ class MemoryStorage {
   readonly target = { provider: 'local' as const }
   readonly objects = new Map<string, Buffer>()
   failReads = 0
+  /** A read that ends after half of the object, with no error. */
+  shortReads = 0
   failWrites = 0
   corruptWrites = 0
   private get(path: string) {
@@ -62,9 +64,12 @@ class MemoryStorage {
       throw new Error(`cannot read ${path}`)
     }
     const pieces: Buffer[] = []
+    const end =
+      this.shortReads > 0 ? Math.floor(bytes.length / 2) : bytes.length
+    if (this.shortReads > 0) this.shortReads--
     // Pieces that do not line up with the 65536-byte chunks.
-    for (let at = 0; at < bytes.length; at += 50_000)
-      pieces.push(Buffer.from(bytes.subarray(at, at + 50_000)))
+    for (let at = 0; at < end; at += 50_000)
+      pieces.push(Buffer.from(bytes.subarray(at, Math.min(end, at + 50_000))))
     return Readable.from(pieces, { objectMode: false })
   }
   async uploadStream(stream: Readable, path: string) {
@@ -899,6 +904,30 @@ describe.skipIf(!databaseUrl)(
         errorCode: null,
       })
       expect(await runOne()).toBe('encrypted')
+    })
+
+    it('does not take a read that ended early for the file', async () => {
+      const content = randomBytes(180_000)
+      const before = await plainFile(content)
+      await queue()
+      // The storage ends the stream after half of the object, with no error.
+      storage.shortReads = 1
+      expect(await runOne()).toBe('retry')
+      expect(await jobOf(before.id)).toMatchObject({
+        status: 'pending',
+        errorCode: 'storage_read_failed',
+      })
+      expect((await row(before.id)).encrypted).toBe(false)
+      // The whole plaintext object stays, and the short ciphertext goes.
+      await runQueuedDeletions()
+      expect([...storage.objects.keys()]).toEqual([before.path])
+      expect(storage.objects.get(before.path)!.equals(content)).toBe(true)
+      // The next attempt reads the whole object and encrypts the file.
+      await prisma.fileEncryptionJob.updateMany({
+        data: { availableAt: new Date() },
+      })
+      expect(await runOne()).toBe('encrypted')
+      expect((await row(before.id)).encrypted).toBe(true)
     })
 
     it('fails at once when the plaintext object is missing or the account has no keys', async () => {

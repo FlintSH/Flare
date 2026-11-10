@@ -193,7 +193,7 @@ A plain file has **Encrypt** in its menu in the library, and **Select** offers *
 
 ### If a file could not be encrypted
 
-The status turns into **could not be encrypted** and opens a list with the reason for each file and **Try again**. A file on that list is unchanged and still plain. The most common reason is storage that did not answer; if the list says the stored file is missing, tell your administrator.
+The status turns into **could not be encrypted** and opens a list with the reason for each file and **Try again**. A file on that list is unchanged and still plain. The most common reason is storage that did not answer or that gave back only a part of the file: the server replaces a file only after it read every stored byte and checked the encrypted copy against it. If the list says the stored file is missing, tell your administrator.
 
 ## What does not work yet
 
