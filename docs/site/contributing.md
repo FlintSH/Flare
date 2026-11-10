@@ -383,6 +383,16 @@ pnpm exec vitest run __tests__/auth/security-database.test.ts
 
 Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic redemption for both code sets, stale-session fences, enrollment, encrypted secret handling, required-passkey transitions and fallback guards, and recovery for local and SSO-only accounts. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators or a live identity provider.
 
+The account key and passphrase sign-in suite uses its own database, named exactly `flare_e2ee_test_local` (or `flare_e2ee_test_ci` for CI), because it deletes every account between tests:
+
+```sh
+export FLARE_E2EE_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_test_local'
+DATABASE_URL="$FLARE_E2EE_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/auth/e2ee-database.test.ts
+```
+
+Without that variable the suite is skipped. It calls the real route handlers and the real NextAuth authorizers against PostgreSQL and signs every proof with the `lib/e2ee` library, as a browser does. It covers the [account key contracts](/api/account-keys): the salt and challenge request for known and unknown identifiers, passphrase sign-in with its second factor and limits, unlock, key setup, rotation with one proof missing, the keyring, recovery, reset, and the password routes that refuse an account with keys. It skips Argon2id, whose input and output never reach the server; `__tests__/e2ee` covers it with the test vectors.
+
 ## Sessions and audit browser checks and demos
 
 The [profile session guide](/guide/account#login-history-and-active-sessions), [audit guide](/admin/audit), and [recorded walkthroughs](/demos#review-and-revoke-browser-sessions) use real application operations with disposable accounts. They do not rely on production accounts or fabricated audit rows.

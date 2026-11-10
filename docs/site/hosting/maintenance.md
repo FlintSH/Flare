@@ -155,6 +155,16 @@ After migration, sign in as an existing administrator, inspect **Admin → Roles
 
 Rollback requires the recorded old image plus its matching pre-upgrade database and file backup. An older image cannot use the removed role enum's replacement schema; changing the image alone is insufficient. [Follow the restore and rollback instructions](#rollback).
 
+### Account key migration
+
+Migration `20261110000000_e2ee_account_keys` adds six nullable columns to `User` for the [account record](/api/account-keys#what-the-server-stores) of end-to-end encryption: two public keys, a salt, a protocol version, and two sealed values that only the account's owner can open. It also adds a check constraint: an account has the whole record or none of it, and an account that has it has no password hash. Normal image startup applies the migration; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive, needs no backfill and no new environment variable, and changes no existing account. Each account keeps its password until its owner sets up keys after signing in, which deletes the hash.
+
+The sealed values and public keys are part of the database, so database backups contain them. A person who has a backup cannot sign in with it, but can test passphrases against it offline. Protect backups as before, and note that restoring a backup from before a passphrase change brings back the old passphrase and the named tokens and upload token that the change cancelled.
+
+Fake salts for unknown sign-in addresses come from `NEXTAUTH_SECRET`. Changing that secret changes them, which lets an observer who recorded earlier answers tell which addresses have no account. It affects nothing else here: no account key depends on `NEXTAUTH_SECRET`.
+
+Keep the reverse proxy [passing request paths through unchanged](/hosting/reverse-proxy#pass-request-paths-through-unchanged); passphrase changes depend on it.
+
 ### Invite links migration
 
 Migrations `20261011010000_invites` and `20261011020000_invite_member_index` add the `Invite` table, its role join table, and an optional, indexed `User.inviteId` reference. The index keeps invite lists and account deletion from scanning every account. Normal image startup applies both; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.

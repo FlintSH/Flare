@@ -19,9 +19,12 @@ import {
   signRequest,
   signedRequestMessage,
   unlockAccount,
+  unlockMessage,
+  unlockSignature,
   unwrapRoot,
   verifySignInSignature,
   verifySignedRequest,
+  verifyUnlockSignature,
   wrapRoot,
 } from '@/lib/e2ee/account'
 import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
@@ -478,6 +481,91 @@ describe('sign-in signature', () => {
 
   it('needs a 32-byte challenge', () => {
     expectReason(() => asChallenge(pattern(16)), 'bad_length')
+  })
+})
+
+describe('unlock signature', () => {
+  const keys = passphraseKeysFromRoot(asPassphraseRoot(pattern(32, 40)))
+  const input = {
+    authPrivateKey: keys.authPrivateKey,
+    challenge,
+    identifier: 'user@example.com',
+  }
+  const proof = { authPublicKey: keys.authPublicKey, challenge }
+
+  it('signs "flare e2ee v1 unlock" || challenge || blake3_hash(identifier)', () => {
+    expect(unlockMessage(challenge, 'user@example.com')).toEqual(
+      concatBytes(
+        asciiBytes('flare e2ee v1 unlock'),
+        challenge,
+        blake3Hash(utf8('user@example.com'))
+      )
+    )
+    const signature = unlockSignature(input)
+    expect(signature).toHaveLength(64)
+    expect(
+      verifyUnlockSignature({
+        ...proof,
+        identifier: 'user@example.com',
+        signature,
+      })
+    ).toBe(true)
+  })
+
+  it('uses the identifier form of the sign-in signature', () => {
+    const signature = unlockSignature(input)
+    expect(
+      unlockSignature({ ...input, identifier: ' \uff35ser@Example.COM\n' })
+    ).toEqual(signature)
+    expect(
+      verifyUnlockSignature({
+        ...proof,
+        identifier: 'USER@example.com ',
+        signature,
+      })
+    ).toBe(true)
+  })
+
+  it('is not valid as a sign-in signature, and a sign-in signature is not valid for unlock', () => {
+    const identifier = 'user@example.com'
+    const unlock = unlockSignature(input)
+    const signIn = signInSignature(input)
+    expect(unlock).not.toEqual(signIn)
+    expect(
+      verifySignInSignature({ ...proof, identifier, signature: unlock })
+    ).toBe(false)
+    expect(
+      verifyUnlockSignature({ ...proof, identifier, signature: signIn })
+    ).toBe(false)
+  })
+
+  it('does not verify for a different challenge, identifier, key or signature', () => {
+    const signature = unlockSignature(input)
+    const base = { ...proof, identifier: 'user@example.com', signature }
+    expect(
+      verifyUnlockSignature({
+        ...base,
+        challenge: asChallenge(flipBit(challenge, 0)),
+      })
+    ).toBe(false)
+    expect(verifyUnlockSignature({ ...base, identifier: 'user2' })).toBe(false)
+    expect(
+      verifyUnlockSignature({ ...base, signature: flipBit(signature, 10) })
+    ).toBe(false)
+    expect(
+      verifyUnlockSignature({ ...base, signature: signature.subarray(0, 63) })
+    ).toBe(false)
+    const otherKeys = passphraseKeysFromRoot(asPassphraseRoot(pattern(32, 41)))
+    expect(
+      verifyUnlockSignature({ ...base, authPublicKey: otherKeys.authPublicKey })
+    ).toBe(false)
+  })
+
+  it('needs a 32-byte challenge', () => {
+    expectReason(
+      () => unlockMessage(pattern(31) as typeof challenge, 'user'),
+      'bad_length'
+    )
   })
 })
 

@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { accountRecordSchema } from '@/lib/auth/e2ee/records'
 import { storageSettingsSchema } from '@/lib/storage/settings'
 import {
   ACCOUNT_PASSWORD_MIN_LENGTH,
@@ -32,3 +33,20 @@ export const setupSchema = z.object({
 })
 
 export type SetupData = z.infer<typeof setupSchema>
+
+/**
+ * What `POST /api/setup` reads. The wizard checks its form with
+ * `setupSchema`, makes the account record of the administrator from the
+ * password field in the browser (docs/e2ee-spec.md, section 5.4), and sends
+ * the record in place of the password. Strict: a request that carries the
+ * password is refused.
+ */
+export const setupRequestSchema = z.strictObject({
+  admin: z.strictObject({
+    name: setupAdminSchema.shape.name,
+    email: setupAdminSchema.shape.email,
+    account: accountRecordSchema,
+  }),
+  storage: setupSchema.shape.storage,
+  registrations: setupSchema.shape.registrations,
+})

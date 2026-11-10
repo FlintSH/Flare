@@ -1,6 +1,6 @@
 import { headers } from 'next/headers'
 
-import { Prisma } from '@prisma/client'
+import { type User as AccountRow, Prisma } from '@prisma/client'
 import type { AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { compare } from 'bcryptjs'
 import { NextAuthOptions, Session, getServerSession } from 'next-auth'
@@ -16,12 +16,19 @@ import {
   scopeOidcSubject,
 } from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
+import { normalizeIdentifier } from '@/lib/e2ee'
 import { getEmailConfig } from '@/lib/email/config'
 import { requiresEmailVerification } from '@/lib/email/policy'
 import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
 import { getUserAccess } from '@/lib/permissions/server'
 import { clientIp, headerRecord } from '@/lib/security/client-ip'
 
+import {
+  IDENTIFIER_MAX_LENGTH,
+  findAccountByIdentifier,
+  verifyAuthKeyProof,
+} from './e2ee/accounts'
+import { challengeField, sameBytes, signatureField } from './e2ee/records'
 import {
   OidcProfile,
   type OidcResolveResult,
@@ -59,6 +66,7 @@ const userSelect = {
   email: true,
   name: true,
   password: true,
+  authPublicKey: true,
   image: true,
   sessionVersion: true,
   passkeyRequired: true,
@@ -136,8 +144,8 @@ function passkeyAttemptId(response?: string) {
 
 async function trackLoginAttempt<T>(
   method: string,
-  requestHeaders: Record<string, string> | undefined,
-  identity: { email?: string; passkeyId?: string },
+  requestHeaders: RequestHeaders,
+  identity: { email?: string; passkeyId?: string; userId?: string },
   authorize: () => Promise<T>
 ) {
   try {
@@ -168,8 +176,83 @@ async function trackLoginAttempt<T>(
   }
 }
 
+type RequestHeaders = Record<string, string> | undefined
+
+/** What a credentials authorizer returns for the account that signed in. */
+function signedIn(
+  user: Pick<AccountRow, 'id' | 'email' | 'name' | 'image' | 'sessionVersion'>,
+  secondFactor?: 'totp' | 'recovery'
+) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    image: user.image,
+    sessionVersion: user.sessionVersion,
+    ...(secondFactor === 'recovery'
+      ? { authenticationMethod: 'recovery' as const }
+      : {}),
+  }
+}
+
+/**
+ * The steps that the password sign-in and the passphrase sign-in share, so
+ * that neither can be weaker than the other: the attempt limits for the
+ * client address and for the account, then `prove`, the first factor of
+ * that sign-in, then the second factor with the account row locked.
+ *
+ * `prove` returns the account, and `unchanged` says whether a row is still
+ * the account that the proof was about. A proof that raced a change of the
+ * secret, of the address or of the session version signs nobody in.
+ */
+async function localSignIn(
+  requestHeaders: RequestHeaders,
+  account: string,
+  code: string | undefined,
+  prove: () => Promise<{
+    id: string
+    unchanged: (fresh: AccountRow) => boolean
+  } | null>
+) {
+  try {
+    const ip = clientIp(headerRecord(requestHeaders)) ?? 'unknown'
+    await securityLimit(`password-ip:${ip}`, 100)
+    await securityLimit(`password-account:${account}`, 30)
+    const proven = await prove()
+    if (!proven) return null
+    return await prisma.$transaction(async (tx) => {
+      const fresh = await lockSecurityUser(tx, proven.id)
+      if (!proven.unchanged(fresh)) return null
+      if (fresh.passkeyRequired) throw new Error(SignInError.PasskeyRequired)
+      if (fresh.totpSecret && !code)
+        throw new Error(SignInError.TwoFactorRequired)
+      return signedIn(fresh, await consumeSecondFactor(tx, fresh, code))
+    })
+  } catch (error) {
+    if (
+      reports(error, SignInError.TwoFactorRequired, SignInError.PasskeyRequired)
+    )
+      throw error
+    if (error instanceof SecurityError && error.status === 429)
+      throw new Error(SignInError.TooManyAttempts)
+    return null
+  }
+}
+
+/** A text field of a credentials form as `schema` reads it, or null. */
+function credentialBytes(
+  schema: typeof challengeField | typeof signatureField,
+  text: string
+) {
+  const parsed = schema.safeParse(text)
+  return parsed.success ? parsed.data : null
+}
+
 export const authOptions: NextAuthOptions = {
   providers: [
+    // Password sign-in, for an account from before encryption until it
+    // completes key setup (docs/e2ee-spec.md, section 14.1). Key setup deletes
+    // the password hash, and this provider then refuses the account.
     CredentialsProvider({
       name: 'credentials',
       credentials: {
@@ -192,65 +275,96 @@ export const authOptions: NextAuthOptions = {
           'credentials',
           req.headers,
           { email: credentials?.email },
-          async () => {
-            try {
-              const ip = clientIp(headerRecord(req.headers)) ?? 'unknown'
-              await securityLimit(`password-ip:${ip}`, 100)
-              await securityLimit(
-                `password-account:${credentials.email.trim().toLowerCase()}`,
-                30
-              )
-              const user = await prisma.user.findUnique({
-                where: { email: credentials.email },
-                select: userSelect,
-              })
-              if (
-                !user?.password ||
-                !(await compare(credentials.password, user.password))
-              )
-                return null
-              return await prisma.$transaction(async (tx) => {
-                const fresh = await lockSecurityUser(tx, user.id)
+          () =>
+            localSignIn(
+              req.headers,
+              credentials.email.trim().toLowerCase(),
+              credentials.code,
+              async () => {
+                const user = await prisma.user.findUnique({
+                  where: { email: credentials.email },
+                  select: userSelect,
+                })
                 if (
-                  fresh.password !== user.password ||
-                  fresh.email !== user.email ||
-                  fresh.sessionVersion !== user.sessionVersion
+                  !user?.password ||
+                  user.authPublicKey ||
+                  !(await compare(credentials.password, user.password))
                 )
                   return null
-                if (fresh.passkeyRequired)
-                  throw new Error(SignInError.PasskeyRequired)
-                if (fresh.totpSecret && !credentials.code)
-                  throw new Error(SignInError.TwoFactorRequired)
-                const secondFactor = await consumeSecondFactor(
-                  tx,
-                  fresh,
-                  credentials.code
-                )
                 return {
-                  id: fresh.id,
-                  email: fresh.email,
-                  name: fresh.name,
-                  image: fresh.image,
-                  sessionVersion: fresh.sessionVersion,
-                  ...(secondFactor === 'recovery'
-                    ? { authenticationMethod: 'recovery' as const }
-                    : {}),
+                  id: user.id,
+                  unchanged: (fresh) =>
+                    fresh.password === user.password &&
+                    !fresh.authPublicKey &&
+                    fresh.email === user.email &&
+                    fresh.sessionVersion === user.sessionVersion,
                 }
-              })
-            } catch (error) {
-              if (
-                reports(
-                  error,
-                  SignInError.TwoFactorRequired,
-                  SignInError.PasskeyRequired
-                )
+              }
+            )
+        )
+      },
+    }),
+    // Passphrase sign-in (docs/e2ee-spec.md, section 6.2, steps 4 to 8). The
+    // passphrase never arrives here. The client proves it with a signature
+    // of the sign-in key on a challenge of `POST /api/auth/e2ee/challenge`.
+    // The session is the only result: the unlock route releases the key
+    // material, for its own signature.
+    CredentialsProvider({
+      id: 'passphrase',
+      name: 'Passphrase',
+      credentials: {
+        identifier: { label: 'Email', type: 'email' },
+        challenge: { label: 'Challenge', type: 'text' },
+        signature: { label: 'Sign-in signature', type: 'text' },
+        code: { label: 'Authenticator or recovery code', type: 'text' },
+      },
+      async authorize(credentials, req) {
+        if (
+          !credentials?.identifier ||
+          !credentials.challenge ||
+          !credentials.signature ||
+          credentials.identifier.length > IDENTIFIER_MAX_LENGTH ||
+          (credentials.code?.length || 0) > SECURITY_CODE_MAX_LENGTH
+        )
+          return null
+        const challenge = credentialBytes(challengeField, credentials.challenge)
+        const signature = credentialBytes(signatureField, credentials.signature)
+        if (!challenge || !signature) return null
+        // Filled in when the identifier names an account, for the history.
+        const identity: { userId?: string } = {}
+        return trackLoginAttempt('passphrase', req.headers, identity, () =>
+          localSignIn(
+            req.headers,
+            normalizeIdentifier(credentials.identifier),
+            credentials.code,
+            async () => {
+              const user = await findAccountByIdentifier(
+                prisma,
+                credentials.identifier
               )
-                throw error
-              if (error instanceof SecurityError && error.status === 429)
-                throw new Error(SignInError.TooManyAttempts)
-              return null
+              identity.userId = user?.id
+              // Step 5: the challenge is deleted before anything is
+              // verified, also for an identifier that names no account.
+              if (
+                !(await verifyAuthKeyProof(
+                  'sign-in',
+                  { challenge, signature },
+                  'e2ee_sign_in',
+                  // Not bound to a session version: no session exists yet.
+                  user && { ...user, sessionVersion: undefined }
+                )) ||
+                !user
+              )
+                return null
+              return {
+                id: user.id,
+                unchanged: (fresh) =>
+                  sameBytes(fresh.authPublicKey, user.authPublicKey) &&
+                  fresh.email === user.email &&
+                  fresh.sessionVersion === user.sessionVersion,
+              }
             }
-          }
+          )
         )
       },
     }),
@@ -421,7 +535,8 @@ export const authOptions: NextAuthOptions = {
         // Only the authorizer can establish recovery proof. Never accept it
         // from OAuth profile data or a client-triggered session update.
         token.authMethod =
-          account?.provider === 'credentials' &&
+          (account?.provider === 'credentials' ||
+            account?.provider === 'passphrase') &&
           user.authenticationMethod === 'recovery'
             ? 'recovery'
             : account?.provider || 'credentials'

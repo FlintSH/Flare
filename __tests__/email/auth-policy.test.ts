@@ -8,7 +8,10 @@ import {
 } from '@/lib/email/policy'
 import { DEFAULT_EMAIL_CONFIG } from '@/lib/email/schema'
 
-const legacy: EmailPolicyUser & { password: string | null } = {
+const legacy: EmailPolicyUser & {
+  password: string | null
+  authPublicKey: Uint8Array | null
+} = {
   email: 'owner@example.com',
   emailVerified: new Date('2020-01-01'),
   emailVerifiedFor: null,
@@ -16,6 +19,7 @@ const legacy: EmailPolicyUser & { password: string | null } = {
   emailExempt: false,
   createdAt: new Date('2020-01-01'),
   password: 'hash',
+  authPublicKey: null,
 }
 const enabled = {
   ...DEFAULT_EMAIL_CONFIG,
@@ -50,6 +54,18 @@ describe('email access and recovery policies', () => {
     expect(canRecoverPassword({ ...proof, password: null }, enabled)).toBe(
       false
     )
+  })
+  it('lets an account that signs in with a passphrase get a reset link', () => {
+    const keyed = {
+      ...proof,
+      password: null,
+      authPublicKey: new Uint8Array(32),
+    }
+    expect(canRecoverPassword(keyed, enabled)).toBe(true)
+    expect(canRecoverPassword(keyed, DEFAULT_EMAIL_CONFIG)).toBe(false)
+    expect(
+      canRecoverPassword({ ...keyed, emailVerificationSource: null }, enabled)
+    ).toBe(false)
   })
   it('stops trusting provider proof when the administrator turns that trust off', () => {
     const oidcProof = { ...proof, emailVerificationSource: 'oidc' }

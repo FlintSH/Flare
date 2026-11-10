@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 
 import { recordAudit } from '@/lib/audit'
+import { accountRecordSchema } from '@/lib/auth/e2ee/records'
 import { getConfig } from '@/lib/config'
 import { lockRoleChanges } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
@@ -17,15 +18,16 @@ import { authLimiter, rateLimit } from '@/lib/security/rate-limit'
 import {
   accountEmailSchema,
   accountNameSchema,
-  accountPasswordSchema,
 } from '@/lib/users/account-policy'
 import { createAccount, verifiesNewAccounts } from '@/lib/users/create-account'
-import { hashAccountPassword } from '@/lib/users/credentials'
 
-const registerSchema = z.object({
+// A new account is created with its account record (docs/e2ee-spec.md,
+// section 5.4, step 7). The passphrase stays in the browser. Strict: a
+// request that still carries a password is refused, not stored without it.
+const registerSchema = z.strictObject({
   email: accountEmailSchema,
-  password: accountPasswordSchema,
   name: accountNameSchema,
+  account: accountRecordSchema,
   invite: z.string().max(200).optional(),
 })
 
@@ -64,8 +66,6 @@ export const POST = api(async (request) => {
   if (verifiesNewAccounts(emailConfig))
     await limitEmailRequest(request, emailConfig, body.email)
 
-  const hashedPassword = await hashAccountPassword(body.password)
-
   const { user, redeemed } = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
     // Redeemed in the same transaction: a rejected sign-up never spends a use.
@@ -76,7 +76,7 @@ export const POST = api(async (request) => {
       {
         email: body.email,
         name: body.name,
-        password: hashedPassword,
+        keys: body.account,
         roleIds: redeemed?.roleIds,
         inviteId: redeemed?.id,
       },

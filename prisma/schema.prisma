@@ -23,6 +23,15 @@ model User {
   avatarStoragePath           String?
   avatarStorageTarget         Json?
   password                    String?
+  // End-to-end encryption account record (docs/e2ee-spec.md, section 5.3).
+  // All four key fields are set together or not at all. wrappedRoot and
+  // sealedKeyring are stored with their record_version byte.
+  accountPublicKey            Bytes?
+  passphraseSalt              Bytes?
+  authPublicKey               Bytes?
+  wrappedRoot                 Bytes?
+  sealedKeyring               Bytes?
+  e2eeProtocolVersion         Int?
   totpSecret                  String?
   totpLastCounter             Int?
   passkeys                    Passkey[]

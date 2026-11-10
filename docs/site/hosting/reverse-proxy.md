@@ -123,6 +123,10 @@ Flare reads `NEXTAUTH_URL` in one place. It must be an `http` or `https` URL wit
 
 Earlier builds read it seven ways. Account security accepted only the exact `NEXTAUTH_URL` origin and answered `503` while it was unset; account email also accepted the origin of the email public URL, and failed with an unrelated error when `NEXTAUTH_URL` wasn't a URL. Both now follow the rule above, and only passkeys need `NEXTAUTH_URL`. A value without `http://` or `https://` used to end up in upload links as written.
 
+## Pass request paths through unchanged
+
+Proxy Flare at the root of its hostname and pass each request path to it as the browser sent it. Do not add or strip a path prefix, and do not let the proxy decode and encode the path again. Account key changes, such as a passphrase change, are [signed requests](/api/account-keys#signed-requests): the browser signs the method, the path and the body, and Flare verifies them against the request it received. If the proxy changed the path, the two no longer match and those requests answer `400`. The Caddy and nginx examples above already pass paths through unchanged.
+
 ## CORS and proxies
 
 Configure cross-origin access with [`FLARE_CORS_ORIGINS`](./configuration#cross-origin-browser-access), not proxy rules. Flare answers preflight requests itself and sends CORS headers only on routes where named tokens or anonymous file reads apply. A proxy rule that adds `Access-Control-Allow-Origin` to every response would also expose session-only routes to the listed sites, and one added on top of Flare's produces two values, which browsers reject. Pass `OPTIONS` requests and the `Origin`, `Access-Control-Request-Method` and `Access-Control-Request-Headers` headers through unchanged, as the examples above do.

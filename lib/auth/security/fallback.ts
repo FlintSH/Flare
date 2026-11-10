@@ -8,7 +8,8 @@ export async function hasFallbackSignIn(
   tx: Prisma.TransactionClient,
   user: User
 ) {
-  if (user.password && user.email) return true
+  // A local secret: a password hash, or the sign-in key of a passphrase.
+  if ((user.password || user.authPublicKey) && user.email) return true
   // The OIDC callback rejects accounts with local TOTP enrollment.
   if (!user.oidcSubject || user.totpSecret) return false
   const prefix = oidcSubjectPrefix((await readConfig(tx)).settings.general.oidc)

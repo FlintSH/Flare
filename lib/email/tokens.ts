@@ -31,6 +31,27 @@ export async function issueEmailToken(
   return { token, record }
 }
 
+/**
+ * The unused, unexpired token of one of these purposes, without using it up:
+ * for a step that only reads what the link is for.
+ */
+export async function findEmailToken(
+  db: Pick<Prisma.TransactionClient, 'emailToken'>,
+  token: string,
+  purposes: EmailTokenPurpose[]
+) {
+  if (!isLinkToken(token)) return null
+  const record = await db.emailToken.findUnique({
+    where: { tokenHash: hashEmailToken(token) },
+  })
+  return record &&
+    !record.consumedAt &&
+    record.expiresAt > new Date() &&
+    purposes.includes(record.purpose as EmailTokenPurpose)
+    ? record
+    : null
+}
+
 export async function consumeEmailToken(
   tx: Prisma.TransactionClient,
   token: string,

@@ -47,6 +47,7 @@ Use the builder to see how your choices change a request. It generates a command
 | Call Flare from a web app or PWA in the browser                    | [Call Flare from a web app](./authentication#call-flare-from-a-web-app) |
 | Start with working code                                            | [Recipes](./recipes)                                                    |
 | Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)                                |
+| Build a client for passphrase sign-in, account keys, and recovery  | [Account key contracts](./account-keys)                                 |
 | Build browser session history or audit views                       | [Sessions and audit contracts](./activity)                              |
 | Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)                              |
 

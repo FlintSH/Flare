@@ -51,6 +51,8 @@ The status response contains:
   "twoFactorEnabled": false,
   "recoveryCodesRemaining": 0,
   "hasPassword": true,
+  "hasPassphrase": false,
+  "canUseRecentPassphrase": false,
   "passkeys": [],
   "passkeysAvailable": true,
   "passkeyRequired": false,
@@ -110,7 +112,7 @@ This provider looks up the current account email **case-insensitively** and requ
 
 Errors contain `{ "error": "…" }` with `Cache-Control: no-store`. Invalid proof, used/expired challenges, invalid enrollment codes, a passkey response that fails verification, and passkey limits return `400`; missing/revoked sessions or an `Authorization` header return `401`; a mutation from another origin returns `403`; an unknown owned passkey returns `404`; oversized requests return `413`; unsupported body content types return `415`; throttled requests return `429`; passkey routes return `503` while `NEXTAUTH_URL` isn't an HTTPS URL, or HTTP on localhost. A throttled response includes `Retry-After: 900`. Any other failure returns `500` with `Unable to complete this security request. Please try again.`, and the server logs the cause; earlier builds answered it with `400`.
 
-Management is limited to **20 attempts per account per 15 minutes**. Password sign-in is limited to **30 attempts per account** and **100 per IP** per 15 minutes. Dedicated passkey-recovery sign-in has its own **30-per-account** and **100-per-IP** limits per 15 minutes. Public passkey options and passkey sign-in callbacks each have a limit of **100 per IP per 15 minutes**. The limits are shared through PostgreSQL across application replicas. Each limit's 15-minute window opens with the first attempt it counts, and refused attempts don't extend it, so `Retry-After: 900` covers a whole window. Requests that carry no usable client address share one count in each per-IP limit. Keep the [proxy's client-IP headers trustworthy](/hosting/reverse-proxy#client-addresses-and-rate-limits).
+Management is limited to **20 attempts per account per 15 minutes**. Password sign-in is limited to **30 attempts per account** and **100 per IP** per 15 minutes; [passphrase sign-in](./account-keys#passphrase-sign-in) counts against the same two limits. Dedicated passkey-recovery sign-in has its own **30-per-account** and **100-per-IP** limits per 15 minutes. Public passkey options and passkey sign-in callbacks each have a limit of **100 per IP per 15 minutes**. The limits are shared through PostgreSQL across application replicas. Each limit's 15-minute window opens with the first attempt it counts, and refused attempts don't extend it, so `Retry-After: 900` covers a whole window. Requests that carry no usable client address share one count in each per-IP limit. Keep the [proxy's client-IP headers trustworthy](/hosting/reverse-proxy#client-addresses-and-rate-limits).
 
 Expired counter records are pruned by the [background cleanup worker](/hosting/maintenance#authentication-rate-limit-cleanup), independently of authentication requests. Pending cleanup does not extend a counter's 15-minute limit window.
 
@@ -141,6 +143,12 @@ The recovered session provides five minutes of fresh proof for adding a passkey,
 Disabling the requirement or removing the last optional passkey also requires a configured fallback. The server checks a local password plus current email, or the account's binding to the enabled OIDC issuer with a client ID and secret and no local TOTP enrollment that would block OIDC, inside the account transaction. Missing fallback returns `400`; a failed disable leaves the dedicated codes intact. This configuration check does not contact the provider or establish that the owner can still use it. Repeating an already-enabled/already-disabled requirement change also returns `400` rather than generating another code set.
 
 Password changes, email changes, administrator password resets, and emailed password resets preserve the flag and both enrolled sign-in methods and code sets. API tokens remain valid according to their existing scopes and permissions; there is no instance-wide passkey requirement or new bearer scope.
+
+## Accounts that sign in with a passphrase
+
+An account that has [account keys](./account-keys) has no password: `hasPassword` is `false` and `hasPassphrase` is `true`. Its passphrase never reaches the server, so no request can carry it as `proof`. Its identity proof is a passphrase sign-in within the last five minutes, which `canUseRecentPassphrase` reports; a stale session answers `400` with `Sign in again with your passphrase, then retry within five minutes.` A security change still uses up `proof.code` when the account has an authenticator, unless a recent passkey or recovery-code sign-in already stands in for it. Authenticator setup works for such an account as it does for an account with a password. The passkey requirement is unchanged: with it on, only a recent passkey or dedicated passkey-recovery sign-in counts.
+
+`PUT /api/profile` refuses `newPassword` for such an account with `409` and `code: "passphrase_account"`. A passphrase changes only through [key rotation](./account-keys#rotation-and-passphrase-change).
 
 ## Password and plain email changes
 

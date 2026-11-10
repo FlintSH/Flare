@@ -624,7 +624,7 @@ describe('contexts', () => {
   it('has each context string once, all ASCII with the v1 prefix', () => {
     const values = Object.values(CONTEXTS)
     expect(new Set(values).size).toBe(values.length)
-    expect(values).toHaveLength(23)
+    expect(values).toHaveLength(24)
     expect(values).toContain('flare e2ee v1 one-time nonce')
     for (const value of values) {
       expect(value).toMatch(/^flare e2ee v1 [a-z-]+( [a-z]+)*$/)

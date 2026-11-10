@@ -47,9 +47,12 @@ export {
   signRequest,
   signedRequestMessage,
   unlockAccount,
+  unlockMessage,
+  unlockSignature,
   unwrapRoot,
   verifySignInSignature,
   verifySignedRequest,
+  verifyUnlockSignature,
   wrapRoot,
 } from './account'
 export {

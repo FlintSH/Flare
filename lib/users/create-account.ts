@@ -1,5 +1,9 @@
 import type { Prisma, User } from '@prisma/client'
 
+import {
+  type AccountRecordInput,
+  accountRecordColumns,
+} from '@/lib/auth/e2ee/records'
 import { sendAccountToken } from '@/lib/email/account'
 import type { EmailConfig } from '@/lib/email/schema'
 import { ensureBuiltInRoles } from '@/lib/permissions/server'
@@ -14,8 +18,14 @@ type TransactionClient = Prisma.TransactionClient
 interface NewAccount {
   email: string
   name: string
-  /** A password hash, for an account that signs in with a password. */
+  /**
+   * A password hash, for an account that an administrator creates. The
+   * account signs in with it one time and then sets up its keys
+   * (docs/e2ee-spec.md, section 14.1).
+   */
   password?: string
+  /** The account record of a person who chose a passphrase (section 5.4). */
+  keys?: AccountRecordInput
   image?: string | null
   oidcSubject?: string
   roleIds?: string[]
@@ -71,7 +81,8 @@ export async function createAccount(
       email: account.email,
       name: account.name,
       image: account.image,
-      password: account.password,
+      password: account.keys ? undefined : account.password,
+      ...(account.keys && accountRecordColumns(account.keys)),
       oidcSubject: account.oidcSubject,
       emailVerified: account.emailVerified,
       emailVerifiedFor: account.emailVerifiedFor,

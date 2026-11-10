@@ -45,8 +45,8 @@ import {
 } from './types'
 
 /**
- * Account keys, sign-in and the keyring (sections 5.1, 5.4, 6.2, 6.6 and
- * 8.3.3). Each function is deterministic: nonces and salts are parameters.
+ * Account keys, sign-in, unlock and the keyring (sections 5.1, 5.4, 6.2,
+ * 6.3, 6.6 and 8.3.3). Each function is deterministic: nonces and salts are parameters.
  */
 
 // --- Mnemonic (section 4.4, rule 10) ---
@@ -268,8 +268,9 @@ export function encodeIdentifier(identifier: string): Uint8Array {
   return utf8(normalizeIdentifier(identifier))
 }
 
-/** `"flare e2ee v1 sign-in" || challenge || blake3_hash(identifier)`. */
-export function signInMessage(
+/** `context || challenge || blake3_hash(identifier)`, the message of both signatures of the sign-in key pair. */
+function authKeyMessage(
+  context: typeof CONTEXTS.signIn | typeof CONTEXTS.unlock,
   challenge: Challenge,
   identifier: string
 ): Uint8Array {
@@ -277,10 +278,18 @@ export function signInMessage(
     throw new E2eeError('bad_length', 'challenge must have 32 bytes')
   }
   return concatBytes(
-    asciiBytes(CONTEXTS.signIn),
+    asciiBytes(context),
     challenge,
     blake3Hash(encodeIdentifier(identifier))
   )
+}
+
+/** `"flare e2ee v1 sign-in" || challenge || blake3_hash(identifier)`. */
+export function signInMessage(
+  challenge: Challenge,
+  identifier: string
+): Uint8Array {
+  return authKeyMessage(CONTEXTS.signIn, challenge, identifier)
 }
 
 export function signInSignature(input: {
@@ -304,6 +313,45 @@ export function verifySignInSignature(input: {
   return ed25519Verify(
     input.authPublicKey,
     signInMessage(input.challenge, input.identifier),
+    input.signature
+  )
+}
+
+// --- Unlock signature (section 6.3, step 4) ---
+
+/**
+ * `"flare e2ee v1 unlock" || challenge || blake3_hash(identifier)`. The
+ * context is not the one of the sign-in signature, so a signature for one
+ * request is not valid for the other.
+ */
+export function unlockMessage(
+  challenge: Challenge,
+  identifier: string
+): Uint8Array {
+  return authKeyMessage(CONTEXTS.unlock, challenge, identifier)
+}
+
+export function unlockSignature(input: {
+  readonly authPrivateKey: AuthPrivateKey
+  readonly challenge: Challenge
+  readonly identifier: string
+}): Signature {
+  return ed25519Sign(
+    input.authPrivateKey,
+    unlockMessage(input.challenge, input.identifier)
+  )
+}
+
+/** Step 5 of section 6.3, for the server. */
+export function verifyUnlockSignature(input: {
+  readonly authPublicKey: AuthPublicKey
+  readonly challenge: Challenge
+  readonly identifier: string
+  readonly signature: Uint8Array
+}): boolean {
+  return ed25519Verify(
+    input.authPublicKey,
+    unlockMessage(input.challenge, input.identifier),
     input.signature
   )
 }

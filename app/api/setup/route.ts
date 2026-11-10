@@ -6,10 +6,9 @@ import { parseInput, readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { rateLimit, setupLimiter } from '@/lib/security/rate-limit'
-import { setupSchema } from '@/lib/setup/schema'
+import { setupRequestSchema } from '@/lib/setup/schema'
 import { isSetupComplete } from '@/lib/setup/status'
 import { createAccount } from '@/lib/users/create-account'
-import { hashAccountPassword } from '@/lib/users/credentials'
 
 const api = routes('/api/setup', {
   invalid: (error) => {
@@ -26,9 +25,7 @@ export const POST = api(async (request) => {
   const limited = await rateLimit(request, setupLimiter)
   if (limited) return limited
 
-  const validatedData = await readJson(request, setupSchema)
-
-  const hashedPassword = await hashAccountPassword(validatedData.admin.password)
+  const validatedData = await readJson(request, setupRequestSchema)
 
   const initialConfig = parseInput(configSchema, {
     ...DEFAULT_CONFIG,
@@ -59,7 +56,7 @@ export const POST = api(async (request) => {
     const admin = await createAccount(tx, {
       name: validatedData.admin.name,
       email: validatedData.admin.email,
-      password: hashedPassword,
+      keys: validatedData.admin.account,
       emailExempt: true,
     })
     if (!admin) throw new HttpError(400, 'Setup already completed')

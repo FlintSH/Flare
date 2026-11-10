@@ -11,7 +11,10 @@ export class SecurityError extends HttpError {
   constructor(
     message: string,
     status = 400,
-    options: { headers?: Record<string, string> } = {}
+    options: {
+      headers?: Record<string, string>
+      body?: Record<string, unknown>
+    } = {}
   ) {
     super(status, message, options)
     this.name = 'SecurityError'

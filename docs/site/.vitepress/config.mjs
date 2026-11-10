@@ -124,6 +124,7 @@ export default defineConfig({
         ['Recipes & examples', '/api/recipes'],
         ['Roles & session contracts', '/api/roles'],
         ['Sign-in security contracts', '/api/security'],
+        ['Account key contracts', '/api/account-keys'],
         ['Sessions & audit contracts', '/api/activity'],
         ['Invite contracts', '/api/invites'],
         ['Endpoint inventory', '/api/endpoint-inventory'],

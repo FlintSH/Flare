@@ -34,6 +34,8 @@ import { issueEmailToken } from '@/lib/email/tokens'
 import { decryptSecret } from '@/lib/security/secret-box'
 import { updateAccount } from '@/lib/users/update-account'
 
+import { clientKeys } from '../auth/e2ee-test-keys'
+
 /** A different documentation-range address per request keeps per-IP email limits apart. */
 function uniqueAddress() {
   return `2001:db8:${randomUUID().replaceAll('-', '').slice(0, 24).match(/.{4}/g)!.join(':')}`
@@ -519,7 +521,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
       const address = `a_b-${id}@example.com`
       const registered = await register(
-        request({ email: address, name: 'L', password: 'signup-password' })
+        request({ email: address, name: 'L', account: clientKeys().record })
       )
       expect(
         registered.status,
@@ -533,7 +535,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         request({
           email: address.toUpperCase(),
           name: 'L',
-          password: 'signup-password',
+          account: clientKeys().record,
         })
       )
       expect(duplicate.status).toBe(400)
@@ -552,18 +554,25 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       )
     })
 
-    it('applies the 72-byte password limit and the one-character name rule with email disabled', async () => {
+    it('takes no password at sign-up and applies the one-character name rule with email disabled', async () => {
       state.config = { ...config, enabled: false }
       const address = `${randomUUID()}@signup.example`
-      const long = await register(
-        request({ email: address, name: 'J', password: '🔒'.repeat(19) })
+      // The passphrase stays in the browser: a request that carries a
+      // password is refused, not stored without it.
+      const withPassword = await register(
+        request({
+          email: address,
+          name: 'J',
+          password: 'signup-password',
+          account: clientKeys().record,
+        })
       )
-      expect(long.status).toBe(400)
-      expect(await long.json()).toEqual({
-        error: 'Password must use at most 72 bytes.',
+      expect(withPassword.status).toBe(400)
+      expect(await withPassword.json()).toEqual({
+        error: 'Unrecognized key: "password"',
       })
       const created = await register(
-        request({ email: address, name: 'J', password: 'signup-password' })
+        request({ email: address, name: 'J', account: clientKeys().record })
       )
       expect(created.status, JSON.stringify(await created.clone().json())).toBe(
         200
@@ -791,7 +800,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         request({
           email: address,
           name: 'New user',
-          password: 'signup-password',
+          account: clientKeys().record,
         })
       )
       // A full daily mail cap answers with its own message.

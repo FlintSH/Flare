@@ -1,12 +1,12 @@
 # Flare End-to-End Encryption Specification
 
-| Field   | Value                                               |
-| ------- | --------------------------------------------------- |
-| Status  | Draft 19. Phase 1 implemented. Not reviewed.        |
-| Version | Protocol version 1 (`v1`)                           |
-| Author  | Claude Fable 5.2, with assistance from birb         |
-| Date    | 2026-11-10                                          |
-| Applies | Flare, branch `feat/e2ee`, based on `main` 79a88c22 |
+| Field   | Value                                                |
+| ------- | ---------------------------------------------------- |
+| Status  | Draft 20. Phases 1 and 2a implemented. Not reviewed. |
+| Version | Protocol version 1 (`v1`)                            |
+| Author  | Claude Fable 5.2, with assistance from birb          |
+| Date    | 2026-11-10                                           |
+| Applies | Flare, branch `feat/e2ee`, based on `main` 79a88c22  |
 
 Each section has one of these labels:
 
@@ -405,6 +405,9 @@ the same bytes.
    verifier rejects each other form. `path` is the path and the query of the request line,
    in the percent-encoded form that the client sends. The server must use
    the request line as it arrived, before a proxy or a base path changes it.
+   The server cannot see a change that a proxy made before the request
+   arrived. Thus a proxy must not change the path, and the server must not
+   take the path from a request header.
    `body` is the bytes of the request body. For a request without a body, use
    `blake3_hash` of the empty byte string.
 9. **JSON records.** `file_metadata`, `folder_metadata` and `tag_metadata`
@@ -424,7 +427,8 @@ the same bytes.
     `sealed_keyring`, `sealed_metadata`, `sealed_ocr_text`,
     `sealed_thumbnail`, `sealed_tag_metadata`, `sealed_folder_metadata`,
     `sealed_folder_private_key` and each stanza. The byte is not an input of
-    `seal` or of `public_wrap`. The sizes in section 2.3 do not include it.
+    `seal` or of `public_wrap`. The client adds the byte before it sends a
+    record. The server stores the record as it arrives. The sizes in section 2.3 do not include it.
 13. **Unicode version.** NFKC and the lower case mapping depend on the
     Unicode version of the program. Two programs with different versions can
     give different bytes for a character that Unicode added recently. This
@@ -592,6 +596,10 @@ releases the key material. Each request has its own challenge.
    the `auth_private_key` and the `wrap_key` that it has in memory. It does
    not calculate Argon2id again.
 
+The server deletes the challenge at the first use, also when the second
+factor is missing or wrong. The client then requests a new challenge and
+signs again. It uses the keys that it has in memory.
+
 The server must limit the rate of step 4 for each identifier and each address.
 
 ### 6.3 Unlock
@@ -619,6 +627,9 @@ it after a passphrase sign-in, and after a sign-in with a passkey or OIDC.
 
 A session alone must not release `wrapped_root`. A person who steals a
 session thus cannot start offline guesses.
+
+In step 4, the identifier is the one that the server stores for the
+account. The server gives it to the client together with the challenge.
 
 The sign-in signature and the unlock signature have different context
 strings. A signature for one request is not valid for the other.
@@ -982,8 +993,9 @@ the stanzas to the new key (section 8.3.4).
      replaces this signature.
 7. The server replaces the account data. The server deletes the old
    `wrapped_root` and the old `sealed_keyring`.
-8. The server cancels all other sessions and all bearer tokens of the
-   account.
+8. The server cancels all sessions and all bearer tokens of the account.
+   This includes the session that made the request. The user signs in again
+   with the new passphrase.
 9. The client shows the new mnemonic. The user must save it. The old
    mnemonic does not open the account after this step.
 
@@ -1883,22 +1895,35 @@ that the "Custom head" setting is equal to a change of the application code.
 
 1. The user signs in with the old method. The server gets the password one
    more time and checks it.
-2. The client immediately does the account creation of section 5.4.
+2. The client immediately does the account creation of section 5.4. The
+   server accepts the new account record only in a session whose sign-in
+   was less than 5 minutes before. The request does not contain the old
+   password.
 3. The user can use the current password as the passphrase, if it passes
    the strength check (section 5.2.1). If not, the user selects a new one.
-4. The server deletes the old password hash.
+4. The server deletes the old password hash in the same operation. The old
+   method does not operate for this account after that.
 5. The client shows the mnemonic.
 
 An account that signs in with a passkey or OIDC selects a passphrase at
 step 3.
 
+An administrator can create an account for a different person. Such an
+account starts with a temporary password and has no keys. The person signs
+in one time with that password and then does steps 2 to 5.
+
+After an account has keys, no party can set a password for it. An
+administrator cannot. The email reset cannot. Only the procedures of
+sections 6.7, 6.8 and 6.9 change its secrets.
+
 The server saw the old password before the migration. A user who does not
 trust the past of the server selects a new passphrase.
 
 During the migration, the sign-in page must know which method an account
-uses. The answer for an account that has no keys is different from the
-answer for an unknown identifier (section 6.1). Thus a person can learn that
-such an account exists. This stops when the account has keys.
+uses. The answer for an account that has a password and no keys is
+different from the answer for an unknown identifier (section 6.1). Thus a
+person can learn that such an account exists. This stops when the account
+has keys.
 
 ### 14.2 Existing files
 
@@ -2013,3 +2038,4 @@ when.
 | 17    | 2026-11-10 | Protocol versions agreed. Exact encodings for each value. Test vectors.                                                                                                                                                                                                                                                                                                                                  |
 | 18    | 2026-11-11 | Results of the first implementation. `seal_once` for stanzas: the nonce comes from the key and is not stored. Argon2id parameters are fixed for a protocol version; the account record does not store them. One valid encrypted form for each file. Canonical X25519 public keys. Exact identifier form, also for the fake salt. Each stored record has the version byte. No sealed empty keyring.       |
 | 19    | 2026-11-11 | Sign-in has two requests: one for the session, one for the key material. Unlock is one procedure for each sign-in method, with its own context string.                                                                                                                                                                                                                                                   |
+| 20    | 2026-11-11 | Results of the server implementation of accounts. A rotation ends each session. The client adds the version byte. Existing accounts get keys in a session of the last 5 minutes, without the old password. Accounts that an administrator creates. A proxy must not change the path of a signed request.                                                                                                 |

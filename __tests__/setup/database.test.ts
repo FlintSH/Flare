@@ -1,4 +1,3 @@
-import { compare } from 'bcryptjs'
 import {
   afterAll,
   beforeAll,
@@ -8,6 +7,8 @@ import {
   it,
   vi,
 } from 'vitest'
+
+import { clientKeys } from '../auth/e2ee-test-keys'
 
 // Exercise bootstrap persistence independently of the per-process HTTP limiter.
 vi.mock('@/lib/security/rate-limit', () => ({
@@ -51,12 +52,14 @@ suite('setup contracts against disposable PostgreSQL', () => {
     vi.unstubAllEnvs()
   })
 
+  const adminKeys = clientKeys()
+
   function payload() {
     return {
       admin: {
         name: ' Administrator ',
         email: ' admin@example.test ',
-        password: ' setup-test-password ',
+        account: adminKeys.record,
       },
       storage: {
         provider: 'local',
@@ -93,6 +96,21 @@ suite('setup contracts against disposable PostgreSQL', () => {
     expect(await reported()).toEqual({ completed: true })
   })
 
+  it('refuses a setup request that carries a password', async () => {
+    const body = payload()
+    const response = await setup.POST(
+      request({
+        ...body,
+        admin: { ...body.admin, password: 'setup-test-password' },
+      } as ReturnType<typeof payload>)
+    )
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({
+      error: 'Unrecognized key: "password"',
+    })
+    expect(await prisma.user.count()).toBe(0)
+  })
+
   it('creates one initial admin with stock appearance and no exposed credentials', async () => {
     const response = await setup.POST(request())
     expect(response.status).toBe(200)
@@ -110,7 +128,9 @@ suite('setup contracts against disposable PostgreSQL', () => {
     expect(user.emailExempt).toBe(true)
     expect(user.emailVerified).toBeNull()
     expect(user.emailVerifiedFor).toBeNull()
-    expect(await compare(payload().admin.password, user.password!)).toBe(true)
+    // Created with its account record, and with no password hash.
+    expect(user.password).toBeNull()
+    expect(user).toMatchObject(adminKeys.columns)
     expect(await response.json()).toEqual({
       success: true,
       user: { id: user.id, name: 'Administrator', email: 'admin@example.test' },

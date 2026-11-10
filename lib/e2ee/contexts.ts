@@ -5,8 +5,8 @@ import { E2eeError } from './errors'
  * writes it. No other file may contain a context string literal.
  *
  * All contexts are ASCII and have no terminator (section 2.2). Most are the
- * `context` of `blake3_derive_key`. `signIn` and `request` are the prefixes
- * of signed messages instead (sections 6.2 and 6.6).
+ * `context` of `blake3_derive_key`. `signIn`, `unlock` and `request` are the
+ * prefixes of signed messages instead (sections 6.2, 6.3 and 6.6).
  */
 export const CONTEXTS = {
   /** Section 4.2 */
@@ -23,6 +23,8 @@ export const CONTEXTS = {
   wrap: 'flare e2ee v1 wrap',
   /** Section 6.2. Prefix of the signed message, not a derivation context. */
   signIn: 'flare e2ee v1 sign-in',
+  /** Section 6.3. Prefix of the signed message, not a derivation context. */
+  unlock: 'flare e2ee v1 unlock',
   /** Section 6.6. Prefix of the signed message, not a derivation context. */
   request: 'flare e2ee v1 request',
   /** Section 7.1 */
