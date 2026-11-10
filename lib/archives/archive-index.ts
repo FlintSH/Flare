@@ -1,8 +1,8 @@
 import { formatBytes } from '@/lib/utils'
 
-import { ManifestBuilder } from './codec'
 import { ArchiveError } from './errors'
 import type { GzipSeekIndex } from './gzip-reader'
+import { ManifestBuilder } from './manifest'
 import {
   ARCHIVE_BROWSE_LIMITS,
   ARCHIVE_LIMITS,

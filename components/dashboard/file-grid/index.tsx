@@ -532,26 +532,13 @@ function FileLibrary({ scope }: { scope: string }) {
             {BATCH_ACTIONS.map((action) => {
               if (!fileActionAllowed(user, action)) return null
               const { icon: Icon, batch } = FILE_ACTIONS[action]
-              // The server builds archives, and it cannot read an
-              // encrypted file.
-              const blocked =
-                action === 'createArchive' &&
-                selectedFiles.some((file) => file.encrypted)
               return (
                 <Button
                   key={action}
                   size="sm"
                   variant="outline"
                   disabled={
-                    !selectedIds.length ||
-                    isLoading ||
-                    selection.loading ||
-                    blocked
-                  }
-                  title={
-                    blocked
-                      ? 'Encrypted files cannot be added to an archive yet'
-                      : undefined
+                    !selectedIds.length || isLoading || selection.loading
                   }
                   onClick={() => void openSelection(action)}
                 >
@@ -684,7 +671,9 @@ function FileLibrary({ scope }: { scope: string }) {
                 onUpdate={refreshFiles}
                 onPreview={open}
                 onBrowseArchive={
-                  isArchiveCandidate(file.name, file.mimeType)
+                  // The card of an encrypted file decides from its
+                  // decrypted name, which the server does not have.
+                  file.encrypted || isArchiveCandidate(file.name, file.mimeType)
                     ? () => setBrowsingArchive(file)
                     : undefined
                 }

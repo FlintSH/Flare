@@ -321,6 +321,8 @@ console.log(archiveResult.data.file)
 
 ## Limits and publication
 
+**Encrypted files.** These endpoints read stored bytes, and the stored bytes of an [encrypted file](/guide/encryption) are ciphertext. A request that names an encrypted file as an archive or as a source gets `400` with `The server cannot read an encrypted file. Open it in a browser, which lists, extracts and creates archives of encrypted files itself.` The browser does that work with the file's key and calls none of these endpoints for it: it reads byte ranges of `GET /api/files/{urlId}/{fileId}` and uploads new encrypted files through the upload endpoints. See [archives that are encrypted files](/guide/archives#archives-that-are-encrypted-files).
+
 Browsing accepts ZIP (stored and deflated members, ZIP64, and archives with a prepended self-extractor), ustar, PAX, and GNU TAR, TAR.GZ/TGZ, and GZIP, including concatenated GZIP members. RAR, 7z, and split archives are unsupported. Encrypted entries, links, special files, sparse files, unsafe paths, and unsupported compression are listed with an `issue` rather than rejecting the archive. A normal Flare password on an owned archive is independent of archive encryption and does not prevent owner access through these routes.
 
 Browsing limits are: 100,000 listed entries; an estimated 64 MiB of server memory per listing, including its encoded response; a 64 MiB ZIP central directory; 2 minutes to list a TAR, TAR.GZ, or GZIP, and 64 GiB of uncompressed data for a TAR.GZ or GZIP; and 4,096 characters per entry path. Exceeding them produces a `truncated` listing rather than an error. There is no archive-size limit for browsing beyond what the instance accepted as an upload.

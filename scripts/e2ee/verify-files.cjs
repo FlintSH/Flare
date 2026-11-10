@@ -550,6 +550,15 @@ function watchPage(page) {
     const text = message.text()
     // A request that the server refused on purpose logs a resource error.
     if (/Failed to load resource/.test(text)) return
+    // The answer of a local address is sandboxed. In a frame the browser
+    // then refuses the script this suite adds to every document, and says
+    // so. That is the policy at work, not a fault of a page.
+    if (
+      /Blocked script execution in '[^']*\/_flare\/local\/[^']*' because the document's frame is sandboxed/.test(
+        text
+      )
+    )
+      return
     pageProblems.push(`${page.url()}: console error: ${text}`)
   })
 }
@@ -1026,15 +1035,29 @@ async function testSharePages(browser, alex) {
   await page.goto(uploaded[fixtures.pdf.name])
   await expectShareState(page, 'open')
   const frame = page.locator('iframe[title$="document preview"]')
-  const pdfState = (await page
-    .getByText('PDF preview is not available in this browser')
-    .count())
+  // Three outcomes, by browser: a frame on a local address of the service
+  // worker (a Chromium with a PDF viewer), a sandboxed frame on a Blob (a
+  // browser that shows PDFs in one), or the download card (no PDF viewer).
+  await expect(
+    frame.or(page.getByText('PDF preview is not available in this browser'))
+  ).toBeVisible({ timeout: 60000 })
+  const pdfSource = (await frame.count())
+    ? await frame.getAttribute('src')
+    : null
+  const pdfState = !pdfSource
     ? 'download'
-    : 'frame'
-  if (pdfState === 'frame') {
+    : pdfSource.startsWith('blob:')
+      ? 'frame'
+      : 'local'
+  if (pdfState === 'frame')
     assert.equal(await frame.getAttribute('sandbox'), '')
-    assert.match(await frame.getAttribute('src'), /^blob:/)
-  } else await expect(frame).toHaveCount(0)
+  else if (pdfState === 'local') {
+    assert.match(
+      pdfSource,
+      /^\/_flare\/local\/[A-Za-z0-9_-]{43}\/document\.pdf#/
+    )
+    assert.equal(await frame.getAttribute('sandbox'), null)
+  }
   await shot(page, 'share-pdf')
   const [pdf] = await Promise.all([
     page.waitForEvent('download'),
@@ -1107,7 +1130,7 @@ async function testSharePages(browser, alex) {
   assert.deepEqual(await violations(page), [])
   await visitor.ctx.close()
   results.push(
-    `A signed-out visitor with the copied link sees the decrypted image (an <img> on a blob of image/png), the text, the PDF (${pdfState === 'frame' ? 'in a frame with an empty sandbox attribute' : 'offered as a download, because this Chromium does not open a PDF in a sandboxed frame'})${fixtures.video ? ', and plays the video' : ''}; downloads from the share page are byte-identical, the 11 MiB file included; the same address without its fragment says "This link is missing its key", with the key of another file "This key does not open this file", and with an unknown prefix it asks for a newer version`
+    `A signed-out visitor with the copied link sees the decrypted image (an <img> on a blob of image/png), the text, the PDF (${pdfState === 'frame' ? 'in a frame with an empty sandbox attribute' : pdfState === 'local' ? 'in a frame on a local address of the service worker, whose answer carries the sandbox policy' : 'offered as a download, because this browser has no PDF viewer'})${fixtures.video ? ', and plays the video' : ''}; downloads from the share page are byte-identical, the 11 MiB file included; the same address without its fragment says "This link is missing its key", with the key of another file "This key does not open this file", and with an unknown prefix it asks for a newer version`
   )
   void alex
 }

@@ -9,7 +9,7 @@ import {
 } from '@/lib/e2ee/client/files'
 import { type OpenedFolder, folderStanzaFor } from '@/lib/e2ee/client/folders'
 import { rememberOpenedFile } from '@/lib/e2ee/client/opened-files'
-import { storedLengthOf } from '@/lib/e2ee/file'
+import { encryptFile, storedLengthOf } from '@/lib/e2ee/file'
 import { type ShareSecret, shareLink } from '@/lib/e2ee/link'
 
 import {
@@ -132,7 +132,14 @@ function send(
       reject(cancelled())
       return
     }
-    signal?.addEventListener('abort', () => request.abort(), { once: true })
+    const abort = () => request.abort()
+    signal?.addEventListener('abort', abort, { once: true })
+    // The signal lives as long as the upload, and its listener holds this
+    // request with the body it sent. Without this, every part of a large
+    // upload stayed in memory until the last one: 2 GiB for a 2 GiB file.
+    request.addEventListener('loadend', () =>
+      signal?.removeEventListener('abort', abort)
+    )
     if (onProgress)
       request.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) onProgress(event.loaded)
@@ -313,6 +320,7 @@ async function uploadInParts(
  */
 const ENCRYPTED_PART_BYTES = 80 * 65568
 const ENCRYPTED_HEADERS = { 'X-Flare-Encrypted': 'true' }
+const ENCRYPTED_PART_HEADERS = { 'Content-Type': 'application/octet-stream' }
 /** The file part carries this name and type. The real ones are sealed. */
 const ENCRYPTED_PART_NAME = 'encrypted'
 const ENCRYPTED_PART_TYPE = 'application/octet-stream'
@@ -336,8 +344,10 @@ function visibleOptions(options: UploadOptions) {
  * browser.
  */
 async function prepareEncryptedUpload(
-  file: File,
-  options: UploadOptions & { encryptFor: Uint8Array }
+  file: Pick<File, 'name' | 'type'>,
+  options: UploadOptions & { encryptFor: Uint8Array },
+  /** The whole plaintext, when the page holds it. A stream has none. */
+  whole?: File
 ) {
   const created = newEncryptedFile({
     name: file.name,
@@ -371,9 +381,11 @@ async function prepareEncryptedUpload(
     const tagIds = library.ruleTagIds(file.name)
     if (tagIds.length) extra.ruleTagIds = tagIds.join(',')
   }
-  if (library?.thumbnail)
+  // A stream has no thumbnail now. The server marks the file, and the
+  // background work of the owner's browser makes one (section 9.7).
+  if (library?.thumbnail && whole)
     try {
-      const thumbnail = await library.thumbnail(file)
+      const thumbnail = await library.thumbnail(whole)
       if (thumbnail)
         extra.sealedThumbnail = sealedThumbnailRecord(created, thumbnail)
       else extra.thumbnail = 'none'
@@ -396,10 +408,11 @@ async function prepareEncryptedUpload(
 /** The link is made here: the server never has the part after `#` (section 10.3). */
 function encryptedUploadResult(
   body: unknown,
-  file: File,
+  file: Pick<File, 'name' | 'type' | 'size'>,
   created: NewEncryptedFile,
   secret: ShareSecret,
-  library?: UploadLibrary
+  library?: UploadLibrary,
+  whole?: File
 ): UploadResponse {
   const uploaded = parseEncryptedUploadResponse(body)
   const link = shareLink(uploaded.pageUrl, secret)
@@ -410,7 +423,8 @@ function encryptedUploadResult(
     type: file.type || ENCRYPTED_PART_TYPE,
   }
   rememberOpenedFile(uploaded.id, opened)
-  library?.uploaded?.({ id: uploaded.id, file, plain: false, opened })
+  if (whole)
+    library?.uploaded?.({ id: uploaded.id, file: whole, plain: false, opened })
   return {
     url: link,
     pageUrl: link,
@@ -430,7 +444,8 @@ async function uploadEncrypted(
 ): Promise<UploadResponse> {
   const { created, secret, records } = await prepareEncryptedUpload(
     file,
-    options
+    options,
+    file
   )
   const storedLength = storedLengthOf(file.size)
   // Progress is reported in bytes of the file, as for a plain upload.
@@ -481,7 +496,8 @@ async function uploadEncrypted(
         file,
         created,
         secret,
-        options.library
+        options.library,
+        file
       )
     }
 
@@ -519,8 +535,11 @@ async function uploadEncrypted(
       const reply = await send(
         'PUT',
         `/api/files/chunks/${uploadId}/part/${number}`,
-        new Blob([bytes], { type: ENCRYPTED_PART_TYPE }),
-        {},
+        // The bytes themselves, not a Blob of them: a browser counts every
+        // Blob against a store of limited size, and frees one only after
+        // garbage collection.
+        bytes,
+        ENCRYPTED_PART_HEADERS,
         (loaded) => reportPart(number, loaded),
         options.signal
       )
@@ -565,11 +584,181 @@ async function uploadEncrypted(
       file,
       created,
       secret,
-      options.library
+      options.library,
+      file
     )
   } finally {
     job.stop()
   }
+}
+
+/** Plaintext that is made as it is uploaded: an archive entry, a new archive. */
+export interface EncryptedStreamSource {
+  readonly name: string
+  readonly type: string
+  /**
+   * The exact number of bytes, where it is known before they are read. The
+   * upload then goes out as it is encrypted. Without it the ciphertext is
+   * kept as Blobs until its size is known, because the server needs the
+   * size before the first part.
+   */
+  readonly size?: number
+  readonly bytes: AsyncIterable<Uint8Array> | Iterable<Uint8Array>
+}
+
+/** The new file, with the records that open it with the account key. */
+export type EncryptedStreamUpload = UploadResponse & {
+  readonly id: string
+  readonly records: NewEncryptedFile['records']
+}
+
+/**
+ * Encrypts a stream and uploads it as a new file (docs/e2ee-spec.md,
+ * sections 10.1 and 12.3). The cipher runs where this is called, so call
+ * it in a worker. At most one part of plaintext and the parts in flight
+ * are in memory; ciphertext that waits for its size is in Blobs, which the
+ * browser may keep on disk. They hold no plaintext.
+ */
+export async function uploadEncryptedStream(
+  source: EncryptedStreamSource,
+  options: UploadOptions & { encryptFor: Uint8Array },
+  onProgress?: Progress
+): Promise<EncryptedStreamUpload> {
+  const { created, secret, records } = await prepareEncryptedUpload(
+    source,
+    options
+  )
+  let plaintextBytes = 0
+  async function* counted() {
+    for await (const piece of source.bytes) {
+      plaintextBytes += piece.length
+      onProgress?.(plaintextBytes)
+      yield piece
+    }
+  }
+  const stored = encryptFile(created.fileKey, created.noncePrefix, counted())
+  /** The next part: the header and stored chunks, a little over 5 MiB. */
+  async function nextPart(): Promise<Uint8Array<ArrayBuffer> | null> {
+    const pieces: Uint8Array[] = []
+    let length = 0
+    while (length < ENCRYPTED_PART_BYTES) {
+      const step = await stored.next()
+      if (step.done) break
+      pieces.push(step.value)
+      length += step.value.length
+    }
+    options.signal?.throwIfAborted()
+    if (!length) return null
+    const part = new Uint8Array(length)
+    let offset = 0
+    for (const piece of pieces) {
+      part.set(piece, offset)
+      offset += piece.length
+    }
+    return part
+  }
+  const result = (body: unknown): EncryptedStreamUpload => ({
+    ...encryptedUploadResult(
+      body,
+      { name: source.name, type: source.type, size: plaintextBytes },
+      created,
+      secret
+    ),
+    id: parseEncryptedUploadResponse(body).id,
+    records: created.records,
+  })
+
+  // Without a size, every part waits. With one, a small file waits whole
+  // (it is one request) and a large one is sent part by part.
+  const known = source.size === undefined ? null : storedLengthOf(source.size)
+  let staged: Blob[] | null = null
+  let storedLength = known
+  if (known === null || source.size! <= WHOLE_FILE_MAX_BYTES) {
+    staged = []
+    for (let part = await nextPart(); part; part = await nextPart())
+      staged.push(new Blob([part], { type: ENCRYPTED_PART_TYPE }))
+    storedLength = staged.reduce((sum, part) => sum + part.size, 0)
+    if (known !== null && storedLength !== known)
+      throw new Error('The data does not have the size it declared')
+  }
+  if (staged && storedLength! <= storedLengthOf(WHOLE_FILE_MAX_BYTES)) {
+    const body = new FormData()
+    for (const [name, value] of Object.entries({
+      ...records,
+      ...visibleOptions(options),
+    }))
+      if (value !== undefined) body.append(name, value ?? '')
+    body.append(
+      'file',
+      new Blob(staged, { type: ENCRYPTED_PART_TYPE }),
+      ENCRYPTED_PART_NAME
+    )
+    const reply = await send(
+      'POST',
+      '/api/files',
+      body,
+      { ...ENCRYPTED_HEADERS, ...selectionHeaders(options) },
+      undefined,
+      options.signal
+    )
+    if (!succeeded(reply))
+      throw failure(reply, `Upload failed: ${reply.statusText}`)
+    return result(reply.body)
+  }
+
+  const started = await send(
+    'POST',
+    '/api/files/chunks',
+    JSON.stringify({
+      encrypted: true,
+      size: storedLength,
+      ...records,
+      profileId: options.profileId,
+      folderId: options.folderId ?? null,
+      ...visibleOptions(options),
+    }),
+    JSON_HEADERS,
+    undefined,
+    options.signal
+  )
+  if (!succeeded(started)) throw failure(started, 'Failed to initialize upload')
+  const id = field(field(started.body, 'data'), 'uploadId')
+  if (typeof id !== 'string' || !id)
+    throw new Error('Failed to initialize upload')
+  const uploadId = encodeURIComponent(id)
+  const parts: { ETag: string; PartNumber: number }[] = []
+  let number = 0
+  let sent = 0
+  for (;;) {
+    const part = staged ? (staged.shift() ?? null) : await nextPart()
+    if (!part) break
+    const reply = await send(
+      'PUT',
+      `/api/files/chunks/${uploadId}/part/${++number}`,
+      part,
+      ENCRYPTED_PART_HEADERS,
+      undefined,
+      options.signal
+    )
+    if (!succeeded(reply))
+      throw failure(reply, `Upload failed: ${reply.statusText}`)
+    const etag = field(field(reply.body, 'data'), 'etag')
+    if (typeof etag !== 'string') throw new Error('Failed to parse response')
+    parts.push({ ETag: etag, PartNumber: number })
+    sent += part instanceof Blob ? part.size : part.length
+  }
+  if (sent !== storedLength)
+    throw new Error('The data does not have the size it declared')
+  const reply = await send(
+    'POST',
+    `/api/files/chunks/${uploadId}/complete`,
+    JSON.stringify({ parts }),
+    JSON_HEADERS,
+    undefined,
+    options.signal
+  )
+  if (!succeeded(reply)) throw failure(reply, 'Failed to complete upload')
+  return result(reply.body)
 }
 
 export function uploadFile(

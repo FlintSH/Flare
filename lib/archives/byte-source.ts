@@ -3,8 +3,10 @@ import type { Readable } from 'node:stream'
 import type { StorageProvider } from '@/lib/storage'
 import type { RandomAccessFile } from '@/lib/storage/types'
 
-import { ArchiveError } from './errors'
+import { ArchiveError, truncatedArchive } from './errors'
 import { readUpTo } from './stream-slice'
+
+export { truncatedArchive }
 
 /** Random access to one stored archive without downloading all of it. */
 export interface ByteSource {
@@ -14,12 +16,6 @@ export interface ByteSource {
   /** Stream `[start, end)` for entry data. */
   stream(start: number, end: number): Promise<Readable>
   close(): Promise<void>
-}
-
-export function truncatedArchive() {
-  return new ArchiveError(
-    'The archive ends unexpectedly. It may be incomplete or damaged.'
-  )
 }
 
 /** Ranged requests are expensive on object storage, so keep one read-ahead window. */

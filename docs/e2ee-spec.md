@@ -1890,6 +1890,104 @@ The service worker keeps `file_key` in memory only.
 If a browser has no service worker, the client downloads and decrypts the
 full file before the player starts.
 
+#### 12.2.1 Local address
+
+**PROPOSED**
+
+**Goal:** the decrypted bytes must never become a page of the application.
+
+**Restriction:** a person who knows `account_public_key` can make a file
+that decrypts correctly (section 3.3, limit 2). Thus the bytes that a local
+address answers with are not trusted. The address is in the origin of the
+application.
+
+The local address is `/_flare/local/{local_token}`. `local_token` is
+`base64url(random(32))`. The page makes it. No URL ID and no vanity ID
+contains `_`, thus no file has this address. `file_key` is never part of an
+address.
+
+The address of the mode `frame` is
+`/_flare/local/{local_token}/document.pdf`. A PDF viewer shows the last part
+of the address as the title. The last part is the same for all files. The
+file name is never part of an address: a browser with no service worker
+sends the address to the server.
+
+The page gives the service worker a `local_resource` through a
+`MessageChannel`: `local_token`, the mode, the type, the address of the
+ciphertext, `file_key`, the header and the stored length. The service worker
+records which page sent it.
+
+Each `local_resource` has one mode:
+
+| Mode       | Who gets an answer                                        | Type of the answer                           |
+| ---------- | --------------------------------------------------------- | -------------------------------------------- |
+| `media`    | An image, video or audio element of the page that sent it | The type, if it is on the list below         |
+| `frame`    | A navigation in a frame                                   | `application/pdf` only                       |
+| `download` | A navigation, one time                                    | `application/octet-stream`, as an attachment |
+
+The list of types for `media` is the raster image, video and audio types
+that the application shows from a decrypted file. HTML, SVG and XML are not
+on the list. The service worker must refuse to record a `local_resource`
+with a type that its mode does not permit.
+
+Each answer of the service worker, also an error, must have these headers:
+
+- `X-Content-Type-Options: nosniff`
+- `Content-Security-Policy: sandbox; default-src 'none'`
+- `Content-Disposition`: `inline` for `media` and `frame`, `attachment` for
+  `download`
+
+Thus a navigation to a local address shows no document that can run script
+in the origin of the application. A `media` address refuses each
+navigation.
+
+The service worker must not answer a request that is not for a local
+address. It must not use Cache Storage or IndexedDB.
+
+#### 12.2.2 Ranges and the end of the file
+
+**PROPOSED**
+
+1. The service worker calculates the stored chunks that contain the
+   requested plaintext bytes (section 7.5) and requests those stored bytes.
+2. The answer of the server must be the requested range, and its total must
+   be the stored length that the page gave. If not, reject.
+3. Before the service worker gives out a byte of a file, it must read the
+   last stored chunk and verify its tag with `final_flag = 0x01`. A server
+   that cuts a file at a chunk border and reports the shorter length thus
+   causes a failure, and the file does not play as a complete file
+   (section 7.4).
+4. The answer has status `206`, `Content-Range` and `Accept-Ranges: bytes`.
+   A request without a range gets status `200` and the full length.
+
+#### 12.2.3 A service worker that stops
+
+**PROPOSED**
+
+A browser stops a service worker that is idle. The keys in its memory are
+lost. The page keeps each `local_resource` that it made, in memory.
+
+1. A service worker that gets a request for a `local_token` that it does not
+   have asks the page for it.
+2. The page sends the `local_resource` again.
+3. The service worker answers the request. The address does not change.
+
+On sign-out, and when the account keys are locked or replaced, the page
+erases each `local_resource` and tells the service worker to erase all that
+it has.
+
+#### 12.2.4 Downloads and PDF
+
+**PROPOSED**
+
+A download uses a `download` address. The browser writes the answer to a
+file as it arrives, thus the plaintext is not complete in memory. If a
+chunk tag is wrong, the service worker breaks the answer. The browser then
+has a failed download and not a file.
+
+A PDF can use a `frame` address. The sandbox of the answer gives the
+document an origin that is not the origin of the application.
+
 ### 12.3 Archives
 
 **AGREED**
@@ -1915,12 +2013,58 @@ Limits:
 - The client must process the data as a stream. It must not hold a full
   large archive in memory.
 
+#### 12.3.1 The archive is not trusted
+
+**PROPOSED**
+
+The list of entries of an archive is content of an encrypted file. A person
+who knows `account_public_key` can make it (section 3.3, limit 2). Thus:
+
+1. The client applies the limits that the server applies to a plain
+   archive: the number of entries, the depth and the length of a path, the
+   size of one entry, the total size after expansion, and the largest ratio
+   that the compression method can give.
+2. The client must not extract an archive that has an entry with a path
+   that leaves the archive, a link, or two names that are equal when the
+   case of the letters is ignored.
+3. The client shows an entry only as text, or as one of the media types of
+   section 12.2.1, which it selects from the name of the entry. It must not
+   show an entry as a document.
+4. The client must not send the name of an entry to the server. A folder
+   that the client makes for extracted files must have a sealed name
+   (section 8.4.2).
+
+A new file from an extract or create operation is an encrypted file. The
+client makes it with the upload procedure of section 10.1.
+
 ### 12.4 Export of the account data
 
 **AGREED**
 
 For encrypted files, the client downloads and decrypts each file and builds
 the archive on the device. The server cannot do it.
+
+#### 12.4.1 Procedure
+
+**PROPOSED**
+
+1. The client requests the list of the files of the account, with
+   `sealed_metadata`, the header and the account stanza of each encrypted
+   file.
+2. The client opens each account stanza and `sealed_metadata`. The name of
+   an entry comes from `file_metadata`. The client must make the name one
+   safe path segment before it uses it.
+3. For each file, the client reads the stored file, verifies each chunk and
+   the last chunk (section 7.4), and writes the plaintext to the archive.
+4. A plain file goes into the same archive as the server stores it.
+5. If no key opens a file, the client writes its ciphertext to the archive.
+6. If a file fails, the client leaves it out and continues. The archive
+   contains a report that names each file that is not complete in it.
+
+The client must write the archive as a stream, to a file that the user
+selects or to a download of the browser (section 12.2.4). The client must
+not write decrypted data to the Origin Private File System, to IndexedDB or
+to any other storage of the browser.
 
 ### 12.5 Pastes
 
@@ -1942,6 +2086,11 @@ reason.
 
 Result: a short link cannot open an encrypted file. An encrypted short link
 is possible but is not part of this document.
+
+**PROPOSED**: the server rejects such a target address too. A script that
+sends one has sent the key already, thus this check protects only the
+stored record. The server must not write the rejected address to a log or
+to an audit record (section 13, requirement 3).
 
 ### 12.7 Webhook `file.ready`
 

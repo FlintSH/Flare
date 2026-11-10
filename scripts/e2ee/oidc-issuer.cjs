@@ -139,8 +139,10 @@ function startOidcIssuer({ redirectUri }) {
     return json(res, 404, {})
   })
 
+  // Any free loopback port, or the one a shared machine reserves for it.
+  const port = Number(process.env.FLARE_E2EE_OIDC_PORT) || 0
   return new Promise((resolve) =>
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(port, '127.0.0.1', () => {
       url = `http://127.0.0.1:${server.address().port}`
       resolve({
         url,

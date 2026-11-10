@@ -371,6 +371,7 @@ async function main() {
       ['/api/profile/upload-tools/legacy-token', 'DELETE'],
       ['/api/profile/export', 'GET'],
       ['/api/profile/export/progress', 'GET'],
+      ['/api/profile/export/manifest', 'GET'],
       ['/api/profile', 'PUT', { name: 'Denied' }],
       ['/api/profile/avatar', 'POST'],
       ['/api/settings/email', 'GET'],

@@ -117,7 +117,7 @@ const features = [
   [
     'Share',
     'Encrypted files',
-    'Uploads are encrypted on your device by default, in the browser and from screenshot tools. The server stores ciphertext, the share link carries the key, and your browser makes thumbnails, reads image text, applies tag rules and searches. An administrator can forbid plain uploads.',
+    'Uploads are encrypted on your device by default, in the browser and from screenshot tools. The server stores ciphertext and the share link carries the key. Your browser makes thumbnails, reads image text, applies tag rules, searches, streams video, opens archives and builds your export.',
     '/guide/encryption',
   ],
   [

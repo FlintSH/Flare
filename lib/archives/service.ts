@@ -98,11 +98,12 @@ async function ownedFiles(actor: ArchiveActor, ids: string[]) {
     )
   }
   // The server holds ciphertext only. It cannot read an encrypted archive
-  // or put a readable copy of an encrypted file into a new one
-  // (docs/e2ee-spec.md, section 12.3).
+  // or put a readable copy of an encrypted file into a new one. The browser
+  // of a person who has the key does this work (docs/e2ee-spec.md, section
+  // 12.3).
   if (found.some((file) => file.encrypted))
     throw new ArchiveError(
-      'Archive tools do not work with encrypted files yet.'
+      'The server cannot read an encrypted file. Open it in a browser, which lists, extracts and creates archives of encrypted files itself.'
     )
   return ids.map((id) => files.find((file) => file.id === id)!)
 }

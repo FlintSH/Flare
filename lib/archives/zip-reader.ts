@@ -1,11 +1,13 @@
-import { setImmediate as nextTurn } from 'node:timers/promises'
-import { crc32 } from 'node:zlib'
-
 import { type ArchiveIndex, normalizeBrowsePath } from './archive-index'
-import type { ByteSource } from './byte-source'
-import { ArchiveError } from './errors'
+import { latin1, nextTurn, u64 as readU64, u16, u32 } from './bytes'
+import { crc32 } from './crc32'
+import { ArchiveError, damagedEntry } from './errors'
+import type { RangeSource } from './range-source'
 import type { ArchiveEntryIssue } from './shared'
-import { damagedEntry } from './stream-slice'
+
+// This reader also runs in the browser, over a decrypted file
+// (docs/e2ee-spec.md, section 12.3): no Node.js imports and no `Buffer`.
+type ByteSource = RangeSource
 
 const EOCD = 0x06054b50
 const ZIP64_LOCATOR = 0x07064b50
@@ -31,19 +33,19 @@ function damaged(message = 'This ZIP archive is damaged or incomplete.') {
   return new ArchiveError(message)
 }
 
-function u64(buffer: Buffer, offset: number) {
-  const value = buffer.readBigUInt64LE(offset)
-  if (value > BigInt(Number.MAX_SAFE_INTEGER)) throw damaged()
-  return Number(value)
+function u64(buffer: Uint8Array, offset: number) {
+  const value = readU64(buffer, offset)
+  if (value === null) throw damaged()
+  return value
 }
 
 /**
  * Names without the UTF-8 flag are officially CP437, but macOS and many
  * Linux tools write UTF-8 without setting it. Prefer valid UTF-8.
  */
-export function decodeZipName(raw: Buffer, utf8Flag: boolean) {
+export function decodeZipName(raw: Uint8Array, utf8Flag: boolean) {
   if (utf8Flag) return lenientUtf8.decode(raw)
-  if (raw.every((byte) => byte < 0x80)) return raw.toString('latin1')
+  if (raw.every((byte) => byte < 0x80)) return latin1(raw)
   try {
     return strictUtf8.decode(raw)
   } catch {
@@ -54,10 +56,10 @@ export function decodeZipName(raw: Buffer, utf8Flag: boolean) {
   }
 }
 
-function extraField(extra: Buffer, id: number) {
+function extraField(extra: Uint8Array, id: number) {
   for (let offset = 0; offset + 4 <= extra.length;) {
-    const header = extra.readUInt16LE(offset)
-    const length = extra.readUInt16LE(offset + 2)
+    const header = u16(extra, offset)
+    const length = u16(extra, offset + 2)
     if (offset + 4 + length > extra.length) return null
     if (header === id) return extra.subarray(offset + 4, offset + 4 + length)
     offset += 4 + length
@@ -82,8 +84,8 @@ async function locate(source: ByteSource): Promise<ZipLayout> {
   let record = -1
   let fallback = -1
   for (let index = tail.length - 22; index >= 0; index--) {
-    if (tail.readUInt32LE(index) !== EOCD) continue
-    const end = index + 22 + tail.readUInt16LE(index + 20)
+    if (u32(tail, index) !== EOCD) continue
+    const end = index + 22 + u16(tail, index + 20)
     if (end === tail.length) {
       record = index
       break
@@ -97,33 +99,33 @@ async function locate(source: ByteSource): Promise<ZipLayout> {
       'Flare couldn’t find this ZIP archive’s file list. The file may be incomplete, damaged, or not a ZIP archive.'
     )
   const position = tailStart + record
-  let disk = tail.readUInt16LE(record + 4)
-  let directoryDisk = tail.readUInt16LE(record + 6)
-  let entryCount = tail.readUInt16LE(record + 10)
-  let directorySize = tail.readUInt32LE(record + 12)
-  let directoryOffset = tail.readUInt32LE(record + 16)
+  let disk = u16(tail, record + 4)
+  let directoryDisk = u16(tail, record + 6)
+  let entryCount = u16(tail, record + 10)
+  let directorySize = u32(tail, record + 12)
+  let directoryOffset = u32(tail, record + 16)
   let directoryEnd = position
   if (position >= 20) {
     const locator = await source.read(position - 20, 20)
-    if (locator.readUInt32LE(0) === ZIP64_LOCATOR) {
-      if (locator.readUInt32LE(16) > 1) throw splitArchive()
+    if (u32(locator, 0) === ZIP64_LOCATOR) {
+      if (u32(locator, 16) > 1) throw splitArchive()
       const recorded = u64(locator, 8)
       // A prepended stub shifts the recorded offset; the record normally sits
       // immediately before its locator.
       const candidates = [recorded, position - 20 - 56]
-      let zip64: Buffer | null = null
+      let zip64: Uint8Array | null = null
       for (const candidate of candidates) {
         if (candidate < 0 || candidate + 56 > position - 20) continue
         const bytes = await source.read(candidate, 56)
-        if (bytes.readUInt32LE(0) === ZIP64_EOCD) {
+        if (u32(bytes, 0) === ZIP64_EOCD) {
           zip64 = bytes
           directoryEnd = candidate
           break
         }
       }
       if (!zip64) throw damaged()
-      disk = zip64.readUInt32LE(16)
-      directoryDisk = zip64.readUInt32LE(20)
+      disk = u32(zip64, 16)
+      directoryDisk = u32(zip64, 20)
       entryCount = u64(zip64, 32)
       directorySize = u64(zip64, 40)
       directoryOffset = u64(zip64, 48)
@@ -176,21 +178,21 @@ export async function indexZip(
       else throw damaged()
       break
     }
-    if (directory.readUInt32LE(offset) !== CENTRAL_HEADER) {
+    if (u32(directory, offset) !== CENTRAL_HEADER) {
       if (!index.entries.length) throw damaged()
       index.truncated = 'damaged'
       break
     }
-    const flags = directory.readUInt16LE(offset + 8)
-    const method = directory.readUInt16LE(offset + 10)
-    const checksum = directory.readUInt32LE(offset + 16)
-    let compressedSize = directory.readUInt32LE(offset + 20)
-    let size = directory.readUInt32LE(offset + 24)
-    const nameLength = directory.readUInt16LE(offset + 28)
-    const extraLength = directory.readUInt16LE(offset + 30)
-    const commentLength = directory.readUInt16LE(offset + 32)
-    const external = directory.readUInt32LE(offset + 38)
-    let headerOffset = directory.readUInt32LE(offset + 42)
+    const flags = u16(directory, offset + 8)
+    const method = u16(directory, offset + 10)
+    const checksum = u32(directory, offset + 16)
+    let compressedSize = u32(directory, offset + 20)
+    let size = u32(directory, offset + 24)
+    const nameLength = u16(directory, offset + 28)
+    const extraLength = u16(directory, offset + 30)
+    const commentLength = u16(directory, offset + 32)
+    const external = u32(directory, offset + 38)
+    let headerOffset = u32(directory, offset + 42)
     const nameStart = offset + 46
     const next = nameStart + nameLength + extraLength + commentLength
     if (next > directory.length) {
@@ -232,7 +234,7 @@ export async function indexZip(
       unicode &&
       unicode.length > 5 &&
       unicode[0] === 1 &&
-      unicode.readUInt32LE(1) === crc32(rawName)
+      u32(unicode, 1) === crc32(rawName)
     )
       name = lenientUtf8.decode(unicode.subarray(5))
     const unixType = (external >>> 16) & 0o170000
@@ -284,20 +286,16 @@ export async function zipDataOffset(
   }
 ) {
   if (entry.dataOffset !== undefined) return entry.dataOffset
-  let header: Buffer
+  let header: Uint8Array
   try {
     header = await source.read(entry.offset, 30)
   } catch (error) {
     if (error instanceof ArchiveError) throw damagedEntry()
     throw error
   }
-  if (
-    header.readUInt32LE(0) !== LOCAL_HEADER ||
-    header.readUInt16LE(8) !== entry.method
-  )
+  if (u32(header, 0) !== LOCAL_HEADER || u16(header, 8) !== entry.method)
     throw damagedEntry()
-  const dataOffset =
-    entry.offset + 30 + header.readUInt16LE(26) + header.readUInt16LE(28)
+  const dataOffset = entry.offset + 30 + u16(header, 26) + u16(header, 28)
   if (dataOffset + (entry.compressedSize ?? 0) > index.dataEnd)
     throw damagedEntry()
   entry.dataOffset = dataOffset

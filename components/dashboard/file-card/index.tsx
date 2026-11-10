@@ -26,6 +26,7 @@ import {
   Trash2,
 } from 'lucide-react'
 
+import { isArchiveCandidate } from '@/components/archives/archive-utils'
 import {
   CARD_BUTTONS,
   CARD_MENU,
@@ -66,8 +67,7 @@ import { type OpenedFile, shareSecretOf } from '@/lib/e2ee/client/files'
 import { shareLink } from '@/lib/e2ee/link'
 import {
   decryptionProblem,
-  fetchDecrypted,
-  saveDecrypted,
+  downloadDecrypted,
 } from '@/lib/files/encrypted-client'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
@@ -77,6 +77,7 @@ import type { FolderView } from '@/lib/folders/schema'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { canReadText } from '@/lib/ocr/encrypted-client'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
+import { mbToBytes } from '@/lib/utils/size'
 
 import { useEncryptedFile } from '@/hooks/use-encrypted-file'
 import { useOcr } from '@/hooks/use-ocr'
@@ -138,10 +139,18 @@ export function FileCard(props: FileCardProps) {
         name: safeFileName(opened.name),
         mimeType: normalizedType(opened.type) || 'application/octet-stream',
       }}
-      // Thumbnails, the image gallery and archive tools read file content
-      // on the server, which holds only ciphertext.
+      // Thumbnails and the image gallery read file content on the server,
+      // which holds only ciphertext. An archive is read in this browser
+      // (docs/e2ee-spec.md, section 12.3), so the decrypted name decides.
       onPreview={undefined}
-      onBrowseArchive={undefined}
+      onBrowseArchive={
+        isArchiveCandidate(
+          safeFileName(opened.name),
+          normalizedType(opened.type)
+        )
+          ? props.onBrowseArchive
+          : undefined
+      }
     />
   )
 }
@@ -412,10 +421,18 @@ function OpenFileCard({
     if (!opened || downloading || signal.aborted) return
     setDownloading(true)
     try {
-      // Saved only after every chunk and the end of the file verified.
-      saveDecrypted(
-        await fetchDecrypted(file, opened, { download: true, signal }),
-        opened.name
+      // Streamed to disk by the service worker where there is one, and
+      // decrypted in memory first where there is none. Either way a file
+      // that fails its integrity check is not kept.
+      await downloadDecrypted(
+        {
+          id: file.id,
+          urlPath: file.urlPath,
+          header: file.encryption?.header ?? '',
+          sizeBytes: Math.round(mbToBytes(file.size)),
+        },
+        opened,
+        { signal }
       )
     } catch (error) {
       if (signal.aborted) return

@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { ArrowDownToLine, Loader2 } from 'lucide-react'
 
@@ -12,6 +12,7 @@ import {
 import { ExpandImageButton } from '@/components/file/viewer/components/expand-image-button'
 import { Button } from '@/components/ui/button'
 
+import { entryMediaType } from '@/lib/archives/client/encrypted-archive'
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
 import { readPreviewBytes } from '@/lib/client/preview-bytes'
 import { refusal, retryable } from '@/lib/client/request'
@@ -28,6 +29,10 @@ import {
   archiveErrorMessage,
   archivePreviewKind,
 } from './archive-utils'
+import {
+  ENTRY_MEMORY_LIMIT_BYTES,
+  type EncryptedArchiveHandle,
+} from './encrypted-archive-handle'
 
 function Waiting({ label }: { label: string }) {
   return (
@@ -112,12 +117,27 @@ function MediaPreview({
   src,
   name,
   kind,
+  recover,
 }: {
   src: string
   name: string
   kind: 'video' | 'audio'
+  /** Makes `src` answer again after a failure. Resolves false if it cannot. */
+  recover?: () => Promise<boolean>
 }) {
   const [failed, setFailed] = useState(false)
+  const retried = useRef(false)
+  const onError = (event: React.SyntheticEvent<HTMLMediaElement>) => {
+    const element = event.currentTarget
+    if (!recover || retried.current) return setFailed(true)
+    retried.current = true
+    const time = element.currentTime
+    void recover().then((ready) => {
+      if (!ready) return setFailed(true)
+      element.load()
+      if (time > 0) element.currentTime = time
+    })
+  }
   if (failed)
     return (
       <Unavailable>
@@ -133,7 +153,7 @@ function MediaPreview({
       playsInline
       preload="metadata"
       aria-label={`${name} video player`}
-      onError={() => setFailed(true)}
+      onError={onError}
       className="max-h-80 w-full rounded-lg bg-black"
     />
   ) : (
@@ -142,13 +162,121 @@ function MediaPreview({
       controls
       preload="metadata"
       aria-label={`${name} audio player`}
-      onError={() => setFailed(true)}
+      onError={onError}
       className="w-full"
     />
   )
 }
 
-function TextPreview({ src, size }: { src: string; size: number }) {
+/**
+ * An image, video or audio entry of an encrypted archive. With a service
+ * worker it plays from a local address, in ranges. Without one the entry is
+ * decrypted into memory first, up to a limit. Either way it is shown only
+ * as the fixed media type its extension stands for, never as a document.
+ */
+function EncryptedMedia({
+  archive,
+  entry,
+  kind,
+  name,
+  onExpand,
+}: {
+  archive: EncryptedArchiveHandle
+  entry: ArchiveRow & { position: number }
+  kind: 'image' | 'video' | 'audio'
+  name: string
+  onExpand?: () => void
+}) {
+  const playable = entryMediaType(entry.path) !== null
+  const direct = playable ? archive.mediaUrl(entry.position) : null
+  const limit =
+    kind === 'image' ? IMAGE_PREVIEW_BYTES : ENTRY_MEMORY_LIMIT_BYTES
+  const [loaded, setLoaded] = useState<{
+    src?: string
+    problem?: 'large' | 'failed'
+  }>({})
+  const { position } = entry
+  useEffect(() => {
+    if (!playable || direct) return
+    let stale = false
+    archive.blobUrl(position, limit).then(
+      (src) => {
+        if (!stale) setLoaded({ src })
+      },
+      (cause: unknown) => {
+        if (!stale)
+          setLoaded({
+            problem: cause instanceof RangeError ? 'large' : 'failed',
+          })
+      }
+    )
+    return () => {
+      stale = true
+    }
+  }, [archive, position, playable, direct, limit])
+  if (!playable)
+    return (
+      <Unavailable>
+        Preview isn’t available for this file type. Download the entry to open
+        it on your device.
+      </Unavailable>
+    )
+  const src = direct ?? loaded.src
+  if (loaded.problem === 'large')
+    return (
+      <Unavailable>
+        This entry is {formatBytes(entry.size)}. Without a service worker, your
+        browser previews entries of an encrypted archive up to{' '}
+        {formatBytes(limit)}. Download the entry to open it.
+      </Unavailable>
+    )
+  if (loaded.problem)
+    return (
+      <Unavailable>
+        This entry could not be read. Download the whole archive to open it.
+      </Unavailable>
+    )
+  if (!src) return <Waiting label="Decrypting…" />
+  return kind === 'image' ? (
+    <ImagePreview
+      src={src}
+      name={name}
+      size={direct ? entry.size : 0}
+      onExpand={direct ? onExpand : undefined}
+    />
+  ) : (
+    <MediaPreview
+      src={src}
+      name={name}
+      kind={kind}
+      recover={direct ? () => archive.refresh(position) : undefined}
+    />
+  )
+}
+
+/** Reads up to `TEXT_PREVIEW_BYTES` of an entry from `offset`. */
+type ReadText = (offset: number, signal: AbortSignal) => Promise<Uint8Array>
+
+/** An entry the server sends: one ranged request for each part. */
+function serverText(src: string): ReadText {
+  return async (offset, signal) => {
+    const response = await fetch(src, {
+      cache: 'no-store',
+      signal,
+      headers: {
+        Range: `bytes=${offset}-${offset + TEXT_PREVIEW_BYTES - 1}`,
+      },
+    })
+    if (!response.ok)
+      throw await refusal(
+        response,
+        'This entry could not be loaded. Please try again.'
+      )
+    return (await readPreviewBytes(response, TEXT_PREVIEW_BYTES)).bytes
+  }
+}
+
+function TextPreview({ read, size }: { read: ReadText; size: number }) {
   const [text, setText] = useState('')
   const [loaded, setLoaded] = useState(0)
   const [state, setState] = useState<
@@ -170,19 +298,7 @@ function TextPreview({ src, size }: { src: string; size: number }) {
         return
       }
       try {
-        const response = await fetch(src, {
-          cache: 'no-store',
-          signal: current.signal,
-          headers: {
-            Range: `bytes=${offset}-${offset + TEXT_PREVIEW_BYTES - 1}`,
-          },
-        })
-        if (!response.ok)
-          throw await refusal(
-            response,
-            'This entry could not be loaded. Please try again.'
-          )
-        const { bytes } = await readPreviewBytes(response, TEXT_PREVIEW_BYTES)
+        const bytes = await read(offset, current.signal)
         if (current.signal.aborted) return
         if (!offset && bytes.subarray(0, 8000).includes(0)) {
           setState('binary')
@@ -203,7 +319,7 @@ function TextPreview({ src, size }: { src: string; size: number }) {
         setState('failed')
       }
     },
-    [src, size]
+    [read, size]
   )
 
   useEffect(() => {
@@ -281,10 +397,40 @@ export function ArchiveEntryPreview({
     ? entry.path.slice(0, entry.path.lastIndexOf('/'))
     : ''
   const kind = entry.issue ? null : archivePreviewKind(entry.path)?.type
-  const inline = archiveEntryHref(file.id, source, entry.position, {
-    inline: true,
-  })
-  const download = archiveEntryHref(file.id, source, entry.position)
+  // An encrypted archive has no address on the server for an entry: this
+  // browser decrypts it (docs/e2ee-spec.md, section 12.3).
+  const encrypted = source.kind === 'encrypted' ? source.archive : null
+  const inline = encrypted
+    ? null
+    : archiveEntryHref(
+        file.id,
+        source as Exclude<ArchiveSource, { kind: 'encrypted' }>,
+        entry.position,
+        { inline: true }
+      )
+  const download = encrypted
+    ? null
+    : archiveEntryHref(
+        file.id,
+        source as Exclude<ArchiveSource, { kind: 'encrypted' }>,
+        entry.position
+      )
+  const { position } = entry
+  const readText = useMemo<ReadText>(
+    () =>
+      encrypted
+        ? (offset, signal) =>
+            encrypted.read(
+              position,
+              offset,
+              offset + TEXT_PREVIEW_BYTES,
+              signal
+            )
+        : serverText(download ?? ''),
+    [encrypted, position, download]
+  )
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
   return (
     <section
@@ -299,7 +445,7 @@ export function ArchiveEntryPreview({
             {formatBytes(entry.size)}
           </p>
         </div>
-        {!entry.issue && (
+        {!entry.issue && download && (
           <Button variant="outline" size="sm" asChild>
             <a href={download} download={name}>
               <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
@@ -307,21 +453,65 @@ export function ArchiveEntryPreview({
             </a>
           </Button>
         )}
+        {!entry.issue && encrypted && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true)
+              setSaveError('')
+              encrypted
+                .download(position)
+                .catch((cause: unknown) =>
+                  setSaveError(
+                    cause instanceof RangeError
+                      ? 'This entry is too large to save without a service worker in this browser. Download the whole archive instead.'
+                      : archiveErrorMessage(cause)
+                  )
+                )
+                .finally(() => setSaving(false))
+            }}
+          >
+            {saving ? (
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+            )}
+            Download entry
+          </Button>
+        )}
       </div>
+      {saveError && (
+        <p
+          role="alert"
+          className="break-words px-4 pt-3 text-sm text-destructive"
+        >
+          {saveError}
+        </p>
+      )}
       <div className="min-h-40 min-w-0 p-4">
         {entry.issue ? (
           <Unavailable>{ARCHIVE_ISSUE_MESSAGES[entry.issue]}</Unavailable>
-        ) : kind === 'image' ? (
+        ) : encrypted && kind && kind !== 'text' ? (
+          <EncryptedMedia
+            archive={encrypted}
+            entry={entry}
+            kind={kind}
+            name={name}
+            onExpand={onExpandImage}
+          />
+        ) : kind === 'image' && inline ? (
           <ImagePreview
             src={inline}
             name={name}
             size={entry.size}
             onExpand={onExpandImage}
           />
-        ) : kind === 'video' || kind === 'audio' ? (
+        ) : (kind === 'video' || kind === 'audio') && inline ? (
           <MediaPreview src={inline} name={name} kind={kind} />
         ) : kind === 'text' ? (
-          <TextPreview src={download} size={entry.size} />
+          <TextPreview read={readText} size={entry.size} />
         ) : (
           <Unavailable>
             Preview isn’t available for this file type. Download the entry to

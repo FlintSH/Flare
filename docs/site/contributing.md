@@ -440,7 +440,7 @@ The database suite above covers both rules on the server.
 Two stand-ins replace things that a script cannot hold. Both are named in the results:
 
 - **The passkey device** is Chromium's virtual authenticator. Registration and sign-in are real WebAuthn ceremonies against the server. No native biometric prompt is shown or tested.
-- **The identity provider** is `scripts/e2ee/oidc-issuer.cjs`, an OpenID Connect issuer that the script starts on a loopback port and turns on in the instance's SSO settings for the two SSO steps. It serves discovery, the authorization code flow with PKCE, RS256 ID tokens signed with a key made at start, JWKS, and userinfo, and has no sign-in page: it answers as the person the script named. Flare's side of the flow is real. It says nothing about a particular provider, its claims, or its availability.
+- **The identity provider** is `scripts/e2ee/oidc-issuer.cjs`, an OpenID Connect issuer that the script starts on a loopback port and turns on in the instance's SSO settings for the two SSO steps. It serves discovery, the authorization code flow with PKCE, RS256 ID tokens signed with a key made at start, JWKS, and userinfo, and has no sign-in page: it answers as the person the script named. Flare's side of the flow is real. It says nothing about a particular provider, its claims, or its availability. It takes any free loopback port, and so does the suite's SMTP sink; `FLARE_E2EE_OIDC_PORT` and `FLARE_E2EE_SMTP_PORT` give them fixed ones.
 
 Set `FLARE_E2EE_SCREENSHOTS` to a temporary directory to capture each screen and state as PNG, `FLARE_E2EE_VIEWPORT=mobile` for a 390×844 viewport, and `FLARE_E2EE_THEME=light` for the light theme. Every file name carries its viewport and theme. Set `FLARE_E2EE_CONCEAL=true` to hide the words of every recovery phrase with capture-only CSS, which is how the images under `docs/images/encryption/` and the refreshed setup and invite images were made; the passphrase fields are masked by the browser. Inspect each image before replacing a canonical source. The script prints how long each key derivation took, measured from the request before it to the request after it. `FLARE_E2EE_TEST_ORIGIN` selects another `localhost` origin.
 
@@ -502,7 +502,7 @@ node scripts/e2ee/verify-files.cjs
 
 The proxy keeps the request target, headers and body of every request as they arrived. At the end the script opens each file's records with independent code (`@noble/*`, not the application bundle), derives every key the browser made, and fails if any request holds a file key, a key derived from one, a link secret, the account private key, the passphrase, a file password, a link fragment, plaintext of an encrypted file, or its file name. It also fails if any request target contains `#`. The same search must find the one plain upload's name and bytes, which proves that it can find something.
 
-What the run cannot show: the PDF preview in a sandboxed frame, because Chromium does not open PDFs there and offers the download; the video scenario needs an `ffmpeg` with `libvpx` to make its fixture (`FLARE_FFMPEG` names one) and is reported as skipped without it; and it does not test S3 storage.
+What the run cannot show: the PDF preview in a sandboxed frame, because Chromium does not open PDFs there (with a service worker Chromium shows the PDF from a local address, which the media suite below checks); the video scenario needs an `ffmpeg` with `libvpx` to make its fixture (`FLARE_FFMPEG` names one) and is reported as skipped without it; and it does not test S3 storage.
 
 `FLARE_E2EE_SCREENSHOTS` names a directory for captures, `FLARE_E2EE_VIEWPORT=mobile` and `FLARE_E2EE_THEME=light` choose the variant, and `FLARE_E2EE_DEBUG` names a directory for a picture of each page when a run fails. Handbook images in `docs/images/encryption/` come from the desktop dark captures; inspect each before replacing a source image. Every secret in the script is a public fixture.
 
@@ -533,6 +533,41 @@ The run signs in, makes each configuration in the Upload tools card the way a pe
 `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as in the encrypted file checks. `FLARE_E2EE_HANDBOOK` names a directory that receives the handbook images of the Upload tools card, the ShareX steps, the profile editor, the Encryption setting and the upload form (desktop dark run only); inspect each before replacing a source image under `docs/images/`.
 
 What the run cannot show: ShareX itself, any Windows or macOS behavior of the program, and a key rotation through the passphrase form. The rotation case uses a configuration with the key of a different account, which the server treats the same way. The program has its own tests, `cargo test` in `clients/flare-upload`, which check every shared test vector it implements and run it against a mock server.
+
+### Encrypted media, archive and export browser checks
+
+`scripts/e2ee/verify-media.cjs` drives what encrypted files do with their content: video and audio from a local address of the [service worker](/guide/encryption#video-audio-and-downloads), streamed downloads, PDF, [archives](/guide/archives#archives-that-are-encrypted-files), the [account export](/guide/account#an-account-with-encrypted-files), pastes and short links. It uses a production build, a disposable database named exactly `flare_e2ee_media_local`, and the same recording proxy as the suite above, on ports 3294 (the browser's origin) and 3293 (the application):
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_media_local'
+export NEXTAUTH_URL='http://localhost:3294'
+export NEXTAUTH_SECRET='public-disposable-e2ee-media-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3293
+```
+
+```sh
+node scripts/e2ee/verify-media.cjs
+```
+
+`FLARE_E2EE_MEDIA_ORIGIN` and `FLARE_E2EE_MEDIA_UPSTREAM` select other loopback addresses. The origin must be `localhost`: browsers give service workers only to secure origins and to `localhost`. The suite launches the full Chromium (`channel: 'chromium'`), because the headless shell has no PDF viewer.
+
+What it checks, each against real requests:
+
+- A 36 MiB video plays for a signed-out visitor after a few percent of the ciphertext was asked for, and a seek to 80% plays without the bytes before it. The proxy counts the bytes of every `Range` request, and every range must start and end at a stored chunk border.
+- The service worker is stopped through the DevTools protocol (`ServiceWorker.stopAllWorkers`), and the same player goes on from a part it had not fetched.
+- The navigation attack: the suite registers local addresses for an HTML file and an SVG file with script, under false types, and opens them as a tab, a frame, an image and a fetch. No script may run.
+- Sign-out drops the worker's keys. A browser context with service workers blocked uses the fallback.
+- A streamed download and the export are compared with the originals by SHA-256. A file cut at a chunk border must be refused.
+- Archives: list, open, extract and create for ZIP, and list and open for TAR, TAR.GZ and GZIP, as the owner and as a signed-out visitor. A hostile ZIP must be listed and not extracted.
+- The search for secrets of the suite above, extended with the names and texts inside archives and with local address tokens. No request for `/_flare/local/` may reach the server.
+
+The video and audio fixtures need an `ffmpeg` with `libvpx` and `libopus` (`FLARE_FFMPEG` names one). They are made once and kept in `FLARE_E2EE_MEDIA_FIXTURES`. Without one, those scenarios are reported as skipped. `FLARE_E2EE_MEDIA_ONLY=archives,export` runs chosen scenarios after the uploads; the names are `video`, `audio`, `password`, `attack`, `signout`, `fallback`, `download`, `pdf`, `truncated`, `archives`, `export`, `paste` and `shortlinks`. The screenshot, viewport, theme and debug variables are those of the suite above.
+
+What the run cannot show: Firefox and Safari, whose PDF preview and service worker behavior differ; the native save dialog of the File System Access API, which the suite replaces with a file handle of its own; and S3 storage.
+
+`scripts/e2ee/measure-media.cjs` measures large files: the time to upload and download one, the time to seek in a long video, the ciphertext bytes the seek asked for, and the peak memory of every browser process. It needs a database named `flare_e2ee_measure_local`, the application on port 3295 with `NEXTAUTH_URL=http://localhost:3296`, and the files to use in `FLARE_E2EE_MEASURE_FILE` and `FLARE_E2EE_MEASURE_VIDEO`. It signs in with Playwright and then drives a second Chromium without it: Playwright turns on the DevTools Network domain, which makes Chromium keep every request body in memory, so a browser under Playwright shows gigabytes more than a person's browser uses during an upload.
 
 ### How the browser suites sign in
 

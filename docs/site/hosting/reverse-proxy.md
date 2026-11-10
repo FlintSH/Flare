@@ -187,6 +187,29 @@ What this means for a proxy:
 
 Flare reads no policy from the environment and has no setting for it in this release.
 
+### The service worker for encrypted files
+
+Encrypted video, audio, PDF and downloads are decrypted by a service worker in the visitor's browser ([what it does](/guide/encryption#video-audio-and-downloads)). Its script is one file:
+
+```text
+/_next/static/service-worker/sw.js
+```
+
+Flare serves it with two headers that matter:
+
+| Header                    | Value                                                       | Why                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Service-Worker-Allowed`  | `/`                                                         | A worker may control only pages under its script's own path unless this header names a wider scope. Flare's pages are at `/`. |
+| `Content-Security-Policy` | `default-src 'none'; connect-src 'self'; script-src 'self'` | The worker may fetch from your instance and nothing else, and runs no other script.                                           |
+
+What this means for a proxy:
+
+- **If the proxy or a CDN serves `/_next/static/` itself** (from a copy of the build, not by passing requests to Flare), it must send `Service-Worker-Allowed: /` for that file. Without it the browser refuses to register the worker. Nothing breaks for visitors: Flare falls back to decrypting whole files in memory, with [size limits for previews](/guide/encryption#video-audio-and-downloads). In nginx: `location = /_next/static/service-worker/sw.js { add_header Service-Worker-Allowed "/"; ... }`.
+- **Do not cache that file for long.** Flare sends `Cache-Control: public, max-age=0, must-revalidate` for it, unlike the hashed files next to it. Browsers check it for updates on their own; a proxy that pins an old copy keeps visitors on an old worker after an upgrade.
+- **Pass `Range` request headers and `206` answers through** for `/api/files/`. The worker reads ciphertext in byte ranges. A proxy that strips `Range`, or buffers and answers `200` with the whole file, makes every encrypted video fail its length check: the player shows an error and downloads fall back to memory.
+- Requests for `/_flare/local/...` never reach your proxy. The worker answers them inside the browser. If you see one in an access log, that browser had no worker at that moment; Flare answers it like any unknown page.
+- The worker needs a secure origin. Serve Flare over HTTPS. On plain HTTP (other than `localhost`) browsers have no service workers and Flare uses the fallback.
+
 `Cross-Origin-Opener-Policy: same-origin` means a Flare page and a page on another site never get a window reference to each other, even when one opens the other. Links between them still work. Builds before this header was added let a page that opened Flare in a new tab keep a reference to it, though Flare's own outgoing links already used `noopener`.
 
 ## Verify the public origin

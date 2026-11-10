@@ -1,4 +1,5 @@
 import { type KeyStore, createBrowserKeyStore } from './key-store'
+import { dropLocalAddresses } from './local-address'
 
 let store: KeyStore | null = null
 
@@ -14,6 +15,8 @@ export function browserKeyStore(): KeyStore {
  * never rejects: a sign-out must go on.
  */
 export function clearStoredAccountKeys(): Promise<void> {
+  // The service worker holds file keys in memory. They go too (section 12.2).
+  dropLocalAddresses()
   return browserKeyStore()
     .clear()
     .catch(() => undefined)

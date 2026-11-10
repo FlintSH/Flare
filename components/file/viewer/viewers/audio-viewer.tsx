@@ -1,19 +1,24 @@
-import { useState } from 'react'
-
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
+import { useMediaRecovery } from '../use-media-recovery'
 
 export function AudioViewer({
   file,
   src,
+  recover,
 }: {
   file: { name: string; mimeType: string }
   src?: string
+  /** Asks for a new `src` after a failure. True if one is on its way. */
+  recover?: (code: number | undefined) => boolean
 }) {
-  const [failedUrl, setFailedUrl] = useState<string>()
+  const { failed, onError, onLoadedMetadata } = useMediaRecovery(
+    src ?? '',
+    recover
+  )
 
   if (!src) return <LoadingState message="Loading audio…" />
-  if (failedUrl === src) {
+  if (failed) {
     return <ErrorState error="This audio couldn’t be played in your browser." />
   }
 
@@ -28,7 +33,8 @@ export function AudioViewer({
         className="block w-full rounded-full focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
-        onError={() => setFailedUrl(src)}
+        onError={onError}
+        onLoadedMetadata={onLoadedMetadata}
       >
         <source src={src} type={file.mimeType} />
         Your browser does not support audio playback. Download the file to

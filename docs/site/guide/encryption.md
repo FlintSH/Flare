@@ -87,19 +87,53 @@ Opening a password-protected link takes a moment while your browser derives the 
 
 Your browser fetches the ciphertext, checks every 64 KiB chunk and the end of the file, and decrypts it. A file that was changed or cut after upload is refused: Flare neither shows nor saves it.
 
-Because an encrypted file is decrypted in your browser's memory before it can be shown, previews have size limits in this release:
+<Screenshot src="/screenshots/encryption/media-integrity-failed.webp" alt="Share page of the encrypted audio file board-call-private.ogg showing This file could not be opened: it did not pass its integrity check, it was changed or cut after it was encrypted, and Flare will not show or save it" caption="This file was cut at a chunk border on the server. It is refused before anything plays." />
 
-| Kind            | Largest file previewed | Above that |
-| --------------- | ---------------------- | ---------- |
-| Images          | 64 MB                  | Download   |
-| Video and audio | 128 MB                 | Download   |
-| PDF             | 64 MB                  | Download   |
-| Text and code   | 1 MB                   | Download   |
-| SVG images      | 2 MB                   | Download   |
+### Video, audio and downloads
 
-A PDF preview needs a browser that opens PDFs inside an isolated frame. Chrome, Edge and other Chromium browsers do not, so they offer the download instead.
+A video or audio file plays without being downloaded first. A [service worker](https://developer.mozilla.org/docs/Web/API/Service_Worker_API) of Flare, a small script your browser runs in the background for this site, answers the player from a local address of the form `/_flare/local/{random}`. When the player asks for a part of the file, the worker fetches the 64 KiB chunks that hold that part, checks them, decrypts them and hands them over. Seeking in a long video therefore fetches the place you seek to, not everything before it, and there is no size limit.
 
-Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download.
+<Screenshot src="/screenshots/encryption/media-video.webp" alt="Share page of the encrypted video product-walkthrough-private.webm paused at 2:24 of 3:00 in the browser's player, with Download and Copy link below and a note that the file is decrypted in the browser" caption="A seek to 2:24 fetched the chunks around that point of the 36 MB file, not the two minutes before it." />
+
+**Download** works the same way: the worker decrypts the file as a stream and your browser writes it to disk, so a file of several gigabytes does not have to fit in memory. If the file fails its integrity check part-way, the browser reports a failed download and keeps no file.
+
+What to know about the worker:
+
+- It holds a file's key in memory only, for the page that opened the file. It writes nothing to browser storage and caches nothing. It handles requests for local addresses and no other request: pages, the API and other sites are untouched.
+- Browsers stop an idle worker after about 30 seconds. Its keys go with it. When you press play again, the page hands the key over again and playback continues. You do not have to do anything.
+- Signing out, locking your keys, or signing in as someone else makes the worker forget every key at once.
+- A local address works only inside the page that made it. Opening one in a new tab shows a refusal, not the file.
+
+**Browsers without a service worker.** Service workers need a secure page (HTTPS, or `localhost`), and some private windows and privacy settings turn them off. A page reloaded with the cache bypassed (Shift and reload) also runs without one until the next normal load. Flare then falls back to the earlier behavior: it downloads and decrypts the whole file in memory before it plays or saves it, with these limits:
+
+| Kind            | Largest file previewed without a service worker | Above that |
+| --------------- | ----------------------------------------------- | ---------- |
+| Video and audio | 128 MB                                          | Download   |
+| PDF             | 64 MB                                           | Download   |
+
+A download without a service worker has no fixed limit, but the whole file must fit in your browser's memory.
+
+### Other previews
+
+Images, text and SVG are small enough to decrypt in memory, with these limits:
+
+| Kind          | Largest file previewed | Above that |
+| ------------- | ---------------------- | ---------- |
+| Images        | 64 MB                  | Download   |
+| Text and code | 1 MB                   | Download   |
+| SVG images    | 2 MB                   | Download   |
+
+A PDF opens in your browser's own PDF viewer inside the page. In Chrome, Edge and other Chromium browsers it comes from a local address, whose answer tells the browser to isolate it. In Firefox and Safari it is decrypted in memory and shown in an isolated frame. A Chromium browser without a service worker offers the download instead, because it shows no PDF in an isolated frame. So does a browser without a built-in PDF viewer, such as Chrome on Android.
+
+The viewer's toolbar in a Chromium browser calls every such file `document.pdf`. A local address never carries a file name, because the name of an encrypted file must not reach the server. Use Flare's **Download** button, not the one in the viewer's toolbar, to save the file under its real name.
+
+<Screenshot src="/screenshots/encryption/media-pdf.webp" alt="Share page of the encrypted file contract-draft-private.pdf open in the browser's PDF viewer, whose toolbar shows the title document.pdf" caption="Chromium's own viewer shows the decrypted PDF from a local address." />
+
+Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download. A local address answers only with the exact types of images, video, audio and PDF, or as a download, and every answer tells the browser not to guess a type and to run nothing.
+
+### Archives
+
+An encrypted ZIP, TAR, TAR.GZ or GZIP file can be browsed, extracted and created like a plain one. Your browser does the work that the server does for plain archives. [Archives that are encrypted files](./archives#archives-that-are-encrypted-files) lists what is different.
 
 ## What your browser does instead
 
@@ -121,12 +155,11 @@ Work that needs your browser waits for it. A file that another device or a tool 
 
 These features do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.
 
-- **Archive tools:** browsing, extracting and creating archives.
-- **Video streaming.** A video is downloaded and decrypted whole before it plays.
-- **Thumbnails, text and tag rules for files from flare-upload.** The program has no key that opens your tag rules and does no text recognition, so a file it uploads has neither until that work moves to your browser.
 - **Declarative tool files.** A ShareX `.sxcu` file, an iTake `.itup` file or a `curl` script cannot encrypt. They upload plain files and need a [profile set to Plain](./upload-profiles#encryption).
+- **Thumbnails, text and rule tags at the moment a tool uploads.** The flare-upload program has no key that opens your tag rules, makes no thumbnail and reads no text. Its files get all three the next time you open Flare with your keys unlocked.
+- **Large archives.** Your browser extracts and creates archives of encrypted files up to a size limit. See [encrypted archives](./archives#archives-that-are-encrypted-files) for the limits and the formats.
 
-Your [data export](./account) contains encrypted files as ciphertext, named by their file ID, with the records that open them listed in `user-data.json`.
+Your [data export](./account#an-account-with-encrypted-files) contains encrypted files decrypted, under their real names: your browser builds it, because the server cannot. With your keys locked you can still take the server's export, which holds each encrypted file as ciphertext named by its file ID.
 
 ## What encryption does not protect against
 

@@ -12,6 +12,7 @@ import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { HttpError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
 import { type StorageProvider, getStorageProvider } from '@/lib/storage'
+import { mbToBytes } from '@/lib/utils/size'
 
 import { trackExport } from './export-progress'
 
@@ -26,6 +27,7 @@ const exportSelect = {
   updatedAt: true,
   files: {
     select: {
+      id: true,
       name: true,
       mimeType: true,
       size: true,
@@ -71,6 +73,8 @@ function exportedRecord(account: ExportedAccount) {
     ...account,
     files: account.files.map(
       ({
+        // The manifest names files by ID. `user-data.json` never did.
+        id: _id,
         urlPath,
         encrypted,
         header,
@@ -259,3 +263,43 @@ export async function exportAccountData(
     body: Readable.toWeb(archive) as ReadableStream<Uint8Array>,
   }
 }
+
+/**
+ * What a browser needs to build the export itself (docs/e2ee-spec.md,
+ * section 12.4). The server cannot decrypt an encrypted file, so for an
+ * account that has one the browser downloads each file, decrypts what it
+ * has the key of, and writes the ZIP on the device.
+ *
+ * `record` is `user-data.json` as the server export writes it. `files` is
+ * the same list in the same order with what the browser needs to fetch each
+ * file: its address and its size in bytes. It names an encrypted file by
+ * its ID and its records only: the server has no name for it.
+ */
+export async function exportManifest(userId: string) {
+  const account = await prisma.user.findUnique({
+    where: { id: userId },
+    select: exportSelect,
+  })
+  if (!account) throw new HttpError(404, 'User not found')
+  return {
+    record: exportedRecord(account),
+    files: account.files.map((file) => ({
+      id: file.id,
+      urlPath: file.urlPath,
+      sizeBytes: Math.round(mbToBytes(file.size)),
+      uploadedAt: file.uploadedAt.toISOString(),
+      encrypted: file.encrypted,
+      name: file.encrypted ? null : file.name,
+      ...(file.encrypted && {
+        encryption: {
+          header: text(file.header),
+          sealedMetadata: text(file.sealedMetadata),
+          accountStanza: text(file.accountStanza),
+          stanzaAccountPublicKey: text(file.stanzaAccountPublicKey),
+        },
+      }),
+    })),
+  }
+}
+
+export type ExportManifest = Awaited<ReturnType<typeof exportManifest>>

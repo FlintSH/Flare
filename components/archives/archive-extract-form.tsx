@@ -13,6 +13,7 @@ import {
   Lock,
 } from 'lucide-react'
 
+import { useAccountKeyState } from '@/components/providers/account-keys-provider'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,14 +24,17 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
+import { extractInWorker } from '@/lib/archives/client/archive-worker'
+import type { JobProgress } from '@/lib/archives/client/jobs'
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { folderPath } from '@/lib/folders/navigation'
 import { folderNameTaken } from '@/lib/folders/owned'
 import { FOLDER_NAME_MAX_LENGTH } from '@/lib/folders/schema'
-import { libraryHref } from '@/lib/library/contract'
+import { UNFILED, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
@@ -47,21 +51,32 @@ import {
   archiveErrorMessage,
   archiveProfileRequest,
 } from './archive-utils'
+import type { EncryptedArchiveHandle } from './encrypted-archive-handle'
 
 export function ArchiveExtractForm({
   file,
+  archive,
   manifest,
   onBack,
   onClose,
   onBusyChange,
 }: {
   file: ArchiveFileRef
+  /**
+   * Set for an encrypted archive. This browser then extracts it: each entry
+   * becomes a new encrypted file (docs/e2ee-spec.md, section 12.3).
+   */
+  archive?: EncryptedArchiveHandle | null
   manifest: ArchiveManifest
   onBack: () => void
   onClose: () => void
   onBusyChange: (busy: boolean) => void
 }) {
   const { user } = usePermissions()
+  const keys = useAccountKeyState()
+  const accountPublicKey =
+    keys.status === 'unlocked' ? keys.keys.accountPublicKey : null
+  const [progress, setProgress] = useState<JobProgress | null>(null)
   const lifetime = useRequestLifetime()
   const {
     folders,
@@ -84,7 +99,7 @@ export function ArchiveExtractForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [result, setResult] = useState<{
-    folderId: string
+    folderId: string | null
     fileCount: number
     totalBytes: number
   } | null>(null)
@@ -124,19 +139,47 @@ export function ArchiveExtractForm({
     onBusyChange(true)
     setError('')
     try {
-      const next = await apiRequest<{
-        folderId: string
+      let next: {
+        folderId: string | null
         fileCount: number
         totalBytes: number
-      }>(`/api/files/${encodeURIComponent(file.id)}/archive/extract`, {
-        body: {
-          folderId,
-          name: name.trim(),
-          ...archiveProfileRequest(profileId, profileSnapshot),
-        },
-        signal,
-        fallback: ARCHIVE_REQUEST_FAILED,
-      })
+      }
+      if (archive) {
+        if (!accountPublicKey)
+          throw new Error('Unlock your encryption keys, then try again.')
+        setProgress(null)
+        const extracted = await extractInWorker(
+          {
+            file: archive.jobFile(),
+            // Private and without expiration unless a profile says otherwise,
+            // as the server does for a plain archive.
+            target: profileId
+              ? { folderId, profileId }
+              : {
+                  folderId,
+                  profileId: null,
+                  visibility: 'PRIVATE',
+                  expiresAt: null,
+                },
+            accountPublicKey,
+          },
+          { signal, onProgress: setProgress }
+        )
+        next = { folderId, ...extracted }
+      } else
+        next = await apiRequest<{
+          folderId: string
+          fileCount: number
+          totalBytes: number
+        }>(`/api/files/${encodeURIComponent(file.id)}/archive/extract`, {
+          body: {
+            folderId,
+            name: name.trim(),
+            ...archiveProfileRequest(profileId, profileSnapshot),
+          },
+          signal,
+          fallback: ARCHIVE_REQUEST_FAILED,
+        })
       if (signal.aborted) return
       void changed()
       setResult(next)
@@ -170,8 +213,13 @@ export function ArchiveExtractForm({
           <DialogTitle>Archive extracted</DialogTitle>
           <DialogDescription>
             {result.fileCount}{' '}
-            {result.fileCount === 1 ? 'file is' : 'files are'} ready in your new
-            folder. The original archive is unchanged.
+            {result.fileCount === 1 ? 'file is' : 'files are'} ready in{' '}
+            {archive
+              ? result.folderId
+                ? folderPath(folders, result.folderId) || 'the selected folder'
+                : 'Unfiled'
+              : 'your new folder'}
+            . The original archive is unchanged.
           </DialogDescription>
         </DialogHeader>
         <p className="rounded-xl border bg-muted/30 p-4 text-sm">
@@ -179,7 +227,9 @@ export function ArchiveExtractForm({
           {profileId
             ? ' using your selected upload profile'
             : ' as private files'}
-          , with the archive’s folder structure preserved.
+          {archive
+            ? ', each encrypted in this browser. A file from a folder of the archive keeps its path in its name.'
+            : ', with the archive’s folder structure preserved.'}
         </p>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
@@ -187,7 +237,7 @@ export function ArchiveExtractForm({
           </Button>
           <Button asChild>
             <Link
-              href={libraryHref({ folder: result.folderId })}
+              href={libraryHref({ folder: result.folderId ?? UNFILED })}
               onClick={onClose}
             >
               <FolderOpen className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -205,8 +255,8 @@ export function ArchiveExtractForm({
         <DialogDescription className="break-words">
           Extract all {manifest.fileCount}{' '}
           {manifest.fileCount === 1 ? 'file' : 'files'} from{' '}
-          <span className="font-medium text-foreground">{file.name}</span> into
-          a new account folder.
+          <span className="font-medium text-foreground">{file.name}</span>{' '}
+          {archive ? 'as new encrypted files.' : 'into a new account folder.'}
         </DialogDescription>
       </DialogHeader>
       <form
@@ -224,14 +274,14 @@ export function ArchiveExtractForm({
             disabled={busy}
             allowFolders
           />
-          <div className="space-y-2">
+          <div className={archive ? 'hidden' : 'space-y-2'}>
             <Label htmlFor="archive-extract-name">New folder name</Label>
             <Input
               id="archive-extract-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={FOLDER_NAME_MAX_LENGTH}
-              required
+              required={!archive}
               disabled={busy}
             />
             <p className="break-words text-xs text-muted-foreground">
@@ -255,10 +305,12 @@ export function ArchiveExtractForm({
           <Alert variant="info" role="status">
             <Lock aria-hidden="true" />
             <AlertDescription>
-              Files keep their archive folder structure and use the settings
-              shown above. No file password is inherited. Your original archive
-              stays in place. This uses up to {formatBytes(manifest.totalBytes)}{' '}
-              of account storage.
+              {archive
+                ? 'This browser decrypts each file, encrypts it again as its own file and uploads it, so a large archive takes time and bandwidth. The files go straight into the destination above: Flare makes no folders from an encrypted archive, and a file from a folder keeps its path in its name.'
+                : 'Files keep their archive folder structure and use the settings shown above.'}{' '}
+              No file password is inherited. Your original archive stays in
+              place. This uses up to {formatBytes(manifest.totalBytes)} of
+              account storage.
             </AlertDescription>
           </Alert>
         </div>
@@ -272,11 +324,29 @@ export function ArchiveExtractForm({
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
-            {busy && (
+            {busy && !archive && (
               <p role="status" className="text-sm text-muted-foreground">
                 Extracting files… This can take up to two minutes. Keep this
                 dialog open.
               </p>
+            )}
+            {busy && archive && (
+              <div role="status" className="space-y-2">
+                <Progress
+                  value={
+                    progress?.bytesTotal
+                      ? (progress.bytesDone / progress.bytesTotal) * 100
+                      : 0
+                  }
+                  aria-label="Extraction progress"
+                  className="h-1.5"
+                />
+                <p className="break-words text-sm text-muted-foreground">
+                  {progress
+                    ? `Encrypting and uploading file ${Math.min(progress.filesDone + 1, progress.filesTotal)} of ${progress.filesTotal}${progress.current ? `: ${progress.current}` : ''}. Keep this dialog open.`
+                    : 'Reading the archive… Keep this dialog open.'}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -299,7 +369,8 @@ export function ArchiveExtractForm({
               !allowed ||
               !profileReady ||
               destinationUnavailable ||
-              !name.trim() ||
+              (!archive && !name.trim()) ||
+              (!!archive && !accountPublicKey) ||
               !manifest.entries.length
             }
           >

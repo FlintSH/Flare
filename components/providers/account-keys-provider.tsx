@@ -19,6 +19,7 @@ import type { AccountKeys } from '@/lib/e2ee/account'
 import { unlockWithPassphrase } from '@/lib/e2ee/client/api'
 import { browserKeyStore } from '@/lib/e2ee/client/browser-store'
 import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
+import { dropLocalAddresses } from '@/lib/e2ee/client/local-address'
 import { forgetOpenedFiles } from '@/lib/e2ee/client/opened-files'
 import {
   type AccountKeyEvent,
@@ -150,9 +151,14 @@ export function AccountKeysProvider({
     if (state.status === 'unlocked') heldKeys.current = true
     if (state.status === 'locked' || state.status === 'signed-out') {
       forgetOpenedFiles()
-      // Thumbnails that the account keys opened go with them. A visitor's
-      // page never held keys: what it opened with a link key stays.
-      if (heldKeys.current) forgetThumbnails()
+      if (heldKeys.current) {
+        // Thumbnails that the account keys opened go with them. A visitor's
+        // page never held keys: what it opened with a link key stays.
+        forgetThumbnails()
+        // The service worker holds file keys for local addresses. They are
+        // dropped with the account keys, for every page (section 12.2).
+        dropLocalAddresses()
+      }
       heldKeys.current = false
     }
     // A session that ended in any way leaves no cache of encrypted records
