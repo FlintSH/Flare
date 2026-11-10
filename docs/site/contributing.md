@@ -393,6 +393,62 @@ pnpm exec vitest run __tests__/auth/e2ee-database.test.ts
 
 Without that variable the suite is skipped. It calls the real route handlers and the real NextAuth authorizers against PostgreSQL and signs every proof with the `lib/e2ee` library, as a browser does. It covers the [account key contracts](/api/account-keys): the salt and challenge request for known and unknown identifiers, passphrase sign-in with its second factor and limits, unlock, key setup, rotation with one proof missing, the keyring, recovery, reset, and the password routes that refuse an account with keys. It skips Argon2id, whose input and output never reach the server; `__tests__/e2ee` covers it with the test vectors.
 
+### Account key browser checks
+
+`scripts/e2ee/verify-ui.cjs` drives the [passphrase flows](/guide/passphrase) in headless Chromium against a production build. Unlike the suites above it has no seed: it starts with first-run setup, so it needs an **empty** database. Use a disposable one, and a fresh one for every run:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_ui_local'
+export NEXTAUTH_URL='http://localhost:3091'
+export NEXTAUTH_SECRET='public-disposable-e2ee-ui-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3091
+```
+
+In another terminal, with the documentation dependencies installed for Playwright:
+
+```sh
+node scripts/e2ee/verify-ui.cjs
+```
+
+One run takes three to five minutes, most of it waiting for fresh authenticator time steps and for the 30-second pause between two emails to one address. It covers, with real requests:
+
+- first-run setup with a weak passphrase, a mismatch, the recovery phrase, and three wrong words typed back;
+- sign-out, sign-in with the address first, an unknown address, a wrong passphrase, and an address in upper case;
+- registration, with and without an invite link;
+- accounts that an administrator created with a temporary password: the password form, the closed dashboard, keeping a strong password, replacing a weak one;
+- unlock in a browser whose IndexedDB was deleted, and in a second tab;
+- an authenticator turned on through the real dialog, and the sign-in with its code;
+- showing the recovery phrase, and a passphrase change with a named API token that must stop working;
+- recovery with the recovery phrase and reset without it, both from links that a local SMTP sink inside the script receives;
+- the administrator's user dialog and the sign-in history.
+
+After every unlock it reads the IndexedDB record and compares it with keys that the script derives from the recovery phrase with its own code: the account private key, and the old keys of the keyring after a rotation, a recovery, and a reset.
+
+**The run fails if any request carried a secret.** It records every request of every page, about 2,000 of them, and searches each URL, header set, and body for every passphrase and recovery phrase of the run and for the hexadecimal, base64url, and base64 forms of `root_entropy`, the account, exchange, and keyring keys, and of `passphrase_root`, `auth_private_key`, and `wrap_key` for every passphrase with every salt that appeared. The script derives those values again with `hash-wasm`, `@noble/hashes`, and `@scure/bip39` directly, not with the application bundle. One request is allowed to carry a secret, because it always did: the password sign-in of an account that has no keys yet may carry that account's password, until the password becomes a passphrase. The search finds those, which shows that it can fail.
+
+Two steps fake a server answer, and their results say `SIMULATED`:
+
+- Key setup with a sign-in older than five minutes gets a fabricated `403` with `recent_sign_in_required`, so the run does not wait five minutes. Set `FLARE_E2EE_REAL_STALE=true` to wait for the real answer.
+- The identity check after the five-minute window gets a status answer with `canUseRecentPassphrase` set to `false`. The confirmation that follows is a real passphrase sign-in.
+
+The database suite above covers both rules on the server.
+
+Set `FLARE_E2EE_SCREENSHOTS` to a temporary directory to capture each screen and state as PNG, `FLARE_E2EE_VIEWPORT=mobile` for a 390×844 viewport, and `FLARE_E2EE_THEME=light` for the light theme. Every file name carries its viewport and theme. Set `FLARE_E2EE_CONCEAL=true` to hide the words of every recovery phrase with capture-only CSS, which is how the images under `docs/images/encryption/` and the refreshed setup and invite images were made; the passphrase fields are masked by the browser. Inspect each image before replacing a canonical source. The script prints how long each key derivation took, measured from the request before it to the request after it. `FLARE_E2EE_TEST_ORIGIN` selects another `localhost` origin.
+
+The client key layer has unit tests that need no database:
+
+```sh
+pnpm exec vitest run __tests__/e2ee/client
+```
+
+They check Argon2id through WebAssembly against the real-parameter vector and the other passphrase vectors of `lib/e2ee/vectors/v1.json` and against the pure JavaScript implementation, the state machine of the key store, the signed request against the server's verifier, rotation and recovery material, and the strength check.
+
+::: warning The older browser suites sign in through the previous form
+`scripts/security`, `scripts/audit`, `scripts/invites`, `scripts/archives`, `scripts/timeline`, `scripts/roles`, and `scripts/navigation` create password accounts and fill the earlier one-step sign-in form. Sign-in now asks for the address first, and an account with a password must set up encryption before the dashboard opens, so those suites cannot reach the dashboard until their seeds create accounts with keys and their sign-in helpers follow the two steps. They have not been updated or rerun since. Their screenshots and recordings that show a sign-in card or a password confirmation predate passphrases for the same reason.
+:::
+
 ## Sessions and audit browser checks and demos
 
 The [profile session guide](/guide/account#login-history-and-active-sessions), [audit guide](/admin/audit), and [recorded walkthroughs](/demos#review-and-revoke-browser-sessions) use real application operations with disposable accounts. They do not rely on production accounts or fabricated audit rows.

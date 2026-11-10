@@ -111,13 +111,19 @@ const features = [
   [
     'Personalize',
     'Your account',
-    'Manage avatar, password, personal theme, upload token, default expiration, and data export.',
+    'Manage avatar, passphrase, personal theme, upload token, default expiration, and data export.',
     '/guide/account',
   ],
   [
     'Personalize',
+    'Passphrase & recovery phrase',
+    'Sign in with a passphrase that never leaves your browser, keep a 24-word recovery phrase, and unlock your encryption keys on each device.',
+    '/guide/passphrase',
+  ],
+  [
+    'Personalize',
     'Two-factor authentication',
-    'Protect password sign-in with authenticator codes (2FA) and keep one-time recovery codes for a lost device.',
+    'Protect passphrase sign-in with authenticator codes (2FA) and keep one-time recovery codes for a lost device.',
     '/guide/security',
   ],
   [

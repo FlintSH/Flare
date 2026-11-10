@@ -3,6 +3,8 @@ import {
   hasRecentSecurityProof,
 } from '@/components/auth/security-api'
 
+import { PASSPHRASE_CONFIRMATION_NEEDED } from './management-proof'
+
 type RefreshSecurity = () => Promise<{
   data?: SecurityStatus
   error: Error | null
@@ -22,6 +24,8 @@ export async function checkProfileProof(
   const recent = hasRecentSecurityProof(status)
 
   if (change === 'password') {
+    if (status.hasPassphrase)
+      return 'This account signs in with a passphrase. Change it in the passphrase section.'
     if (!status.hasPassword)
       return 'Change your SSO password with your identity provider.'
     if (!proof.currentPassword)
@@ -30,6 +34,14 @@ export async function checkProfileProof(
   if (recent) return null
   if (status.passkeyRequired)
     return 'Confirm with a passkey again to continue. Your passkey confirmation lasts five minutes.'
+  if (status.hasPassphrase) {
+    // The server takes a passphrase sign-in of the last five minutes, and
+    // still uses up an authenticator code.
+    if (!status.canUseRecentPassphrase) return PASSPHRASE_CONFIRMATION_NEEDED
+    return status.twoFactorEnabled && !proof.securityCode?.trim()
+      ? 'Enter an authenticator or recovery code to continue.'
+      : null
+  }
   if (!status.hasPassword) {
     return status.canUseRecentSso
       ? null

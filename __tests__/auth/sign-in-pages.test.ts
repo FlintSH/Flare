@@ -34,6 +34,11 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }))
 vi.mock('next-auth/react', () => ({ signIn: vi.fn() }))
+// The forms keep account keys through the provider of the root layout.
+vi.mock('@/components/providers/account-keys-provider', () => ({
+  KEY_SETUP_PATH: '/auth/encryption',
+  useAccountKeys: () => ({ state: { status: 'signed-out' }, adopt: vi.fn() }),
+}))
 vi.mock('@/components/customization/instance-brand', () => ({
   InstanceBrand: () => null,
 }))
@@ -47,7 +52,7 @@ const email: EmailCapabilities = {
   verificationMode: 'new_users',
   changesEnabled: false,
 }
-const recoveryLink = 'Forgot your password?'
+const recoveryLink = 'Forgot your passphrase?'
 const verificationNotice = 'confirm your email before using your account'
 const fetch = vi.fn()
 
@@ -93,6 +98,16 @@ describe('sign-in pages', () => {
     const form = await register()
     expect(form).toContain('Create an account')
     expect(form).not.toContain(verificationNotice)
+  })
+
+  it('ask for the address first and for a passphrase when registering, never for a password', async () => {
+    const page = await login()
+    expect(page).toContain('Email address')
+    expect(page).toContain('Continue')
+    expect(page).not.toContain('type="password"')
+    const form = await register()
+    expect(form).toContain('Confirm passphrase')
+    expect(form).not.toContain('Confirm password')
   })
 
   it('send a new instance to setup instead of showing a form', async () => {

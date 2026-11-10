@@ -159,7 +159,19 @@ Rollback requires the recorded old image plus its matching pre-upgrade database 
 
 Migration `20261110000000_e2ee_account_keys` adds six nullable columns to `User` for the [account record](/api/account-keys#what-the-server-stores) of end-to-end encryption: two public keys, a salt, a protocol version, and two sealed values that only the account's owner can open. It also adds a check constraint: an account has the whole record or none of it, and an account that has it has no password hash. Normal image startup applies the migration; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive, needs no backfill and no new environment variable, and changes no existing account. Each account keeps its password until its owner sets up keys after signing in, which deletes the hash.
 
-The sealed values and public keys are part of the database, so database backups contain them. A person who has a backup cannot sign in with it, but can test passphrases against it offline. Protect backups as before, and note that restoring a backup from before a passphrase change brings back the old passphrase and the named tokens and upload token that the change cancelled.
+**What people see after the upgrade.** Sign-in asks for the email address first. An existing account then gets a **Password** field, signs in as before, and lands on **Set up encryption**, which it must finish before anything else in Flare opens: keep the password as the passphrase if it passes the strength check or choose a new one, then save a 24-word recovery phrase. An account that signs in with a passkey or SSO chooses a passphrase the same way after its next sign-in. Accounts migrate one by one, whenever their owners next sign in, and an account that never comes back keeps its password and has no keys. Tell people before the upgrade, in these words or your own:
+
+- The passphrase replaces the password, and nobody can reset it for them. You cannot either.
+- The recovery phrase is the only way back in with their encrypted files if they forget it. They should store it offline.
+- Screenshot tools and API tokens keep working through the upgrade. A later passphrase change cancels them.
+
+[Passphrase and recovery phrase](/guide/passphrase) is the page for users. Files are not encrypted by this release; the keys are in place for the release that does.
+
+**Set up encryption needs a sign-in from the last five minutes**, measured by the server's clock. Keep the clocks of every replica synchronized, as for the other [recent sign-in checks](/admin/users#account-sign-in-security).
+
+**Custom clients and scripts that sign in.** Registration and first-run setup no longer accept a password, and password sign-in stops for each account when it sets up its keys. The repository's own browser check suites under `scripts/` that signed in through the old one-step form need the same change; `scripts/e2ee/verify-ui.cjs` drives the new flows.
+
+The sealed values and public keys are part of the database, so database backups contain them. A person who has a backup cannot sign in with it, but can test passphrases against it offline, on their own hardware and without Flare's attempt limits. Only the strength of each passphrase and the cost of Argon2id stand in the way, and an account's second factor does not help there. Protect backups as before, and note that restoring a backup from before a passphrase change brings back the old passphrase and the named tokens and upload token that the change cancelled.
 
 Fake salts for unknown sign-in addresses come from `NEXTAUTH_SECRET`. Changing that secret changes them, which lets an observer who recorded earlier answers tell which addresses have no account. It affects nothing else here: no account key depends on `NEXTAUTH_SECRET`.
 

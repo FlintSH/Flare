@@ -10,17 +10,21 @@ Choose **Setup guide** in the header on any step to open the guide in a new tab,
 
 ## 1. Create the administrator
 
-Enter a username, email address, and password of at least eight characters and at most 72 UTF-8 bytes; emoji and many accented letters use more than one byte. These are the rules every account follows, so a one-character username still saves later in **Users** or **Profile**. Setup removes spaces around the username and address, never from the password. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its password available even if you plan to enable SSO later.
+Enter a username and an email address, then a **Passphrase** and the same text in **Confirm passphrase**. The passphrase signs you in and locks the [encryption keys](/guide/passphrase) of your account. It never leaves your browser, so nobody can reset it for you, including you as the operator of the server. The meter under the field estimates how hard it is to guess, in your browser, and **Continue** needs **Strong** or **Very strong**. There is no length or character rule; several unrelated words work well, and your address, your username, and the word Flare count against it. Setup removes spaces around the username and address, never from the passphrase. A one-character username still saves later in **Users** or **Profile**. Flare creates an **Admin** role with the wildcard Administrator permission and assigns it to this first account, granting every permission. It also creates **Everyone**, the editable baseline inherited by all current and future accounts. [Roles](./roles) replace the former fixed account types. Keep its passphrase available even if you plan to enable SSO later: SSO signs you in, and the passphrase still unlocks the account's keys.
 
-<Screenshot src="/screenshots/documentation-links/setup-desktop.webp" alt="First-run account form with a Setup guide link in the header" caption="Keep the setup guide alongside the form as you create the first administrator." />
+The account does not exist yet at this step. Your browser makes its keys when you choose **Create my instance** on the access step, which shows **Deriving your keys…** for a moment. Flare then shows the administrator's **recovery phrase**: 24 words that recover the account if you forget the passphrase. Write them down or use **Copy** or **Download as text**, tick **I saved my recovery phrase somewhere offline**, choose **Continue**, and type the three words that Flare asks for. Setup goes on to the appearance step only after that. If you lose both the passphrase and these words, the account can be [reset by email](/guide/passphrase#forgot-your-passphrase) once email works, but nothing it encrypted can be opened again. You can show the phrase again later from **Profile → Account → Passphrase and recovery**.
+
+<Screenshot src="/screenshots/encryption/setup-recovery-phrase.webp" alt="Setup page headed Save your recovery phrase, with 24 numbered words hidden for this capture, Copy and Download as text buttons, and a checkbox to confirm the phrase is saved offline" caption="Setup pauses here after the instance is created. The words are hidden in this capture." />
+
+<Screenshot src="/screenshots/documentation-links/setup-desktop.webp" alt="First-run account form with Username, Email address, Passphrase and Confirm passphrase fields, and a Setup guide link in the header" caption="Keep the setup guide alongside the form as you create the first administrator." />
 
 ::: details Find the guide on a phone
 <div style="max-width: 390px; margin-inline: auto">
-<Screenshot src="/screenshots/documentation-links/setup-mobile.webp" alt="Mobile first-run setup with the Setup guide link above the account form" caption="Setup guide remains available at every step on narrow screens." />
+<Screenshot src="/screenshots/documentation-links/setup-mobile.webp" alt="Mobile first-run setup with the Setup guide link above the account form and its passphrase fields" caption="Setup guide remains available at every step on narrow screens." />
 </div>
 :::
 
-The initial administrator is explicitly exempt from required email verification so an optional email step cannot lock you out. That exemption does not prove ownership of the address and does not, on its own, enable password recovery. Verify a recovery address after email is configured.
+The initial administrator is explicitly exempt from required email verification so an optional email step cannot lock you out. That exemption does not prove ownership of the address and does not, on its own, enable passphrase recovery by email. Verify a recovery address after email is configured.
 
 ## 2. Choose storage
 
@@ -60,7 +64,7 @@ The ready step links to the workspace, a first upload, and the appearance studio
 
 ## Refreshing or resuming setup
 
-Before account creation, form values live only in memory. Refreshing starts over; passwords and storage credentials are not put in browser storage or URLs.
+Before account creation, form values live only in memory. Refreshing starts over; the passphrase and storage credentials are not put in browser storage or URLs, and the passphrase is never sent. Only the account's key record is.
 
 After creation, the address names the current step: `/setup?step=appearance`, `email`, or `ready`. Refreshing returns to that step; any other value opens the appearance step. If automatic sign-in fails, the account has still been created; use the offered sign-in link, and signing in returns you to the same step. A signed-out administrator can sign in to continue, but accounts without Administrator cannot administer setup. Older `/setup/email` links redirect to the email step in the unified flow.
 

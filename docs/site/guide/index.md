@@ -13,18 +13,19 @@ This guide is for people using an existing Flare instance. Everyone supplies the
 
 ## Join your instance
 
-Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form.
+Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local sign-in form that asks for your email address first and your [passphrase](./passphrase) second.
 
-- **Registration available:** create an account, then follow any email-verification instructions.
+- **Registration available:** create an account with a [passphrase](./passphrase#create-an-account), save the recovery phrase it shows you, then follow any email-verification instructions.
+- **Your address shows a Password field:** the account was created before passphrases or by an administrator. Sign in with that password and [set up encryption](./passphrase#accounts-from-before-passphrases) right away.
 - **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
-- **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
+- **Two-factor authentication:** after your passphrase, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
-- **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
+- **Passkey required:** passphrase and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
 - **Single sign-on:** use the provider offered by your instance. Existing local accounts are not automatically linked to SSO accounts with the same email address.
 
 The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.
 
-<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="Use an allowed account method. Requiring passkeys disables password and SSO sign-in; dedicated passkey recovery codes remain an emergency option." />
+<Screenshot src="/screenshots/encryption/sign-in.webp" alt="Flare sign-in card with an Email address field, a Continue button, a separate Sign in with a passkey button, and a link to use a passkey recovery code" caption="Sign-in starts with your address. The next step asks for your passphrase. Requiring passkeys disables passphrase and SSO sign-in; dedicated passkey recovery codes remain an emergency option." />
 
 ## Upload and share your first file
 
@@ -51,7 +52,7 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 | **Upload**                 | Queue files and choose the destination, upload profile, visibility, password, and expiration.                        |
 | **Paste**                  | Save text or code as a shareable file.                                                                               |
 | **Links**                  | Create short redirects under your instance's domain and see their click counts.                                      |
-| **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.                                    |
+| **Profile → Account**      | Update identity, passphrase, email, appearance, login history, and active sessions.                                  |
 | **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.                                   |
 | **Profile → Integrations** | Create scoped API tokens and outgoing webhooks.                                                                      |
 | **Profile → Your data**    | Check storage use, export data, or delete your account.                                                              |

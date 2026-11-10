@@ -5,6 +5,7 @@ import localFont from 'next/font/local'
 
 import { AppearanceProvider } from '@/components/customization/appearance-provider'
 import { CustomHead } from '@/components/layout/custom-head'
+import { AccountKeysProvider } from '@/components/providers/account-keys-provider'
 import { AuthProvider } from '@/components/providers/auth-provider'
 import { InputModality } from '@/components/providers/input-modality'
 import { MeticulousContext } from '@/components/providers/meticulous-context'
@@ -161,7 +162,9 @@ export default async function RootLayout({
                   />
                 )}
                 <SetupChecker completed={setupComplete} />
-                <div className="flex-1">{children}</div>
+                <AccountKeysProvider>
+                  <div className="flex-1">{children}</div>
+                </AccountKeysProvider>
               </AppearanceProvider>
             </AuthProvider>
           </QueryProvider>

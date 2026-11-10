@@ -21,9 +21,20 @@ import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
 
 import { PasskeyConfirmation } from './passkey-confirmation'
+import { PassphraseSettings } from './passphrase-settings'
 import { checkProfileProof } from './profile-proof'
 
-export function ProfileSecurity({ onUpdate }: ProfileSecurityProps) {
+/**
+ * An account that has encryption keys changes its passphrase, which is a key
+ * rotation. Only an account from before encryption still has a password.
+ */
+export function ProfileSecurity(props: ProfileSecurityProps) {
+  const { data: security } = useSecurityStatus()
+  if (security?.hasPassphrase) return <PassphraseSettings />
+  return <PasswordChange {...props} />
+}
+
+function PasswordChange({ onUpdate }: ProfileSecurityProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [proofNotice, setProofNotice] = useState<string | null>(null)
   // Update password waits until the form has something in it, like every

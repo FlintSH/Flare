@@ -5,6 +5,8 @@ import { checkProfileProof } from '@/components/profile/security/profile-proof'
 
 const status: SecurityStatus = {
   hasPassword: true,
+  hasPassphrase: false,
+  canUseRecentPassphrase: false,
   twoFactorEnabled: true,
   recoveryCodesRemaining: 5,
   passkeys: [],
@@ -147,5 +149,52 @@ describe('profile proof preflight', () => {
     expect(await checkProfileProof(refresh, 'password', {})).toMatch(
       /identity provider/
     )
+  })
+
+  it('asks an account with a passphrase for a recent passphrase sign-in before an email change', async () => {
+    const keyed = { ...status, hasPassword: false, hasPassphrase: true }
+    const refresh = vi
+      .fn()
+      .mockResolvedValueOnce({ data: keyed, error: null })
+      .mockResolvedValueOnce({
+        data: { ...keyed, canUseRecentPassphrase: true },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { ...keyed, canUseRecentPassphrase: true },
+        error: null,
+      })
+      .mockResolvedValue({
+        data: {
+          ...keyed,
+          canUseRecentPassphrase: true,
+          twoFactorEnabled: false,
+        },
+        error: null,
+      })
+    expect(
+      await checkProfileProof(refresh, 'email', {
+        currentPassword: 'public-test-password',
+      })
+    ).toMatch(/Confirm your passphrase/)
+    expect(await checkProfileProof(refresh, 'email', {})).toMatch(
+      /authenticator or recovery code/
+    )
+    expect(
+      await checkProfileProof(refresh, 'email', { securityCode: '123456' })
+    ).toBeNull()
+    expect(await checkProfileProof(refresh, 'email', {})).toBeNull()
+  })
+
+  it('sends a password change of a passphrase account to the passphrase section', async () => {
+    const refresh = vi.fn().mockResolvedValue({
+      data: { ...status, hasPassword: false, hasPassphrase: true },
+      error: null,
+    })
+    expect(
+      await checkProfileProof(refresh, 'password', {
+        currentPassword: 'public-test-password',
+      })
+    ).toMatch(/passphrase section/)
   })
 })

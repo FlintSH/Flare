@@ -1295,10 +1295,31 @@ export function UserList() {
                       placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       required
+                      aria-describedby="password-help"
                     />
+                    <p
+                      id="password-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      A temporary password for the first sign-in. The person
+                      then chooses a passphrase, which replaces it.
+                    </p>
                   </div>
                 )}
-                {editingUser && (
+                {editingUser?.hasPassphrase && (
+                  <div className="space-y-1 rounded-xl border bg-muted/30 p-3 text-sm">
+                    <p className="font-medium">Passphrase</p>
+                    <p
+                      className="text-muted-foreground"
+                      data-user-passphrase-note=""
+                    >
+                      This account signs in with a passphrase that only its
+                      owner knows, so you cannot set one here. The owner can
+                      reset it from the sign-in page by email.
+                    </p>
+                  </div>
+                )}
+                {editingUser && !editingUser.hasPassphrase && (
                   <div className="space-y-2">
                     <Label htmlFor="newPassword">
                       New password{' '}
@@ -1322,7 +1343,8 @@ export function UserList() {
                       id="newPassword-help"
                       className="text-xs text-muted-foreground"
                     >
-                      Leave empty to keep the current password.
+                      Leave empty to keep the current password. This password
+                      works until the person signs in and chooses a passphrase.
                     </p>
                   </div>
                 )}

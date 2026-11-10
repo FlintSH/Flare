@@ -294,10 +294,21 @@ function AccountSignInSecurity() {
     }
   }
 
+  // An account with encryption keys signs in with a passphrase.
+  const secret = status?.hasPassphrase ? 'passphrase' : 'password'
+  const Secret = status?.hasPassphrase ? 'Passphrase' : 'Password'
+  const needsPassphrase =
+    status &&
+    status.hasPassphrase &&
+    !status.passkeyRequired &&
+    action !== 'require-passkey' &&
+    !hasRecentSecurityProof(status) &&
+    !status.canUseRecentPassphrase
   const needsSso =
     status &&
     !status.passkeyRequired &&
     !status.hasPassword &&
+    !status.hasPassphrase &&
     !hasRecentSecurityProof(status) &&
     !status.canUseRecentSso
   const needsPasskey =
@@ -360,14 +371,14 @@ function AccountSignInSecurity() {
                   </Badge>
                 </div>
                 <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                  Use a six-digit code after your password when you sign in.
+                  Use a six-digit code after your {secret} when you sign in.
                 </p>
               </div>
               {status.twoFactorEnabled ? (
                 <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
                   {status.passkeyRequired && (
                     <p className="text-sm text-muted-foreground">
-                      Your authenticator is saved, but password and
+                      Your authenticator is saved, but {secret} and
                       authenticator sign-in are blocked while a passkey is
                       required.
                     </p>
@@ -408,7 +419,7 @@ function AccountSignInSecurity() {
                     </Button>
                   </div>
                 </div>
-              ) : status.hasPassword ? (
+              ) : status.hasPassword || status.hasPassphrase ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -435,8 +446,11 @@ function AccountSignInSecurity() {
                 </h3>
                 <p className="mt-1 max-w-xl text-sm text-muted-foreground">
                   Sign in with your fingerprint, face, device PIN, or security
-                  key. A passkey replaces both your password and authenticator
-                  code.
+                  key. A passkey replaces both your {secret} and authenticator
+                  code
+                  {status.hasPassphrase
+                    ? ' at sign-in. Your passphrase still unlocks your encryption keys afterwards.'
+                    : '.'}
                 </p>
               </div>
               {status.passkeys.length > 0 ? (
@@ -543,8 +557,8 @@ function AccountSignInSecurity() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {status.passkeyRequired
-                      ? 'Only a passkey or a dedicated passkey recovery code can sign in. Password, authenticator, and SSO sign-in are blocked until you explicitly allow them again.'
-                      : 'Require a passkey and block password, authenticator, and SSO sign-in. You will save a separate set of emergency passkey recovery codes.'}
+                      ? `Only a passkey or a dedicated passkey recovery code can sign in. ${Secret}, authenticator, and SSO sign-in are blocked until you explicitly allow them again.`
+                      : `Require a passkey and block ${secret}, authenticator, and SSO sign-in. You will save a separate set of emergency passkey recovery codes.`}
                   </p>
                   {status.passkeyRequired ? (
                     <>
@@ -645,9 +659,9 @@ function AccountSignInSecurity() {
                 : complete
                   ? 'For your protection, all previous sessions have ended. Sign in again to continue.'
                   : action === 'require-passkey'
-                    ? 'Confirm a registered passkey, then save ten emergency passkey recovery codes. Password, authenticator, and SSO sign-in will stop. Your existing credentials stay saved, and all browser sessions will end.'
+                    ? `Confirm a registered passkey, then save ten emergency passkey recovery codes. ${Secret}, authenticator, and SSO sign-in will stop. Your existing credentials stay saved, and all browser sessions will end.`
                     : action === 'allow-other-methods'
-                      ? 'Your saved password or SSO method will be allowed again, with any existing authenticator requirement. Dedicated passkey recovery codes will stop working. Registered passkeys stay saved, and all browser sessions will end.'
+                      ? `Your saved ${secret} or SSO method will be allowed again, with any existing authenticator requirement. Dedicated passkey recovery codes will stop working. Registered passkeys stay saved, and all browser sessions will end.`
                       : action === 'passkey-codes'
                         ? 'All previous passkey recovery codes will stop working immediately. Save the new set before signing in again. Each code grants full access with only your email address.'
                         : action === 'setup'
@@ -658,8 +672,8 @@ function AccountSignInSecurity() {
                             ? 'Your old recovery codes will stop working immediately. Save the new set before signing in again.'
                             : action === 'disable'
                               ? status?.passkeyRequired
-                                ? 'Your saved authenticator and its recovery codes will be removed. Your passkey requirement stays on, so password sign-in will remain blocked.'
-                                : 'Your password will no longer need an authenticator code. Existing recovery codes will also stop working.'
+                                ? `Your saved authenticator and its recovery codes will be removed. Your passkey requirement stays on, so ${secret} sign-in will remain blocked.`
+                                : `Your ${secret} will no longer need an authenticator code. Existing recovery codes will also stop working.`
                               : action === 'add-passkey'
                                 ? 'Give your passkey a name you will recognize, then follow your browser’s instructions.'
                                 : action === 'remove-passkey'
@@ -798,7 +812,9 @@ function AccountSignInSecurity() {
                         : 'default'
                     }
                     disabled={
-                      busy || ((!!needsSso || !!needsPasskey) && !setup)
+                      busy ||
+                      ((!!needsSso || !!needsPasskey || !!needsPassphrase) &&
+                        !setup)
                     }
                   >
                     {busy ? (

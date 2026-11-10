@@ -31,10 +31,16 @@ import {
   Sparkles,
   Users,
 } from 'lucide-react'
-import { signIn } from 'next-auth/react'
 
 import { EmailSettings } from '@/components/email/email-settings'
+import {
+  DERIVING_KEYS,
+  NewPassphraseFields,
+  useNewPassphrase,
+} from '@/components/encryption/passphrase-fields'
+import { RecoveryPhrase } from '@/components/encryption/recovery-phrase'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
+import { useAccountKeys } from '@/components/providers/account-keys-provider'
 import { Icons } from '@/components/shared/icons'
 import {
   SetupActions,
@@ -56,6 +62,14 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 
+import { signInWithPassphraseKeys } from '@/lib/e2ee/client/api'
+import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
+import {
+  createNewAccount,
+  wipeAccountKeys,
+  wipePassphraseKeys,
+} from '@/lib/e2ee/client/procedures'
+import { accountRecordToWire } from '@/lib/e2ee/client/wire'
 import {
   SETUP_STEPS,
   type SetupResumeStep,
@@ -70,7 +84,6 @@ import {
   setupSchema,
 } from '@/lib/setup/schema'
 import { storageSettingsSchema } from '@/lib/storage/settings'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
 import { cn } from '@/lib/utils'
 
 import { useMarkSetupComplete } from '@/hooks/use-setup-status'
@@ -124,7 +137,7 @@ const stepDetails: Record<SetupStep, StepDetails> = {
     detail: 'Account recovery, ready',
     title: 'Make your account recoverable.',
     description:
-      'Connect your mail provider for password recovery and email verification. You can do this later.',
+      'Connect your mail provider for account recovery and email verification. You can do this later.',
     icon: Mail,
     optional: true,
   },
@@ -154,7 +167,7 @@ const nextStepClassName =
   'group rounded-2xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
 
 const initialData: SetupData = {
-  admin: { name: '', email: '', password: '' },
+  admin: { name: '', email: '' },
   storage: {
     provider: 'local',
     s3: {
@@ -186,7 +199,18 @@ export function SetupWizard({
   const [step, setStep] = useState<SetupStep>(resumeStep ?? 'account')
   const [data, setData] = useState<SetupData>(initialData)
   const [created, setCreated] = useState(resumeStep !== undefined)
+  const { adopt } = useAccountKeys()
+  // The passphrase lives outside the form data, which is what the wizard
+  // sends. The instance has no name of its own yet.
+  const passphrase = useNewPassphrase([
+    data.admin.email,
+    data.admin.name,
+    'Flare',
+  ])
   const [busy, setBusy] = useState(false)
+  const [deriving, setDeriving] = useState(false)
+  // The recovery phrase of the new administrator, until they saved it.
+  const [recoveryPhrase, setRecoveryPhrase] = useState<string | null>(null)
   const [needsSignIn, setNeedsSignIn] = useState(false)
   const [error, setError] = useState<FormError | null>(null)
   const [emailEnabled, setEmailEnabled] = useState(initialEmailEnabled)
@@ -228,6 +252,15 @@ export function SetupWizard({
         showValidation(issue.message, `admin.${issue.path.join('.')}`)
         return
       }
+      if (passphrase.problem) {
+        showValidation(
+          passphrase.problem,
+          passphrase.problem.includes('match')
+            ? 'admin-confirmation'
+            : 'admin-passphrase'
+        )
+        return
+      }
       setData((previous) => ({ ...previous, admin: result.data }))
       go('storage')
       return
@@ -248,14 +281,35 @@ export function SetupWizard({
       showValidation(result.error.issues[0].message)
       return
     }
+    if (passphrase.problem) {
+      // The passphrase was cleared, for example by a reload of the form.
+      go('account')
+      showValidation(passphrase.problem)
+      return
+    }
     submitting.current = true
     setBusy(true)
+    setDeriving(true)
     let accountCreated = false
+    let account: Awaited<ReturnType<typeof createNewAccount>> | null = null
     try {
+      // Section 5.4 of docs/e2ee-spec.md: the account record is made here.
+      // The passphrase and the recovery phrase never leave this browser.
+      account = await createNewAccount({
+        passphrase: passphrase.passphrase,
+        argon2id: workerArgon2id,
+      })
+      setDeriving(false)
       const response = await fetch('/api/setup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(result.data),
+        body: JSON.stringify({
+          ...result.data,
+          admin: {
+            ...result.data.admin,
+            account: accountRecordToWire(account.record),
+          },
+        }),
       })
       const body = await response.json().catch(() => ({}))
       if (!response.ok)
@@ -265,27 +319,27 @@ export function SetupWizard({
       accountCreated = true
       setCreated(true)
       markSetupComplete()
+      passphrase.reset()
+      setRecoveryPhrase(account.mnemonic)
       setData((previous) => ({
         ...previous,
-        admin: { ...previous.admin, password: '' },
         storage: {
           ...previous.storage,
           s3: { ...previous.storage.s3, accessKeyId: '', secretAccessKey: '' },
         },
       }))
-      const session = await signIn('credentials', {
-        email: result.data.admin.email,
-        password: result.data.admin.password,
-        redirect: false,
+      // The keys are in memory: sign in and keep them without a second
+      // derivation.
+      const signedIn = await signInWithPassphraseKeys({
+        identifier: result.data.admin.email,
+        passphraseKeys: account.passphraseKeys,
       })
-      if (!session?.ok || session.error) {
-        setNeedsSignIn(true)
-      }
-      go('appearance')
+      if (signedIn === 'signed-in') await adopt(account).catch(() => undefined)
+      else setNeedsSignIn(true)
+      // The wizard goes on to the next step when the phrase is saved.
     } catch (cause) {
       if (accountCreated) {
         setNeedsSignIn(true)
-        go('appearance')
       } else {
         showValidation(
           cause instanceof Error
@@ -294,6 +348,11 @@ export function SetupWizard({
         )
       }
     } finally {
+      if (account) {
+        wipePassphraseKeys(account.passphraseKeys)
+        wipeAccountKeys(account.accountKeys)
+      }
+      setDeriving(false)
       setBusy(false)
       submitting.current = false
     }
@@ -477,29 +536,60 @@ export function SetupWizard({
           <main className="min-w-0 space-y-6 pb-8">
             <div className="space-y-3">
               <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Step {index + 1} of {steps.length}
-                {current.optional && ' · Optional'}
+                {recoveryPhrase ? (
+                  'Instance created'
+                ) : (
+                  <>
+                    Step {index + 1} of {steps.length}
+                    {current.optional && ' · Optional'}
+                  </>
+                )}
               </p>
               <h1
                 ref={heading}
                 tabIndex={-1}
                 className="text-3xl font-semibold tracking-tight outline-none sm:text-4xl"
               >
-                {needsSignIn ? 'Your account is ready.' : current.title}
+                {recoveryPhrase
+                  ? 'Save your recovery phrase.'
+                  : needsSignIn
+                    ? 'Your account is ready.'
+                    : current.title}
               </h1>
               <p className="max-w-2xl text-pretty text-sm leading-relaxed text-muted-foreground sm:text-base">
-                {needsSignIn
-                  ? 'Your instance was created successfully. Sign in to finish the optional steps.'
-                  : current.description}
+                {recoveryPhrase
+                  ? 'Your instance is created. Before you go on, keep the one thing that can recover your account.'
+                  : needsSignIn
+                    ? 'Your instance was created successfully. Sign in to finish the optional steps.'
+                    : current.description}
               </p>
             </div>
 
-            {needsSignIn ? (
+            {recoveryPhrase ? (
+              <Card className="max-w-xl">
+                <CardHeader>
+                  <CardTitle>Your recovery phrase</CardTitle>
+                  <CardDescription>
+                    Flare cannot show these words to anyone but you, and cannot
+                    reset your passphrase.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RecoveryPhrase
+                    mnemonic={recoveryPhrase}
+                    onDone={() => {
+                      setRecoveryPhrase(null)
+                      go('appearance')
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            ) : needsSignIn ? (
               <Card>
                 <CardHeader>
                   <CardTitle>Continue with your new account</CardTitle>
                   <CardDescription>
-                    Use the email address and password you just chose. Your
+                    Use the email address and passphrase you just chose. Your
                     account and storage settings are already saved.
                   </CardDescription>
                 </CardHeader>
@@ -573,7 +663,7 @@ export function SetupWizard({
                             Verify your email address
                           </Link>{' '}
                           {emailRecoveryEnabled
-                            ? 'to make password recovery available for your account.'
+                            ? 'to make recovery by email available for your account.'
                             : 'to confirm the address associated with your account.'}
                         </AlertDescription>
                       </Alert>
@@ -655,18 +745,17 @@ export function SetupWizard({
                           hint: 'Use an address you own. You can enable recovery in the email step.',
                         }
                       )}
-                      {field(
-                        'admin.password',
-                        'Password',
-                        data.admin.password,
-                        (value) => updateAdmin('password', value),
-                        {
-                          type: 'password',
-                          placeholder: 'Choose a strong password',
-                          autoComplete: 'new-password',
-                          hint: `At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`,
-                        }
-                      )}
+                      <NewPassphraseFields
+                        form={passphrase}
+                        idPrefix="setup-admin"
+                        disabled={busy}
+                      />
+                      <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+                        Your passphrase signs you in and locks your encryption
+                        keys. It never leaves this browser, so nobody can reset
+                        it for you. You will get a recovery phrase when the
+                        instance is created.
+                      </p>
                     </CardContent>
                   </Card>
                 )}
@@ -951,7 +1040,7 @@ export function SetupWizard({
                           className="animate-spin"
                           aria-hidden="true"
                         />
-                        Creating your instance…
+                        {deriving ? DERIVING_KEYS : 'Creating your instance…'}
                       </>
                     ) : (
                       <>

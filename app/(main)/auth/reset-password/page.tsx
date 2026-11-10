@@ -4,14 +4,14 @@ import { AlertCircle } from 'lucide-react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
 import { AuthShell } from '@/components/auth/auth-shell'
-import { ResetPasswordForm } from '@/components/email/auth-forms'
+import { ResetPassphraseForm } from '@/components/encryption/reset-passphrase-form'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 
 export const metadata = {
-  title: 'Choose a new password · Flare',
+  title: 'Reset your passphrase · Flare',
   robots: { index: false, follow: false },
   referrer: 'no-referrer' as const,
 }
@@ -25,7 +25,7 @@ export default async function ResetPasswordPage({
   if (typeof token !== 'string' || !token)
     return (
       <AuthShell
-        title="Choose a new password"
+        title="Reset your passphrase"
         description="Reset links can be used once and expire after a short time."
       >
         <Alert variant="destructive">
@@ -48,10 +48,10 @@ export default async function ResetPasswordPage({
 
   return (
     <AuthShell
-      title="Choose a new password"
-      description="Your reset link can be used once. After resetting, sign in again with your new password."
+      title="Reset your passphrase"
+      description="Your reset link can be used once. Afterwards you sign in with the new passphrase."
     >
-      <ResetPasswordForm token={token} />
+      <ResetPassphraseForm token={token} />
     </AuthShell>
   )
 }

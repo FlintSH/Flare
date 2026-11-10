@@ -1,12 +1,12 @@
 # Flare End-to-End Encryption Specification
 
-| Field   | Value                                                |
-| ------- | ---------------------------------------------------- |
-| Status  | Draft 20. Phases 1 and 2a implemented. Not reviewed. |
-| Version | Protocol version 1 (`v1`)                            |
-| Author  | Claude Fable 5.2, with assistance from birb          |
-| Date    | 2026-11-10                                           |
-| Applies | Flare, branch `feat/e2ee`, based on `main` 79a88c22  |
+| Field   | Value                                               |
+| ------- | --------------------------------------------------- |
+| Status  | Draft 20. Phases 1 and 2 implemented. Not reviewed. |
+| Version | Protocol version 1 (`v1`)                           |
+| Author  | Claude Fable 5.2, with assistance from birb         |
+| Date    | 2026-11-10                                          |
+| Applies | Flare, branch `feat/e2ee`, based on `main` 79a88c22 |
 
 Each section has one of these labels:
 

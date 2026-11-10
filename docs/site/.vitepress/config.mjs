@@ -91,6 +91,7 @@ export default defineConfig({
         ['Screenshot tools', '/guide/screenshot-tools'],
         ['Your account', '/guide/account'],
         ['Invite people', '/guide/invites'],
+        ['Passphrase & recovery phrase', '/guide/passphrase'],
         ['Two-factor authentication & passkeys', '/guide/security'],
         ['Personal appearance', '/guide/appearance'],
       ]),

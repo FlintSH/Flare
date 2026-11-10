@@ -6,7 +6,6 @@ import { storageSettingsSchema } from '@/lib/storage/settings'
 const admin = {
   name: 'admin',
   email: 'admin@example.test',
-  password: 'long-enough-password',
 }
 const s3 = {
   bucket: 'screenshots',
@@ -23,7 +22,6 @@ function firstAdminError(input: unknown): string | null {
 
 describe('shared setup validation', () => {
   it.each([
-    [{ ...admin, password: 'short' }, 'Password must be at least 8 characters'],
     [{ ...admin, email: 'not-an-email' }, 'Enter a valid email address'],
     [{ ...admin, name: '  ' }, 'Username is required'],
   ])(
@@ -40,13 +38,16 @@ describe('shared setup validation', () => {
     }
   )
 
-  it('normalizes identifiers without changing passwords or S3 secrets', () => {
+  it('normalizes identifiers, keeps S3 secrets as typed and holds no passphrase', () => {
     const result = setupSchema.parse({
       admin: {
         ...admin,
         name: ' admin ',
         email: ' admin@example.test ',
-        password: ' password with spaces ',
+        // The wizard keeps the passphrase outside the form data. A field
+        // that carries one is dropped here and refused by the server.
+        passphrase: ' passphrase with spaces ',
+        password: 'a password',
       },
       storage: {
         provider: 's3',
@@ -57,7 +58,6 @@ describe('shared setup validation', () => {
     expect(result.admin).toEqual({
       name: 'admin',
       email: 'admin@example.test',
-      password: ' password with spaces ',
     })
     expect(result.storage.s3.bucket).toBe('screenshots')
     expect(result.storage.s3.secretAccessKey).toBe(' secret ')

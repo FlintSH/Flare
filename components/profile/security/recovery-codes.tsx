@@ -38,8 +38,8 @@ export function RecoveryCodes({
       window.location.origin,
       '',
       passkey
-        ? 'Keep these codes private. Each code grants full account access once with your email address alone. No password is required.'
-        : 'Keep these codes private. Each code can be used once with your password.',
+        ? 'Keep these codes private. Each code grants full account access once with your email address alone. No passphrase or password is required.'
+        : 'Keep these codes private. Each code can be used once, with your passphrase or password.',
       'Replacing recovery codes invalidates this list.',
       '',
       ...codes,
@@ -60,8 +60,8 @@ export function RecoveryCodes({
         <p className="text-sm leading-relaxed">
           Store these codes somewhere private, such as your password manager.
           {passkey
-            ? ' Each passkey recovery code grants full account access once with your email address alone, without a password. Keep them separate from your passkey device. These are different from authenticator recovery codes.'
-            : ' Each code replaces your authenticator once when signing in with your password.'}{' '}
+            ? ' Each passkey recovery code grants full account access once with your email address alone, without a passphrase or password. Keep them separate from your passkey device. These are different from authenticator recovery codes.'
+            : ' Each code replaces your authenticator once when signing in with your passphrase or password.'}{' '}
           You will not be able to view this list again.
         </p>
       </div>

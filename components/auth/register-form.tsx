@@ -6,9 +6,16 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { AlertCircle, MailCheck, TriangleAlert } from 'lucide-react'
-import { signIn } from 'next-auth/react'
 
 import { AuthFooter, authLinkClassName } from '@/components/auth/auth-shell'
+import {
+  DERIVING_KEYS,
+  NewPassphraseFields,
+  useNewPassphrase,
+} from '@/components/encryption/passphrase-fields'
+import { RecoveryPhrase } from '@/components/encryption/recovery-phrase'
+import { useAccountKeys } from '@/components/providers/account-keys-provider'
+import { useAppearance } from '@/components/providers/appearance-context'
 import { RoleBadges } from '@/components/roles/role-badges'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -18,7 +25,17 @@ import { Label } from '@/components/ui/label'
 
 import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
-import { ACCOUNT_PASSWORD_MIN_LENGTH } from '@/lib/users/account-policy'
+import { signInWithPassphraseKeys } from '@/lib/e2ee/client/api'
+import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
+import {
+  createNewAccount,
+  wipeAccountKeys,
+  wipePassphraseKeys,
+} from '@/lib/e2ee/client/procedures'
+import { accountRecordToWire } from '@/lib/e2ee/client/wire'
+
+const inputClassName =
+  'h-11 bg-background/50 focus:bg-background transition-colors'
 
 export function RegisterForm({
   invite,
@@ -33,68 +50,114 @@ export function RegisterForm({
   verificationRequired: boolean
 }) {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const { adopt } = useAccountKeys()
+  const { brand } = useAppearance()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const form = useNewPassphrase([email, name, brand.name])
+  const [activity, setActivity] = useState<'deriving' | 'creating' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Set once the account exists: its recovery phrase, and where to go next.
+  const [created, setCreated] = useState<{
+    mnemonic: string
+    next: string
+    signedIn: boolean
+  } | null>(null)
+  const isLoading = activity !== null
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setIsLoading(true)
+    if (isLoading) return
     setError(null)
-
-    const formData = new FormData(event.currentTarget)
-    const email = formData.get('email') as string
-    const password = formData.get('password') as string
-    const confirmPassword = formData.get('confirmPassword') as string
-    const name = formData.get('name') as string
-
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      setIsLoading(false)
+    if (form.problem) {
+      setError(form.problem)
       return
     }
-
-    if (password.length < ACCOUNT_PASSWORD_MIN_LENGTH) {
-      setError(
-        `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters long`
-      )
-      setIsLoading(false)
-      return
-    }
-
+    setActivity('deriving')
     try {
-      const { nextAction } = await apiRequest<{ nextAction?: string }>(
-        '/api/auth/register',
-        {
-          body: { email, password, name, ...(invite ? { invite } : {}) },
-          fallback: 'Failed to register',
-        }
-      )
-
-      const result = await signIn('credentials', {
-        email,
-        password,
-        redirect: false,
+      // Section 5.4 of docs/e2ee-spec.md: the account record is made here.
+      // The passphrase and the recovery phrase never leave this browser.
+      const account = await createNewAccount({
+        passphrase: form.passphrase,
+        argon2id: workerArgon2id,
       })
-
-      if (result?.error) {
-        throw new Error('Failed to sign in after registration')
+      try {
+        setActivity('creating')
+        const { nextAction } = await apiRequest<{ nextAction?: string }>(
+          '/api/auth/register',
+          {
+            body: {
+              email,
+              name,
+              account: accountRecordToWire(account.record),
+              ...(invite ? { invite } : {}),
+            },
+            fallback: 'Failed to register',
+          }
+        )
+        // The keys are in memory: sign in and keep them without a second
+        // derivation. If the sign-in fails the account still exists, so the
+        // recovery phrase is shown either way.
+        const signedIn =
+          (await signInWithPassphraseKeys({
+            identifier: email,
+            passphraseKeys: account.passphraseKeys,
+          }).catch(() => 'refused')) === 'signed-in'
+        if (signedIn) await adopt(account).catch(() => undefined)
+        form.reset()
+        setCreated({
+          mnemonic: account.mnemonic,
+          signedIn,
+          next: !signedIn
+            ? SIGN_IN_PATH
+            : nextAction === 'verify_email'
+              ? '/auth/verify-email'
+              : '/dashboard',
+        })
+      } finally {
+        wipePassphraseKeys(account.passphraseKeys)
+        wipeAccountKeys(account.accountKeys)
       }
-
-      router.push(
-        nextAction === 'verify_email' ? '/auth/verify-email' : '/dashboard'
-      )
     } catch (error) {
       setError(
         error instanceof RefusedRequest && error.code?.startsWith('invite_')
           ? `${error.message} Ask the person who invited you for a new link.`
-          : error instanceof Error
+          : error instanceof RefusedRequest
             ? error.message
-            : 'Something went wrong'
+            : 'Something went wrong. Please try again.'
       )
     } finally {
-      setIsLoading(false)
+      setActivity(null)
     }
   }
+
+  if (created)
+    return (
+      <div className="space-y-4">
+        <h2 className="text-center font-medium">
+          Your account is ready. Save your recovery phrase.
+        </h2>
+        {!created.signedIn && (
+          <Alert variant="warning" role="status">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>
+              We could not sign you in automatically. Save the phrase, then sign
+              in with your new passphrase.
+            </AlertDescription>
+          </Alert>
+        )}
+        <RecoveryPhrase
+          mnemonic={created.mnemonic}
+          doneLabel={created.signedIn ? 'Finish' : 'Go to sign in'}
+          onDone={() => {
+            const { next } = created
+            setCreated(null)
+            router.push(next)
+            router.refresh()
+          }}
+        />
+      </div>
+    )
 
   return (
     <form onSubmit={onSubmit} aria-busy={isLoading}>
@@ -126,11 +189,13 @@ export function RegisterForm({
           <Input
             id="name"
             name="name"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
             placeholder="Create a username"
             required
             disabled={isLoading}
-            className="h-11 bg-background/50 focus:bg-background transition-colors"
-            autoComplete="username"
+            className={inputClassName}
+            autoComplete="nickname"
             autoFocus
           />
         </div>
@@ -142,48 +207,26 @@ export function RegisterForm({
             id="email"
             name="email"
             type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
             placeholder="name@example.com"
             required
             disabled={isLoading}
-            className="h-11 bg-background/50 focus:bg-background transition-colors"
-            autoComplete="email"
+            className={inputClassName}
+            autoComplete="username"
           />
         </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium" htmlFor="password">
-            Password
-          </Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            required
-            disabled={isLoading}
-            className="h-11 bg-background/50 focus:bg-background transition-colors"
-            autoComplete="new-password"
-            placeholder="Create a password"
-            minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-            aria-describedby="password-hint"
-          />
-          <p id="password-hint" className="text-xs text-muted-foreground">
-            {`Use at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters.`}
-          </p>
-        </div>
-        <div className="space-y-2">
-          <Label className="text-sm font-medium" htmlFor="confirmPassword">
-            Confirm password
-          </Label>
-          <Input
-            id="confirmPassword"
-            name="confirmPassword"
-            type="password"
-            required
-            disabled={isLoading}
-            className="h-11 bg-background/50 focus:bg-background transition-colors"
-            autoComplete="new-password"
-            placeholder="Confirm your password"
-          />
-        </div>
+        <NewPassphraseFields
+          form={form}
+          idPrefix="register"
+          disabled={isLoading}
+          inputClassName={inputClassName}
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Your passphrase signs you in and locks your encryption keys. It never
+          leaves this browser, so nobody can reset it for you. You will get a
+          recovery phrase next.
+        </p>
         {error && (
           <Alert variant="destructive">
             <AlertCircle aria-hidden="true" />
@@ -196,7 +239,7 @@ export function RegisterForm({
           {isLoading ? (
             <>
               <Icons.spinner className="animate-spin" aria-hidden="true" />
-              Creating account…
+              {activity === 'deriving' ? DERIVING_KEYS : 'Creating account…'}
             </>
           ) : (
             'Create account'

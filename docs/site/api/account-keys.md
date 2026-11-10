@@ -10,8 +10,10 @@ These routes are the server side of Flare's end-to-end encryption accounts. Each
 This page is for people who build or audit a client. The protocol, with every key derivation and byte layout, is the [end-to-end encryption specification](https://github.com/FlintSH/Flare/blob/main/docs/e2ee-spec.md); section numbers below refer to it. The repository's `lib/e2ee` library implements the client side of every procedure, and its test vectors fix the outputs.
 
 ::: warning Files are not encrypted yet
-This part of the design covers accounts and sign-in only. Uploads, downloads, and sharing still handle plain files. The registration and first-run setup pages of this build still send a password, which those two routes now refuse, and no page calls the routes below yet. The browser flows that use them ship next.
+This part of the design covers accounts and sign-in only. Uploads, downloads, and sharing still handle plain files.
 :::
+
+Flare's own pages use every route on this page: registration, first-run setup, sign-in, the unlock prompt, **Set up encryption**, the passphrase change in Profile, and the reset page. [Passphrase and recovery phrase](/guide/passphrase) describes them for users, and [how the browser client works](#how-the-browser-client-works) below describes what a second client would have to match.
 
 Named API tokens and the legacy upload credential cannot call any route on this page. They are excluded from the named-token [OpenAPI document](/openapi.json) and the request builder.
 
@@ -208,6 +210,20 @@ Both procedures start from the existing email reset link: `POST /api/auth/email/
 
 A link is used up only when recovery or reset succeeds, so a refused recovery leaves it for another try. Neither procedure changes the authenticator, the passkeys, or the passkey requirement: after a reset, sign-in still asks for the account's second factor. An account with no password and no keys cannot get keys from a link, as it could never get a password from one. Both routes count against the email request limit for each client address.
 
+## How the browser client works
+
+The browser client lives in `lib/e2ee/client` and is the reference for another client.
+
+- **Argon2id** runs in a Web Worker through WebAssembly (`hash-wasm`), with the fixed parameters of protocol version 1: 64 MiB, 3 passes, 4 lanes, 32 bytes of output. The repository's tests check its output against the vectors of the independent reference program. A derivation takes about 0.3 seconds in headless Chromium on a 4-core x86 server; the time on a slow phone is not measured yet.
+- **One derivation per sign-in.** The client derives the sign-in key and the wrap key one time, signs the sign-in challenge, signs a new one when the server asks for a second factor, and signs the unlock challenge, all with the keys in memory. It overwrites them when the account is unlocked or the form is left.
+- **New accounts skip unlock.** Registration, first-run setup, and key setup make the account key in the browser, so the client keeps it directly and does not call the unlock route.
+- **The key store** is one IndexedDB database, `flare-e2ee`, with one record: the user id, the account public key, the account private key, and the old private keys of the keyring. Nothing else is stored: no passphrase, no recovery phrase, no `root_entropy`, no `wrap_key`, and nothing in `localStorage` or `sessionStorage` apart from the time of a sign-in for which the unlock prompt already opened. The record is erased at sign-out, when the session ends or a key route answers `401`, when the session belongs to another user, and when the account's public key on the server differs from the stored one.
+- **Four states.** A page is signed out, signed in without keys on the server (key setup is required before the dashboard opens), signed in and locked (the server has keys, this browser has none), or unlocked. `GET /api/auth/e2ee/keys` decides between them after each session change.
+- **The strength check** (zxcvbn, minimum score 3, with the identifier, the username and the instance name as known words) runs before every request that carries a new account record. The reset page does not know the identifier and uses the instance name only.
+- **A legacy password** is sent by the password sign-in, as before. If the person keeps it as the passphrase, it is derived in the browser like any passphrase and never sent again.
+
+`scripts/e2ee/verify-ui.cjs` drives these flows in a real browser and searches every request of the run for every secret; see [the contribution guide](/contributing#account-key-browser-checks).
+
 ## Changed account routes
 
 | Route                                 | Change                                                                                                                                                                                                                             |
@@ -219,6 +235,7 @@ A link is used up only when recovery or reset succeeds, so a refused recovery le
 | `PUT /api/users`                      | `password` answers `409` with `code: "passphrase_account"` for an account that has keys. An administrator cannot set a passphrase, because it never reaches the server; the owner resets it by email. Other fields save as before. |
 | `POST /api/users`                     | Unchanged. An administrator can still create an account with a temporary password. That account signs in with it and then sets up its keys, which deletes the password.                                                            |
 | `POST /api/auth/email/reset`          | Sets a password only for an account that has none of these keys. For an account that has keys it answers `409` with `code: "passphrase_account"` and leaves the link unused, for the recovery and reset routes above.              |
+| `GET /api/users`                      | Each listed account has `hasPassphrase`, which is `true` when it has keys. The dashboard hides its password field for such an account. The keys themselves are never listed.                                                       |
 | `GET /api/auth/security`              | Adds `hasPassphrase` and `canUseRecentPassphrase`.                                                                                                                                                                                 |
 
 ### Identity proof for accounts that have keys

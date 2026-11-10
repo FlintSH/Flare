@@ -5,6 +5,8 @@ import { checkManagementProof } from '@/components/profile/security/management-p
 
 const status: SecurityStatus = {
   hasPassword: true,
+  hasPassphrase: false,
+  canUseRecentPassphrase: false,
   twoFactorEnabled: true,
   recoveryCodesRemaining: 5,
   passkeys: [],
@@ -107,5 +109,56 @@ describe('security dialog proof preflight', () => {
       error: failure,
     })
     await expect(checkManagementProof(refresh, {})).rejects.toBe(failure)
+  })
+
+  it('asks an account with a passphrase for a recent passphrase sign-in, never for a password', async () => {
+    const keyed = { ...status, hasPassword: false, hasPassphrase: true }
+    const refresh = vi
+      .fn()
+      .mockResolvedValueOnce({ data: keyed, error: null })
+      .mockResolvedValueOnce({ data: keyed, error: null })
+      .mockResolvedValue({
+        data: { ...keyed, canUseRecentPassphrase: true },
+        error: null,
+      })
+    expect(await checkManagementProof(refresh, {})).toMatch(
+      /Confirm your passphrase/
+    )
+    // A typed password is no proof for this account.
+    expect(
+      await checkManagementProof(refresh, { password: 'public-test-password' })
+    ).toMatch(/Confirm your passphrase/)
+    // The authenticator code is still used up after the confirmation.
+    expect(await checkManagementProof(refresh, {})).toMatch(
+      /authenticator or recovery code/
+    )
+    expect(await checkManagementProof(refresh, { code: '123456' })).toBeNull()
+  })
+
+  it('lets a recent passphrase sign-in stand alone without an authenticator, and keeps the passkey rules', async () => {
+    const keyed = {
+      ...status,
+      hasPassword: false,
+      hasPassphrase: true,
+      canUseRecentPassphrase: true,
+      twoFactorEnabled: false,
+    }
+    const refresh = vi
+      .fn()
+      .mockResolvedValueOnce({ data: keyed, error: null })
+      .mockResolvedValueOnce({ data: keyed, error: null })
+      .mockResolvedValue({
+        data: { ...keyed, passkeyRequired: true },
+        error: null,
+      })
+    expect(await checkManagementProof(refresh, {})).toBeNull()
+    // Turning the passkey requirement on needs an actual passkey.
+    expect(await checkManagementProof(refresh, {}, true)).toMatch(
+      /Confirm with a passkey/
+    )
+    // With the requirement on, a passphrase sign-in is no proof.
+    expect(await checkManagementProof(refresh, {})).toMatch(
+      /Confirm with a passkey/
+    )
   })
 })

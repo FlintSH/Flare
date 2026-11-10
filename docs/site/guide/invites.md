@@ -28,21 +28,21 @@ If **Profile → Invites** is missing, your roles do not include Create invites.
 
 <Screenshot src="/screenshots/invites/invite-ready.webp" alt="Your invite link is ready dialog showing a blurred invite link, a Copied button, and the summary Single use, an expiry date, and Grants Moderator" caption="The link is ready to copy. The token is blurred in this screenshot." />
 
-An invite link looks like `https://files.example.com/auth/register?invite=…`, using your instance's address. **Anyone who has the link can use it** until it is used up, expires, or is revoked. Treat it like a password: avoid public channels, and prefer a single use and a short expiry.
+An invite link looks like `https://files.example.com/auth/register?invite=…`, using your instance's address. **Anyone who has the link can use it** until it is used up, expires, or is revoked. Treat it like a secret: avoid public channels, and prefer a single use and a short expiry.
 
 Selecting a role that includes **Administrator** shows a warning: anyone who uses that link becomes a full administrator of the instance.
 
 ## What the invited person sees
 
-Opening an active link shows **You’re invited** with the name of the person who created the link. If the link grants roles, they appear under **You’ll join with these roles**. The person chooses a **Username**, **Email address**, and **Password**, then chooses **Create account**.
+Opening an active link shows **You’re invited** with the name of the person who created the link. If the link grants roles, they appear under **You’ll join with these roles**. The person chooses a **Username**, **Email address**, and [**Passphrase**](./passphrase#create-an-account), then chooses **Create account** and saves the recovery phrase that Flare shows.
 
-<Screenshot src="/screenshots/invites/register-invite.webp" alt="You're invited page: Alex Morgan invited you to join Flare, with the Moderator role listed above username, email, and password fields" caption="The invite page names the inviter and any roles the link grants." />
+<Screenshot src="/screenshots/invites/register-invite.webp" alt="You're invited page with username, email address, passphrase and confirm passphrase fields, and a strength meter under the passphrase" caption="The invite page names the inviter and any roles the link grants." />
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/invites/register-invite-mobile.webp" alt="You're invited page on a 390-pixel phone screen with the registration form" caption="The same invite page on a phone." />
 </div>
 
-The usual registration rules still apply: a username of at least one character, a valid email address that no other account uses, and a password of at least eight characters and at most 72 UTF-8 bytes. If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
+The usual registration rules still apply: a username of at least one character, a valid email address that no other account uses, and a passphrase that passes the [strength check](./passphrase#choose-a-passphrase). If the instance requires new users to verify their email, the new account is asked to verify before using Flare. An attempt that fails, such as one using an email address that already has an account, does not use up the invite.
 
 If the link cannot be used, the page explains why, such as **This invite link has already been used.** On an instance with closed registration, the page is titled **Invite unavailable** and offers **Go to sign in**. If public registration is open, the ordinary sign-up form appears with a note that the invite cannot be used; an account created that way does not receive the invite's roles.
 

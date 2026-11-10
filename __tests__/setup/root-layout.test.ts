@@ -52,6 +52,9 @@ vi.mock('@/components/providers/auth-provider', () => ({
       children
     ),
 }))
+vi.mock('@/components/providers/account-keys-provider', () => ({
+  AccountKeysProvider: passThrough,
+}))
 vi.mock('@/components/providers/query-provider', () => ({
   QueryProvider: passThrough,
 }))

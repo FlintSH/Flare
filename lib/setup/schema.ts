@@ -2,25 +2,15 @@ import { z } from 'zod'
 
 import { accountRecordSchema } from '@/lib/auth/e2ee/records'
 import { storageSettingsSchema } from '@/lib/storage/settings'
-import {
-  ACCOUNT_PASSWORD_MIN_LENGTH,
-  accountNameSchema,
-  accountPasswordSchema,
-} from '@/lib/users/account-policy'
+import { accountNameSchema } from '@/lib/users/account-policy'
 
 // The rules of every account, worded for the wizard, which shows these
-// messages inline. Setup trims the name and address it saves, never the
-// password.
+// messages inline. Setup trims the name and address it saves. The form has
+// no field for the passphrase of the administrator: the wizard keeps it
+// outside this data, measures it in the browser and never sends it.
 export const setupAdminSchema = z.object({
   name: z.string().trim().pipe(accountNameSchema),
   email: z.string().trim().email('Enter a valid email address'),
-  password: z
-    .string()
-    .min(
-      ACCOUNT_PASSWORD_MIN_LENGTH,
-      `Password must be at least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`
-    )
-    .pipe(accountPasswordSchema),
 })
 
 export const setupSchema = z.object({
@@ -37,9 +27,9 @@ export type SetupData = z.infer<typeof setupSchema>
 /**
  * What `POST /api/setup` reads. The wizard checks its form with
  * `setupSchema`, makes the account record of the administrator from the
- * password field in the browser (docs/e2ee-spec.md, section 5.4), and sends
- * the record in place of the password. Strict: a request that carries the
- * password is refused.
+ * passphrase in the browser (docs/e2ee-spec.md, section 5.4), and sends the
+ * record. Strict: a request that carries a password or a passphrase is
+ * refused.
  */
 export const setupRequestSchema = z.strictObject({
   admin: z.strictObject({

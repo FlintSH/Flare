@@ -33,6 +33,7 @@ import {
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { usePreferenceSection } from '@/hooks/use-preference-section'
+import { useSecurityStatus } from '@/hooks/use-security-status'
 
 import { ProfileAccount } from './account'
 import { ProfileExport } from './export'
@@ -48,7 +49,7 @@ import { ProfileTools } from './tools'
 const sections = [
   {
     id: 'account',
-    hint: 'Identity, password, and theme',
+    hint: 'Identity, passphrase, and theme',
     title: 'Account',
     description:
       'Manage your identity, sign-in details, and workspace preference.',
@@ -96,6 +97,7 @@ export function ProfileClient({
   initialPreference,
 }: ProfileClientProps) {
   const { can, user: sessionUser } = usePermissions()
+  const { data: security } = useSecurityStatus()
   const router = useRouter()
   const [activeSection, setSection] = usePreferenceSection(
     PROFILE_SECTIONS,
@@ -161,9 +163,15 @@ export function ProfileClient({
         <PermissionGate permission="profile.update">
           <Card id="password" className="scroll-mt-28">
             <CardHeader>
-              <CardTitle>Change your password</CardTitle>
+              <CardTitle>
+                {security?.hasPassphrase
+                  ? 'Passphrase and recovery'
+                  : 'Change your password'}
+              </CardTitle>
               <CardDescription>
-                Use a strong password that you do not use elsewhere.
+                {security?.hasPassphrase
+                  ? 'Your passphrase signs you in and unlocks your encryption keys. Flare never receives it.'
+                  : 'Use a strong password that you do not use elsewhere.'}
               </CardDescription>
             </CardHeader>
             <CardContent>

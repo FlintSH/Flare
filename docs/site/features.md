@@ -26,8 +26,9 @@ Reading for a particular installation? [Browse dated documentation releases and 
 | Share a collection                                             | [Folders](./guide/folders) → [sharing and privacy](./guide/sharing)                                                                                       |
 | Find an older upload in a large library                        | [Continuous scrolling and the date rail](./guide/library#scroll-through-your-library) → [recorded walkthrough](./demos#browse-a-large-library)            |
 | Preview files inside large archives, extract, or package files | [Archives](./guide/archives) → [large-archive walkthrough](./demos#preview-files-in-a-large-archive)                                                      |
+| Sign in without giving the server your secret                  | [Passphrase and recovery phrase](./guide/passphrase) → [what it does not protect](./guide/passphrase#what-the-design-does-not-protect)                    |
 | Protect your sign-in                                           | [Two-factor authentication and passkeys](./guide/security)                                                                                                |
-| Require a passkey instead of password or SSO                   | [Passkey requirement and emergency recovery](./guide/security#require-a-passkey-for-sign-in)                                                              |
+| Require a passkey instead of passphrase or SSO                 | [Passkey requirement and emergency recovery](./guide/security#require-a-passkey-for-sign-in)                                                              |
 | Review sign-ins or sign out a lost device                      | [Login history and active sessions](./guide/account#login-history-and-active-sessions)                                                                    |
 | Investigate activity or a failed operation                     | [Instance audit log](./admin/audit)                                                                                                                       |
 | Match your own brand                                           | [Appearance studio](./admin/appearance)                                                                                                                   |
@@ -38,6 +39,6 @@ Reading for a particular installation? [Browse dated documentation releases and 
 
 Flare needs a running application server and PostgreSQL. Local storage also needs a persistent writable filesystem; S3 is an alternative file store. The **documentation** can run on a static host, but **Flare itself** cannot. Read the [deployment guide](./hosting/) before choosing infrastructure.
 
-Private files are restricted to their owner and accounts with permission to read other users’ content. This is a self-hosted sharing application, not an end-to-end encrypted vault. See [sharing and privacy](./guide/sharing) for the exact rules, including passwords, folder links, and storage URLs.
+Private files are restricted to their owner and accounts with permission to read other users’ content. Accounts sign in with a [passphrase that the server never receives](./guide/passphrase), but files are not encrypted yet: this is a self-hosted sharing application, not an end-to-end encrypted vault. See [sharing and privacy](./guide/sharing) for the exact rules, including passwords, folder links, and storage URLs.
 
 These docs describe the source revision shown on the page. If a control is missing on an older installation, check the version in **Settings → General**, [open its documentation archive](./versions), review the release notes, and follow the [upgrade guide](./hosting/maintenance).

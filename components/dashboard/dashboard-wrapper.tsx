@@ -2,6 +2,7 @@ import { GlobalDropZone } from '@/components/dashboard/global-drop-zone'
 import { DashboardNav } from '@/components/dashboard/nav'
 import { UploadProgress } from '@/components/dashboard/upload-progress'
 import { UserNav } from '@/components/dashboard/user-nav'
+import { UnlockBanner } from '@/components/encryption/unlock-dialog'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { PermissionGate } from '@/components/roles/permission-gate'
@@ -52,7 +53,10 @@ export function DashboardWrapper({
         tabIndex={-1}
         className="relative z-10 w-full min-w-0 flex-1 pt-24 outline-none"
       >
-        <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-6">
+          <UnlockBanner />
+          {children}
+        </div>
       </main>
       {showFooter && <Footer />}
     </div>

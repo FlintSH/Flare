@@ -66,8 +66,8 @@ export function renderAccountEmail(
     },
     reset: {
       subject: branding.resetSubject || 'Reset your password',
-      body: `A password reset was requested for your ${instance} account. If this was you, use the link below to choose a new password. If you did not request it, you can ignore this email.`,
-      action: 'Reset password',
+      body: `A reset of the passphrase for your ${instance} account was requested. If this was you, use the link below to choose a new passphrase. Keep your recovery phrase at hand: without it, files that the account encrypted cannot be opened after a reset. If you did not request it, you can ignore this email.`,
+      action: 'Reset passphrase',
     },
     change: {
       subject: branding.changeSubject || 'Confirm your new email address',
@@ -80,8 +80,8 @@ export function renderAccountEmail(
       action: 'Approve email change',
     },
     password_changed: {
-      subject: 'Your password was changed',
-      body: `The password for your ${instance} account was changed. Existing browser sessions were signed out. If you did not make this change, contact your instance administrator immediately.`,
+      subject: 'Your passphrase was changed',
+      body: `The passphrase or password for your ${instance} account was changed. Existing browser sessions were signed out. If you did not make this change, contact your instance administrator immediately.`,
     },
     email_changed: {
       subject: 'Your email address was changed',
