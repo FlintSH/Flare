@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 8. Not implemented. Not reviewed.             |
+| Status  | Draft 9. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -70,7 +70,9 @@ This document does not use single-letter names.
    upload script can do it.
 6. A share link carries the `file_key` after the `#` character. The browser
    does not send that part to the server.
-7. A user can select a plain upload when a file must have a link preview.
+7. A user can select a plain upload, for one file or in an upload profile,
+   when a file must show its content in a link preview. An encrypted file
+   gets a generic preview.
 
 ## 2. Terms and notation
 
@@ -1086,22 +1088,67 @@ A ShareX custom uploader file is a declarative HTTP description. It cannot
 encrypt. It cannot add `file_key` to the URL that it copies. A helper program
 must do the encryption, the upload and the copy of the link.
 
-## 11. Plain files
+## 11. Plain files and link previews
 
 **AGREED**
 
-**Goal:** keep link previews on other sites for users who want them.
+**Goal:** keep link previews on other sites for users who want them. Keep
+share links useful for encrypted files too.
 
 **Restriction:** a crawler does not run the client and does not get the part
-of the URL after `#`. The server must give the content to the crawler. Thus a
-file with a link preview cannot be encrypted.
+of the URL after `#`. To show the content, the server must give the content
+to the crawler. Thus the content of an encrypted file cannot be in a link
+preview. No design can change this.
 
-- Encryption is the default.
-- A user can upload a plain file. The user must select this for each file or
-  in an upload configuration.
+### 11.1 Encryption is the default
+
+- A new file is encrypted unless the user selects a plain upload.
 - The server marks each plain file. The application shows the mark.
-- Link previews, server OCR and server archive tools operate only on plain
-  files.
+- Link previews with content, server OCR and server archive tools operate
+  only on plain files.
+
+### 11.2 Where the user selects a plain upload
+
+1. **For one file**, in the upload dialog.
+2. **In an upload profile.** An upload profile has the setting
+   `encryption`, with the value `encrypted` or `plain`. The default is
+   `encrypted`.
+
+A bearer token can be bound to an upload profile. Thus a user can have one
+token that encrypts and one token that does not. Example: a screenshot tool
+configuration for chat messages uses a `plain` profile, and a second
+configuration for private files uses an `encrypted` profile.
+
+The client reads the setting and acts on it. The server cannot encrypt. The
+server must reject an encrypted upload to a `plain` profile, and a plain
+upload to an `encrypted` profile. This prevents a plain upload by mistake
+from a wrong configuration.
+
+### 11.3 Link preview of an encrypted file
+
+A share link of an encrypted file gives a generic preview. The preview tells
+the reader to open the link to see the file.
+
+The server makes the preview from values that it has:
+
+| Preview field | Content                                                   |
+| ------------- | --------------------------------------------------------- |
+| Site name     | The name of the instance.                                 |
+| Title         | A fixed text. Example: "Encrypted file".                  |
+| Description   | A fixed text. Example: "Open the link to view this file." |
+| Image         | A fixed image of the instance. Not the file.              |
+
+The preview must not contain the file name or the type of the file. The
+server does not have them (section 9).
+
+The server must not redirect a crawler to the content of an encrypted file.
+Today the server redirects known crawlers to the raw file.
+
+### 11.4 What the user must be told
+
+- The upload dialog and the upload profile settings must say that an
+  encrypted file has a generic preview only.
+- The application must show which files are plain.
 
 ## 12. Requirements for the server and the application
 
@@ -1157,3 +1204,4 @@ file with a link preview cannot be encrypted.
 | 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back. |
 | 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                      |
 | 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                    |
+| 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                   |
