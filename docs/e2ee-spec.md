@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 22. Phases 1 to 6 implemented. Not reviewed.  |
+| Status  | Draft 23. Phases 1 to 6 implemented. Not reviewed.  |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -1040,7 +1040,10 @@ Each account stanza records the `account_public_key` that it is for.
 1. The client requests a batch of account stanzas that are for an old key.
 2. For each stanza: the client opens it with the old key and makes a new
    account stanza for the current public key (section 8.1).
-3. The client sends the batch. The server replaces the old stanzas.
+3. The client sends the batch. The server replaces the old stanzas. It
+   replaces only a stanza that is for an old key (**PROPOSED**, draft 23):
+   a request that replaced a stanza for the current key could only destroy
+   a file key.
 4. The client does steps 1 to 3 again until no stanza is for the old key.
 5. The client makes a new `sealed_keyring` without that old key and sends it
    in a signed request (section 6.6).
@@ -1052,7 +1055,23 @@ about 100 bytes.
 The migration does not touch password stanzas (section 8.2).
 
 The rotation request already contains the new `sealed_folder_private_key`
-of each folder (section 8.3.3). The key pairs of the folders do not change.
+of each folder (section 8.3.3).
+
+**PROPOSED** (draft 23, from the security review). The old account key
+opened the private key of each folder, and a folder key opens each public
+file and each folder that the owner adds to that folder later. Thus the
+key pairs of folders change after a rotation:
+
+1. In the rotation, the server marks each folder that no shared folder link
+   opens. A link opens the folder that it shares and each folder below it.
+2. The client of the owner gives each marked folder a new key pair, with
+   the procedure of section 9.4.5, steps 2 and 3. This is a background
+   task, as the stanza migration is.
+3. A folder that a link opens keeps its key pair. Each person who has the
+   link has that key, and a new key pair would break the link. To change
+   the key of such a folder, the owner stops the sharing (section 9.4.5).
+
+Drafts before 23 said that the key pairs of the folders do not change.
 
 #### 8.3.5 What rotation gives and does not give
 
@@ -1060,10 +1079,17 @@ of each folder (section 8.3.3). The key pairs of the folders do not change.
 | --------------------------------------------------------- | ----------------------------------------------------- |
 | The passphrase only                                       | Reads nothing.                                        |
 | The old keys                                              | Does not read files that come after the rotation.     |
-| The old keys, and a copy of the database after migration  | Reads nothing. The old stanzas are deleted.           |
+| The old keys, and a copy of the database after migration  | Reads only what a shared folder link opens (below).   |
 | The old keys, and a copy of the database before migration | Reads the old files that are not migrated.            |
 | The old keys and a copy of the old stanzas                | Reads the old files. Does not read new files.         |
 | A share link                                              | Reads that file. Rotation does not change `file_key`. |
+
+**PROPOSED** (draft 23). The old account key opened the key of each
+folder. After the folder migration of section 8.3.4, the old keys open only
+the folders that a shared folder link opens, and the public files in them,
+as each person who has that link does. The owner stops the sharing to
+change those keys. The third row of the table was "Reads nothing" in
+drafts before 23, which was not correct for folders.
 
 To protect an old file from an attacker who has its old stanza, a client
 would have to encrypt the file again with a new `file_key`. This document
@@ -1345,8 +1371,16 @@ rejects a stanza for an old folder key, and the user installs a new
 configuration.
 
 A moderator can change the visibility of a file of a different account. A
-moderator has no keys. If a moderator makes a file public, the file has no
-folder stanza until the browser of the owner makes one.
+moderator has no keys.
+
+**PROPOSED** (draft 23, from the security review). A moderator can make an
+encrypted file private. A moderator cannot make an encrypted file public:
+the server refuses the request. The browser of the owner makes a folder
+stanza for each public file in a folder (section 9.4.7), and that stanza
+gives the file to each person who has a link to the folder. Thus a
+moderator who made a private file public would give it to those persons,
+and to itself if it has the link. Only the owner publishes an encrypted
+file (section 13, requirement 4).
 
 #### 9.4.5 Stop sharing
 
@@ -1358,7 +1392,17 @@ When the owner stops sharing a folder:
 3. The client makes new stanzas for these folders and their files.
 
 Step 1 has an immediate effect if the server is honest. Steps 2 and 3
-protect the files that arrive later, also if the server is compromised.
+protect the files that arrive later against a server that becomes
+compromised after step 2 is done.
+
+**PROPOSED** (draft 23, from the security review). Steps 2 and 3 do not
+protect against a server that is compromised at the time of step 1. The
+client starts step 2 when the server lists the folder (section 9.4.7). A
+compromised server can leave the folder out of the list, or give the old
+`folder_public_key` and the old `sealed_folder_private_key` again, which
+the account key still opens. The owner then continues to encrypt for the
+old key. Drafts before 23 claimed more. Section 15, question 3, is about a
+record that would let the client detect this.
 
 **What stop sharing does not do.** A visitor of a shared folder gets the
 `file_key` and the file identifier of each file in the list. These two
@@ -1418,7 +1462,19 @@ the key that the folder has at that time.
 For a folder from before encryption, the browser makes the key pair and
 `sealed_folder_metadata` from the plain name. The server deletes the plain
 name when it stores them. The browser does the same for a tag from before
-encryption (section 9.5.2).
+encryption (section 9.5.2). In the same operation the server deletes the
+plain name from the audit records that it wrote before, and it writes no
+name into the audit record of the operation itself. Copies of the database
+from before that time keep the name.
+
+**Limit** (draft 23, from the security review). The browser makes these
+records from a list that the server gives. The browser cannot check that
+list. A server that is compromised and that knows the private key of one
+folder can list a private file as a public file of that folder, or list a
+folder as a folder below it. The browser then makes a stanza that gives the
+file key or the folder key to each person who has that folder key. The
+attacker does not need to change the served code for this, so this is more
+than limit 1 of section 3.3. Section 15, question 3, is about the fix.
 
 ### 9.5 Tags
 
@@ -1763,6 +1819,11 @@ finds a prefix that it does not know must tell the user to update (section
   server in its configuration and from the path that the server returns.
   It does not use a host that the server returns. Thus a compromised server
   cannot make the script client put a key in a link to a different site.
+- **PROPOSED** (draft 23, from the security review). The browser client
+  obeys the same rule. It puts a key only into an address of the origin of
+  the page: it takes the path from the answer of the server and drops the
+  host. This applies to the link of an upload and to each link on a shared
+  folder page.
 - A person who has the link (and the password, if there is one) can read the
   file until the file is deleted.
 - Account key rotation does not change `file_key`. Share links continue to
@@ -2218,6 +2279,15 @@ sections 6.7, 6.8 and 6.9 change its secrets.
 The server saw the old password before the migration. A user who does not
 trust the past of the server selects a new passphrase.
 
+**PROPOSED** (draft 23, from the security review). There is a second
+reason. A copy of the database from before the migration has a bcrypt hash
+of the old password. A person who has such a copy can test passwords
+against that hash at a much lower cost than Argon2id (section 3.3, limit
+4). If the user keeps the old password as the passphrase, that person then
+opens `wrapped_root` from a later copy of the database. The application
+must tell the user this where it offers to keep the password. Question 6 of
+section 15 asks if the offer should stay.
+
 During the migration, the sign-in page must know which method an account
 uses. The answer for an account that has a password and no keys is
 different from the answer for an unknown identifier (section 6.1). Thus a
@@ -2322,6 +2392,30 @@ after the upgrade.
    necessary.
 2. **Public upload links.** This feature is not merged. It must use the
    upload procedure of section 10.2.
+3. **A record of the owner for the place of a file.** From the security
+   review. Sections 9.4.5 and 9.4.7 state the problem: the browser of the
+   owner adds a reader (a folder stanza, a parent stanza, a new key pair)
+   because the server says that a file is public in a folder, that a folder
+   is below a different folder, or that a folder waits for a key. A proposal:
+   the owner writes a tag with each such change,
+   `keyed_hash(derive_key("flare e2ee v1 placement", account_private_key),
+file_id || folder_id || visibility)` for a file and the same with the two
+   folder identifiers for a folder, and the browser makes a record later
+   only if the tag is correct. A script client has no account private key
+   and cannot make the tag, so its files in a folder would wait until the
+   owner agrees. A different proposal: the owner agrees to each repair that
+   adds a reader. No decision is made.
+4. **Storage quota of sealed records.** From the security review. A
+   `sealed_ocr_text` and a `sealed_thumbnail` can each have 256 KiB, and the
+   server does not count them in the storage quota of the account. Thus an
+   account can use much more database storage than its quota. The proposal
+   is to count them.
+5. **The keyring after a migration.** The client deletes an old key from
+   `sealed_keyring` when the server says that no stanza is for that key
+   (section 8.3.4, step 5). A compromised server can say this too early.
+   The result is the loss of files, not their disclosure.
+6. **The old password as the passphrase.** Section 14.1 lets the user keep
+   it. The alternative is to demand a new passphrase from each account.
 
 The program for script clients is `flare-upload`, in `clients/flare-upload`.
 It is written in Rust. The project builds it for Linux (x86_64 and aarch64),
@@ -2358,3 +2452,4 @@ when.
 | 20    | 2026-11-11 | Results of the server implementation of accounts. A rotation ends each session. The client adds the version byte. Existing accounts get keys in a session of the last 5 minutes, without the old password. Accounts that an administrator creates. A proxy must not change the path of a signed request.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | 21    | 2026-11-10 | Results of the implementation of encrypted files. The form of a random `file_id`. A password that the owner adds later does not stop a person who has `file_key`. The script policy has `'strict-dynamic'`. The server sends webhook version 2 for each file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 22    | 2026-11-10 | Results of the implementation of the library, of the content features and of script uploads. All additions are PROPOSED. Reset deletes folder keys, tag records and stanzas. The form of the shared folder link. Re-key of a subtree after the owner stops sharing. Records that the browser of the owner makes later. Plain files can wait for tag rules. The sequence number and the repair of the local cache. The local address of the service worker, ranges, the end of the file, a worker that stops, downloads and PDF. An archive is not trusted. The export procedure. The server also rejects a short link that contains a key. A script client checks the accepted versions and builds the link from its own origin. Rules for the `encryption` setting and for old tokens. A folder stanza that a script client cannot renew is not stored. The program for script clients is `flare-upload`. |
+| 23    | 2026-11-10 | Results of the security review. All additions are PROPOSED. After a rotation, each folder that no shared folder link opens gets a new key pair (sections 8.3.4 and 8.3.5). A moderator cannot make an encrypted file public (section 9.4.4). The claim of section 9.4.5 about a compromised server is corrected, and section 9.4.7 states the limit of the repair list. The browser builds each link with a key on its own origin (section 10.3). The server replaces only a stanza for an old key (section 8.3.4). The plain names of folders and tags leave the audit records (section 9.4.7). Section 14.1 states the risk of the old password hash in old copies of the database. New open questions 3 to 6.                                                                                                                                                                                           |

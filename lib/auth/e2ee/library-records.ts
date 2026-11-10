@@ -96,6 +96,55 @@ export async function replaceLibraryRecords(
       where: { id: tag.id, userId },
       data: { sealedTagMetadata: tag.sealedTagMetadata },
     })
+  await rekeyUnsharedFolders(tx, userId)
+}
+
+/**
+ * The old account key opened the private key of every folder, and a folder
+ * key opens what is added to the folder later. So each folder that no share
+ * link reaches waits for a new key pair from the owner's browser, as a
+ * folder does after its sharing stopped (sections 8.3.4 and 9.4.5). A
+ * folder that a share link reaches, itself or through a folder above it,
+ * keeps its key pair: every holder of that link has the key, the link would
+ * stop working, and the owner changes the key by stopping the share.
+ */
+async function rekeyUnsharedFolders(
+  tx: Prisma.TransactionClient,
+  userId: string
+) {
+  const folders = await tx.vaultFolder.findMany({
+    where: { userId },
+    select: {
+      id: true,
+      parentId: true,
+      shareToken: true,
+      folderPublicKey: true,
+    },
+  })
+  const byId = new Map(folders.map((folder) => [folder.id, folder]))
+  const reached = new Map<string, boolean>()
+  const isReached = (id: string): boolean => {
+    const known = reached.get(id)
+    if (known !== undefined) return known
+    // A loop cannot exist. If the data has one, the walk ends there.
+    reached.set(id, false)
+    const folder = byId.get(id)!
+    const answer =
+      folder.shareToken !== null ||
+      (folder.parentId !== null &&
+        byId.has(folder.parentId) &&
+        isReached(folder.parentId))
+    reached.set(id, answer)
+    return answer
+  }
+  const waiting = folders
+    .filter((folder) => folder.folderPublicKey && !isReached(folder.id))
+    .map((folder) => folder.id)
+  for (let start = 0; start < waiting.length; start += 5000)
+    await tx.vaultFolder.updateMany({
+      where: { userId, id: { in: waiting.slice(start, start + 5000) } },
+      data: { rekeyPending: true },
+    })
 }
 
 /**

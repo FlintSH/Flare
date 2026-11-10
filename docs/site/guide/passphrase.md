@@ -62,7 +62,7 @@ Passkey and SSO sign-in still work as [their guide](./security) describes. They 
 
 An account that was created before this release, or that an administrator created for you with a temporary password, has no keys yet. The first step of sign-in shows a **Password** field for it. Directly after that sign-in, **Set up encryption** opens, and the rest of Flare stays closed until you finish it:
 
-- If your current password passes the strength check, you can **Keep my current password**. It becomes your passphrase. The server has seen that password at every earlier sign-in; choose a new passphrase if you want one it never saw.
+- If your current password passes the strength check, you can **Keep my current password**. It becomes your passphrase. The server has seen that password at every earlier sign-in, and database backups from before this step hold a hash of it that is much cheaper to guess against than your sealed keys are. Choose a new passphrase if you want one that the server never saw and that no old backup helps to guess.
 - If it does not pass, you must **Choose a new passphrase**.
 - An account that signs in with a passkey or SSO only chooses a passphrase here as well.
 
@@ -105,6 +105,7 @@ Your files, folders, tags, two-factor authentication, recovery codes, passkeys, 
 Two things happen to your library, both without any action from you:
 
 - **Folder keys and tags are sealed again for the new key.** The same request that changes the passphrase carries a new sealed copy of each folder's key and of each tag's name and rule. If Flare says the request does not cover every folder and tag, another tab changed one while you worked: reload the page and start again.
+- **Folders that are not shared get new keys in the background.** The old passphrase could open the key of every folder, and a folder key opens what you add to the folder later. After you sign in again, your browser gives each folder that has no share link a new key. A shared folder, and the folders inside it, keep their keys so that the link keeps working. If you changed the passphrase because someone else may have known it, stop sharing those folders and share them again: that gives them new keys and a new link.
 - **Your files move to the new key in the background.** Each encrypted file has a small record that gives its key to your account key. After you sign in again, your browser opens each record with the old key and makes one for the new key. A status at the edge of the page reads **Updating file keys** with a count. You can use Flare meanwhile, close the tab, or sign in on another device; the work continues where it stopped. When no file is left on the old key, your browser tells the server to forget that old key.
 
 1. Open **Profile → Account → Passphrase and recovery** and choose **Change passphrase**.

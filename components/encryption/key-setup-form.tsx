@@ -261,8 +261,9 @@ export function KeySetupForm() {
             <span>
               <span className="font-medium">Choose a new passphrase</span>
               <span className="block text-muted-foreground">
-                The server has seen your current password. A new passphrase is
-                one it never saw.
+                The server has seen your current password, and old backups of
+                the server hold a record that makes it easier to guess. A new
+                passphrase is one that neither has.
               </span>
             </span>
           </label>

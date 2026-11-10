@@ -200,10 +200,48 @@ describe.skipIf(!databaseUrl)(
       expect(ownedTagViews(await tags.listTags(owner), before)[0].locked).toBe(
         true
       )
-      // The key pair of the folder did not change (section 8.3.4).
-      expect((await folders.listFolders(owner))[0].keys!.folderPublicKey).toBe(
-        folder.keys!.folderPublicKey
+      // The old key opened the folder key. No share link reaches this
+      // folder, so it waits for a new key pair (sections 8.3.4 and 9.4.5).
+      expect((await folders.listFolders(owner))[0].keys).toMatchObject({
+        folderPublicKey: folder.keys!.folderPublicKey,
+        rekeyPending: true,
+      })
+      expect((await folders.folderRepairs(owner)).folderKeys).toEqual([
+        folder.id,
+      ])
+    })
+
+    it('keeps the key pair of a folder that a share link reaches, and of the folders below it', async () => {
+      const { folderInputSchema } = await import('@/lib/folders/schema')
+      const { folder } = await library2()
+      const make = async (name: string, parentId: string | null) =>
+        folders.createFolder(
+          owner,
+          folderInputSchema.parse({
+            ...newFolderKeys(keys.accountKeys.accountPrivateKey, name).records,
+            ...(parentId ? { parentId } : {}),
+          })
+        )
+      const shared = await make('Shared', null)
+      const below = await make('Below', shared.id)
+      await folders.updateFolder(owner, shared.id, { sharing: true })
+      const next = clientKeys()
+      await rotate(
+        next,
+        resealLibrary(pair(keys), pair(next), await sealedLibrary())
       )
+      const views = new Map(
+        (await folders.listFolders(owner)).map((view) => [view.id, view])
+      )
+      expect(views.get(shared.id)).toMatchObject({
+        shareToken: expect.any(String),
+        keys: { rekeyPending: false },
+      })
+      expect(views.get(below.id)!.keys!.rekeyPending).toBe(false)
+      expect(views.get(folder.id)!.keys!.rekeyPending).toBe(true)
+      expect((await folders.folderRepairs(owner)).folderKeys).toEqual([
+        folder.id,
+      ])
     })
 
     it('migrates stanzas to the current key in the background and prunes the keyring', async () => {
