@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 6. Not implemented. Not reviewed.             |
+| Status  | Draft 7. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -133,6 +133,8 @@ All context strings are ASCII. A context string does not have a terminator.
 | `password_key`          | 32 bytes | Key that encrypts `file_key` in a password stanza.                    |
 | `keyring_key`           | 32 bytes | Key that encrypts the list of old account private keys.               |
 | `sealed_keyring`        | variable | The encrypted list of old account private keys. The server stores it. |
+| `folder_private_key`    | 32 bytes | X25519 private key of one folder. A shared folder link carries it.    |
+| `folder_public_key`     | 32 bytes | Its public key. The server stores it.                                 |
 
 ## 3. Threat model
 
@@ -168,7 +170,8 @@ These limits are accepted. The public documentation must state them.
 2. **No sender authentication.** A person who knows the account public key can
    create a file that decrypts correctly. The server always knows this key.
    This is deliberate. It gives deniability and it keeps secrets off the
-   upload machine.
+   upload machine. For the same reason, a person who knows
+   `folder_public_key` can add a file to the list of a shared folder.
 3. **Limited forward secrecy.** The owner must be able to read old files. Thus
    the current account private key opens all current stanzas. Key rotation
    (section 8.3) protects the files that come after it. It cannot protect an
@@ -750,6 +753,9 @@ about 100 bytes.
 
 The migration does not touch password stanzas (section 8.2).
 
+The migration also makes a new `owner_folder_stanza` for each folder
+(section 8.4.2). The key pairs of the folders do not change.
+
 #### 8.3.5 What rotation gives and does not give
 
 | Attacker has before the rotation                          | Result                                                |
@@ -777,6 +783,89 @@ A script client has the old `account_public_key` in its configuration
 A rotation is a rare operation after a compromise. Thus a new configuration
 is acceptable. No separate signing key is necessary, and one Ed25519 key
 pair continues to serve both purposes (section 4.1).
+
+### 8.4 Folder keys and folder stanzas
+
+**AGREED** for the structure. **PROPOSED** for the exact strings and for the
+points that section 9.4.6 lists.
+
+**Goal:** a person who has the link of a shared folder can read the files in
+that folder and in all folders below it. Files that arrive later become
+readable without a new link.
+
+**Idea:** each folder has an X25519 key pair. A file key is encrypted to the
+public key of its folder. The private key of a folder is encrypted to the
+public key of its parent folder. The share link carries the private key of
+one folder. That key opens the folder and each folder below it.
+
+**Restriction:** a script client has no secret (section 10.2). It must be
+able to put a file in a folder. Thus the operation must need a public key
+only.
+
+#### 8.4.1 Public-key wrap
+
+The procedure of section 8.1 encrypts a secret to an X25519 public key. This
+section uses the same procedure with three parameters:
+
+`public_wrap(recipient_public_key, context, associated_data, secret)`:
+
+1. Make an X25519 key pair
+   `(ephemeral_private_key, ephemeral_public_key)`.
+2. `shared_secret = X25519(ephemeral_private_key, recipient_public_key)`.
+   If `shared_secret = zeros(32)`, reject.
+3. `stanza_key = blake3_derive_key(context, shared_secret || ephemeral_public_key || recipient_public_key)`
+4. The output is `ephemeral_public_key || seal(stanza_key, zeros(24), associated_data, secret)`.
+
+`public_unwrap` is the reverse operation with the private key of the
+recipient.
+
+The account stanza of section 8.1 is
+`public_wrap(exchange_public_key, "flare e2ee v1 account stanza", header_hash, file_key)`.
+
+#### 8.4.2 Folder keys
+
+When the client creates a folder:
+
+1. Make an X25519 key pair `(folder_private_key, folder_public_key)`.
+2. `folder_metadata_key = blake3_derive_key("flare e2ee v1 folder metadata", folder_private_key)`
+3. `sealed_folder_metadata = seal(folder_metadata_key, random(24), folder_public_key, folder_metadata)`.
+   `folder_metadata` is a JSON object with the field `name`.
+4. `owner_folder_stanza = public_wrap(exchange_public_key, "flare e2ee v1 owner folder stanza", folder_public_key, folder_private_key)`
+5. If the folder has a parent:
+   `parent_folder_stanza = public_wrap(parent folder_public_key, "flare e2ee v1 parent folder stanza", folder_public_key, folder_private_key)`
+6. Send `folder_public_key`, `sealed_folder_metadata` and the stanzas to the
+   server.
+
+The key pair of a folder does not come from the key pair of its parent. A
+person who has the key of a folder cannot calculate the key of a folder
+above it.
+
+#### 8.4.3 Folder stanza of a file
+
+When a file with public visibility is in a folder, the file has a folder
+stanza:
+
+`folder_file_stanza = public_wrap(folder_public_key, "flare e2ee v1 folder file stanza", header_hash, file_key)`
+
+A file with private visibility must not have a folder stanza. A shared
+folder does not show private files.
+
+A file with a password stanza (section 8.2) does not get a folder stanza for
+`file_key`. It gets this stanza:
+
+`folder_link_secret_stanza = public_wrap(folder_public_key, "flare e2ee v1 folder link secret stanza", header_hash, link_secret)`
+
+A visitor of the shared folder then has `link_secret`. The visitor must
+type the password to read the file.
+
+#### 8.4.4 Who can open what
+
+| Person has                    | Can open                                                             |
+| ----------------------------- | -------------------------------------------------------------------- |
+| The account private key       | Each folder, through `owner_folder_stanza`.                          |
+| The private key of one folder | The name of that folder, its public files, and each folder below it. |
+| The private key of one folder | Not the folders above it. Not its private files.                     |
+| Only `folder_public_key`      | Nothing. That person can add a file to the folder.                   |
 
 ## 9. Metadata
 
@@ -820,7 +909,98 @@ A person who has `file_key` can read `file_metadata`. The server cannot.
 - Audit records, expiry events and webhooks contain the file identifier only.
 - The `file.ready` webhook needs a new schema version.
 
-### 9.4 Folders, tags and OCR
+### 9.4 Folders
+
+**AGREED** for sections 9.4.1 to 9.4.3. **PROPOSED** for the others.
+
+A folder is not a container. It is a record in the database. A file has a
+reference to at most one folder. A folder has a reference to at most one
+parent folder. These references stay visible to the server. The server
+needs them to list a folder.
+
+#### 9.4.1 What the server sees
+
+- which file is in which folder,
+- which folder is the parent of which folder,
+- `folder_public_key` of each folder,
+- if a folder is shared.
+
+The server does not see the name of a folder.
+
+#### 9.4.2 Names
+
+The name is in `sealed_folder_metadata` (section 8.4.2). The server cannot
+compare names. Thus the server cannot reject two folders with the same name
+in one parent. The client does this check. Two folders with the same name
+can exist if two clients create them at the same time. This causes no
+damage.
+
+#### 9.4.3 Shared folder link
+
+```
+https://{host}/s/folders/{share_token}#{base64url(folder_private_key)}
+```
+
+- `share_token` is a random value that the server makes, as today. The
+  server gives the list of the folder only to a request with the token.
+- The part after `#` is the private key of the folder. The server does not
+  get it.
+- The shared folder shows its public files and all folders below it, with
+  their public files. This is a change. Today a shared folder shows only its
+  direct files. The project owner confirmed that the old behaviour was not
+  intentional.
+
+Procedure for the visitor:
+
+1. The client requests the list with `share_token`. The server returns
+   `sealed_folder_metadata`, the folder stanzas of the files, and the
+   `parent_folder_stanza` of each folder directly below.
+2. The client opens the name and each file key with `folder_private_key`.
+3. For a folder below, the client opens `parent_folder_stanza` and gets the
+   private key of that folder. Then it does this procedure for that folder.
+
+#### 9.4.4 Operations of the owner
+
+| Operation              | What the client does                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| Put a file in a folder | Make a folder stanza for the new folder. Delete the old folder stanza.        |
+| Make a file private    | Delete its folder stanza.                                                     |
+| Make a file public     | Make its folder stanza.                                                       |
+| Rename a folder        | Make a new `sealed_folder_metadata`.                                          |
+| Delete a folder        | Its files and folders move up one level. Make new stanzas for the new parent. |
+| Rotate the account key | Make new `owner_folder_stanza` values in the migration (section 8.3.4).       |
+
+A script client that puts files in a folder has `folder_public_key` of that
+folder in its configuration, together with `account_public_key`.
+
+#### 9.4.5 Stop sharing
+
+When the owner stops sharing a folder:
+
+1. The server deletes `share_token`. The old link gives no list.
+2. The client makes a new key pair for the folder and for each folder below
+   it.
+3. The client makes new stanzas for these folders and their files.
+
+Step 1 has an immediate effect if the server is honest. Steps 2 and 3
+protect the files that arrive later, also if the server is compromised.
+
+A visitor who opened a file before this has its `file_key`. That person can
+read that file if the person gets the ciphertext again. This is the same
+limit as for a share link of one file.
+
+The work of steps 2 and 3 increases with the number of files and folders
+below the folder.
+
+#### 9.4.6 Points that are not decided
+
+- If a link can show a folder without the folders below it. This needs a
+  second key for each folder.
+- If a folder that is not shared needs folder stanzas for its files. This
+  draft makes them at all times, because a script client cannot know if a
+  folder is shared.
+
+### 9.5 Tags and OCR
 
 **OPEN**. See section 13.
 
@@ -927,9 +1107,7 @@ file with a link preview cannot be encrypted.
 
 ## 13. Open questions
 
-1. **Folders.** Folder names are plain text today. Shared folders have a
-   server token. Does a folder get a folder key that wraps the file keys in
-   it? How does a shared folder link carry that key?
+1. **Folders.** See section 9.4.6.
 2. **Tags.** Do tag names get encryption under a key of the account?
 3. **OCR.** Does OCR move to the client? Where does the encrypted text go, and
    how does search use it?
@@ -966,3 +1144,4 @@ file with a link preview cannot be encrypted.
 | 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                      |
 | 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                   |
 | 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back. |
+| 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                      |
