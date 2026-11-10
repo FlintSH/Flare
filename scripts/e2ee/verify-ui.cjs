@@ -561,8 +561,10 @@ function startMailSink() {
       }
     })
   })
+  // Any free loopback port, or the one a shared machine reserves for it.
+  const port = Number(process.env.FLARE_E2EE_SMTP_PORT) || 0
   return new Promise((resolve) =>
-    server.listen(0, '127.0.0.1', () =>
+    server.listen(port, '127.0.0.1', () =>
       resolve({
         port: server.address().port,
         close: () => server.close(),

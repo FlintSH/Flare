@@ -804,9 +804,16 @@ describe('creating an archive from files', () => {
     const stored = await encrypted(secret)
     const server = fakeServer({ [URL]: stored })
     const fetch: JobEnvironment['fetch'] = (url, init) =>
-      url === '/api/files/alexm/plain.txt'
-        ? Promise.resolve(new Response(plain))
-        : server.fetch(url, init)
+      url !== '/api/files/alexm/plain.txt'
+        ? server.fetch(url, init)
+        : Promise.resolve(
+            init.headers?.Range
+              ? new Response(plain.subarray(0, 1), {
+                  status: 206,
+                  headers: { 'Content-Range': `bytes 0-0/${plain.length}` },
+                })
+              : new Response(plain)
+          )
     let uploaded: (EncryptedStreamSource & { all: Uint8Array }) | null = null
     const result = await createEncryptedArchive(
       [
@@ -823,7 +830,8 @@ describe('creating an archive from files', () => {
           encrypted: false,
           url: '/api/files/alexm/plain.txt',
           name: 'plain.txt',
-          size: plain.length,
+          // What the library lists, a little off: the server's total counts.
+          size: plain.length + 3,
         },
       ],
       { name: 'Archive.zip', format: 'zip' },
@@ -873,9 +881,21 @@ describe('creating an archive from files', () => {
   })
 
   it('refuses a source over 256 MiB and a selection over 512 MiB before it reads them', async () => {
+    const sizes: Record<string, number> = {
+      '/api/files/a/huge.bin': 257 * 1024 ** 2,
+      '/api/files/a/part-1.bin': 200 * 1024 ** 2,
+      '/api/files/a/part-2.bin': 200 * 1024 ** 2,
+      '/api/files/a/part-3.bin': 200 * 1024 ** 2,
+    }
     const environment: JobEnvironment = {
-      fetch: async () => {
-        throw new Error('Nothing may be fetched')
+      // Only the size of each source is asked for. No content is read.
+      fetch: async (url, init) => {
+        if (init.headers?.Range !== 'bytes=0-0')
+          throw new Error('Nothing may be fetched')
+        return new Response(new Uint8Array(1), {
+          status: 206,
+          headers: { 'Content-Range': `bytes 0-0/${sizes[url]}` },
+        })
       },
       upload: async () => {
         throw new Error('Nothing may be uploaded')

@@ -108,6 +108,52 @@ describe('owner short-link API', () => {
     expect(links.create).not.toHaveBeenCalled()
   })
 
+  it.each([
+    [
+      'a file key',
+      (key: string) =>
+        `https://flare.test/alexm/e_0123456789abcdefghijkl#${key}`,
+    ],
+    [
+      'a link secret',
+      (key: string) =>
+        `https://flare.test/alexm/e_0123456789abcdefghijkl#p.${key}`,
+    ],
+    [
+      'a key of a later version',
+      (key: string) =>
+        `https://other.example/x/e_0123456789abcdefghijkl#v2.${key}`,
+    ],
+  ])(
+    'refuses a target that carries %s after #, stores nothing and logs no key',
+    async (_name, link) => {
+      // 32 bytes as base64url: the form of a Flare key (section 12.6).
+      const key = Buffer.from(
+        Uint8Array.from({ length: 32 }, (_, index) => 200 - index * 5)
+      ).toString('base64url')
+      const logged: unknown[] = []
+      for (const level of ['info', 'warn', 'error'] as const)
+        vi.spyOn(loggers.api, level).mockImplementation(
+          (...args: unknown[]) => {
+            logged.push(args)
+          }
+        )
+      const response = await create(
+        json('https://flare.test/api/urls', { url: link(key) })
+      )
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        success: false,
+        error:
+          'This link has an encryption key after #. A short link is stored on the server, so shortening it would give the server the key. Share the full link instead.',
+      })
+      expect(links.create).not.toHaveBeenCalled()
+      // The refusal is recorded without the address that was refused.
+      expect(JSON.stringify(events)).not.toContain(key)
+      expect(JSON.stringify(logged)).not.toContain(key)
+    }
+  )
+
   it("lists the caller's links", async () => {
     links.findMany.mockResolvedValue([stored])
     const response = await listOwn(new Request('https://flare.test/api/urls'))

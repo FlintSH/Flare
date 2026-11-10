@@ -28,14 +28,16 @@
 // streams and keeps none. Either file can be left out. The measured browser
 // listens for DevTools on `FLARE_E2EE_MEASURE_DEBUG_PORT` (3298).
 const assert = require('node:assert/strict')
+const { spawn } = require('node:child_process')
 const { createHash } = require('node:crypto')
 const {
   createReadStream,
   readFileSync,
   readdirSync,
   statSync,
+  writeFileSync,
 } = require('node:fs')
-const { mkdir } = require('node:fs/promises')
+const { mkdir, rm } = require('node:fs/promises')
 const http = require('node:http')
 const os = require('node:os')
 const path = require('node:path')
@@ -272,6 +274,15 @@ async function openTab(browser) {
     targetId,
     flatten: true,
   })
+  // A tab that a person looks at: visible and focused. A hidden tab plays
+  // media in another way.
+  await browser.send('Page.enable', {}, sessionId)
+  await browser.send('Page.bringToFront', {}, sessionId)
+  await browser.send(
+    'Emulation.setFocusEmulationEnabled',
+    { enabled: true },
+    sessionId
+  )
   const evaluate = async (expression) => {
     const result = await browser.send(
       'Runtime.evaluate',
@@ -290,8 +301,21 @@ async function openTab(browser) {
     for (;;) {
       const value = await evaluate(expression).catch(() => null)
       if (value) return value
-      if (Date.now() > deadline)
-        throw new Error(`Timed out waiting for: ${expression.slice(0, 120)}`)
+      if (Date.now() > deadline) {
+        // A picture and the address of the page, to see what it waited on.
+        const shot = await browser
+          .send('Page.captureScreenshot', { format: 'png' }, sessionId)
+          .catch(() => null)
+        if (shot)
+          writeFileSync(
+            path.join(downloadsPath, 'timed-out.png'),
+            Buffer.from(shot.data, 'base64')
+          )
+        const where = await evaluate('location.href').catch(() => '?')
+        throw new Error(
+          `Timed out at ${where} waiting for: ${expression.slice(0, 120)}`
+        )
+      }
       await new Promise((resolve) => setTimeout(resolve, intervalMs))
     }
   }
@@ -299,6 +323,15 @@ async function openTab(browser) {
     evaluate,
     until,
     goto: (url) => browser.send('Page.navigate', { url }, sessionId),
+    /** A real mouse click, which gives the page user activation. */
+    async click(x, y) {
+      for (const type of ['mousePressed', 'mouseReleased'])
+        await browser.send(
+          'Input.dispatchMouseEvent',
+          { type, x, y, button: 'left', clickCount: 1 },
+          sessionId
+        )
+    },
     async setFile(selector, file) {
       const { root } = await browser.send('DOM.getDocument', {}, sessionId)
       const { nodeId } = await browser.send(
@@ -371,10 +404,24 @@ async function upload(tab, file) {
   const name = path.basename(file)
   await tab.goto(`${origin}/dashboard/upload`)
   await tab.until(
-    `document.querySelector('[data-encryption-choice="encrypted"]') && document.querySelector('input[type="file"]')`
+    `Boolean(document.querySelector('[data-encryption-choice="encrypted"]') && document.querySelector('input[type="file"]'))`
   )
-  await tab.setFile('input[type="file"]', file)
-  await tab.until(clickButton('Upload 1 file'))
+  // The form takes the file once React has hydrated it. A choice that came
+  // too early is cleared, so the next one is a change again.
+  await tab.until(
+    `(() => { const input = document.querySelector('input[type="file"]'); return Boolean(input && Object.keys(input).some((key) => key.startsWith('__reactProps'))) })()`
+  )
+  for (let attempt = 0; ; attempt++) {
+    await tab.evaluate(
+      `(() => { const input = document.querySelector('input[type="file"]'); if (input) input.value = ''; return true })()`
+    )
+    await tab.setFile('input[type="file"]', file)
+    const clicked = await tab
+      .until(clickButton('Upload 1 file'), 8000)
+      .catch(() => false)
+    if (clicked) break
+    assert.ok(attempt < 8, 'The upload form did not take the file')
+  }
   await tab.until(
     `[...document.querySelectorAll('a')].some((link) => (link.getAttribute('aria-label') || link.textContent).trim() === ${JSON.stringify(`Open ${name}`)})`,
     uploadTimeoutMs,
@@ -418,7 +465,6 @@ async function main() {
       '--no-sandbox',
       '--disable-gpu',
       '--no-first-run',
-      '--autoplay-policy=no-user-gesture-required',
       `--user-data-dir=${profile}`,
       `--remote-debugging-port=${debugPort}`,
       'about:blank',
@@ -461,7 +507,9 @@ async function main() {
 
       // The owner downloads it from its page: the account stanza gives the key.
       await tab.goto(uploaded.value)
-      await tab.until(`document.querySelector('[data-encrypted-share="open"]')`)
+      await tab.until(
+        `Boolean(document.querySelector('[data-encrypted-share="open"]'))`
+      )
       const before = ciphertext.length
       const saved = await withPeakMemory(root, async () => {
         await tab.until(clickButton('Download'))
@@ -527,15 +575,27 @@ async function main() {
         )
         const ready = (Date.now() - opened) / 1000
         const start = { asked: asked(), sent: sent() }
-        // Seek to three quarters of the film and play.
+        report.videoTab = await tab.evaluate(
+          `({ visibility: document.visibilityState, focused: document.hasFocus(), controlled: Boolean(navigator.serviceWorker.controller), source: document.querySelector('video').currentSrc.slice(0, 40).replace(/local\\/.*/, 'local/…') })`
+        )
+        // As a person does: a click on the player starts it, it plays for
+        // two seconds, and then comes a seek to three quarters of the film.
+        const centre = await tab.evaluate(
+          `(() => { const video = document.querySelector('video'); video.muted = true; const box = video.getBoundingClientRect(); return { x: box.x + box.width / 2, y: box.y + box.height / 2 } })()`
+        )
+        await tab.click(centre.x, centre.y)
+        await tab.until(
+          `document.querySelector('video').currentTime > 2`,
+          60000
+        )
         const seekTo = Math.floor(duration * 0.75)
         const seekStarted = Date.now()
         await tab.evaluate(
-          `(() => { const video = document.querySelector('video'); video.muted = true; video.currentTime = ${seekTo}; return video.play().then(() => true) })()`
+          `(() => { document.querySelector('video').currentTime = ${seekTo}; return true })()`
         )
         await tab.until(
           `document.querySelector('video').currentTime > ${seekTo + 0.5}`,
-          120000,
+          300000,
           25
         )
         const seek = (Date.now() - seekStarted) / 1000

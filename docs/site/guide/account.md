@@ -188,6 +188,8 @@ Where the ZIP goes depends on the browser:
 
 The button shows **Exporting…** with a percentage, and below it the file being written, how much is done, and a **Cancel** button. Keep the tab open: closing it, reloading it or pressing **Cancel** stops the export. Nothing is saved from a stopped export to a chosen file; a stopped download shows as failed in your browser. An export does not resume. Start it again, and it reads every file again.
 
+<Screenshot src="/screenshots/encryption/export-progress.webp" alt="Your data section during an export built in the browser: the button reads Exporting with a percentage, Cancel is beside it, and below a progress bar are the number and name of the file being written, the bytes done, and a line that the browser decrypts each file and writes the ZIP on this device" caption="The export names the file it is writing. The percentage counts bytes, so small files move it little." />
+
 The ZIP contains:
 
 - `user-data.json`: the same account record. Each file also has `exportPath`, the path of its entry in the ZIP. An encrypted file that was decrypted has its real `name` and `mimeType` and `"decrypted": true`. Its sealed records stay listed.
@@ -198,6 +200,8 @@ The ZIP contains:
 A file that fails part-way is left out and the export goes on: a file that fails its integrity check, a file the server no longer sends, or a lost connection during that file. The summary under the button says how many were left out, and `export-report.json` names them. Export again to retry.
 
 If your encryption keys are locked in this browser, the page says so and offers two buttons. **Unlock** asks for your passphrase and then exports decrypted files. **Export without decrypting** gives the server's export: each encrypted file as ciphertext named `<file ID>.flare-encrypted`, with the records that open it listed in `user-data.json`.
+
+<Screenshot src="/screenshots/encryption/export-locked.webp" alt="Take your files with you card with a notice that the account has encrypted files and the encryption keys are locked in this browser, and the buttons Unlock and Export without decrypting" caption="With locked keys you choose: unlock and export decrypted files, or take the ciphertext." />
 
 Decrypted data goes only to the ZIP: to the file you chose or to your browser's download. Flare writes none of it to browser storage. Building the export takes time and bandwidth in proportion to your library, because every file passes through your device.
 

@@ -160,6 +160,9 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
   // A player whose local address stopped answering asks for a new one.
   const [attempt, setAttempt] = useState(0)
   const recoveries = useRef(0)
+  // Set when a player kept failing on local addresses: the file is then
+  // decrypted whole, as in a browser without a service worker.
+  const [wholeOnly, setWholeOnly] = useState(false)
   const { records } = file
   const accountKeys = keys.status === 'unlocked' ? keys.keys : null
   const keyStatus = keys.status
@@ -324,10 +327,16 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
       )
     }
 
-    if (
+    if (wholeOnly) wholeFile()
+    else if (
       rendering.renderer === 'video' ||
       rendering.renderer === 'audio' ||
-      (rendering.renderer === 'pdf' && !sandboxedPdf)
+      // A browser with a PDF viewer that shows nothing in a sandboxed
+      // frame: Chromium. One without a viewer, such as Chrome on Android,
+      // would save the answer as a file, so it gets the download card.
+      (rendering.renderer === 'pdf' &&
+        !sandboxedPdf &&
+        navigator.pdfViewerEnabled)
     ) {
       const { blobType } = rendering
       setPreview({ status: 'idle' })
@@ -395,16 +404,28 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
     }
     // `file` is the page's own prop and does not change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, rendering, attempt])
+  }, [opened, rendering, attempt, wholeOnly])
 
-  // A new address for a player whose address failed: at most two times in
-  // a row, so a file that cannot play ends in the player's error.
-  const recover = useCallback(() => {
-    if (recoveries.current >= 2) return false
-    recoveries.current++
-    setAttempt((value) => value + 1)
-    return true
-  }, [])
+  // A new address for a player whose address failed, two times. After that
+  // the file is decrypted whole one time, in case this browser's player and
+  // its service worker do not work together. A file that still cannot play
+  // ends in the player's error.
+  const recover = useCallback(
+    (code: number | undefined) => {
+      // The bytes arrived and the browser cannot decode them: no other
+      // address changes that.
+      if (code === MediaError.MEDIA_ERR_DECODE) return false
+      if (recoveries.current >= 3) return false
+      if (recoveries.current === 2) {
+        const size = plaintextSize(file.sizeBytes)
+        if (size === null || size > INLINE_PREVIEW_MAX_BYTES.video) return false
+        setWholeOnly(true)
+      } else setAttempt((value) => value + 1)
+      recoveries.current++
+      return true
+    },
+    [file.sizeBytes]
+  )
 
   useEffect(() => {
     if (!copied) return
@@ -792,9 +813,13 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
             </Button>
           )}
         </div>
-        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p
+          className="flex items-center gap-1.5 text-pretty text-xs text-muted-foreground"
+          data-encrypted-note
+        >
           <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          End-to-end encrypted. Decrypted in your browser.
+          End-to-end encrypted. Decrypted in your browser, so there is no “Open
+          original” address.
         </p>
       </div>
     </div>

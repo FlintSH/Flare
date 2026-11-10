@@ -59,7 +59,7 @@ export function VideoPlayer({
   file: { name: string; mimeType: string }
   src: string
   /** Asks for a new `src` after a failure. True if one is on its way. */
-  recover?: () => boolean
+  recover?: (code: number | undefined) => boolean
 }) {
   const { failed, onError, onLoadedMetadata } = useMediaRecovery(src, recover)
 

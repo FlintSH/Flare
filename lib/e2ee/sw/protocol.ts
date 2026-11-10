@@ -10,7 +10,8 @@ import {
  * addresses (docs/e2ee-spec.md, section 12.2), and the rules for what such
  * an address may answer. Pure: the page, the worker and the tests share it.
  *
- * A local address is `/_flare/local/{token}`. No request for it reaches the
+ * A local address is `/_flare/local/{token}`, and for a PDF in a frame
+ * `/_flare/local/{token}/document.pdf`. No request for it reaches the
  * server while the worker runs: the worker answers with bytes it decrypts.
  * Those bytes are not trusted. A person who knows an account public key can
  * make a file that decrypts correctly (section 3.3, limit 2), so the answer
@@ -136,14 +137,30 @@ export function isLocalToken(token: unknown): token is string {
   return typeof token === 'string' && TOKEN.test(token)
 }
 
-export function localAddressPath(token: string): string {
-  return `${LOCAL_ADDRESS_PREFIX}${token}`
+/**
+ * The last part of a `frame` address. The PDF viewer of a browser shows the
+ * last part of the address as the title of a document that has none, and
+ * names a saved copy after it. The token would be that title. The label is
+ * the same for every file: the name of an encrypted file is never in an
+ * address, because a browser without a worker sends the address to the
+ * server.
+ */
+export const LOCAL_FRAME_LABEL = 'document.pdf'
+
+export function localAddressPath(token: string, mode?: LocalMode): string {
+  const path = `${LOCAL_ADDRESS_PREFIX}${token}`
+  return mode === 'frame' ? `${path}/${LOCAL_FRAME_LABEL}` : path
 }
 
-/** The token of a local address path, or null for each other path. */
+/**
+ * The token of a local address path, null for each other path, and the
+ * empty text for a path under the prefix that is not an address.
+ */
 export function localAddressToken(pathname: string): string | null {
   if (!pathname.startsWith(LOCAL_ADDRESS_PREFIX)) return null
-  const token = pathname.slice(LOCAL_ADDRESS_PREFIX.length)
+  const rest = pathname.slice(LOCAL_ADDRESS_PREFIX.length)
+  const label = `/${LOCAL_FRAME_LABEL}`
+  const token = rest.endsWith(label) ? rest.slice(0, -label.length) : rest
   return isLocalToken(token) ? token : ''
 }
 

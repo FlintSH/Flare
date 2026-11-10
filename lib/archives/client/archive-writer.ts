@@ -20,6 +20,11 @@ export interface ArchiveInput {
    * or more; an entry without a size gets the 64-bit form.
    */
   readonly size?: number
+  /**
+   * A size that is expected and not required, such as the size a database
+   * lists for a file. ZIP uses it only to choose the 64-bit form.
+   */
+  readonly sizeHint?: number
   /** Opens the bytes. Called when the writer reaches the entry. */
   open(): AsyncIterable<Uint8Array> | Promise<AsyncIterable<Uint8Array>>
 }
@@ -159,7 +164,8 @@ export async function* zipBytes(
     const name = encoder.encode(input.name)
     if (!name.length || name.length > 0xffff)
       throw new Error('An archive entry name is empty or too long')
-    const zip64 = input.size === undefined || input.size >= ZIP64_FROM
+    const expected = input.size ?? input.sizeHint
+    const zip64 = expected === undefined || expected >= ZIP64_FROM
     const method = deflate ? 8 : 0
     const stamp = dosTime(input.date ?? new Date())
     const record: ZipRecord = {

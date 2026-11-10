@@ -370,6 +370,7 @@ async function main() {
       ['/api/profile/upload-token', 'GET'],
       ['/api/profile/export', 'GET'],
       ['/api/profile/export/progress', 'GET'],
+      ['/api/profile/export/manifest', 'GET'],
       ['/api/profile/sharex', 'GET'],
       ['/api/profile', 'PUT', { name: 'Denied' }],
       ['/api/profile/avatar', 'POST'],

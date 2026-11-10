@@ -36,7 +36,7 @@ export type LocalAddressEvent =
   | { readonly type: 'failed'; readonly reason: LocalFailure | 'cancelled' }
 
 export interface LocalAddress {
-  /** `/_flare/local/{token}`. Give it to a media element or a frame. */
+  /** The local address. Give it to a media element or a frame. */
   readonly url: string
   /** Resolves when the worker holds the address. Rejects if it refused it. */
   readonly registered: Promise<void>
@@ -229,7 +229,7 @@ async function start(): Promise<LocalAddresses | null> {
       // A caller that does not wait must not get an unhandled rejection.
       registered.catch(() => undefined)
       return {
-        url: localAddressPath(token),
+        url: localAddressPath(token, resource.mode),
         registered,
         refresh: () => send(entry),
         watch(listener) {

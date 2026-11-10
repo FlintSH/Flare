@@ -262,8 +262,8 @@ export function exportArchive(
   const fetched = (entry: ExportEntry): ArchiveInput => ({
     name: entry.path,
     date: new Date(entry.file.uploadedAt),
-    // The stored size is exact for a plain file and for ciphertext.
-    size: entry.file.sizeBytes,
+    // The size the server lists. The entry holds what the server sends.
+    sizeHint: entry.file.sizeBytes,
     async open() {
       const response = await environment.fetch(
         `/api/files${entry.file.urlPath}`,

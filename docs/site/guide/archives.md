@@ -242,6 +242,10 @@ An archive you uploaded as an [encrypted file](./encryption) is stored as cipher
 - A visitor with the link browses the archive on its share page. The key is the part of the link after `#`. The server is asked for byte ranges of ciphertext only: it gets no entry name, serves no entry, and sets no unlock cookie.
 - **Download entry** saves one entry. **Extract all** makes a new encrypted file from each entry. **Create archive** builds a ZIP or TAR.GZ from the files you select and uploads it as a new encrypted file. A selection that mixes encrypted and plain files is built in the browser too, and the result is encrypted.
 
+<Screenshot src="/screenshots/encryption/archive-entry.webp" alt="Browse archive dialog for the encrypted project-bundle-private.zip with the photos folder open and the image harbor-inside-private.png previewed beside a Download entry button" caption="The browser listed this encrypted ZIP and decrypted one image from it. The server sent ranges of ciphertext." />
+
+<Screenshot src="/screenshots/encryption/archive-share.webp" alt="Share page of the encrypted project-bundle-private.zip with Archive contents listing the folders data, notes, photos and web, a search field and an empty preview pane" caption="A visitor with the full link browses the same archive on its share page." />
+
 What is different from a plain archive:
 
 | Topic                    | Encrypted archive, in your browser                                                                                                                                                                                                                                                                                                                        |
@@ -257,6 +261,8 @@ What is different from a plain archive:
 | API                      | The archive endpoints answer for plain files only. For an encrypted file they return `400` with a message that says the browser does this work.                                                                                                                                                                                                           |
 
 The limits for extraction and creation are the same as for plain archives: 256 MiB for the archive or one file, 512 MiB unpacked or selected, 1,000 entries, 100 selected files, paths 20 levels deep. They apply to what the archive declares, before anything is uploaded. An archive with an unsafe path, a link, an encrypted entry or a name Flare's rules refuse is listed, and **Extract all** is unavailable with the reason shown. There is no 120-second deadline: the work runs for as long as the dialog stays open.
+
+<Screenshot src="/screenshots/encryption/archive-extract.webp" alt="Extract archive dialog for an encrypted ZIP with Save to Unfiled, Private (no profile), and a note that this browser decrypts each file, encrypts it again as its own file and uploads it, and that Flare makes no folders from an encrypted archive" caption="The extraction form of an encrypted archive says what is different before you start." />
 
 The entry list of an archive is content that someone else may have made, so the browser reads it with the same parser and the same rules as the server, and shows every name as text.
 

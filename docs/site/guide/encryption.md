@@ -75,9 +75,13 @@ Opening a password-protected link takes a moment while your browser derives the 
 
 Your browser fetches the ciphertext, checks every 64 KiB chunk and the end of the file, and decrypts it. A file that was changed or cut after upload is refused: Flare neither shows nor saves it.
 
+<Screenshot src="/screenshots/encryption/media-integrity-failed.webp" alt="Share page of the encrypted audio file board-call-private.ogg showing This file could not be opened: it did not pass its integrity check, it was changed or cut after it was encrypted, and Flare will not show or save it" caption="This file was cut at a chunk border on the server. It is refused before anything plays." />
+
 ### Video, audio and downloads
 
 A video or audio file plays without being downloaded first. A [service worker](https://developer.mozilla.org/docs/Web/API/Service_Worker_API) of Flare, a small script your browser runs in the background for this site, answers the player from a local address of the form `/_flare/local/{random}`. When the player asks for a part of the file, the worker fetches the 64 KiB chunks that hold that part, checks them, decrypts them and hands them over. Seeking in a long video therefore fetches the place you seek to, not everything before it, and there is no size limit.
+
+<Screenshot src="/screenshots/encryption/media-video.webp" alt="Share page of the encrypted video product-walkthrough-private.webm paused at 2:24 of 3:00 in the browser's player, with Download and Copy link below and a note that the file is decrypted in the browser" caption="A seek to 2:24 fetched the chunks around that point of the 36 MB file, not the two minutes before it." />
 
 **Download** works the same way: the worker decrypts the file as a stream and your browser writes it to disk, so a file of several gigabytes does not have to fit in memory. If the file fails its integrity check part-way, the browser reports a failed download and keeps no file.
 
@@ -107,7 +111,11 @@ Images, text and SVG are small enough to decrypt in memory, with these limits:
 | Text and code | 1 MB                   | Download   |
 | SVG images    | 2 MB                   | Download   |
 
-A PDF opens in your browser's own PDF viewer inside the page. In Chrome, Edge and other Chromium browsers it comes from a local address, whose answer tells the browser to isolate it. In Firefox and Safari it is decrypted in memory and shown in an isolated frame. A Chromium browser without a service worker offers the download instead, because it shows no PDF in an isolated frame.
+A PDF opens in your browser's own PDF viewer inside the page. In Chrome, Edge and other Chromium browsers it comes from a local address, whose answer tells the browser to isolate it. In Firefox and Safari it is decrypted in memory and shown in an isolated frame. A Chromium browser without a service worker offers the download instead, because it shows no PDF in an isolated frame. So does a browser without a built-in PDF viewer, such as Chrome on Android.
+
+The viewer's toolbar in a Chromium browser calls every such file `document.pdf`. A local address never carries a file name, because the name of an encrypted file must not reach the server. Use Flare's **Download** button, not the one in the viewer's toolbar, to save the file under its real name.
+
+<Screenshot src="/screenshots/encryption/media-pdf.webp" alt="Share page of the encrypted file contract-draft-private.pdf open in the browser's PDF viewer, whose toolbar shows the title document.pdf" caption="Chromium's own viewer shows the decrypted PDF from a local address." />
 
 Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download. A local address answers only with the exact types of images, video, audio and PDF, or as a download, and every answer tells the browser not to guess a type and to run nothing.
 

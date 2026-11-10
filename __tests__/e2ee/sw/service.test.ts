@@ -425,6 +425,54 @@ describe('the navigation attack', () => {
   })
 })
 
+describe('a PDF in a frame', () => {
+  it('answers a frame navigation at the labelled address and nothing else', async () => {
+    const { plaintext, service, resource } = await setup(3 * CHUNK_SIZE + 7)
+    service.register(
+      resource({ mode: 'frame', contentType: 'application/pdf' }),
+      PAGE,
+      null
+    )
+    const address = `${ORIGIN}${localAddressPath(TOKEN, 'frame')}`
+    expect(address.endsWith(`/${TOKEN}/document.pdf`)).toBe(true)
+    const frame = { mode: 'navigate', destination: 'iframe' }
+    const response = await service.handle(
+      { ...request(TOKEN, frame), url: address },
+      ''
+    )!
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('application/pdf')
+    expect(response.headers.get('content-disposition')).toBe('inline')
+    expect(response.headers.get('content-security-policy')).toBe(
+      "sandbox; default-src 'none'"
+    )
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(response.headers.get('accept-ranges')).toBeNull()
+    expectSameBytes(await body(response), plaintext)
+    // A tab, a script and a media element get nothing from it.
+    for (const [shape, client] of [
+      [{ mode: 'navigate', destination: 'document' }, ''],
+      [{ mode: 'cors', destination: '' }, PAGE],
+      [{ mode: 'no-cors', destination: 'video' }, PAGE],
+    ] as const) {
+      const refused = await service.handle(
+        { ...request(TOKEN, shape), url: address },
+        client
+      )!
+      expect(refused.status, JSON.stringify(shape)).toBe(403)
+    }
+    // No other last part is an address.
+    const other = await service.handle(
+      {
+        ...request(TOKEN, frame),
+        url: `${ORIGIN}/_flare/local/${TOKEN}/x.pdf`,
+      },
+      ''
+    )!
+    expect(other.status).toBe(404)
+  })
+})
+
 describe('a download', () => {
   it('streams the whole file in one counted request and answers one time', async () => {
     const { plaintext, server, service, notices, resource } = await setup(

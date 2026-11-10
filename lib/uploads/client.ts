@@ -94,7 +94,14 @@ function send(
       reject(cancelled())
       return
     }
-    signal?.addEventListener('abort', () => request.abort(), { once: true })
+    const abort = () => request.abort()
+    signal?.addEventListener('abort', abort, { once: true })
+    // The signal lives as long as the upload, and its listener holds this
+    // request with the body it sent. Without this, every part of a large
+    // upload stayed in memory until the last one: 2 GiB for a 2 GiB file.
+    request.addEventListener('loadend', () =>
+      signal?.removeEventListener('abort', abort)
+    )
     if (onProgress)
       request.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) onProgress(event.loaded)
@@ -437,9 +444,8 @@ async function uploadEncrypted(
         'PUT',
         `/api/files/chunks/${uploadId}/part/${number}`,
         // The bytes themselves, not a Blob of them: a browser counts every
-        // Blob against a store that it empties only at garbage collection,
-        // and a file of 2 GiB in 5 MiB parts filled it
-        // (net::ERR_BLOB_OUT_OF_MEMORY).
+        // Blob against a store of limited size, and frees one only after
+        // garbage collection.
         bytes,
         ENCRYPTED_PART_HEADERS,
         (loaded) => reportPart(number, loaded),

@@ -704,16 +704,26 @@ async function violations(page) {
   return page.evaluate(() => window.__cspViolations.slice())
 }
 
-async function shot(page, name) {
+async function shot(page, name, focus) {
   if (!screenshots) return
   await mkdir(screenshots, { recursive: true })
+  // A phone capture is of the whole page, unless a dialog covers it.
+  const fullPage = mobile && !(await page.getByRole('dialog').count())
+  // A state below the fold: the capture is of the part that changed. A
+  // capture of the whole page starts at the top, or the bar that stays on
+  // screen is drawn in the middle of it.
+  if (fullPage) await page.evaluate(() => window.scrollTo(0, 0))
+  else if (focus)
+    await focus.evaluate((element) =>
+      element.scrollIntoView({ block: 'center' })
+    )
   await page.waitForTimeout(300)
   await page.screenshot({
     path: path.join(
       screenshots,
       `${name}-${mobile ? 'mobile' : 'desktop'}-${theme}.png`
     ),
-    fullPage: mobile && !(await page.getByRole('dialog').count()),
+    fullPage,
   })
 }
 
@@ -881,7 +891,7 @@ async function localSource(locator) {
     .poll(() => locator.evaluate((element) => element.getAttribute('src')))
     .toMatch(/^\/_flare\/local\/[A-Za-z0-9_-]{43}/)
   const src = await locator.evaluate((element) => element.getAttribute('src'))
-  localTokens.add(src.slice(LOCAL_PREFIX.length).split('#')[0])
+  localTokens.add(src.slice(LOCAL_PREFIX.length, LOCAL_PREFIX.length + 43))
   return src
 }
 
@@ -995,12 +1005,12 @@ async function testVideo(browser) {
     atStart.asked < storedBytes * 0.3,
     `The player read ${atStart.asked} of ${storedBytes} bytes before it played`
   )
-  await shot(page, 'media-video')
 
   // A seek to 80 percent: the chunks there, not the 80 percent before them.
   const seekTo = Math.floor(duration * 0.8)
   await playFrom(player, seekTo)
   const afterSeek = { asked: asked(), sent: sent() }
+  await shot(page, 'media-video')
   assert.ok(
     afterSeek.asked < storedBytes * 0.5,
     `After the seek the browser had asked for ${afterSeek.asked} of ${storedBytes} bytes`
@@ -1453,6 +1463,30 @@ async function testFallback(browser) {
   )
 }
 
+/**
+ * Scrolls the library until a control of one card exists. The library is
+ * virtual: on a narrow page a card far down is not in the document until
+ * the page is scrolled to it.
+ */
+async function reveal(page, locator) {
+  const deadline = Date.now() + 60000
+  while (!(await locator.count()) && Date.now() < deadline) {
+    const atEnd = await page.evaluate(() => {
+      const end =
+        window.scrollY + window.innerHeight >=
+        document.documentElement.scrollHeight - 4
+      window.scrollTo(
+        0,
+        end ? 0 : window.scrollY + Math.round(window.innerHeight * 0.8)
+      )
+      return end
+    })
+    await page.waitForTimeout(atEnd ? 500 : 200)
+  }
+  await expect(locator).toBeVisible({ timeout: 10000 })
+  await locator.scrollIntoViewIfNeeded()
+}
+
 /** The library card menu of a file, by its decrypted name. */
 async function openCardMenu(page, name) {
   await page.goto(`${origin}/dashboard`)
@@ -1460,7 +1494,7 @@ async function openCardMenu(page, name) {
     name: `Manage ${name}`,
     exact: true,
   })
-  await expect(manage).toBeVisible({ timeout: 60000 })
+  await reveal(page, manage)
   await manage.click()
   return page.getByRole('menu')
 }
@@ -1554,7 +1588,12 @@ async function testPdf(browser) {
   const frame = page.locator('iframe[title$="document preview"]')
   await expect(frame).toBeVisible()
   const src = await localSource(frame)
-  assert.match(src, /#navpanes=0&view=FitH$/)
+  // The viewer titles the document after the last part of its address, so
+  // that part is a fixed label, never the token and never the name.
+  assert.match(
+    src,
+    /^\/_flare\/local\/[A-Za-z0-9_-]{43}\/document\.pdf#navpanes=0&view=FitH$/
+  )
   // The answer carries the sandbox; the frame must not, or Chromium shows
   // no PDF in it.
   assert.equal(await frame.getAttribute('sandbox'), null)
@@ -1750,6 +1789,22 @@ function hostileZip() {
   return Buffer.concat([...contents, central, end])
 }
 
+/** The entries of a TAR, read with tar-stream: `{ name: Buffer }`. */
+async function untar(buffer) {
+  const extract = tarStream.extract()
+  const files = {}
+  const reading = (async () => {
+    for await (const entry of extract) {
+      const chunks = []
+      for await (const chunk of entry) chunks.push(chunk)
+      files[entry.header.name] = Buffer.concat(chunks)
+    }
+  })()
+  extract.end(buffer)
+  await reading
+  return files
+}
+
 /** The entries of a ZIP, read with yauzl: `{ name: Buffer }`. */
 function unzip(buffer) {
   return new Promise((resolve, reject) => {
@@ -1909,10 +1964,27 @@ async function testArchives(browser, alex, keys) {
     page.getByRole('heading', { name: 'Extract archive' })
   ).toBeVisible()
   await shot(page, 'archive-extract-form')
+  // For a picture of the progress, each upload of the capture run waits a
+  // moment. The requests themselves are not changed.
+  if (screenshots)
+    await page.route('**/api/files', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 900))
+      await route.continue()
+    })
   await page.getByRole('button', { name: 'Extract files' }).click()
+  if (screenshots) {
+    await expect(
+      page.getByRole('progressbar', { name: 'Extraction progress' })
+    ).toBeVisible()
+    await expect(
+      page.getByText(/Encrypting and uploading file \d+ of 5/)
+    ).toBeVisible()
+    await shot(page, 'archive-extract-progress')
+  }
   await expect(
     page.getByRole('heading', { name: 'Archive extracted' })
   ).toBeVisible({ timeout: 120000 })
+  if (screenshots) await page.unroute('**/api/files')
   await shot(page, 'archive-extracted')
   await page.getByRole('button', { name: 'Done', exact: true }).click()
   const extracted = await prisma.file.findMany({
@@ -1944,8 +2016,11 @@ async function testArchives(browser, alex, keys) {
   // --- Create an archive from two encrypted files and one plain file.
   await page.goto(`${origin}/dashboard`)
   await page.getByRole('button', { name: 'Select files', exact: true }).click()
-  for (const name of [fixtures.text.name, fixtures.image.name, PLAIN.name])
-    await page.getByLabel(`Select ${name}`, { exact: true }).check()
+  for (const name of [fixtures.text.name, fixtures.image.name, PLAIN.name]) {
+    const box = page.getByLabel(`Select ${name}`, { exact: true })
+    await reveal(page, box)
+    await box.check()
+  }
   await page
     .getByRole('button', { name: 'Create archive', exact: true })
     .click()
@@ -1953,10 +2028,22 @@ async function testArchives(browser, alex, keys) {
   await create.getByLabel('Archive name').fill('handover-private.zip')
   extraPlaintext.set('handover-private', 'the name of a created archive')
   await shot(page, 'archive-create-form')
+  if (screenshots)
+    await page.route('**/api/files', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 1500))
+      await route.continue()
+    })
   await create.getByRole('button', { name: 'Create archive' }).click()
+  if (screenshots) {
+    await expect(
+      page.getByRole('progressbar', { name: 'Archive creation progress' })
+    ).toBeVisible()
+    await shot(page, 'archive-create-progress')
+  }
   await expect(
     page.getByRole('heading', { name: 'Archive created' })
   ).toBeVisible({ timeout: 120000 })
+  if (screenshots) await page.unroute('**/api/files')
   await shot(page, 'archive-created')
   const createdRow = await prisma.file.findFirstOrThrow({
     where: { userId: accounts.alex.id },
@@ -1985,7 +2072,67 @@ async function testArchives(browser, alex, keys) {
     'An archive is created in the browser from two encrypted files and one plain file: the result is a new encrypted file named handover-private.zip in sealed metadata; decrypted with independent code and read with yauzl it holds the three files byte for byte, and "Open archive" lists it'
   )
 
-  // --- TAR.GZ: browse and extract as the owner.
+  // --- A TAR.GZ from the same selection.
+  await page.goto(`${origin}/dashboard`)
+  await page.getByRole('button', { name: 'Select files', exact: true }).click()
+  for (const name of [fixtures.text.name, fixtures.image.name]) {
+    const box = page.getByLabel(`Select ${name}`, { exact: true })
+    await reveal(page, box)
+    await box.check()
+  }
+  await page
+    .getByRole('button', { name: 'Create archive', exact: true })
+    .click()
+  const createTar = page.getByRole('dialog', { name: 'Create archive' })
+  await createTar.getByLabel('Format').click()
+  await page.getByRole('option', { name: 'TAR.GZ' }).click()
+  await createTar.getByLabel('Archive name').fill('handover-private.tar.gz')
+  await createTar.getByRole('button', { name: 'Create archive' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Archive created' })
+  ).toBeVisible({ timeout: 120000 })
+  const tarRow = await prisma.file.findFirstOrThrow({
+    where: { userId: accounts.alex.id },
+    orderBy: [{ uploadedAt: 'desc' }, { id: 'desc' }],
+  })
+  const tarKey = fileKeyOf(tarRow, keys.accountPrivateKey)
+  assert.equal(metadataOf(tarRow, tarKey).name, 'handover-private.tar.gz')
+  const tarMembers = await untar(
+    zlib.gunzipSync(await plaintextOf(tarRow, tarKey))
+  )
+  assert.deepEqual(
+    Object.keys(tarMembers).sort(),
+    [fixtures.text.name, fixtures.image.name].sort()
+  )
+  assert.ok(tarMembers[fixtures.text.name].equals(fixtures.text.buffer))
+  assert.ok(tarMembers[fixtures.image.name].equals(fixtures.image.buffer))
+  await page.keyboard.press('Escape')
+  results.push(
+    'A TAR.GZ is created in the browser from two encrypted files: decrypted with independent code, gunzipped and read with tar-stream it holds both files byte for byte'
+  )
+
+  // --- TAR and TAR.GZ: browse and extract as the owner.
+  for (const [fixture, label] of [[tar, /TAR · 5 files/]]) {
+    const tarMenu = await openCardMenu(page, fixture.name)
+    await tarMenu.getByRole('menuitem', { name: 'Browse archive' }).click()
+    const tarDialog = page.getByRole('dialog', { name: 'Browse archive' })
+    await expect(tarDialog.getByText(label)).toBeVisible({ timeout: 30000 })
+    const tarCount = await prisma.file.count({
+      where: { userId: accounts.alex.id },
+    })
+    await tarDialog.getByRole('button', { name: 'Extract all' }).click()
+    await page.getByRole('button', { name: 'Extract files' }).click()
+    await expect(
+      page.getByRole('heading', { name: 'Archive extracted' })
+    ).toBeVisible({ timeout: 120000 })
+    await page.getByRole('button', { name: 'Done', exact: true }).click()
+    assert.equal(
+      (await prisma.file.count({ where: { userId: accounts.alex.id } })) -
+        tarCount,
+      ARCHIVE_ENTRIES.length
+    )
+  }
+
   const tgzMenu = await openCardMenu(page, tgz.name)
   await tgzMenu.getByRole('menuitem', { name: 'Browse archive' }).click()
   const tgzDialog = page.getByRole('dialog', { name: 'Browse archive' })
@@ -2202,7 +2349,11 @@ async function testExport(browser, keys) {
   await expect(
     streamed.page.locator('[data-export-phase="running"]')
   ).toBeVisible()
-  await shot(streamed.page, 'export-progress')
+  await shot(
+    streamed.page,
+    'export-progress',
+    streamed.page.locator('[data-export-phase]')
+  )
   assert.match(download.suggestedFilename(), /^flare-data-export-\d+\.zip$/)
   assert.match(download.url(), /\/_flare\/local\//)
   localTokens.add(download.url().split(LOCAL_PREFIX)[1])
@@ -2210,7 +2361,11 @@ async function testExport(browser, keys) {
   await expect(streamed.page.locator('[data-export-phase="done"]')).toBeVisible(
     { timeout: 60000 }
   )
-  await shot(streamed.page, 'export-done')
+  await shot(
+    streamed.page,
+    'export-done',
+    streamed.page.locator('[data-export-phase]')
+  )
   const first = await checkExport(zip, library, 'streamed export')
   assert.deepEqual(
     await streamed.page.evaluate(() => window.__blobBytes),
@@ -2296,7 +2451,11 @@ async function testExport(browser, keys) {
   await expect(
     chosen.page.locator('[data-export-phase="locked"]')
   ).toBeVisible()
-  await shot(chosen.page, 'export-locked')
+  await shot(
+    chosen.page,
+    'export-locked',
+    chosen.page.locator('[data-export-phase]')
+  )
   const [serverDownload] = await Promise.all([
     chosen.page.waitForEvent('download', { timeout: 300000 }),
     chosen.page
@@ -2339,6 +2498,165 @@ async function testExport(browser, keys) {
   )
 }
 
+// ---------------------------------------------------------------- pastes and short links
+
+const PASTE = {
+  name: 'release-plan-private.js',
+  text: `// ${marker('paste')}\nconst release = { day: 'Friday', ready: true }\nexport default release\n`,
+  marker: marker('paste'),
+}
+
+async function testPaste(browser, alex) {
+  const { page } = alex
+  extraPlaintext.set(PASTE.name, 'the name of an encrypted paste')
+  extraPlaintext.set(PASTE.marker, 'plaintext of an encrypted paste')
+  await page.goto(`${origin}/dashboard/paste`)
+  await page.locator('#content').fill(PASTE.text)
+  await page.locator('#filename').fill(PASTE.name)
+  // Encrypted without a choice by the person.
+  await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
+    'data-encryption-choice',
+    'encrypted'
+  )
+  await page.getByRole('button', { name: 'Create paste' }).click()
+  const field = page.locator('#paste-created-link')
+  await expect(field).toHaveValue(
+    /\/alexm\/e_[A-Za-z0-9_-]{22}#[A-Za-z0-9_-]{43}$/
+  )
+  const address = link(await field.inputValue())
+  const row = await prisma.file.findFirstOrThrow({
+    where: { userId: accounts.alex.id, isPaste: true },
+    orderBy: { uploadedAt: 'desc' },
+  })
+  assert.equal(row.encrypted, true)
+  assert.equal(row.name, '')
+  const stored = await readFile(path.join(appDirectory, row.path))
+  assert.ok(!stored.toString('latin1').includes(PASTE.marker))
+
+  const visitor = await context(browser)
+  const view = visitor.page
+  await view.goto(address)
+  await expectShareState(view, 'open')
+  // Highlighting: the code view colours the JavaScript by its file name.
+  const code = view.getByRole('region', { name: `${PASTE.name} preview` })
+  await expect(code.getByText(PASTE.marker)).toBeVisible()
+  const colours = await code.evaluate((element) => {
+    const found = new Set()
+    for (const span of element.querySelectorAll('.cm-line span'))
+      found.add(getComputedStyle(span).color)
+    return found.size
+  })
+  assert.ok(colours >= 2, `The paste is shown in ${colours} colour`)
+  await shot(view, 'paste-encrypted')
+  // Copy.
+  await view.getByRole('button', { name: 'Copy text' }).click()
+  await expect.poll(() => clipboard(view)).toBe(PASTE.text)
+  // Download, under its real name.
+  const [download] = await Promise.all([
+    view.waitForEvent('download'),
+    view.getByRole('button', { name: 'Download', exact: true }).click(),
+  ])
+  assert.equal(download.suggestedFilename(), PASTE.name)
+  assert.equal(
+    (await readFile(await download.path())).toString('utf8'),
+    PASTE.text
+  )
+  // The raw view is the one feature an encrypted paste does not have, and
+  // the page says why. The viewer has no editor for any paste.
+  await expect(view.getByRole('button', { name: /Open original/ })).toHaveCount(
+    0
+  )
+  await expect(view.locator('[data-encrypted-note]')).toContainText(
+    'there is no “Open original” address'
+  )
+  for (const route of ['raw', 'direct']) {
+    const response = await fetch(`${origin}${row.urlPath}/${route}`)
+    assert.equal(response.status, 404, `/${route} of an encrypted paste`)
+  }
+  assert.equal(
+    await view.locator('textarea, [contenteditable="true"]').count(),
+    0
+  )
+  assert.deepEqual(await violations(view), [])
+  await visitor.ctx.close()
+  results.push(
+    'An encrypted paste keeps the viewer\'s features: the paste form encrypts by default (the stored object holds no paste text, the row no name), a signed-out visitor sees the JavaScript highlighted in several colours by its decrypted file name, "Copy text" puts the exact text on the clipboard, Download saves it under its real name, and the page has no "Open original": it says there is no such address, and /raw and /direct answer 404. The viewer has no editor, as for a plain paste'
+  )
+}
+
+async function testShortLinks(alex) {
+  const { page } = alex
+  // The form refuses a link with a key, and sends nothing.
+  for (const address of [
+    uploaded[fixtures.text.name],
+    ...(fixtures.shortVideo ? [uploaded[fixtures.shortVideo.name]] : []),
+  ]) {
+    const before = requests.length
+    await page.goto(`${origin}/dashboard/urls`)
+    await page.locator('#url').fill(address)
+    await page
+      .getByRole('button', { name: /Shorten|Create/ })
+      .first()
+      .click()
+    await expect(
+      page.getByText('This link has an encryption key after #.')
+    ).toBeVisible()
+    await page.waitForTimeout(300)
+    assert.ok(
+      !requests
+        .slice(before)
+        .some(
+          (request) =>
+            request.method === 'POST' && request.target === '/api/urls'
+        ),
+      'The short link form sent a link with a key'
+    )
+  }
+  // The capture shows a link that is no key of any file: 43 characters in
+  // the form of one, so that no image carries a real one.
+  await page
+    .locator('#url')
+    .fill(
+      `https://flare.example/alex/x7Kp2a#${'example-key-not-a-real-one-'.padEnd(43, 'A')}`
+    )
+  await page
+    .getByRole('button', { name: /Shorten|Create/ })
+    .first()
+    .click()
+  await expect(
+    page.getByText('This link has an encryption key after #.')
+  ).toBeVisible()
+  await shot(page, 'short-link-refused')
+  // The API refuses the same form of link from a script. This one is not a
+  // real key: 32 random bytes in the form of one.
+  const fake = randomBytes(32).toString('base64url')
+  const row = await rowOf(uploaded[fixtures.text.name])
+  for (const fragment of [fake, `p.${fake}`]) {
+    const response = await alex.ctx.request.post(`${origin}/api/urls`, {
+      data: { url: `${origin}${row.urlPath}#${fragment}` },
+      headers: { Origin: origin },
+    })
+    assert.equal(response.status(), 400)
+    assert.match(
+      (await response.json()).error,
+      /^This link has an encryption key after #\./
+    )
+  }
+  assert.equal(
+    await prisma.shortenedUrl.count({ where: { userId: accounts.alex.id } }),
+    0
+  )
+  // A link without a key, and one with an ordinary fragment, still shorten.
+  const ok = await alex.ctx.request.post(`${origin}/api/urls`, {
+    data: { url: `${origin}${row.urlPath}#notes` },
+    headers: { Origin: origin },
+  })
+  assert.equal(ok.status(), 200)
+  results.push(
+    'A short link with a key is rejected: the form refuses the link of an encrypted file and of a password-protected one with "This link has an encryption key after #." and sends no request, the API answers 400 with the same reason for a link with 43 base64url characters after # (alone and after "p."), no short link was stored, and a link with an ordinary fragment is still accepted'
+  )
+}
+
 // ---------------------------------------------------------------- run
 
 const scenarios = []
@@ -2371,6 +2689,8 @@ async function main() {
     scenario('truncated', () => testTruncated(browser, alex))
     scenario('archives', () => testArchives(browser, alex, keys))
     scenario('export', () => testExport(browser, keys))
+    scenario('paste', () => testPaste(browser, alex))
+    scenario('shortlinks', () => testShortLinks(alex))
     for (const { name, run } of scenarios)
       if (!only.length || only.includes(name)) await run()
 

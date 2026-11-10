@@ -330,6 +330,25 @@ async function* responseBytes(
   }
 }
 
+/** The size of a stored file, from the answer to a request for its first byte. */
+async function storedSize(
+  url: string,
+  environment: JobEnvironment
+): Promise<number> {
+  const response = await environment.fetch(url, {
+    headers: { Range: 'bytes=0-0' },
+    signal: environment.signal,
+    credentials: 'same-origin',
+    cache: 'no-store',
+  })
+  void response.body?.cancel().catch(() => undefined)
+  // An empty file has no first byte: the server answers 416 with its size.
+  const total = /\/(\d+)$/.exec(response.headers.get('content-range') ?? '')
+  if (![206, 416].includes(response.status) || !total)
+    throw new ArchiveError('One or more source files are unavailable.', 404)
+  return Number(total[1])
+}
+
 /**
  * Builds a ZIP or TAR.GZ from files of the account and uploads it as a new
  * encrypted file. Encrypted sources are decrypted here; plain sources are
@@ -367,10 +386,13 @@ export async function createEncryptedArchive(
             }),
         })
       } else {
-        builder.add(names[index], 'file', file.size)
+        // The exact size, which a TAR header needs: the total the server
+        // names for the stored file. The library lists sizes in megabytes.
+        const size = await storedSize(file.url, environment)
+        builder.add(names[index], 'file', size)
         inputs.push({
           name: names[index],
-          size: file.size,
+          size,
           async open() {
             const response = await environment.fetch(file.url, {
               signal,

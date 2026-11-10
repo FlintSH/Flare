@@ -25,6 +25,13 @@ describe('the form of a local address', () => {
 
   it('reads the token and tells its own paths from all others', () => {
     expect(localAddressToken(localAddressPath(TOKEN))).toBe(TOKEN)
+    expect(localAddressPath(TOKEN, 'media')).toBe(localAddressPath(TOKEN))
+    expect(localAddressPath(TOKEN, 'download')).toBe(localAddressPath(TOKEN))
+    // A PDF viewer titles a document after the last part of its address.
+    expect(localAddressPath(TOKEN, 'frame')).toBe(
+      `${LOCAL_ADDRESS_PREFIX}${TOKEN}/document.pdf`
+    )
+    expect(localAddressToken(localAddressPath(TOKEN, 'frame'))).toBe(TOKEN)
     for (const path of [
       '/',
       '/dashboard',
@@ -40,6 +47,10 @@ describe('the form of a local address', () => {
       LOCAL_ADDRESS_PREFIX,
       `${LOCAL_ADDRESS_PREFIX}short`,
       `${LOCAL_ADDRESS_PREFIX}${TOKEN}/more`,
+      `${LOCAL_ADDRESS_PREFIX}${TOKEN}/`,
+      `${LOCAL_ADDRESS_PREFIX}${TOKEN}/document.pdf/`,
+      `${LOCAL_ADDRESS_PREFIX}${TOKEN}/secret-name.pdf`,
+      `${LOCAL_ADDRESS_PREFIX}/document.pdf`,
       `${LOCAL_ADDRESS_PREFIX}${'A'.repeat(42)}.`,
       `${LOCAL_ADDRESS_PREFIX}../api/files`,
     ])

@@ -50,6 +50,25 @@ Markdown pastes wrap long lines to fit the screen, so they stay readable on a ph
 
 The viewer is read-only. HTML and Markdown shown as text/code are not a hosted website or a collaborative editor. If you need to revise the content, create a new paste and distribute its new link; the paste form does not edit an existing file.
 
+### What the viewer does for an encrypted paste
+
+An encrypted paste is decrypted in the visitor's browser, and the viewer works as for a plain one, with one exception:
+
+| Feature                      | Encrypted paste                                                                                                                                                                              |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Syntax highlighting          | Works. The language comes from the filename, which the browser decrypts with the text.                                                                                                       |
+| **Copy text**                | Works. It copies the decrypted text.                                                                                                                                                         |
+| **Download**                 | Works. The file is saved under its real name.                                                                                                                                                |
+| **Copy link**                | Works. The link carries the key after `#`.                                                                                                                                                   |
+| **Open original** (raw view) | Not available. The raw address shows what the server stores, and for an encrypted paste that is ciphertext. The page has no such button and says so under its actions; `/raw` answers `404`. |
+| Editing                      | Not available for any paste. The viewer is read-only: create a new paste.                                                                                                                    |
+| Preview size                 | Up to 1 MB of text is shown. A larger paste is offered as a download.                                                                                                                        |
+| Link previews on other sites | Generic: the instance name and "Encrypted file". Choose **Plain** when a preview must show the text.                                                                                         |
+
+Markup in an encrypted paste is never run. An `.html` or `.svg` paste is shown as source text, like every other paste.
+
+<Screenshot src="/screenshots/encryption/paste-view.webp" alt="Share page of the encrypted paste release-plan-private.js with highlighted JavaScript, line numbers, and the buttons Download, Copy link and Copy text, and no Open original button" caption="An encrypted paste, decrypted and highlighted in the visitor's browser." />
+
 ::: tip Review content before making it public
 Logs and configuration snippets can contain passwords, access tokens, email addresses, or internal URLs. The public setting permits anyone with the link to read them. Choose your intended visibility before creating the paste.
 :::

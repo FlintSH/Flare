@@ -117,7 +117,7 @@ const features = [
   [
     'Share',
     'Encrypted files',
-    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and a password is part of the key.',
+    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and a password is part of the key. Video plays without a full download, archives open, and your export is decrypted, all in your browser.',
     '/guide/encryption',
   ],
   [
