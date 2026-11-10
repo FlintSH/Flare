@@ -118,7 +118,12 @@ export function sealedThumbnailUrl(
     waiting.set(id, resolve)
     thumbnailWorker().postMessage({
       id,
-      url: `/api/files/${encodeURIComponent(fileId)}/sealed-thumbnail`,
+      // An absolute address: a worker's own address may not be one that a
+      // relative path resolves against.
+      url: new URL(
+        `/api/files/${encodeURIComponent(fileId)}/sealed-thumbnail`,
+        window.location.origin
+      ).href,
       // A copy: the worker erases the key it was given.
       fileKey: opened.fileKey.slice(),
       headerHash: opened.headerHash.slice(),

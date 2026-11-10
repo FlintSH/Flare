@@ -15,6 +15,9 @@ import {
 import { libraryChanged } from '@/lib/library/changes'
 import { searchIndex } from '@/lib/library/search-client'
 
+/** How often an open tab looks for new work. */
+const RECHECK_MS = 60_000
+
 /**
  * Runs the background work of the library while the account keys are
  * unlocked in this browser, and shows what it does in a small status at the
@@ -45,8 +48,21 @@ export function LibraryMaintenance() {
         oldPrivateKeys,
       })
     })
+    // Search needs the names in memory as soon as the keys are here: the
+    // worker starts now, and the queue only asks it to update.
+    searchIndex.start(keys)
     libraryMaintenance.start(keys)
+    // A tab that stays open still finds what arrived in the meantime: a
+    // screenshot tool uploads while the library is open (section 9.7).
+    const again = () => {
+      if (document.visibilityState === 'visible')
+        libraryMaintenance.request('folders', 'index', 'pending')
+    }
+    const timer = window.setInterval(again, RECHECK_MS)
+    document.addEventListener('visibilitychange', again)
     return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', again)
       libraryMaintenance.stop()
       // The names and the text in the search worker go with the keys.
       searchIndex.stop()

@@ -66,6 +66,8 @@ export interface PendingDeps {
   /** Told each file that changed, so its card and its cached thumbnail refresh. */
   changed?(file: PendingFile, body: Record<string, unknown>): void
   sleep?(ms: number): Promise<void>
+  /** Told each failure, for the console. Never a name or a text of a file. */
+  failed?(file: PendingFile, error: unknown): void
   /** How many files are worked on at once. */
   concurrency?: number
 }
@@ -178,6 +180,7 @@ export async function processPendingWork(
         } catch (error) {
           if (deps.signal?.aborted) throw error
           result.failed++
+          deps.failed?.(file, error)
           // The server counts the attempt and stops listing the file after
           // three. A request that fails too changes nothing: this run does
           // not come back to the file.

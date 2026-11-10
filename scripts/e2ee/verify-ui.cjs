@@ -1171,11 +1171,16 @@ async function testRotation(admin) {
     .slice(before)
     .find((request) => request.url.endsWith('/api/auth/e2ee/rotation'))
   const sent = JSON.parse(rotation.body)
+  // The folder keys and tag records are sealed again in the same request
+  // (docs/e2ee-spec.md, section 8.3.3, step 6). This account has none.
   assert.deepEqual(Object.keys(sent).sort(), [
     'account',
+    'folders',
     'passphraseProof',
     'sealedKeyring',
+    'tags',
   ])
+  assert.deepEqual([sent.folders, sent.tags], [[], []])
   const headers = JSON.parse(rotation.headers)
   assert.ok(
     headers['x-flare-e2ee-challenge'] && headers['x-flare-e2ee-signature']
@@ -1370,7 +1375,9 @@ async function testRecovery(browser, jamie, mail, totpSecret) {
     .find((request) => request.url.endsWith('/api/auth/e2ee/recovery'))
   assert.deepEqual(Object.keys(JSON.parse(recovery.body)).sort(), [
     'account',
+    'folders',
     'sealedKeyring',
+    'tags',
     'token',
   ])
   await assertLinkUsed(page, link)

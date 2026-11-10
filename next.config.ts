@@ -15,9 +15,11 @@ const nextConfig: NextConfig = {
   },
   // Text recognition in the browser loads its worker, its WebAssembly core
   // and the language data from Flare itself. The route reads them from the
-  // installed packages, which no import names.
+  // installed packages, which no import names. The key is a glob, where
+  // brackets would be a character class, so the route is written with `*`.
+  // The Docker image also copies all of node_modules.
   outputFileTracingIncludes: {
-    '/api/ocr/[version]/[asset]': [
+    '/api/ocr/*/*': [
       './node_modules/tesseract.js/dist/worker.min.js',
       './node_modules/tesseract.js-core/tesseract-core*.wasm.js',
       './node_modules/.pnpm/tesseract.js-core@*/node_modules/tesseract.js-core/tesseract-core*.wasm.js',

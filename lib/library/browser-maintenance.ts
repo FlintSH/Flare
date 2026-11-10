@@ -171,6 +171,12 @@ async function runPendingWork({ keys, signal, report, unpaused }: Context) {
       if (body.sealedThumbnail) forgetThumbnail(file.id)
       if (body.sealedOcrText) textChanged = true
     },
+    failed: (file, error) =>
+      // The ID is public. The reason is what a person needs to report.
+      console.warn(
+        `Flare could not finish the background work on file ${file.id}:`,
+        error instanceof Error ? `${error.name}: ${error.message}` : error
+      ),
   })
   if (changed) libraryChanged?.()
   // New text belongs in the local search cache.

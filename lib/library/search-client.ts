@@ -102,6 +102,7 @@ export const searchIndex = {
     publish({ ...STOPPED, stopped: false })
     worker.postMessage({
       type: 'start',
+      origin: window.location.origin,
       userId: keys.userId,
       // Copies: the worker erases the keys it was given after it imported them.
       accountPrivateKey: keys.accountPrivateKey.slice(),

@@ -1954,6 +1954,51 @@ describe.skipIf(!databaseUrl)(
             scopes: [],
           },
         })
+        // An encrypted file, a folder with keys and a sealed tag of the old
+        // keys, and a plain file (section 6.9, steps 4 and 5).
+        const folder = await prisma.vaultFolder.create({
+          data: {
+            id: 'reset-folder',
+            userId: user.id,
+            name: '',
+            normalizedName: '/sealed/reset-folder',
+            shareToken: 'a-share-token-of-a-keyed-folder',
+            folderPublicKey: new Uint8Array(32).fill(9),
+            sealedFolderMetadata: new Uint8Array(60).fill(1),
+            sealedFolderPrivateKey: new Uint8Array(89).fill(1),
+          },
+        })
+        const tag = await prisma.vaultTag.create({
+          data: {
+            id: 'reset-tag',
+            userId: user.id,
+            name: '',
+            normalizedName: '/sealed/reset-tag',
+            sealedTagMetadata: new Uint8Array(60).fill(1),
+          },
+        })
+        const file = (name: string, encrypted: boolean) =>
+          prisma.file.create({
+            data: {
+              userId: user.id,
+              name: encrypted ? '' : name,
+              urlPath: `/${user.urlId}/${name}`,
+              path: `uploads/${name}`,
+              mimeType: encrypted ? 'application/octet-stream' : 'text/plain',
+              size: 1,
+              folderId: folder.id,
+              ...(encrypted && {
+                encrypted: true,
+                header: new Uint8Array(26).fill(1),
+                sealedMetadata: new Uint8Array(60).fill(1),
+                accountStanza: new Uint8Array(97).fill(1),
+                stanzaAccountPublicKey: keys.columns.accountPublicKey,
+                thumbnailPending: true,
+              }),
+            },
+          })
+        const secret = await file('secret', true)
+        const plain = await file('plain.txt', false)
         const next = clientKeys()
         const { token } = await resetLink(user)
         for (const body of [
@@ -1977,6 +2022,35 @@ describe.skipIf(!databaseUrl)(
         expect(saved.sessionVersion).toBe(user.sessionVersion + 1)
         expect(saved.uploadToken).not.toBe(user.uploadToken)
         expect(await prisma.apiToken.count()).toBe(0)
+        // No key of the account opens the encrypted file now. It is marked,
+        // stays where it was, and waits for no work. The plain file is as it
+        // was.
+        expect(
+          await prisma.file.findUniqueOrThrow({ where: { id: secret.id } })
+        ).toMatchObject({
+          unreadable: true,
+          thumbnailPending: false,
+          folderId: folder.id,
+        })
+        expect(
+          await prisma.file.findUniqueOrThrow({ where: { id: plain.id } })
+        ).toMatchObject({ unreadable: false, name: 'plain.txt' })
+        // The sealed names are lost with the old key: the folder and the tag
+        // get placeholder names and no keys, and the folder link stops.
+        const resetFolder = await prisma.vaultFolder.findUniqueOrThrow({
+          where: { id: folder.id },
+        })
+        expect(resetFolder).toMatchObject({
+          folderPublicKey: null,
+          sealedFolderPrivateKey: null,
+          shareToken: null,
+        })
+        expect(resetFolder.name).toMatch(/^Folder /)
+        const resetTag = await prisma.vaultTag.findUniqueOrThrow({
+          where: { id: tag.id },
+        })
+        expect(resetTag.sealedTagMetadata).toBeNull()
+        expect(resetTag.name).toMatch(/^Tag /)
         await expect(
           validateBrowserSession(
             user.id,

@@ -145,10 +145,15 @@ export function AccountKeysProvider({
 
   // The file keys this page opened are useless and unwanted without the
   // account keys: erase them when the browser locks or the session ends.
+  const heldKeys = useRef(false)
   useEffect(() => {
+    if (state.status === 'unlocked') heldKeys.current = true
     if (state.status === 'locked' || state.status === 'signed-out') {
       forgetOpenedFiles()
-      forgetThumbnails()
+      // Thumbnails that the account keys opened go with them. A visitor's
+      // page never held keys: what it opened with a link key stays.
+      if (heldKeys.current) forgetThumbnails()
+      heldKeys.current = false
     }
     // A session that ended in any way leaves no cache of encrypted records
     // in this browser (section 9.8.1).

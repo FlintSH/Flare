@@ -78,11 +78,13 @@ export function useClientView(filters: LibraryFilters): boolean {
     searchIndex.getState,
     searchIndex.getState
   )
+  // The worker starts when the keys unlock. Until it has started, the view
+  // waits for it: the server's answer alone would put every encrypted file
+  // first in an order by name, and leave them out of a search.
   return (
     keys.status === 'unlocked' &&
-    !index.stopped &&
     needsClient(viewQuery(filters)) &&
-    !(index.status === 'ready' && index.total === 0)
+    !(!index.stopped && index.status === 'ready' && index.total === 0)
   )
 }
 
@@ -96,7 +98,7 @@ function useIndexVersion() {
   const [version, setVersion] = useState(index.version)
   const latest = useRef(index.version)
   latest.current = index.version
-  const ready = index.status === 'ready'
+  const ready = index.status === 'ready' && !index.stopped
   useEffect(() => {
     if (ready) {
       setVersion(latest.current)
@@ -108,7 +110,13 @@ function useIndexVersion() {
     )
     return () => window.clearInterval(timer)
   }, [ready, index.version])
-  return { version, ready, indexed: index.indexed, total: index.total }
+  return {
+    version,
+    ready,
+    stopped: index.stopped,
+    indexed: index.indexed,
+    total: index.total,
+  }
 }
 
 async function plainOrder(query: string, signal: AbortSignal) {
@@ -165,8 +173,9 @@ export function useMergedLibrary(
   const sort = useMemo(() => librarySort(filters.sortBy), [filters.sortBy])
   const local = useMemo(() => viewQuery(filters), [filters])
 
+  const running = !index.stopped
   useEffect(() => {
-    if (!scope) return
+    if (!scope || !running) return
     if (plain.current?.key !== plainKey) {
       plain.current?.controller.abort()
       const controller = new AbortController()
@@ -205,7 +214,7 @@ export function useMergedLibrary(
     return () => {
       stale = true
     }
-  }, [scope, plainKey, viewKey, query, local, sort, grouping])
+  }, [scope, running, plainKey, viewKey, query, local, sort, grouping])
 
   useEffect(
     () => () => {

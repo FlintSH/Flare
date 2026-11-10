@@ -182,13 +182,20 @@ export function UnlockBanner() {
   const [open, setOpen] = useState(false)
   const locked = state.status === 'locked'
   const authTime = session?.user?.authTime
+  // A browser that held the keys and gave them up, at a passphrase change
+  // or with "Lock", did not arrive locked: the prompt stays closed.
+  const [heldKeys, setHeldKeys] = useState(false)
+  const unlocked = state.status === 'unlocked'
+  useEffect(() => {
+    if (unlocked) setHeldKeys(true)
+  }, [unlocked])
 
   useEffect(() => {
-    if (!locked || !authTime) return
+    if (!locked || !authTime || heldKeys) return
     const age = Date.now() - authTime
     if (age < 0 || age > FRESH_SIGN_IN_MS) return
     if (claimPrompt(authTime)) setOpen(true)
-  }, [locked, authTime])
+  }, [locked, authTime, heldKeys])
 
   if (!locked) return null
   return (

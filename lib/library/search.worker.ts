@@ -27,6 +27,8 @@ import {
 export type SearchWorkerRequest =
   | {
       type: 'start'
+      /** The origin of the page: the worker's own address may be a `blob:` one. */
+      origin: string
       userId: string
       accountPrivateKey: Uint8Array
       oldPrivateKeys: Uint8Array[]
@@ -53,8 +55,10 @@ interface WorkerScope {
 
 const scope = globalThis as unknown as WorkerScope
 
+let origin = ''
+
 async function read<Answer>(path: string): Promise<Answer> {
-  const response = await fetch(path, {
+  const response = await fetch(origin + path, {
     credentials: 'same-origin',
     cache: 'no-store',
   })
@@ -77,6 +81,7 @@ let index: SearchIndex | null = null
 let ready: Promise<unknown> = Promise.resolve()
 
 async function start(request: Extract<SearchWorkerRequest, { type: 'start' }>) {
+  origin = request.origin
   const unwrapper: AccountUnwrapper = await createAccountUnwrapper(request)
   wipe(request.accountPrivateKey, ...request.oldPrivateKeys)
   const store = (await openOpfsStore(request.userId)) ?? createMemoryStore()
