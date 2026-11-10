@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 11. Not implemented. Not reviewed.            |
+| Status  | Draft 12. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -12,7 +12,7 @@ Each section has one of these labels:
 
 - **AGREED**: The design discussion made this decision.
 - **PROPOSED**: This text is a proposal. No decision is made.
-- **OPEN**: No proposal is complete. Section 13 lists the questions.
+- **OPEN**: No proposal is complete. Section 15 lists the questions.
 
 Most sections start with three short paragraphs:
 
@@ -194,15 +194,15 @@ These limits are accepted. The public documentation must state them.
 
 **AGREED**, except where a line shows a different label.
 
-| Primitive | Use                                    | Parameters                                             |
-| --------- | -------------------------------------- | ------------------------------------------------------ |
-| Ed25519   | Signatures                             | RFC 8032                                               |
-| X25519    | Key agreement                          | RFC 7748                                               |
-| ed2curve  | Conversion of an Ed25519 key to X25519 | Section 4.1                                            |
-| XChaCha20 | Stream cipher                          | 32-byte key, 24-byte nonce                             |
-| BLAKE3    | Hash, keyed hash, key derivation       | 32-byte output                                         |
-| Argon2id  | Passphrase stretching                  | **PROPOSED**: 64 MiB, 3 passes, 1 lane, 32-byte output |
-| BIP39     | Mnemonic encoding                      | **PROPOSED**: 256-bit entropy, 24 words                |
+| Primitive | Use                                    | Parameters                                                     |
+| --------- | -------------------------------------- | -------------------------------------------------------------- |
+| Ed25519   | Signatures                             | RFC 8032                                                       |
+| X25519    | Key agreement                          | RFC 7748                                                       |
+| ed2curve  | Conversion of an Ed25519 key to X25519 | Section 4.1                                                    |
+| XChaCha20 | Stream cipher                          | 32-byte key, 24-byte nonce                                     |
+| BLAKE3    | Hash, keyed hash, key derivation       | 32-byte output                                                 |
+| Argon2id  | Passphrase stretching                  | 64 MiB memory, 3 passes, 4 lanes, 32-byte output (section 4.3) |
+| BIP39     | Mnemonic encoding                      | 256-bit entropy, 24 words                                      |
 
 BLAKE3 has three modes. This document names them as follows:
 
@@ -249,7 +249,29 @@ ciphertext (encrypt-then-MAC).
    reject.
 5. The output is `XChaCha20(cipher_key, nonce, ciphertext)`.
 
-Section 13 contains an open question about the two derived keys.
+**Reason for two derived keys:** one key for both operations has no known
+attack with XChaCha20 and BLAKE3. Two keys agree with the standard proof of
+encrypt-then-MAC, and they cost one more derivation.
+
+### 4.3 Argon2id parameters
+
+**AGREED**
+
+RFC 9106 gives two recommended parameter sets for Argon2id:
+
+| Set    | Memory | Passes | Lanes | Use                                |
+| ------ | ------ | ------ | ----- | ---------------------------------- |
+| First  | 2 GiB  | 1      | 4     | A computer with much memory        |
+| Second | 64 MiB | 3      | 4     | An environment with a memory limit |
+
+This document uses the second set. A browser on a phone cannot supply 2 GiB.
+
+The salt is 32 bytes. RFC 9106 recommends 16 bytes or more.
+
+A browser without threads calculates the 4 lanes one after the other. The
+result is the same. The time is longer. The implementation must measure the
+time on a slow phone before the release. If the time is not acceptable, the
+authors must change this section, not the implementation only.
 
 ## 5. Account keys
 
@@ -316,7 +338,7 @@ secret. This applies to:
 - the password of a file (section 8.2).
 
 The client must reject a secret with a zxcvbn score less than
-`minimum_strength_score`. **PROPOSED**: the value is `3`.
+`minimum_strength_score`. The value is `3`.
 
 The client gives the account identifier and the instance name to zxcvbn as
 user inputs. A secret that contains them gets a lower score.
@@ -772,9 +794,11 @@ The migration also makes a new `owner_folder_stanza` for each folder
 | The old keys and a copy of the old stanzas                | Reads the old files. Does not read new files.         |
 | A share link                                              | Reads that file. Rotation does not change `file_key`. |
 
-To protect an old file from an attacker who has its old stanza, the client
-must encrypt the file again with a new `file_key`. This breaks the share
-links of that file. This document does not specify it. See section 13.
+To protect an old file from an attacker who has its old stanza, a client
+would have to encrypt the file again with a new `file_key`. This document
+does not include that operation. It would break the share links of the file,
+and it adds little. The behaviour is the same as before encryption: a person
+who copied a file keeps the copy.
 
 #### 8.3.6 Script clients after a rotation
 
@@ -873,7 +897,7 @@ type the password to read the file.
 
 ## 9. Metadata
 
-**PROPOSED**. The authors have not confirmed this section.
+**AGREED**
 
 **Goal:** the server must not learn what a file is from its name or type.
 
@@ -1259,7 +1283,16 @@ step 5.
 
 ### 10.3 Share link
 
-**PROPOSED**
+**AGREED** for the structure. The address of the file is **PROPOSED**.
+
+**The file name is not in the address.** Today the address of a file is
+`/{user}/{file name}`, for example `/birb/holiday-photo.png`. The server
+reads the name from the address. The name of an encrypted file is secret,
+thus it cannot be in the address. `file_id` replaces it.
+
+`file_id` is a value that the server can see. It is a random value by
+default. A name pattern of an upload profile can make it, if the pattern
+does not use the original file name.
 
 A file without a password:
 
@@ -1307,8 +1340,9 @@ preview. No design can change this.
 
 - A new file is encrypted unless the user selects a plain upload.
 - The server marks each plain file. The application shows the mark.
-- Link previews with content, server OCR and server archive tools operate
-  only on plain files.
+- Link previews with content and server OCR operate only on plain files.
+- An administrator can forbid plain uploads for the instance. An
+  administrator cannot turn encryption off for the instance.
 
 ### 11.2 Where the user selects a plain upload
 
@@ -1353,49 +1387,288 @@ Today the server redirects known crawlers to the raw file.
   encrypted file has a generic preview only.
 - The application must show which files are plain.
 
-## 12. Requirements for the server and the application
+## 12. Features that use file content
+
+**Rule:** an encrypted file must have the same functions as a plain file,
+where a client can do the work. The functions move from the server to the
+client. They are not removed.
+
+### 12.1 Thumbnails
+
+**AGREED**
+
+1. The client makes a small image of the file. **PROPOSED**: WebP, longest
+   side 480 pixels.
+2. `thumbnail_key = blake3_derive_key("flare e2ee v1 thumbnail", file_key)`
+3. `sealed_thumbnail = seal(thumbnail_key, random(24), header_hash, thumbnail)`
+
+The server accepts `sealed_thumbnail` only in the upload request or from a
+session of the owner (as in section 9.6.3).
+
+A file from a script client that has no thumbnail gets the flag
+`thumbnail_pending`. The browser of the owner makes the thumbnail later
+(section 9.7).
+
+### 12.2 Video and audio
+
+**AGREED**
+
+A player requests parts of a file. The chunk format permits this (section
+7.5).
+
+1. The page gives `file_key` to a service worker of the application.
+2. The player requests a local address. The service worker gets the request.
+3. The service worker calculates which stored chunks contain the requested
+   bytes. It requests them from the server with a range request.
+4. It verifies the tag of each chunk and decrypts the chunk.
+5. It answers the player with the requested bytes.
+
+The service worker keeps `file_key` in memory only.
+
+If a browser has no service worker, the client downloads and decrypts the
+full file before the player starts.
+
+### 12.3 Archives
+
+**AGREED**
+
+The server reads, extracts and creates archives today. For an encrypted
+file, the client does this work.
+
+| Operation         | What the client does                                                         |
+| ----------------- | ---------------------------------------------------------------------------- |
+| List the content  | Read the necessary chunks with range requests, decrypt them, read the index. |
+| Open one entry    | Read and decrypt the chunks of that entry.                                   |
+| Extract           | Decrypt the entries. Encrypt each entry as a new file. Upload them.          |
+| Create an archive | Download and decrypt the files. Build the archive. Encrypt and upload it.    |
+
+A visitor of a share page can list an archive and open an entry. The client
+of the visitor does the work. No unlock cookie from the server is necessary,
+because `file_key` or the password stanza controls access.
+
+Limits:
+
+- Extract and create operations move the data through the device of the
+  user. A large archive needs time and bandwidth.
+- The client must process the data as a stream. It must not hold a full
+  large archive in memory.
+
+### 12.4 Export of the account data
+
+**AGREED**
+
+For encrypted files, the client downloads and decrypts each file and builds
+the archive on the device. The server cannot do it.
+
+### 12.5 Pastes
+
+**AGREED**
+
+A paste is a file. It is encrypted by default, as each file.
+
+### 12.6 Short links
+
+**AGREED**
+
+A short link stays as today. The server stores the target address as plain
+text and redirects to it.
+
+A short link must not contain a key. If the user makes a short link from a
+share link, the part after `#` would go to the server. The client must
+reject a target address that contains a Flare key and tell the user the
+reason.
+
+Result: a short link cannot open an encrypted file. An encrypted short link
+is possible but is not part of this document.
+
+### 12.7 Webhook `file.ready`
 
 **PROPOSED**
 
-1. The application must send a Content-Security-Policy that blocks inline
-   scripts and scripts from other origins.
-2. The "Custom head" setting must not accept `script` or `base` elements.
-3. The server must not write a file key or a share link fragment
+Flare sends this event to the receiver of a user when a file is ready. Today
+the event contains: the identifier, the file name, the MIME type, the size,
+the visibility, and if the file has a password. The schema permits no other
+fields.
+
+The server does not have the name or the type of an encrypted file. Thus
+the event needs version 2:
+
+| Field                    | Version 1 | Version 2                                            |
+| ------------------------ | --------- | ---------------------------------------------------- |
+| `version`                | `1`       | `2`                                                  |
+| `data.encrypted`         | Not there | `true` or `false`                                    |
+| `data.name`              | Text      | Text for a plain file. `null` for an encrypted file. |
+| `data.mimeType`          | Text      | Text for a plain file. `null` for an encrypted file. |
+| `data.passwordProtected` | Yes or no | `true` if the file has a password stanza.            |
+
+A receiver that needs the name must have `file_key`. The server cannot give
+it.
+
+## 13. Requirements for the server and the application
+
+1. **AGREED.** The application must send a Content-Security-Policy that
+   permits scripts and WebAssembly only from the origin of the application.
+   It must block inline scripts.
+2. **PROPOSED.** The "Custom head" setting must not accept `script` or
+   `base` elements (section 13.1).
+3. **AGREED.** The server must not write a file key or a share link fragment
    to a log, an audit record, a webhook or a URL query.
-4. A moderator permission must not give access to encrypted content.
-5. The legacy upload token is stored without a hash today. The server must
-   store a hash only.
-6. The Content-Security-Policy must permit WebAssembly from the origin of the
-   application. The recognition program (section 9.6) needs it.
+4. **AGREED.** A moderator permission must not give access to encrypted
+   content. A moderator sees the visible metadata of section 9.2 and can
+   delete a file. The project owner accepted this.
+5. **PROPOSED.** The server must store a hash of each upload token only
+   (section 14.4).
 
-## 13. Open questions
+### 13.1 The "Custom head" setting
 
-1. **Folders.** Closed. See section 9.4.
-2. **Tags.** Closed. See section 9.5.
-3. **OCR.** Closed. See sections 9.6 to 9.8.
-4. **One key or two in `seal`.** This draft derives separate cipher and MAC
-   keys. One shared key has no known attack with XChaCha20 and BLAKE3. The
-   separate keys agree with the standard encrypt-then-MAC proof.
-5. **Size.** Does the format pad the content to hide the exact size?
-6. **Argon2id parameters.** 64 MiB and 3 passes are a first proposal. They
-   must work in a browser on a slow device.
-7. **Old files after a rotation.** Does the client encrypt old files again
-   with new file keys? Which share links break?
-8. **Automatic rotation.** This draft has no automatic rotation. Is a
-   rotation after a number of uploads necessary?
-9. **Existing accounts.** Sign-in sends the password to the server today. How
-   does an existing account move to section 6.2?
-10. **Existing files.** Do old plain files stay plain, or does the client
-    encrypt them after the user gets keys?
-11. **Thumbnails.** Does the client make an encrypted thumbnail at upload
-    time?
-12. **Archives and export.** Do these move to the client for encrypted files?
-13. **Public upload links.** An unmerged feature lets other persons upload to
-    an account. Section 10.2 fits this use. The design must confirm it.
-14. **Script helper.** Which language and distribution does the helper of
-    section 10.4 use?
+**PROPOSED**. The project owner must decide.
 
-## 14. Change log
+An administrator can type HTML in this setting. Flare puts it in the head of
+each page, also the share pages. Today it accepts `script`, `style`, `link`,
+`meta`, `base`, `noscript`, `template` and `title` elements. Administrators
+use it for analytics programs, fonts, site verification and small changes.
+
+The setting is a value in the database. A person who can write that value
+can add a script to each page. That script can read the account private key
+of each user who opens the application, and the key in each share link. No
+change of the application code is necessary. This is the easiest attack on
+the design after a compromise of the server.
+
+Proposal:
+
+- The setting accepts `style`, `link`, `meta`, `title` and `noscript`.
+- The setting rejects `script` and `base`. A `base` element changes the
+  address from which the page loads its own scripts.
+- The Content-Security-Policy of requirement 1 stops a script also if a
+  person writes it directly in the database.
+- Custom CSS stays.
+
+Cost: an administrator cannot add an analytics script in the settings. An
+alternative is a list of permitted script origins in an environment
+variable. A person who can change the environment can change the code too,
+thus this adds no new risk of that type. But each permitted origin can read
+keys. The documentation would have to say this.
+
+## 14. Migration of an existing instance
+
+### 14.1 Existing accounts
+
+**AGREED**
+
+1. The user signs in with the old method. The server gets the password one
+   more time and checks it.
+2. The client immediately does the account creation of section 5.4.
+3. The user can use the current password as the passphrase, if it passes
+   the strength check (section 5.2.1). If not, the user selects a new one.
+4. The server deletes the old password hash.
+5. The client shows the mnemonic.
+
+An account that signs in with a passkey or OIDC selects a passphrase at
+step 3.
+
+The server saw the old password before the migration. A user who does not
+trust the past of the server selects a new passphrase.
+
+### 14.2 Existing files
+
+**PROPOSED**
+
+**Idea:** the encryption of a file to a public key needs no secret (section
+3.3, limit 2). The server has the plaintext of each existing file. Thus the
+server can encrypt the files of an account after the account has a public
+key. The browser of the user does not have to download them.
+
+For each file, the server:
+
+1. makes `file_key`,
+2. builds the header with the name and the type (section 7.2),
+3. encrypts the content (section 7.3),
+4. makes the account stanza and, if the file is public and in a folder, the
+   folder stanza,
+5. encrypts the stored image text, if there is one (section 9.6.1),
+6. replaces the plaintext in the storage with the ciphertext,
+7. erases `file_key` and deletes the plain name, type and text from the
+   database.
+
+Before the server starts, the browser of the owner makes the key pairs of
+the folders and the encrypted tag records. These need the owner.
+
+**Which files:**
+
+| File                        | Action                                                                                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Private                     | The server encrypts it automatically. No link exists that can break.                                                                                         |
+| Public                      | Stays plain. The owner can request encryption. The old link then stops, and the owner gets a new link.                                                       |
+| With a server-side password | Stays plain. The server has only a hash of the password, thus it cannot make a password stanza. The owner can request encryption and set the password again. |
+
+**Limits:**
+
+- The server reads each file one more time. This is acceptable because the
+  server has the plaintext already. The design assumes an honest server at
+  this time (section 3.1).
+- The server needs free storage for one file during its encryption.
+- Old backups of the storage and the database contain the plaintext. The
+  operator must delete or replace them. The documentation must say this.
+- Files get the flag `thumbnail_pending`. The browser makes thumbnails later.
+
+### 14.3 Accounts that do not come back
+
+**AGREED**
+
+An account that never signs in again has no keys. Its files stay plain.
+
+### 14.4 Upload tokens and old configurations of screenshot tools
+
+**PROPOSED**
+
+Today each account has one upload token. The database stores it as plain
+text. An endpoint returns it. Each screenshot tool configuration contains
+it. A person who copies the database can upload as each user.
+
+Proposal:
+
+1. A database migration replaces each stored token with its hash. The old
+   configurations continue to authenticate.
+2. The endpoint that returns the token is removed. A hash cannot give the
+   token back.
+3. A new configuration contains a new token, the `account_public_key`, and
+   the upload profile (section 11.2).
+
+An old configuration cannot encrypt. Two behaviours are possible:
+
+- **Reject.** The server rejects its uploads. Each screenshot tool stops at
+  the upgrade until the user installs a new configuration.
+- **Accept as plain, with a warning.** The server accepts its uploads as
+  plain files. The application shows a warning until the user installs a new
+  configuration.
+
+The second behaviour keeps the tools of each user in operation after the
+upgrade. The first behaviour agrees with "encrypted by default". The authors
+must decide.
+
+## 15. Open questions
+
+1. **Custom head.** Section 13.1. The project owner must decide.
+2. **Webhook version 2.** Section 12.7.
+3. **Old screenshot tool configurations.** Reject, or accept as plain with a
+   warning? Section 14.4.
+4. **Existing public files.** Is the table of section 14.2 correct?
+5. **Address of a file.** Section 10.3. Can a name pattern make `file_id`?
+6. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
+   necessary.
+7. **Program for script clients.** Language, platforms and how users get it
+   (section 10.4).
+8. **Public upload links.** This feature is not merged. It must use the
+   upload procedure of section 10.2.
+
+Closed in this draft: the two keys of `seal` stay. No size padding. 24-word
+mnemonic. Minimum strength score 3. Recovery rotates the keys. No automatic
+rotation. No new encryption of old files after a rotation. The metadata
+split of section 9. Client-side archives, export, thumbnails, video.
+Pastes are files. Short links stay as they are. Moderators cannot read
+encrypted content.
+
+## 16. Change log
 
 | Draft | Date       | Change                                                                                                                                                                                        |
 | ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1411,3 +1684,4 @@ Today the server redirects known crawlers to the raw file.
 | 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                   |
 | 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                             |
 | 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                        |
+| 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                        |

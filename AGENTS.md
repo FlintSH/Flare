@@ -23,7 +23,8 @@ names on the server.
   key or a share link fragment. A change that sends one of them to the server,
   or writes one to a log, an audit record, a webhook or a URL query, is a bug.
 - Server features that need file content (link previews with content, server
-  OCR, server archive tools) apply to plain files only.
+  OCR) apply to plain files only. For encrypted files the client does the
+  work: OCR, thumbnails, archives, search and export.
 
 ## Documentation location and boundaries
 
