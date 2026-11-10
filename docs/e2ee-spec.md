@@ -299,7 +299,7 @@ Each account must have a passphrase. This rule applies to accounts that sign
 in with a passkey or with OIDC too. Those methods give the client no secret
 that the server cannot see.
 
-### 5.2.1 Strength check
+#### 5.2.1 Strength check
 
 The client must measure each new secret with zxcvbn before it uses the
 secret. This applies to:
