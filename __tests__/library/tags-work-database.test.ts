@@ -320,7 +320,7 @@ describe.skipIf(!databaseUrl)(
       const tag = await sealedTag('Shots', 'filename', 'screenshot')
       const upload = (
         extra: Record<string, string>,
-        credential: 'session' | 'token' | 'upload-token' = 'session'
+        credential: 'session' | 'token' = 'session'
       ) =>
         finalize.finalizeUpload(
           encryptedUploadInput(
@@ -330,7 +330,8 @@ describe.skipIf(!databaseUrl)(
           )
         )
       // A script client: no rules, an image, no thumbnail.
-      for (const credential of ['token', 'upload-token', 'session'] as const)
+      // The legacy upload token sends plain files only (section 14.4).
+      for (const credential of ['token', 'session'] as const)
         expect(
           await upload({ rulesApplied: 'false', isImage: 'true' }, credential)
         ).toMatchObject({
