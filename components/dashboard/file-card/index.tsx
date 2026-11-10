@@ -36,6 +36,7 @@ import {
 import { EncryptedFilePasswordDialog } from '@/components/encryption/file-password-dialog'
 import { UnlockDialog } from '@/components/encryption/unlock-dialog'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
+import { SealedThumbnail } from '@/components/file/sealed-thumbnail'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
@@ -70,6 +71,7 @@ import {
 } from '@/lib/files/encrypted-client'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
+import { thumbnailKind } from '@/lib/files/thumbnail-client'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
@@ -557,8 +559,16 @@ function OpenFileCard({
     }
   }
 
-  // An encrypted image has no thumbnail and no server-side text yet.
+  // The server makes the preview of a plain image. An encrypted file shows
+  // the thumbnail that a browser sealed for it.
   const isImage = !opened && file.mimeType.startsWith('image/')
+  // The icon steps aside for the hover and focus controls, so it doesn't
+  // show through between them.
+  const typeIcon = (
+    <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
+      <FileTypeIcon file={file} className="h-16 w-16 text-muted-foreground" />
+    </div>
+  )
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   // The server lists a sealed tag by its ID. Its name is opened here.
@@ -646,15 +656,20 @@ function OpenFileCard({
               onError={() => setPreviewFailed(true)}
               unoptimized={!canOptimizeThumbnail(file)}
             />
+          ) : opened &&
+            thumbnailKind(file.mimeType) &&
+            !file.thumbnailPending ? (
+            // The sealed thumbnail, opened in this browser with the file key
+            // (docs/e2ee-spec.md, section 12.1).
+            <SealedThumbnail
+              fileId={file.id}
+              opened={opened}
+              alt={file.name}
+              className="absolute inset-0 h-full w-full object-cover"
+              fallback={typeIcon}
+            />
           ) : (
-            // The icon steps aside for the hover and focus controls, so it
-            // doesn't show through between them.
-            <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
-              <FileTypeIcon
-                file={file}
-                className="h-16 w-16 text-muted-foreground"
-              />
-            </div>
+            typeIcon
           )}
         </Link>
         {/* Hover and keyboard focus veil the preview halfway toward the page

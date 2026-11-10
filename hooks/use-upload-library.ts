@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react'
 
+import { makeThumbnail } from '@/lib/files/thumbnail-client'
 import { ownedFolderKeys } from '@/lib/folders/owned'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { matchingRuleTagIds } from '@/lib/tags/owned'
@@ -34,6 +35,9 @@ export function useUploadLibrary() {
           : null
       return {
         folder,
+        // A WebP thumbnail of an image or of a video's first frame, which
+        // the upload seals (section 12.1).
+        thumbnail: (file: File) => makeThumbnail(file, file.type),
         ...(rulesReady && {
           // The rules on the name. A rule on image text runs once the text
           // is read (docs/e2ee-spec.md, section 9.7).

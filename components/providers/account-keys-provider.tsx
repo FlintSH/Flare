@@ -27,6 +27,7 @@ import {
   type ServerKeyStatus,
   transitionAccountKeys,
 } from '@/lib/e2ee/client/state'
+import { forgetThumbnails } from '@/lib/e2ee/client/thumbnails'
 import { wipe } from '@/lib/e2ee/primitives'
 
 /** Where an account without keys chooses its passphrase. */
@@ -144,8 +145,10 @@ export function AccountKeysProvider({
   // The file keys this page opened are useless and unwanted without the
   // account keys: erase them when the browser locks or the session ends.
   useEffect(() => {
-    if (state.status === 'locked' || state.status === 'signed-out')
+    if (state.status === 'locked' || state.status === 'signed-out') {
       forgetOpenedFiles()
+      forgetThumbnails()
+    }
   }, [state.status])
 
   const adopt = useCallback(
