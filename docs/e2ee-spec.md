@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 2. Not implemented. Not reviewed.             |
+| Status  | Draft 3. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -129,6 +129,8 @@ All context strings are ASCII. A context string does not have a terminator.
 | `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                        |
 | `shared_secret`         | 32 bytes | Output of X25519.                                                |
 | `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.                  |
+| `link_secret`           | 32 bytes | Random secret in the share link of a file with a password.       |
+| `password_key`          | 32 bytes | Key that encrypts `file_key` in a password stanza.               |
 
 ## 3. Threat model
 
@@ -291,11 +293,30 @@ gives nothing that a person can present to sign in.
 `auth_private_key` and `wrap_key` are independent. A person who has one
 cannot calculate the other.
 
-### 5.2 Passphrase rule
+### 5.2 Passphrase rules
 
 Each account must have a passphrase. This rule applies to accounts that sign
 in with a passkey or with OIDC too. Those methods give the client no secret
 that the server cannot see.
+
+### 5.2.1 Strength check
+
+The client must measure each new secret with zxcvbn before it uses the
+secret. This applies to:
+
+- the passphrase of an account, and
+- the password of a file (section 8.2).
+
+The client must reject a secret with a zxcvbn score less than
+`minimum_strength_score`. **PROPOSED**: the value is `3`.
+
+The client gives the account identifier and the instance name to zxcvbn as
+user inputs. A secret that contains them gets a lower score.
+
+The check occurs only in the client. The server never gets the secret, thus
+the server cannot do the check. A client that a person changes can skip the
+check. The check protects a user from a weak selection. It is not a security
+boundary.
 
 ### 5.3 Data that the server stores for each account
 
@@ -565,21 +586,50 @@ Unwrap:
 
 ### 8.2 Password stanza
 
-**PROPOSED**
+**AGREED** for the structure. **PROPOSED** for the exact strings.
 
 **Goal:** replace the file password. Today the server compares the password.
 A compromised server could ignore that comparison.
 
-**Idea:** the password makes a key, and that key encrypts `file_key`. The
-password becomes part of the cryptography.
+**Idea:** the password and a secret in the link make a key together. That
+key encrypts `file_key`. The key derivation includes the public key of the
+owner and the hash of the file header.
+
+**Restriction:** a person selects a password, thus a password is weak. The
+server stores the stanza. If the password alone made the key, a person with
+the database could test passwords offline. The secret in the link prevents
+this, because the server never gets it.
+
+Wrap:
 
 1. `password_salt = random(32)`
-2. `password_key = blake3_derive_key("flare e2ee v1 password stanza", Argon2id(password, password_salt))`
-3. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
-4. The stanza is `password_salt || wrapped_file_key`.
+2. `link_secret = random(32)`
+3. `stretched_password = Argon2id(password, password_salt)`
+4. `password_key = blake3_derive_key("flare e2ee v1 password stanza", stretched_password || link_secret || account_public_key || header_hash)`
+5. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
+6. The stanza is `password_salt || wrapped_file_key`.
+7. The share link carries `link_secret` (section 10.3).
 
-The share link of a file with a password stanza does not contain `file_key`.
-The recipient types the password. The client calculates `file_key`.
+Unwrap:
+
+1. The client reads `link_secret` from the link.
+2. The recipient types the password.
+3. The client calculates `password_key` as in steps 3 and 4 of the wrap
+   procedure.
+4. `file_key = open(password_key, header_hash, wrapped_file_key)`
+
+Properties:
+
+- A person who has the link and not the password cannot read the file.
+- A person who has the password and not the link cannot read the file.
+- The server has neither, and cannot test passwords offline.
+- `account_public_key` and `header_hash` in the derivation bind the stanza
+  to one owner and one file. A stanza does not open in a different account
+  or with a different file. This is a binding to the context. It does not
+  prove who made the stanza (section 3.3, limit 2).
+
+The owner reads the file through the account stanza. The owner does not need
+the password.
 
 ### 8.3 Account key rotation
 
@@ -758,16 +808,29 @@ step 5.
 
 **PROPOSED**
 
+A file without a password:
+
 ```
 https://{host}/{user}/{file_id}#{base64url(file_key)}
 ```
 
+A file with a password (section 8.2):
+
+```
+https://{host}/{user}/{file_id}#p.{base64url(link_secret)}
+```
+
+The prefix `p.` tells the client that the secret is a `link_secret` and that
+it must ask for the password.
+
 - The browser does not send the part after `#` to the server.
-- The uploading client makes the link. It knows `file_key` and it gets
+- The uploading client makes the link. It knows the secret and it gets
   `file_id` from the server.
-- A person who has the link can read the file until the file is deleted.
+- A person who has the link (and the password, if there is one) can read the
+  file until the file is deleted.
 - Account key rotation does not change `file_key`. Share links continue to
   work after a rotation.
+- A link without the part after `#` cannot open an encrypted file.
 
 ### 10.4 Limit for declarative upload tools
 
@@ -835,8 +898,9 @@ file with a link preview cannot be encrypted.
 
 ## 14. Change log
 
-| Draft | Date       | Change                                                                                                                                  |
-| ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | 2026-11-10 | First draft.                                                                                                                            |
-| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations. |
-| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                     |
+| Draft | Date       | Change                                                                                                                                             |
+| ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | 2026-11-10 | First draft.                                                                                                                                       |
+| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.            |
+| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                |
+| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password. |
