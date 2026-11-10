@@ -31,6 +31,7 @@ export function EncryptionChoice({
   onChange,
   disabled,
   locked,
+  plainForbidden,
   noun = 'file',
 }: {
   value: EncryptionMode
@@ -38,10 +39,60 @@ export function EncryptionChoice({
   disabled?: boolean
   /** The keys of this browser are locked, so it cannot encrypt yet. */
   locked?: boolean
+  /**
+   * The administrator forbids plain uploads (section 11.1). The choice is
+   * not shown: there is one answer.
+   */
+  plainForbidden?: boolean
   noun?: 'file' | 'paste'
 }) {
   const id = useId()
   const [unlocking, setUnlocking] = useState(false)
+  const lockedNotice = locked && value === 'encrypted' && (
+    <div
+      role="status"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
+    >
+      <LockKeyhole
+        className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <p className="min-w-0 flex-1 basis-48 leading-relaxed">
+        Your encryption keys are locked in this browser. Unlock them to upload
+        encrypted {noun}s.
+      </p>
+      <button
+        type="button"
+        className="rounded-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setUnlocking(true)}
+      >
+        Unlock
+      </button>
+      <UnlockDialog open={unlocking} onOpenChange={setUnlocking} />
+    </div>
+  )
+  if (plainForbidden)
+    return (
+      <div
+        className="space-y-2"
+        data-encryption-choice="encrypted"
+        data-plain-forbidden
+      >
+        <p className="text-sm font-medium leading-none">Encryption</p>
+        <p className="flex items-start gap-2 text-pretty text-xs leading-relaxed text-muted-foreground">
+          <ShieldCheck
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            aria-hidden="true"
+          />
+          <span>
+            Encrypted in this browser before upload. The server cannot read the{' '}
+            {noun} or its name, and its link shows only a generic preview on
+            other sites. This server accepts encrypted uploads only.
+          </span>
+        </p>
+        {lockedNotice}
+      </div>
+    )
   return (
     <div className="space-y-2" data-encryption-choice={value}>
       <p id={`${id}-label`} className="text-sm font-medium leading-none">
@@ -91,29 +142,7 @@ export function EncryptionChoice({
           ? `Encrypted in this browser before upload. The server cannot read the ${noun} or its name, and its link shows only a generic preview on other sites.`
           : `Stored as it is. The server and its administrators can read the ${noun}, and its link can show the content in a preview on other sites.`}
       </p>
-      {locked && value === 'encrypted' && (
-        <div
-          role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs"
-        >
-          <LockKeyhole
-            className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <p className="min-w-0 flex-1 basis-48 leading-relaxed">
-            Your encryption keys are locked in this browser. Unlock them to
-            upload encrypted {noun}s.
-          </p>
-          <button
-            type="button"
-            className="rounded-sm font-medium underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => setUnlocking(true)}
-          >
-            Unlock
-          </button>
-          <UnlockDialog open={unlocking} onOpenChange={setUnlocking} />
-        </div>
-      )}
+      {lockedNotice}
     </div>
   )
 }

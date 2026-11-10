@@ -106,7 +106,6 @@ suite.sequential(
           email: 'admin@example.test',
           password: 'fixture',
           urlId: 'admin',
-          uploadToken: 'admin-fixture',
           roles: { connect: { id: roles.administrator.id } },
         },
       })
@@ -117,7 +116,6 @@ suite.sequential(
           email: 'member@example.test',
           password: 'fixture',
           urlId: 'member',
-          uploadToken: 'member-fixture',
         },
       })
       authentication.userId = memberId

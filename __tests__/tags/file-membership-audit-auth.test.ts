@@ -7,7 +7,7 @@ import { hashApiToken } from '@/lib/integrations/tokens'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
-  user: { findUnique: vi.fn() },
+  user: { findUnique: vi.fn(), updateMany: vi.fn() },
   role: { findUnique: vi.fn() },
   apiToken: { findUnique: vi.fn(), update: vi.fn() },
   queryRaw: vi.fn(),
@@ -89,6 +89,7 @@ function auditResult(
   const recorded = JSON.stringify(events)
   for (const excluded of [
     legacySecret,
+    hashApiToken(legacySecret),
     namedSecret,
     hashApiToken(namedSecret),
     fileId,
@@ -118,6 +119,9 @@ beforeEach(() => {
   })
   mocks.user.findUnique.mockImplementation(async () => ({
     ...account,
+    // The database holds the hash of the legacy token, used a moment ago.
+    uploadTokenHash: hashApiToken(legacySecret),
+    uploadTokenUsedAt: new Date(),
     roles: [
       {
         id: 'reader-role',

@@ -35,13 +35,12 @@ type StoredUser = Pick<
   | 'password'
   | 'emailVerified'
   | 'oidcSubject'
-  | 'uploadToken'
   | 'urlId'
 > & { roles: RoleSummary[] }
 type UserWhere = Partial<
   Pick<StoredUser, 'id' | 'email' | 'oidcSubject' | 'urlId'>
 >
-type CreateUserData = Pick<StoredUser, 'urlId' | 'uploadToken'> &
+type CreateUserData = Pick<StoredUser, 'urlId'> &
   Partial<Omit<StoredUser, 'id' | 'sessionVersion' | 'roles'>> & {
     roles?: { connect: { id: string }[] }
   }
@@ -146,7 +145,6 @@ vi.mock('@/lib/database/prisma', async () => {
         password: data.password ?? null,
         emailVerified: data.emailVerified ?? null,
         oidcSubject: data.oidcSubject ?? null,
-        uploadToken: data.uploadToken,
         urlId: data.urlId,
       }
       db.rows.push(row)
@@ -374,7 +372,6 @@ function makeUser(overrides: Partial<StoredUser> = {}): StoredUser {
     password: null,
     emailVerified: null,
     oidcSubject: null,
-    uploadToken: `${id}-upload-token`,
     urlId: `${id}-url-id`,
     ...overrides,
   }
@@ -500,7 +497,6 @@ describe.sequential('OIDC protocol and application sign-in', () => {
       oidcSubject: `${issuer}|subject-1`,
       emailVerified: expect.any(Date),
       password: null,
-      uploadToken: expect.any(String),
       urlId: expect.any(String),
     })
     expect(db.create).toHaveBeenCalledOnce()
@@ -636,7 +632,6 @@ describe.sequential('OIDC protocol and application sign-in', () => {
                 accountKind === 'existing SSO account'
                   ? `${issuer}|original-subject`
                   : null,
-              uploadToken: 'existing-secret-upload-token',
               urlId: 'existing-url-id',
             })
           )

@@ -1,414 +1,363 @@
-import { GET as bash } from '@/app/api/profile/bash/route'
-import { POST as flameshot } from '@/app/api/profile/flameshot/route'
-import { GET as itake } from '@/app/api/profile/itake/route'
-import { GET as sharex } from '@/app/api/profile/sharex/route'
-import { POST as spectacle } from '@/app/api/profile/spectacle/route'
+import { DELETE as revokeLegacyToken } from '@/app/api/profile/upload-tools/legacy-token/route'
+import { GET as uploadTools } from '@/app/api/profile/upload-tools/route'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getAuthenticatedUser } from '@/lib/auth/api-auth'
+import { PROTOCOL_VERSION } from '@/lib/e2ee/contexts'
+import { base64urlDecode } from '@/lib/e2ee/primitives'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
-import {
-  requestUploadOptions,
-  resolveUploadOptions,
-} from '@/lib/uploads/options'
+import { requestUploadOptions } from '@/lib/uploads/options'
 import {
   UPLOADER_CLIENT_IDS,
   type UploaderClientId,
-  uploaderClientRequest,
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
+import {
+  type UploaderConfiguration,
+  flareUploadConfig,
+  flareUploadConfigName,
+  folderPublicKeyForConfiguration,
+  renderUploaderFile,
+  shareXAction,
+  transportFor,
+  uploaderAvailable,
+} from '@/lib/uploads/uploader-clients/render'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   user: vi.fn(),
-  profile: vi.fn(),
-  findApiToken: vi.fn(),
-  createApiToken: vi.fn(),
+  userUpdateMany: vi.fn(),
+  tokenCount: vi.fn(),
 }))
-vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
+vi.mock('@/lib/auth', () => ({
+  authOptions: {},
+  getAccessSession: mocks.session,
+}))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
-    user: { findUnique: mocks.user },
-    role: {
-      findUnique: vi.fn(async () => ({
-        id: 'everyone',
-        name: 'Everyone',
-        position: 0,
-        systemKey: 'everyone',
-        permissions: [...DEFAULT_PERMISSIONS],
-      })),
-    },
-    uploadProfile: { findFirst: mocks.profile },
-    apiToken: {
-      findUnique: mocks.findApiToken,
-      create: mocks.createApiToken,
-    },
+    user: { findUnique: mocks.user, updateMany: mocks.userUpdateMany },
+    apiToken: { count: mocks.tokenCount },
   },
 }))
-vi.mock('@/lib/config', () => ({
-  getConfig: async () => ({
-    settings: {
-      customization: { published: { sharing: { defaultStyle: 'delivery' } } },
-    },
-  }),
-}))
-vi.mock('@/lib/email/config', () => ({ getEmailConfig: async () => ({}) }))
-vi.mock('@/lib/email/policy', () => ({
-  requiresEmailVerification: () => false,
-}))
 vi.mock('@/lib/logger', () => ({
-  loggers: { users: { error: vi.fn() }, files: { error: vi.fn() } },
+  loggers: { users: { error: vi.fn() }, api: { error: vi.fn() } },
 }))
 
-const owner = {
-  id: 'owner',
-  name: 'Screenshot User',
-  uploadToken: 'existing-account-upload-token',
-  storageUsed: 0,
-  urlId: 'owner',
-  vanityId: null,
-  roles: [],
-  permissions: [...DEFAULT_PERMISSIONS],
-  randomizeFileUrls: false,
-  defaultUploadProfileId: 'default-profile',
-  defaultFileExpiration: 'DISABLED',
-  defaultFileExpirationAction: 'DELETE',
+const TOKEN = 'flr_configuration-token'
+const accountPublicKey = Uint8Array.from({ length: 32 }, (_, i) => i + 1)
+const plain: UploaderConfiguration = {
+  origin: 'https://flare.test',
+  token: TOKEN,
+  profile: { id: 'screens', name: 'Chat screenshots' },
+  encryption: 'plain',
+  accountPublicKey: null,
+  folder: null,
 }
-const handlers: Record<
-  UploaderClientId,
-  (request: Request) => Promise<Response>
-> = { sharex, itake, bash, flameshot, spectacle }
-const clients = UPLOADER_CLIENT_IDS.map((id) => ({
-  id,
-  name: uploaderClients[id].label,
-}))
-
-beforeEach(() => {
-  vi.clearAllMocks()
-  vi.stubEnv('NEXTAUTH_URL', 'https://flare.test/')
-  mocks.session.mockResolvedValue({
-    user: { id: owner.id, permissions: [...DEFAULT_PERMISSIONS] },
-  })
-  mocks.user.mockResolvedValue(owner)
-  mocks.profile.mockImplementation(async ({ where }) =>
-    where.userId === owner.id &&
-    ['default-profile', 'screenshots'].includes(where.id)
-      ? {
-          id: where.id,
-          name: where.id === 'screenshots' ? 'Screenshots' : 'Default profile',
-          options: { visibility: 'PRIVATE' },
-          updatedAt: new Date('2026-09-13T12:00:00Z'),
-        }
-      : null
-  )
-})
-afterEach(() => vi.unstubAllEnvs())
-
-/**
- * Each download's type, and its file name after the account-name prefix,
- * with default options.
- */
-const downloads: Record<UploaderClientId, { type: string; name: string }> = {
-  sharex: { type: 'application/json', name: 'sharex.sxcu' },
-  itake: { type: 'application/json', name: 'itake.itup' },
-  flameshot: { type: 'text/plain', name: 'flameshot.sh' },
-  spectacle: { type: 'text/plain', name: 'spectacle-screenshot.sh' },
-  bash: { type: 'text/plain', name: 'upload.sh' },
+const encrypted: UploaderConfiguration = {
+  ...plain,
+  profile: { id: 'private', name: 'Private work' },
+  encryption: 'encrypted',
+  accountPublicKey,
 }
-
-/** Downloads a client the way the dashboard asks for it. */
-function download<Id extends UploaderClientId>(
-  id: Id,
-  profileId?: string,
-  authorization?: string
-) {
-  const [path, init] = uploaderClientRequest(
-    id,
-    uploaderClients[id].defaults,
-    profileId
-  )
-  const request = new Request(new URL(path, 'https://flare.test'), init)
-  if (authorization) request.headers.set('Authorization', authorization)
-  return handlers[id](request)
-}
-
-/** The upload request an installed client makes with the downloaded file. */
-async function uploadRequest(
+const render = (
   id: UploaderClientId,
-  response: Response,
-  profileName = 'Account defaults'
-) {
-  expect(response.status).toBe(200)
-  expect(response.headers.get('content-type')).toBe(downloads[id].type)
-  expect(response.headers.get('content-disposition')).toBe(
-    `attachment; filename="screenshot-user-${downloads[id].name}"`
-  )
-  // Every download carries the account upload token.
-  expect(response.headers.get('cache-control')).toBe('private, no-store')
-  if (id === 'sharex') {
-    const config = await response.json()
-    expect(config).toMatchObject({
-      RequestMethod: 'POST',
-      Body: 'MultipartFormData',
-      FileFormName: 'file',
-      URL: '{json:data.pageUrl}',
-    })
-    return new Request(config.RequestURL, {
-      method: config.RequestMethod,
-      headers: config.Headers,
-    })
-  }
-  if (id === 'itake') {
-    const config = await response.json()
-    expect(config).toMatchObject({
-      name: `Flare — ${profileName}`,
-      request: { method: 'POST' },
-      body: { type: 'multipart', fileField: 'file', fields: {} },
-      response: { linkPath: 'data.pageUrl' },
-    })
-    return new Request(config.request.url, {
-      method: config.request.method,
-      headers: config.request.headers,
-    })
-  }
-  const script = await response.text()
-  expect(script).toContain('-H "Authorization: Bearer $UPLOAD_TOKEN"')
-  expect(script).toContain('-F "file=@')
-  expect(script).toContain(`jq -r '.data.pageUrl // empty'`)
-  expect(script).not.toContain('copyText')
-  const url = /^API_URL="([^"]+)"$/m.exec(script)?.[1]
-  const token = /^UPLOAD_TOKEN="([^"]+)"$/m.exec(script)?.[1]
-  expect(url).toBeDefined()
-  expect(token).toBeDefined()
-  return new Request(url!, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  configuration: UploaderConfiguration
+): string =>
+  renderUploaderFile(id, configuration, uploaderClients[id].defaults as never)
+
+/** The upload request a generated plain file makes. */
+function uploadRequest(id: UploaderClientId, body: string) {
+  const [url, authorization] =
+    id === 'sharex'
+      ? [JSON.parse(body).RequestURL, JSON.parse(body).Headers.Authorization]
+      : id === 'itake'
+        ? [
+            JSON.parse(body).request.url,
+            JSON.parse(body).request.headers.Authorization,
+          ]
+        : [
+            /^API_URL="([^"]+)"$/m.exec(body)![1],
+            `Bearer ${/^UPLOAD_TOKEN="([^"]+)"$/m.exec(body)![1]}`,
+          ]
+  return new Request(url, { method: 'POST', headers: { authorization } })
 }
 
-describe.each(clients)('$name setup download', ({ id }) => {
-  it('is ready to authenticate and follow account defaults without creating an API token', async () => {
-    const request = await uploadRequest(id, await download(id))
-    expect(request.url).toBe('https://flare.test/api/files')
-    expect(request.headers.get('authorization')).toBe(
-      `Bearer ${owner.uploadToken}`
-    )
-    expect(mocks.profile).not.toHaveBeenCalled()
-
-    // External tools authenticate without a browser session after installation.
-    mocks.session.mockResolvedValue(null)
-    const user = await getAuthenticatedUser(request)
-    expect(user?.id).toBe(owner.id)
-    expect(mocks.user).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { uploadToken: owner.uploadToken } })
-    )
-    await expect(
-      resolveUploadOptions(user!, requestUploadOptions(request))
-    ).resolves.toMatchObject({
-      profileId: 'default-profile',
-      visibility: 'PRIVATE',
-    })
-    expect(mocks.findApiToken).not.toHaveBeenCalled()
-    expect(mocks.createApiToken).not.toHaveBeenCalled()
-  })
-
-  it('keeps an explicitly selected profile in the generated upload request', async () => {
-    const request = await uploadRequest(
-      id,
-      await download(id, 'screenshots'),
-      'Screenshots'
-    )
-    expect(requestUploadOptions(request)).toEqual({ profileId: 'screenshots' })
-    expect(mocks.profile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'screenshots', userId: owner.id },
-      })
-    )
-    expect(mocks.profile).toHaveBeenCalledTimes(1)
-  })
-
-  it('preserves an encoded profile ID as a single query parameter', async () => {
-    const profileId = 'screenshots & recordings/#1'
-    mocks.profile.mockResolvedValue({
-      id: profileId,
-      name: 'Screenshots & recordings',
-    })
-    const request = await uploadRequest(
-      id,
-      await download(id, profileId),
-      'Screenshots & recordings'
-    )
-    const uploadUrl = new URL(request.url)
-    expect([...uploadUrl.searchParams.entries()]).toEqual([
-      ['profileId', profileId],
-    ])
-    expect(uploadUrl.hash).toBe('')
-  })
-
-  it('rejects missing or other-account profiles without returning credentials', async () => {
-    const response = await download(id, 'another-owner-profile')
-    expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({
-      error: 'Upload profile not found.',
-    })
-    expect(mocks.profile).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'another-owner-profile', userId: owner.id },
-      })
-    )
-  })
-
-  it.each([undefined, `Bearer ${owner.uploadToken}`, 'Bearer flr_named-token'])(
-    'requires a signed-in browser session even when authorization is %s',
-    async (authorization) => {
-      mocks.session.mockResolvedValue(null)
-      const response = await download(id, undefined, authorization)
-      expect(response.status).toBe(401)
-      expect(await response.json()).toEqual({
-        error: 'Authentication required',
-      })
-      expect(mocks.user).not.toHaveBeenCalled()
-      expect(mocks.profile).not.toHaveBeenCalled()
+describe('files for a plain profile', () => {
+  it.each(UPLOADER_CLIENT_IDS)(
+    '%s is offered and carries the new token and the profile',
+    (id) => {
+      expect(uploaderAvailable(id, 'plain')).toBe(true)
+      const request = uploadRequest(id, render(id, plain))
+      expect(new URL(request.url).pathname).toBe('/api/files')
+      expect(request.headers.get('authorization')).toBe(`Bearer ${TOKEN}`)
+      expect(requestUploadOptions(request)).toEqual({ profileId: 'screens' })
     }
   )
 
-  it('requires tokens.manage', async () => {
-    mocks.session.mockResolvedValue({
-      user: { id: owner.id, permissions: ['files.upload'] },
+  it('follows the default profile when the configuration names none, and keeps a folder', () => {
+    const request = uploadRequest(
+      'sharex',
+      render('sharex', { ...plain, profile: null })
+    )
+    expect(request.url).toBe('https://flare.test/api/files')
+    const filed = uploadRequest(
+      'itake',
+      render('itake', {
+        ...plain,
+        folder: { id: 'folder-1', publicKey: null, visibility: 'PUBLIC' },
+      })
+    )
+    expect(requestUploadOptions(filed)).toEqual({
+      profileId: 'screens',
+      folderId: 'folder-1',
     })
-    const response = await download(id)
-    expect(response.status).toBe(403)
-    expect(await response.json()).toEqual({ error: 'Permission denied' })
-    expect(mocks.user).not.toHaveBeenCalled()
+  })
+
+  it('reads the share link from the same response field in each declarative format', () => {
+    const sharex = JSON.parse(render('sharex', plain))
+    expect(sharex.URL).toBe('{json:data.pageUrl}')
+    expect(sharex.Body).toBe('MultipartFormData')
+    const itake = JSON.parse(render('itake', plain))
+    expect(itake.response.linkPath).toBe('data.pageUrl')
+    expect(itake.name).toBe('Flare — Chat screenshots')
+  })
+})
+
+describe('files for an encrypted profile', () => {
+  it('offers only tools that can start a program, because a request description cannot encrypt', () => {
+    expect(transportFor('encrypted')).toBe('helper')
+    expect(transportFor('plain')).toBe('request')
+    expect(
+      UPLOADER_CLIENT_IDS.filter((id) => uploaderAvailable(id, 'encrypted'))
+    ).toEqual(['sharex', 'flameshot', 'spectacle', 'bash'])
+    // ShareX starts the program through an action, not through a .sxcu file.
+    for (const id of ['sharex', 'itake'] as const)
+      expect(() => render(id, encrypted)).toThrow('cannot encrypt')
+  })
+
+  it.each(['flameshot', 'spectacle', 'bash'] as const)(
+    'the %s script starts flare-upload and holds no token',
+    (id) => {
+      const script = render(id, encrypted)
+      expect(script).toContain('flare-upload --config "$FLARE_UPLOAD_CONFIG"')
+      expect(script).toContain('/flare-upload/private-work.json}"')
+      expect(script).not.toContain(TOKEN)
+      expect(script).not.toContain('curl')
+      expect(script).not.toContain('Authorization')
+    }
+  )
+
+  it('writes the flare-upload configuration with the pinned account key and no private value', () => {
+    const text = flareUploadConfig(encrypted)
+    const config = JSON.parse(text)
+    expect(config).toEqual({
+      format: 'flare-upload-config',
+      version: 1,
+      origin: 'https://flare.test',
+      token: TOKEN,
+      protocol_version: PROTOCOL_VERSION,
+      account_public_key: expect.any(String),
+      profile_id: 'private',
+      encryption: 'encrypted',
+    })
+    expect([...base64urlDecode(config.account_public_key)]).toEqual([
+      ...accountPublicKey,
+    ])
+    expect(text).not.toMatch(/private_key|secret|passphrase|file_key/i)
+    expect(flareUploadConfigName(encrypted)).toBe('private-work.json')
+    expect(flareUploadConfigName({ profile: null })).toBe('config.json')
+    expect(
+      flareUploadConfigName({ profile: { id: 'x', name: '../../etc/passwd' } })
+    ).toBe('etc-passwd.json')
+  })
+
+  it('refuses an encrypted configuration without the account key of the unlocked browser', () => {
+    expect(() =>
+      flareUploadConfig({ ...encrypted, accountPublicKey: null })
+    ).toThrow('needs the account public key')
+  })
+
+  it('a plain configuration holds no key and no protocol version', () => {
+    expect(JSON.parse(flareUploadConfig(plain))).toEqual({
+      format: 'flare-upload-config',
+      version: 1,
+      origin: 'https://flare.test',
+      token: TOKEN,
+      profile_id: 'screens',
+      encryption: 'plain',
+    })
+  })
+
+  it('names the folder, and pins its key and the visibility once folders have keys', () => {
+    const folder = { id: 'folder-1', visibility: 'PUBLIC' as const }
+    // PHASE 4 INTEGRATION: folders have no key pair on this branch.
+    expect(folderPublicKeyForConfiguration(folder)).toBeNull()
+    const unpinned = JSON.parse(
+      flareUploadConfig({
+        ...encrypted,
+        folder: { ...folder, publicKey: null },
+      })
+    )
+    expect(unpinned.folder_id).toBe('folder-1')
+    expect(unpinned).not.toHaveProperty('folder_public_key')
+    expect(unpinned).not.toHaveProperty('visibility')
+    const folderPublicKey = Uint8Array.from({ length: 32 }, () => 9)
+    const pinned = JSON.parse(
+      flareUploadConfig({
+        ...encrypted,
+        folder: { ...folder, publicKey: folderPublicKey },
+      })
+    )
+    expect([...base64urlDecode(pinned.folder_public_key)]).toEqual([
+      ...folderPublicKey,
+    ])
+    expect(pinned.visibility).toBe('PUBLIC')
+  })
+
+  it('gives ShareX an action that passes the captured file and copies the link', () => {
+    expect(shareXAction(encrypted)).toEqual({
+      name: 'Flare (Private work)',
+      arguments: '--use private-work --copy "$input"',
+      configPath: '%APPDATA%\\flare-upload\\private-work.json',
+    })
+    expect(shareXAction({ profile: null })).toEqual({
+      name: 'Flare',
+      arguments: '--copy "$input"',
+      configPath: '%APPDATA%\\flare-upload\\config.json',
+    })
+  })
+})
+
+describe('the upload tools routes', () => {
+  const account = { id: 'owner', permissions: [...DEFAULT_PERMISSIONS] }
+  const site = 'https://flare.test'
+  const get = (headers: Record<string, string> = {}) =>
+    uploadTools(new Request(`${site}/api/profile/upload-tools`, { headers }))
+  const revoke = (headers: Record<string, string> = {}) =>
+    revokeLegacyToken(
+      new Request(`${site}/api/profile/upload-tools/legacy-token`, {
+        method: 'DELETE',
+        headers: { Origin: site, ...headers },
+      })
+    )
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubEnv('NEXTAUTH_URL', `${site}/`)
+    mocks.session.mockResolvedValue({ user: account })
+    mocks.user.mockResolvedValue({
+      uploadTokenHash: 'a'.repeat(64),
+      uploadTokenUsedAt: new Date('2026-11-09T10:00:00Z'),
+    })
+    mocks.userUpdateMany.mockResolvedValue({ count: 1 })
+    mocks.tokenCount.mockResolvedValue(0)
+  })
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('answers the public address and the state of the old token, and never a token or a hash', async () => {
+    const response = await get()
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+    const body = await response.json()
+    expect(body).toEqual({
+      origin: site,
+      legacyToken: {
+        active: true,
+        lastUsedAt: '2026-11-09T10:00:00.000Z',
+        hasNewConfiguration: false,
+      },
+    })
+    expect(JSON.stringify(body)).not.toContain('a'.repeat(64))
+    expect(mocks.user).toHaveBeenCalledWith({
+      where: { id: 'owner' },
+      select: { uploadTokenHash: true, uploadTokenUsedAt: true },
+    })
+  })
+
+  it('counts only usable upload tokens from after the upgrade as a new configuration', async () => {
+    mocks.tokenCount.mockResolvedValue(2)
+    expect((await (await get()).json()).legacyToken.hasNewConfiguration).toBe(
+      true
+    )
+    expect(mocks.tokenCount.mock.calls[0][0].where).toMatchObject({
+      userId: 'owner',
+      predatesEncryption: false,
+      revokedAt: null,
+      scopes: { has: 'files:upload' },
+    })
+  })
+
+  it('reports a revoked old token as inactive, without a last use', async () => {
+    mocks.user.mockResolvedValue({
+      uploadTokenHash: null,
+      uploadTokenUsedAt: new Date(),
+    })
+    expect((await (await get()).json()).legacyToken).toEqual({
+      active: false,
+      lastUsedAt: null,
+      hasNewConfiguration: false,
+    })
   })
 
   it.each([
-    ['https://flare.test///', 'https://flare.test/api/files'],
-    ['https://flare.test/flare/', 'https://flare.test/flare/api/files'],
-    ['http://localhost:3210/', 'http://localhost:3210/api/files'],
-  ])(
-    'uses the configured server URL %s in development',
-    async (baseUrl, expected) => {
-      vi.stubEnv('NODE_ENV', 'development')
-      vi.stubEnv('NEXTAUTH_URL', baseUrl)
-      const request = await uploadRequest(id, await download(id))
-      expect(request.url).toBe(expected)
-    }
-  )
-
-  it('falls back to localhost only in development when no server URL is configured', async () => {
-    vi.stubEnv('NODE_ENV', 'development')
-    vi.stubEnv('NEXTAUTH_URL', '')
-    const request = await uploadRequest(id, await download(id))
-    expect(request.url).toBe('http://localhost:3000/api/files')
+    ['https://example.com/', 'https://example.com'],
+    ['https://example.com/base/', 'https://example.com/base'],
+  ])('keeps the path of the public URL %s', async (configured, origin) => {
+    vi.stubEnv('NEXTAUTH_URL', configured)
+    expect((await (await get()).json()).origin).toBe(origin)
   })
 
-  it('rejects a missing production URL without returning credentials', async () => {
-    vi.stubEnv('NODE_ENV', 'production')
+  it('needs a browser session with tokens.manage, and refuses API credentials', async () => {
+    mocks.session.mockResolvedValue(null)
+    expect((await get()).status).toBe(401)
+    expect((await revoke()).status).toBe(401)
+    mocks.session.mockResolvedValue({
+      user: { id: 'owner', permissions: ['files.upload'] },
+    })
+    expect((await get()).status).toBe(403)
+    expect((await revoke()).status).toBe(403)
+    mocks.session.mockResolvedValue({ user: account })
+    expect((await get({ authorization: 'Bearer flr_named' })).status).toBe(401)
+    expect((await revoke({ authorization: 'Bearer legacy' })).status).toBe(401)
+    expect(mocks.user).not.toHaveBeenCalled()
+    expect(mocks.userUpdateMany).not.toHaveBeenCalled()
+  })
+
+  it('rejects a server URL with a query, and a missing one in production', async () => {
+    vi.stubEnv('NEXTAUTH_URL', 'https://example.com/?token=1')
+    expect((await get()).status).toBe(500)
     vi.stubEnv('NEXTAUTH_URL', '')
-    const response = await download(id)
-    expect(response.status).toBe(500)
+    vi.stubEnv('NODE_ENV', 'production')
+    expect((await get()).status).toBe(500)
+    vi.stubEnv('NODE_ENV', 'development')
+    expect((await (await get()).json()).origin).toBe('http://localhost:3000')
+  })
+
+  it('revokes the old token of the signed-in account and issues no new one', async () => {
+    mocks.user.mockResolvedValue({
+      uploadTokenHash: null,
+      uploadTokenUsedAt: null,
+    })
+    const response = await revoke()
+    expect(response.status).toBe(200)
+    expect(mocks.userUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'owner', uploadTokenHash: { not: null } },
+      data: { uploadTokenHash: null, uploadTokenUsedAt: null },
+    })
     expect(await response.json()).toEqual({
-      error: 'Invalid server URL configuration',
+      legacyToken: {
+        active: false,
+        lastUsedAt: null,
+        hasNewConfiguration: false,
+      },
     })
   })
 
-  it.each(
-    ['development', 'production'].flatMap((environment) =>
-      [
-        'not-a-url',
-        'ftp://flare.test',
-        'file:///tmp/flare',
-        'https://username:password@flare.test',
-        'https://flare.test?unexpected=query',
-        'https://flare.test#fragment',
-      ].map((baseUrl) => [environment, baseUrl])
-    )
-  )(
-    'rejects an invalid upload server URL in %s (%s) without returning credentials',
-    async (environment, baseUrl) => {
-      vi.stubEnv('NODE_ENV', environment)
-      vi.stubEnv('NEXTAUTH_URL', baseUrl)
-      const response = await download(id)
-      expect(response.status).toBe(500)
-      expect(await response.json()).toEqual({
-        error: 'Invalid server URL configuration',
-      })
-    }
-  )
-
-  it('returns 404 when the signed-in user no longer exists', async () => {
-    mocks.user.mockResolvedValue(null)
-    const response = await download(id)
-    expect(response.status).toBe(404)
-    expect(await response.json()).toEqual({ error: 'User not found' })
-  })
-
-  it('keeps filenames safe when the account name contains header characters', async () => {
-    mocks.user.mockResolvedValue({ ...owner, name: 'Jane "Mac"\r\nUser' })
-    const response = await download(id)
-    expect(response.status).toBe(200)
-    expect(response.headers.get('content-disposition')).toBe(
-      `attachment; filename="jane--mac---user-${downloads[id].name}"`
-    )
-  })
-})
-
-describe('script options', () => {
-  function post(id: 'flameshot' | 'spectacle', body: string, query = '') {
-    return handlers[id](
-      new Request(`https://flare.test/api/profile/${id}${query}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      })
-    )
-  }
-
-  it('answers malformed JSON and invalid options with 400', async () => {
-    const malformed = await post('flameshot', '{')
-    expect(malformed.status).toBe(400)
-    expect(await malformed.json()).toEqual({ error: 'Invalid JSON.' })
-
-    const invalid = await post('flameshot', JSON.stringify({ useWayland: 1 }))
-    expect(invalid.status).toBe(400)
-    expect(mocks.user).not.toHaveBeenCalled()
-  })
-
-  it('keeps accepting a Spectacle screenshot delay, which the form no longer sends', async () => {
-    const options = uploaderClients.spectacle.defaults
-    expect(options).not.toHaveProperty('delay')
-    const plain = await post('spectacle', JSON.stringify(options))
-    expect(plain.status).toBe(200)
-    expect(await plain.text()).not.toContain('-d ')
-
-    const delayed = await post(
-      'spectacle',
-      JSON.stringify({ ...options, delay: 2500 })
-    )
-    expect(delayed.status).toBe(200)
-    expect(await delayed.text()).toContain(
-      'SPECTACLE_ARGS="$SPECTACLE_ARGS -d 2500"'
-    )
-
-    const tooLong = await post(
-      'spectacle',
-      JSON.stringify({ ...options, delay: 10001 })
-    )
-    expect(tooLong.status).toBe(400)
-  })
-
-  it('still honors a profile sent in the POST body', async () => {
-    const response = await post(
-      'flameshot',
-      JSON.stringify({
-        ...uploaderClients.flameshot.defaults,
-        profileId: 'screenshots',
-      })
-    )
-    expect(response.status).toBe(200)
-    expect(await response.text()).toContain(
-      'API_URL="https://flare.test/api/files?profileId=screenshots"'
-    )
+  it('refuses a revocation from a different site', async () => {
+    const response = await revoke({
+      Origin: 'https://attacker.example',
+      'Sec-Fetch-Site': 'cross-site',
+    })
+    expect(response.status).toBe(403)
+    expect(mocks.userUpdateMany).not.toHaveBeenCalled()
   })
 })

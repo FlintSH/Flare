@@ -416,8 +416,9 @@ export function InstanceSettings({
     {
       id: 'access',
       title: 'Access',
-      hint: 'Registration and sign-in',
-      description: 'Choose who can join and how they sign in.',
+      hint: 'Registration, sign-in, encryption',
+      description:
+        'Choose who can join, how they sign in, and whether plain uploads are allowed.',
       icon: ShieldCheck,
       dirty:
         inviteAccessChanged ||
@@ -428,6 +429,10 @@ export function InstanceSettings({
         !deepEqual(
           savedConfig.settings.general.oidc,
           workingConfig.settings.general.oidc
+        ) ||
+        !deepEqual(
+          savedConfig.settings.general.encryption,
+          workingConfig.settings.general.encryption
         ),
     },
     {
@@ -1135,6 +1140,51 @@ export function InstanceSettings({
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+            <Card id="settings-encryption">
+              <CardHeader>
+                <CardTitle>Encryption</CardTitle>
+                <CardDescription className="text-pretty">
+                  Files are encrypted in the browser, or by the flare-upload
+                  program, before they reach this server. Encryption has no off
+                  switch.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Forbid plain uploads</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Refuse every upload that is not encrypted: the Plain
+                      choice in the upload dialog, upload profiles set to Plain,
+                      and screenshot tool configurations from before encryption.
+                      Files that are plain already stay as they are.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isFieldChanged('general', [
+                      'encryption',
+                      'forbidPlainUploads',
+                    ]) && <ChangeIndicator />}
+                    <Switch
+                      aria-label="Forbid plain uploads"
+                      checked={
+                        workingConfig.settings.general.encryption
+                          .forbidPlainUploads
+                      }
+                      onCheckedChange={(checked) =>
+                        handleSettingChange('general', {
+                          encryption: { forbidPlainUploads: checked },
+                        })
+                      }
+                      className={getFieldClasses('general', [
+                        'encryption',
+                        'forbidPlainUploads',
+                      ])}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>

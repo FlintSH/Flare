@@ -239,6 +239,7 @@ describe('portable profile and upload policy contracts', () => {
         id: 'token',
         scopes: ['files:upload'],
         profileId: 'profile-one',
+        predatesEncryption: false,
       },
     }
     const resolved = await resolveUploadOptions(boundUser, {
@@ -346,6 +347,7 @@ describe('portable profile and upload policy contracts', () => {
         id: 'token',
         scopes: ['files:upload'],
         profileId: 'profile-one',
+        predatesEncryption: false,
       },
     }
     await expect(

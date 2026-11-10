@@ -61,6 +61,8 @@ vi.mock('@/lib/users/create-account', () => ({
 }))
 
 const initial: User = {
+  uploadTokenHash: null,
+  uploadTokenUsedAt: null,
   passkeyRequired: false,
   totpSecret: null,
   totpLastCounter: null,
@@ -91,7 +93,6 @@ const initial: User = {
   oidcSubject: null,
   vanityId: null,
   urlId: 'abc12',
-  uploadToken: 'upload-token',
   randomizeFileUrls: false,
   defaultFileExpiration: 'DISABLED',
   defaultFileExpirationAction: 'DELETE',
@@ -508,7 +509,7 @@ describe('user directory', () => {
     expect(query.skip).toBe(25)
     expect(query.take).toBe(25)
     expect(query.select.password).toBeUndefined()
-    expect(query.select.uploadToken).toBeUndefined()
+    expect(query.select.uploadTokenHash).toBeUndefined()
   })
 
   it.each([25, 0])(

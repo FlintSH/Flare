@@ -481,6 +481,34 @@ What the run cannot show: the PDF preview in a sandboxed frame, because Chromium
 
 `FLARE_E2EE_SCREENSHOTS` names a directory for captures, `FLARE_E2EE_VIEWPORT=mobile` and `FLARE_E2EE_THEME=light` choose the variant, and `FLARE_E2EE_DEBUG` names a directory for a picture of each page when a run fails. Handbook images in `docs/images/encryption/` come from the desktop dark captures; inspect each before replacing a source image. Every secret in the script is a public fixture.
 
+### Script upload checks
+
+`scripts/e2ee/verify-script-upload.cjs` runs the real [`flare-upload`](/guide/screenshot-tools) program against a production build, with a disposable database named exactly `flare_e2ee_script_local`. Build the program first, then start the application as for the encrypted file checks:
+
+```sh
+(cd clients/flare-upload && cargo build --release)
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_script_local'
+export NEXTAUTH_URL='http://localhost:3094'
+export NEXTAUTH_SECRET='public-disposable-e2ee-script-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3093
+```
+
+In another terminal, with the same `DATABASE_URL`:
+
+```sh
+node scripts/e2ee/verify-script-upload.cjs
+```
+
+`FLARE_SCRIPT_UPLOAD_ORIGIN` and `FLARE_SCRIPT_UPLOAD_UPSTREAM` select other loopback addresses, and `FLARE_UPLOAD_BINARY` another build of the program. The browser and the program both go through the script's recording proxy.
+
+The run signs in, makes each configuration in the Upload tools card the way a person does, and starts the program with the downloaded files. It covers a small file in one request, a 9 MiB file through the chunked route, a password link, a plain profile, both profile mismatches, **Forbid plain uploads** with every plain path refused, the old upload token (a plain upload, the warning, the revocation), a configuration that pins a different account key, and what the program refuses before it sends anything. It opens each printed link signed out and checks that the image renders, the large file downloads byte for byte, and the password link asks for its password. At the end it fails if any recorded request, from the browser or from the program, holds the name or content of an encrypted file, a file key, a link secret, the file password, the account private key, or a link fragment.
+
+`FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as in the encrypted file checks. `FLARE_E2EE_HANDBOOK` names a directory that receives the handbook images of the Upload tools card, the ShareX steps, the profile editor, the Encryption setting and the upload form (desktop dark run only); inspect each before replacing a source image under `docs/images/`.
+
+What the run cannot show: ShareX itself, any Windows or macOS behavior of the program, and a key rotation through the passphrase form. The rotation case uses a configuration with the key of a different account, which the server treats the same way. The program has its own tests, `cargo test` in `clients/flare-upload`, which check every shared test vector it implements and run it against a mock server.
+
 ### How the browser suites sign in
 
 Every browser suite under `scripts/` signs in the way a person does: the address, **Continue**, then the passphrase. `scripts/shared/passphrase-accounts.cjs` holds what they share.

@@ -71,7 +71,6 @@ async function seed() {
         // An account with keys: the fixture secret is its passphrase.
         ...(await createAccountRecord('Archive-demo-only-2026!')).columns,
         urlId: id,
-        uploadToken: `${id}-disposable-fixture-token`,
       },
     })
   }

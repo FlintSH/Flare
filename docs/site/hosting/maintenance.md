@@ -181,7 +181,7 @@ Keep the reverse proxy [passing request paths through unchanged](/hosting/revers
 
 Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `encrypted` (false for every existing file), the 26-byte file `header`, `sealedMetadata`, `accountStanza`, `stanzaAccountPublicKey`, and `passwordStanza`. A check constraint requires an encrypted row to have its records, an empty `name`, the type `application/octet-stream`, no password hash and no OCR text, and a plain row to have none of the records. The migration only adds columns: it does not touch existing files, their addresses, or their stored objects, and it needs no downtime beyond the usual `migrate deploy`.
 
-**What changes for people.** Uploads made in the browser are encrypted by default from this release on. Existing files stay plain. Each person needs their [account keys](#account-key-migration) set up and unlocked to upload. Uploads from screenshot tools, the account upload token and API tokens stay plain and need no change. [Encrypted and plain files](/guide/encryption) is the page for users, including what does not work yet for encrypted files.
+**What changes for people.** Uploads made in the browser are encrypted by default from this release on. Existing files stay plain. Each person needs their [account keys](#account-key-migration) set up and unlocked to upload. Uploads from screenshot tool configurations and API tokens made before the upgrade stay plain and need no change; see the [upload token migration](#upload-token-migration) for what new configurations do. [Encrypted and plain files](/guide/encryption) is the page for users, including what does not work yet for encrypted files.
 
 **What changes for you.**
 
@@ -193,6 +193,27 @@ Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `enc
 - **Quotas count ciphertext**, which is the file size plus 26 bytes and 32 bytes per 64 KiB: about 0.05% more.
 
 Rolling back to a build before this migration leaves encrypted rows that the older build would serve as nameless binary files. Delete or keep them knowingly; do not roll back the migration itself while such rows exist.
+
+### Upload token migration
+
+Migration `20261113000000_e2ee_upload_tokens` changes how upload credentials are stored. It runs with the usual `migrate deploy` and needs no downtime beyond it.
+
+- **The account upload token becomes a hash.** `User.uploadToken` held each account's token as plain text. The migration writes its SHA-256 to `User.uploadTokenHash`, the same form as a named API token, and drops the plain column. A person who copies the database after the upgrade can no longer upload as each user. Installed ShareX, iTake, Flameshot, Spectacle and Bash configurations keep authenticating: they hold the token, and Flare compares its hash.
+- **The token cannot be shown again.** `GET` and `POST /api/profile/upload-token` are removed, and so is the **Manual setup and upload token** section of the profile. Nothing can return the token after the migration. `User.uploadTokenUsedAt` records, to the hour, when an old configuration last uploaded, for the warning people see.
+- **Existing named tokens are marked.** `ApiToken.predatesEncryption` is `true` for every token that existed at the migration and `false` for each new one. A marked token, like the account upload token, belongs to a tool that cannot encrypt: its uploads stay plain files, whatever its upload profile says.
+- **New accounts get no upload token.** A tool gets a named token with the configuration its owner creates.
+
+**What changes for people.** Their tools keep uploading plain files, and **Profile → Uploads** shows a warning until they [create new configurations and revoke the old token](/guide/screenshot-tools#old-configurations). Encrypted uploads from a tool need the [flare-upload](/guide/screenshot-tools#install-flare-upload) program, which people download from the releases page of Flare. Upload profiles gain an **Encryption** setting. Every existing profile reads as **Encrypted**: that decides what a new tool configuration must send and what the upload dialog shows first, and it does not change what marked tokens may send.
+
+**What changes for you.**
+
+- **Old backups still hold the tokens in plain text.** A database backup from before this migration contains every account upload token, and those tokens keep working until each person revokes theirs. Replace or delete old backups as you already must for [plain files](#encrypted-files-migration), and ask people to revoke their old token once their tools are moved.
+- **Integrations that read the token break.** Anything that called `GET /api/profile/upload-token` to fetch a credential, or `POST` to rotate it, now gets `404`. The generated-configuration routes `/api/profile/sharex`, `/itake`, `/flameshot`, `/spectacle` and `/bash` are removed too: the browser writes those files, because the server no longer has a token to put in them. Use a [named token](/api/authentication).
+- **New named tokens upload encrypted files by default.** A plain upload with a token created after the upgrade is refused unless the token's upload profile is set to **Plain**. Tokens from before the upgrade are not affected. See [the rules](/api/files#which-uploads-a-token-may-send).
+- **"Rotate upload tokens after a password reset"** in Settings → Email, and `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN`, now revoke the old token without issuing a new one.
+- **You can forbid plain uploads** for the instance in [Settings → Access](/admin/#forbid-plain-uploads). It is off after the upgrade. Turning it on stops every old configuration at once.
+
+Rolling back to a build before this migration is not possible without restoring the database: the plain tokens no longer exist, so the older build could not authenticate any upload tool.
 
 ### Invite links migration
 
@@ -297,7 +318,7 @@ The dependency refresh retains Next.js 15, React 18, Prisma 6, and Tailwind 3. I
 - [Folders](/guide/folders) and [tags](/guide/tags) are optional ways to organize your library. Folders start unshared, and tags stay private to your account. A shared folder lists only its direct public files; it does not publish private files or subfolders.
 - **Copy link** now always copies the plain share-page URL. The old **Copy format** preference has been removed. Upload responses use that same URL for `url`, `pageUrl`, and `copyText`; clients that need raw bytes or direct downloads should use `rawUrl` or `downloadUrl` explicitly. Review custom clients that relied on Markdown or HTML in `copyText`.
 - Changing your URL ID now updates public file URLs while preserving the storage paths used to read, download, and delete existing files. Links using the previous ID may stop working; copy the current link again. The fix does not automatically repair files affected by an earlier failed change. Restore those files from a matching backup if needed.
-- Screenshot tools can be configured directly from **Profile → Uploads → Screenshot tools and scripts**. [macOS setup with iTake](/guide/screenshot-tools#itake-on-macos) is available alongside the existing tools.
+- Screenshot tools can be configured directly from **Profile → Uploads → Screenshot tools and scripts**. [macOS setup with iTake](/guide/screenshot-tools#macos) is available alongside the existing tools.
 
 After updating, test a new upload, a copied link, an existing download, and any screenshot-tool integration you use. Review a shared folder while signed out before distributing its link.
 

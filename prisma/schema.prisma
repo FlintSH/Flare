@@ -52,7 +52,12 @@ model User {
   oidcSubject                 String?               @unique
   vanityId                    String?               @unique
   urlId                       String                @unique
-  uploadToken                 String                @unique
+  /// SHA-256 of the account upload token from before end-to-end encryption.
+  /// Flare never has the token itself. Null once the user revokes it, and for
+  /// each account created after the upgrade (docs/e2ee-spec.md, section 14.4).
+  uploadTokenHash             String?               @unique
+  /// When an upload last used that token, to the hour.
+  uploadTokenUsedAt           DateTime?
   randomizeFileUrls           Boolean               @default(false)
   files                       File[]
   vaultFolders                VaultFolder[]
@@ -345,17 +350,20 @@ model UploadProfile {
 }
 
 model ApiToken {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  hash       String    @unique
-  scopes     String[]
-  profileId  String?
-  expiresAt  DateTime?
-  revokedAt  DateTime?
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  hash               String    @unique
+  scopes             String[]
+  profileId          String?
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  lastUsedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  /// Issued before end-to-end encryption. Its uploads are plain files,
+  /// whatever its upload profile says (docs/e2ee-spec.md, section 14.4).
+  predatesEncryption Boolean   @default(false)
 
   @@index([userId])
 }

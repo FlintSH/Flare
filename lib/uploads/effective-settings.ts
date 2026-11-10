@@ -43,6 +43,9 @@ export function effectiveUploadRevision(
         randomizeFileUrls: effective.randomizeFileUrls,
         shareStyle: effective.shareStyle,
         tagIds: [...new Set(effective.tagIds)].sort(),
+        // Only a plain profile adds the field, so the revision of each
+        // profile from before this setting stays the same.
+        ...(effective.encryption === 'plain' && { encryption: 'plain' }),
       })
     )
     .digest('hex')

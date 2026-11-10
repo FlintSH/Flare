@@ -45,7 +45,7 @@ const features = [
   [
     'Share',
     'Screenshot tools',
-    'Download account-ready configurations for ShareX and iTake, or scripts for Flameshot, Spectacle, and Bash.',
+    'Create a configuration for ShareX, Flameshot, Spectacle, iTake or Bash. The flare-upload program encrypts each capture on your machine before it uploads.',
     '/guide/screenshot-tools',
   ],
   [
@@ -93,7 +93,7 @@ const features = [
   [
     'Personalize',
     'Upload profiles',
-    'Reuse visibility, expiration, URL naming, tags, and share-page preferences across clients.',
+    'Reuse encryption, visibility, expiration, URL naming, tags, and share-page preferences across clients.',
     '/guide/upload-profiles',
   ],
   [
@@ -111,13 +111,13 @@ const features = [
   [
     'Personalize',
     'Your account',
-    'Manage avatar, passphrase, personal theme, upload token, default expiration, and data export.',
+    'Manage avatar, passphrase, personal theme, tool configurations, default expiration, and data export.',
     '/guide/account',
   ],
   [
     'Share',
     'Encrypted files',
-    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and a password is part of the key.',
+    'Uploads are encrypted on your device by default, in the browser and from screenshot tools. The server stores ciphertext, the share link carries the key, and an administrator can forbid plain uploads.',
     '/guide/encryption',
   ],
   [

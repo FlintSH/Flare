@@ -70,7 +70,6 @@ async function seed() {
           },
         },
         urlId: id,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

@@ -39,6 +39,7 @@ import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
 import { bytesToMB } from '@/lib/utils/size'
 
 import { assertFits, uploadCapacity } from './capacity'
+import { assertUploadEncryption } from './encryption-policy'
 import { UploadError } from './options'
 import { findOwnedProfile } from './profiles'
 import type { ResolvedUploadOptions } from './schema'
@@ -203,6 +204,15 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           () => new UploadError('The token upload profile was removed.', 403)
         )
     }
+    // With the settings and the token as they are now: the administrator
+    // can forbid plain uploads while an upload is on its way.
+    assertUploadEncryption({
+      user,
+      encrypted: Boolean(input.encrypted),
+      // An upload that started before the setting existed has none.
+      profileEncryption: options.encryption ?? 'encrypted',
+      config,
+    })
     if (input.encrypted)
       // Under the user lock, so a key rotation cannot pass between this
       // check and the file's publication.

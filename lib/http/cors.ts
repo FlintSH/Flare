@@ -27,6 +27,9 @@ const ALLOWED_HEADERS = [
   'X-Upload-Profile',
   'X-Upload-Folder',
   'X-Flare-Paste',
+  // A web app with a named token sends encrypted uploads as the browser
+  // application does (docs/e2ee-spec.md, section 10.2).
+  'X-Flare-Encrypted',
 ].join(', ')
 
 /** Response headers clients need beyond the CORS-safelisted ones. */

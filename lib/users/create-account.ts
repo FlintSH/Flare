@@ -9,7 +9,6 @@ import type { EmailConfig } from '@/lib/email/schema'
 import { ensureBuiltInRoles } from '@/lib/permissions/server'
 import { isSetupComplete } from '@/lib/setup/status'
 
-import { newUploadToken } from './credentials'
 import { claimEmail } from './email-claim'
 import { newUrlId } from './public-id-claim'
 
@@ -95,7 +94,6 @@ export async function createAccount(
       ...(account.inviteId
         ? { invite: { connect: { id: account.inviteId } } }
         : {}),
-      uploadToken: newUploadToken(),
     },
   })
   if (verify) await sendAccountToken(tx, created, 'verify', verify)

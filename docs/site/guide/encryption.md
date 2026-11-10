@@ -26,6 +26,14 @@ Pick **Plain** when a link must show its content in a chat or social preview. A 
 
 You need your encryption keys unlocked to upload an encrypted file. If the form says your keys are locked, choose **Unlock** and enter your [passphrase](./passphrase). Dropping files anywhere in Flare uploads them encrypted with your default upload profile. While your keys are locked, a drop is refused with a message, not sent plain.
 
+The form shows first what the selected [upload profile](./upload-profiles#encryption) says: **Plain** for a profile set to Plain, **Encrypted** for every other. Whatever you then select is what happens for this upload. Selecting a different profile shows that profile's value again.
+
+Your administrator can [forbid plain uploads](/admin/#forbid-plain-uploads). The forms then show no choice, only the line that the upload is encrypted and that this server accepts encrypted uploads only. An administrator cannot turn encryption off.
+
+<Screenshot src="/screenshots/encryption/upload-encrypted-only.png" alt="The upload form on a server that forbids plain uploads: the Encryption section has no choice, only a line that says the server accepts encrypted uploads only" caption="With plain uploads forbidden, there is nothing to choose." />
+
+Screenshot tools and scripts encrypt with the [flare-upload program](./screenshot-tools). It holds your account's public key and no private key, so it can add files to your library and cannot read it.
+
 ## What the server still sees
 
 For an encrypted file the server knows:
@@ -100,7 +108,8 @@ These features read file content on the server, so they do not work for encrypte
 - **Archive tools:** browsing, extracting and creating archives.
 - **Shared folder links.** An encrypted file in a shared folder is not listed on the folder's public page.
 - **Video streaming.** A video is downloaded and decrypted whole before it plays.
-- **Uploads from screenshot tools and API tokens.** They are plain.
+- **Thumbnails, text and tag rules for files from flare-upload.** The program has no key that opens your tag rules and does no text recognition, so a file it uploads has neither until that work moves to your browser.
+- **Declarative tool files.** A ShareX `.sxcu` file, an iTake `.itup` file or a `curl` script cannot encrypt. They upload plain files and need a [profile set to Plain](./upload-profiles#encryption).
 
 Your [data export](./account) contains encrypted files as ciphertext, named by their file ID, with the records that open them listed in `user-data.json`.
 

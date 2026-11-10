@@ -31,6 +31,7 @@ import {
 } from '@/lib/email/account'
 import { DEFAULT_EMAIL_CONFIG, type EmailConfig } from '@/lib/email/schema'
 import { issueEmailToken } from '@/lib/email/tokens'
+import { hashApiToken } from '@/lib/integrations/tokens'
 import { decryptSecret } from '@/lib/security/secret-box'
 import { updateAccount } from '@/lib/users/update-account'
 
@@ -144,24 +145,27 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
 
     async function user(
       overrides: Partial<Prisma.UserCreateInput> = {}
-    ): Promise<User> {
+    ): Promise<User & { uploadToken: string }> {
       const id = randomUUID()
       const email = `${id}@example.com`
       ids.push(id)
-      return prisma.user.create({
+      // An upload token from before encryption. The database holds its hash.
+      const uploadToken = randomUUID()
+      const created = await prisma.user.create({
         data: {
           id,
           email,
           name: 'Test user',
           password: passwordHash,
           urlId: id,
-          uploadToken: randomUUID(),
+          uploadTokenHash: hashApiToken(uploadToken),
           emailVerified: new Date(),
           emailVerifiedFor: email,
           emailVerificationSource: 'email',
           ...overrides,
         },
       })
+      return { ...created, uploadToken }
     }
 
     async function persistConfig(
@@ -328,7 +332,7 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
         where: { id: account.id },
       })
       expect(updated.sessionVersion).toBe(account.sessionVersion + 1)
-      expect(updated.uploadToken).toBe(account.uploadToken)
+      expect(updated.uploadTokenHash).toBe(account.uploadTokenHash)
       expect(await compare('old-password', updated.password!)).toBe(false)
       expect(
         await prisma.emailToken.count({
@@ -771,7 +775,8 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       const updated = await prisma.user.findUniqueOrThrow({
         where: { id: account.id },
       })
-      expect(updated.uploadToken).not.toBe(account.uploadToken)
+      // The old token is revoked. Flare issues no replacement.
+      expect(updated.uploadTokenHash).toBeNull()
       expect(await compare('new-password', updated.password!)).toBe(true)
     })
 
@@ -946,8 +951,8 @@ describe.skipIf(!process.env.FLARE_EMAIL_AUTH_DATABASE_URL)(
       await resetPassword(reset.token, 'new-password', config)
       expect(
         (await prisma.user.findUniqueOrThrow({ where: { id: account.id } }))
-          .uploadToken
-      ).not.toBe(account.uploadToken)
+          .uploadTokenHash
+      ).toBeNull()
     })
 
     it('accepts the public origin behind a proxy and no other, not even the email link address', async () => {

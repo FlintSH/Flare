@@ -112,7 +112,6 @@ async function main() {
         ...(await createAccountRecord('Timeline-demo-only-2026!')).columns,
         roles: { connect: { systemKey: 'administrator' } },
         urlId: id,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

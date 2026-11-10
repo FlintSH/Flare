@@ -237,7 +237,8 @@ describe.skipIf(!databaseUrl)(
           email,
           name: 'Test user',
           urlId: id,
-          uploadToken: randomUUID(),
+          // The hash of an upload token from before encryption.
+          uploadTokenHash: randomUUID(),
           emailVerified: new Date(),
           emailVerifiedFor: email,
           emailVerificationSource: 'email',
@@ -1309,15 +1310,16 @@ describe.skipIf(!databaseUrl)(
             )
           ).status
         ).toBe(401)
-        // Tokens: named tokens deleted, the legacy upload token replaced.
+        // Tokens: named tokens deleted, the legacy upload token revoked.
         expect(
           await prisma.apiToken.count({ where: { userId: user.id } })
         ).toBe(0)
         expect(await prisma.apiToken.count()).toBe(1)
-        expect(saved.uploadToken).not.toBe(user.uploadToken)
+        expect(user.uploadTokenHash).not.toBeNull()
+        expect(saved.uploadTokenHash).toBeNull()
         expect(
           await prisma.user.findUnique({
-            where: { uploadToken: user.uploadToken },
+            where: { uploadTokenHash: user.uploadTokenHash! },
           })
         ).toBeNull()
         // Pending challenges of the account are gone with the old keys.
@@ -1366,7 +1368,7 @@ describe.skipIf(!databaseUrl)(
         const saved = await reload(user)
         expect(saved).toMatchObject(old.columns)
         expect(saved.sessionVersion).toBe(user.sessionVersion)
-        expect(saved.uploadToken).toBe(user.uploadToken)
+        expect(saved.uploadTokenHash).toBe(user.uploadTokenHash)
         return response
       }
 
@@ -1824,7 +1826,7 @@ describe.skipIf(!databaseUrl)(
         // The keyring continues: the old key still opens the old stanzas.
         expect(b64(saved.sealedKeyring!)).toBe(sent.sealedKeyring)
         expect(saved.sessionVersion).toBe(user.sessionVersion + 1)
-        expect(saved.uploadToken).not.toBe(user.uploadToken)
+        expect(saved.uploadTokenHash).toBeNull()
         expect(await prisma.apiToken.count()).toBe(0)
         expect(
           await prisma.emailToken.count({
@@ -1971,7 +1973,7 @@ describe.skipIf(!databaseUrl)(
         expect(saved).toMatchObject(next.columns)
         expect(saved.sealedKeyring).toBeNull()
         expect(saved.sessionVersion).toBe(user.sessionVersion + 1)
-        expect(saved.uploadToken).not.toBe(user.uploadToken)
+        expect(saved.uploadTokenHash).toBeNull()
         expect(await prisma.apiToken.count()).toBe(0)
         await expect(
           validateBrowserSession(

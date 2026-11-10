@@ -12,7 +12,6 @@ import {
   Upload,
 } from 'lucide-react'
 
-import { ProfileToolDownloads } from '@/components/profile/tools/profile-tools'
 import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -33,6 +32,7 @@ import {
 } from '@/components/ui/select'
 
 import { apiRequest } from '@/lib/client/request'
+import { allows } from '@/lib/permissions/actions'
 import {
   PROFILE_NAME_MAX_LENGTH,
   PROFILE_TAG_LIMIT,
@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
 import { useAccountRefresh } from '@/hooks/use-account-query'
+import { usePermissions } from '@/hooks/use-permissions'
 import { useTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
@@ -58,7 +59,7 @@ const tagTriggerClassName =
   'flex h-9 w-full items-center justify-between gap-2 whitespace-nowrap rounded-md border border-control bg-transparent px-3 py-2 text-left text-base shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 md:text-sm'
 
 const controls: {
-  key: Exclude<keyof UploadProfileOptions, 'tagIds'>
+  key: Exclude<keyof UploadProfileOptions, 'tagIds' | 'encryption'>
   label: string
   choices: [string, string][]
 }[] = [
@@ -164,6 +165,7 @@ function sameOptions(a: UploadProfileOptions, b: UploadProfileOptions) {
 
 export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const { data, error } = useUploadProfiles()
+  const { user } = usePermissions()
   const { toast } = useToast()
   const {
     tags,
@@ -358,6 +360,9 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                               ? 'Public'
                               : 'Inherited visibility',
                       },
+                      ...(profile.options.encryption === 'plain'
+                        ? [{ key: 'encryption', text: 'Plain uploads' }]
+                        : []),
                       {
                         key: 'choices',
                         text: `${Object.keys(profile.options).length} saved choices`,
@@ -444,6 +449,49 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 placeholder="My screenshots"
                 maxLength={PROFILE_NAME_MAX_LENGTH}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="profile-encryption">Encryption</Label>
+              <Select
+                value={options.encryption ?? 'encrypted'}
+                onValueChange={(value) =>
+                  setOptions((current) => {
+                    // `encrypted` is the default, so it is not saved.
+                    const { encryption: _encryption, ...next } = current
+                    return value === 'plain'
+                      ? { ...next, encryption: 'plain' }
+                      : next
+                  })
+                }
+              >
+                <SelectTrigger id="profile-encryption">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="encrypted">Encrypted</SelectItem>
+                  <SelectItem
+                    value="plain"
+                    disabled={
+                      data?.plainUploadsForbidden &&
+                      options.encryption !== 'plain'
+                    }
+                  >
+                    Plain (can show a link preview)
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+              <p
+                className="text-pretty text-xs leading-relaxed text-muted-foreground"
+                data-profile-encryption-help
+              >
+                {options.encryption === 'plain'
+                  ? 'Tools with a token for this profile send files as they are. The server and its administrators can read them, and links can show the content in a preview on other sites.'
+                  : 'Tools with a token for this profile must encrypt, with the flare-upload program. The server cannot read the files or their names, and links show only a generic preview on other sites.'}{' '}
+                In the upload dialog this sets the choice that is selected
+                first.
+                {data?.plainUploadsForbidden &&
+                  ' Plain uploads are turned off on this server.'}
+              </p>
             </div>
             <div className="grid gap-5 sm:grid-cols-2">
               {controls.map((control) => (
@@ -682,12 +730,22 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                 {busy ? 'Saving…' : 'Save profile'}
               </Button>
             </div>
-            {editing && (
-              <ProfileToolDownloads
-                profileId={editing.id}
-                profileName={editing.name}
-                disabled={busy}
-              />
+            {editing && allows(user, 'uploaderTools') && (
+              <div className="space-y-1 rounded-xl border bg-muted/30 p-4">
+                <h3 className="text-sm font-medium">
+                  Use this profile in your tools
+                </h3>
+                <p className="text-pretty text-xs text-muted-foreground">
+                  A tool uploads through a profile with its own token. Under{' '}
+                  <a
+                    href="#upload-tools"
+                    className="font-medium text-primary underline underline-offset-4"
+                  >
+                    Screenshot tools and scripts
+                  </a>
+                  , select this profile and create a configuration.
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>

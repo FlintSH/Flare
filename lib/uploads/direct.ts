@@ -14,7 +14,8 @@ import { hasPermission } from '@/lib/permissions/catalog'
 import { getStorageProvider } from '@/lib/storage'
 
 import { overCapacity, uploadCapacity } from './capacity'
-import { assertEncryptedUploader, splitEncryptedFields } from './encrypted'
+import { splitEncryptedFields } from './encrypted'
+import { assertUploadEncryption } from './encryption-policy'
 import {
   cleanupUncommittedUpload,
   finalizeUpload,
@@ -38,7 +39,8 @@ import {
  * An encrypted upload says so in `X-Flare-Encrypted: true`, for the same
  * reason: the server must know before the file part that it gets no name.
  * Its body is the header and the stored chunks of docs/e2ee-spec.md,
- * section 7, and its records are form fields.
+ * section 7, and its records are form fields. A browser session and a
+ * bearer token send the same request (section 10.2).
  */
 export async function directUpload(request: Request, user: AuthenticatedUser) {
   const isPaste = request.headers.get('X-Flare-Paste') === 'true'
@@ -47,12 +49,19 @@ export async function directUpload(request: Request, user: AuthenticatedUser) {
   if (!request.headers.get('content-type')?.includes('multipart/form-data'))
     throw new UploadError('Content-Type must be multipart/form-data.')
   const encrypted = request.headers.get(ENCRYPTED_UPLOAD_HEADER) === 'true'
-  if (encrypted) assertEncryptedUploader(user)
   const selected = await resolveUploadOptions(
     user,
     requestUploadOptions(request)
   )
-  const capacity = uploadCapacity(await getConfig(), user, user.storageUsed)
+  const config = await getConfig()
+  // Before the file is stored. Publication checks again under its locks.
+  assertUploadEncryption({
+    user,
+    encrypted,
+    profileEncryption: selected.encryption,
+    config,
+  })
+  const capacity = uploadCapacity(config, user, user.storageUsed)
   if (capacity.quotaBytes <= 0) throw overCapacity('quota')
   const storage = await getStorageProvider()
   let filePath = ''

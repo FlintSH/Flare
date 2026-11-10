@@ -72,6 +72,8 @@ const textActionClassName =
 interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
+  /** The administrator forbids plain uploads, so the choice is not shown. */
+  plainUploadsForbidden?: boolean
   user: {
     defaultFileExpiration: $Enums.FileExpiration | null
     defaultFileExpirationAction: $Enums.ExpiryAction | null
@@ -81,6 +83,7 @@ interface UploadFormProps {
 export function UploadForm({
   maxSize,
   formattedMaxSize,
+  plainUploadsForbidden = false,
   user,
 }: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
@@ -106,7 +109,12 @@ export function UploadForm({
     upload,
     cancel,
   } = useUploadQueue()
-  const [encryption, setEncryption] = useState<EncryptionMode>('encrypted')
+  // What the dialog shows first follows the selected upload profile. The
+  // choice a person then makes is explicit and wins, until they select a
+  // different profile (docs/e2ee-spec.md, section 11.2).
+  const [chosenEncryption, setEncryption] =
+    useState<EncryptionMode>('encrypted')
+  const encryption = plainUploadsForbidden ? 'encrypted' : chosenEncryption
   const encrypted = encryption === 'encrypted'
   const keys = useUploadEncryption()
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>()
@@ -290,12 +298,14 @@ export function UploadForm({
           value={profileId}
           onChange={setProfileId}
           disabled={isUploading}
+          onEncryptionChange={setEncryption}
         />
         <EncryptionChoice
           value={encryption}
           onChange={setEncryption}
           disabled={isUploading}
           locked={keys.locked}
+          plainForbidden={plainUploadsForbidden}
         />
         {(showFolders || canShare) && (
           <div className="grid gap-4 md:grid-cols-2 md:[&>:only-child]:col-span-2">

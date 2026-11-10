@@ -96,7 +96,7 @@ A passphrase change makes **new keys**. Someone who knew the old passphrase may 
 Before you start, know what it cancels:
 
 - **Every session ends**, on every device and in the browser you use for the change. You sign in again with the new passphrase.
-- **Every API token is deleted and your upload token is replaced.** Screenshot tools and scripts stop uploading until you [install their configuration again](./screenshot-tools) or give them a [new token](/api/authentication).
+- **Every API token is deleted, and the upload token from before encryption is revoked.** Screenshot tools and scripts stop uploading. A configuration also holds your account's public key, which is new now, so [create a new configuration](./screenshot-tools#create-a-configuration) for each tool, or give a custom integration a [new token](/api/authentication). `flare-upload` with an old configuration exits with code 3 and says to download a new one.
 - **You get a new recovery phrase.** The old one stops working.
 - An unfinished email address change and links that Flare already emailed you are cancelled.
 

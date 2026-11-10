@@ -153,14 +153,74 @@ describe('an encrypted upload in one request', () => {
     })
   })
 
-  it('refuses a token: uploads with a token are plain in this release', async () => {
-    for (const credential of ['upload-token', 'token'] as const) {
-      mocks.account.mockResolvedValue({ ...user, credential })
+  it('takes the same request from a bearer token as from the browser', async () => {
+    // Section 10.2: a script client sends what the browser sends.
+    mocks.account.mockResolvedValue({
+      ...user,
+      credential: 'token',
+      apiToken: {
+        id: 'token',
+        scopes: ['files:upload'],
+        profileId: null,
+        predatesEncryption: false,
+      },
+    })
+    const response = await send()
+    expect(response.status).toBe(200)
+    expect(mocks.finalize.mock.calls[0][0].encrypted).not.toBeNull()
+    expect((await response.json()).data.encrypted).toBe(true)
+  })
+
+  it('refuses a token from before encryption, with a code a tool can read, before storing a byte', async () => {
+    for (const credentials of [
+      { credential: 'upload-token' },
+      {
+        credential: 'token',
+        apiToken: {
+          id: 'token',
+          scopes: ['files:upload'],
+          profileId: null,
+          predatesEncryption: true,
+        },
+      },
+    ] as const) {
+      mocks.account.mockResolvedValue({ ...user, ...credentials })
       const response = await send()
-      expect(response.status, credential).toBe(403)
+      expect(response.status, credentials.credential).toBe(403)
+      expect(await response.json()).toMatchObject({
+        code: 'token_predates_encryption',
+      })
     }
     expect(mocks.uploadStream).not.toHaveBeenCalled()
     expect(mocks.finalize).not.toHaveBeenCalled()
+  })
+
+  it('accepts the declarations of an uploader and does not pass them on', async () => {
+    // PHASE 4 INTEGRATION: the fields are checked and dropped on this branch.
+    const response = await send({
+      fields: {
+        ...created.records,
+        rulesApplied: 'false',
+        isImage: 'true',
+        folderStanza: 'AQ'.padEnd(130, 'A'),
+        folderPublicKey: 'A'.repeat(43),
+        thumbnail: 'none',
+      },
+    })
+    expect(response.status).toBe(200)
+    const passed = mocks.finalize.mock.calls[0][0]
+    expect(Object.keys(passed.encrypted).sort()).toEqual([
+      'accountStanza',
+      'header',
+      'passwordStanza',
+      'sealedMetadata',
+      'stanzaAccountPublicKey',
+    ])
+    const refused = await send({
+      fields: { ...created.records, rulesApplied: 'maybe' },
+    })
+    expect(refused.status).toBe(400)
+    expect((await refused.json()).error).toMatch(/declaration/)
   })
 
   it('refuses a file part that carries a real name or type', async () => {

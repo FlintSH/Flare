@@ -32,22 +32,18 @@ import {
   uploaderClients,
 } from '@/lib/uploads/uploader-clients'
 
-import { DependencyNotice, ToolRow, type UploaderToolProps } from './tool-parts'
+import { DependencyNotice, ToolRow } from './tool-parts'
 import { useUploaderDownload } from './use-uploader-download'
 
 const flameshot = uploaderClients.flameshot
 
-export function FlameshotTool({
-  profileId,
-  compact,
-  disabled,
-}: UploaderToolProps) {
+export function FlameshotTool() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const form = useForm<UploaderOptions<'flameshot'>>({
     resolver: zodResolver(flameshot.options),
     defaultValues: flameshot.defaults,
   })
-  const { download, isLoading } = useUploaderDownload('flameshot', {
+  const { download, ready, transport } = useUploaderDownload('flameshot', {
     ready: {
       title: 'Flameshot script ready',
       description:
@@ -62,31 +58,34 @@ export function FlameshotTool({
   const dialog = (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size={compact ? 'sm' : 'default'}
-          disabled={disabled}
-        >
-          {compact ? flameshot.label : 'Download script'}
+        <Button variant="outline" disabled={!ready}>
+          Download script
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Flameshot upload script</DialogTitle>
           <DialogDescription>
-            Choose your Linux options. Your upload token is already included in
-            the script.
+            Choose your Linux options.{' '}
+            {transport === 'request'
+              ? 'Your upload token is included in the script.'
+              : 'The script starts flare-upload, which encrypts each capture on this machine.'}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form
-            onSubmit={form.handleSubmit(async (values) => {
-              if (await download(values, profileId)) setIsDialogOpen(false)
+            onSubmit={form.handleSubmit((values) => {
+              if (download(values)) setIsDialogOpen(false)
             })}
             className="space-y-6"
           >
-            <DependencyNotice commands={flameshot.dependencies(form.watch())} />
+            <DependencyNotice
+              commands={flameshot.dependencies(
+                form.watch(),
+                transport ?? 'helper'
+              )}
+            />
 
             <div className="space-y-4">
               <div>
@@ -176,9 +175,7 @@ export function FlameshotTool({
                 >
                   Reset options
                 </Button>
-                <Button type="submit" disabled={isLoading}>
-                  {isLoading ? 'Downloading…' : 'Download script'}
-                </Button>
+                <Button type="submit">Download script</Button>
               </div>
             </DialogFooter>
           </form>
@@ -186,8 +183,6 @@ export function FlameshotTool({
       </DialogContent>
     </Dialog>
   )
-  if (compact) return dialog
-
   return (
     <ToolRow
       title="Flameshot"

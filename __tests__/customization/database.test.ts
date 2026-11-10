@@ -98,7 +98,6 @@ suite('customization contracts against disposable PostgreSQL', () => {
           id,
           name: id,
           urlId: id,
-          uploadToken: `${id}-legacy`,
           password: 'fixture-only',
         },
       })

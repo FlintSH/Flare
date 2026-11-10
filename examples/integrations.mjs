@@ -3,6 +3,11 @@
 // Uploads require a files:upload token and files.upload in its owner’s current
 // roles. Administrator does not expand token scopes. Missing files.share makes
 // new uploads private. Role changes apply to subsequent authenticated requests.
+//
+// The upload here sends a plain file, which the server can read. A token made
+// after the upgrade to end-to-end encryption needs an upload profile whose
+// Encryption is Plain for it: bind the token to one. For encrypted uploads use
+// the flare-upload program (clients/flare-upload).
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -79,7 +84,9 @@ if (mode === 'upload') {
       `Upload failed (${response.status}): ${body}` +
         (response.status === 401
           ? '\nCheck the token, files:upload scope, owner files.upload permission, and email eligibility.'
-          : '')
+          : body.includes('profile_requires_encrypted')
+            ? '\nThis is a plain upload. Bind the token to an upload profile whose Encryption is Plain, or upload with flare-upload.'
+            : '')
     )
   process.stdout.write(body + '\n')
 } else if (mode === 'timeline') {

@@ -95,6 +95,7 @@ const tokenSelect = {
   revokedAt: true,
   lastUsedAt: true,
   createdAt: true,
+  predatesEncryption: true,
 } as const
 const webhookSelect = {
   id: true,
@@ -110,7 +111,7 @@ type Transaction = Prisma.TransactionClient
 /** The integrations screen. An account sees each list only while it may manage it. */
 export async function listIntegrations(account: Account) {
   const userId = account.id
-  const [tokens, webhooks, deliveries, profiles] = await Promise.all([
+  const [tokens, webhooks, deliveries, profiles, owner] = await Promise.all([
     prisma.apiToken.findMany({
       where: { userId },
       select: tokenSelect,
@@ -143,6 +144,10 @@ export async function listIntegrations(account: Account) {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { uploadTokenHash: true },
+    }),
   ])
   const managesTokens = hasPermission(account, 'tokens.manage')
   const managesWebhooks = hasPermission(account, 'webhooks.manage')
@@ -151,6 +156,9 @@ export async function listIntegrations(account: Account) {
     webhooks: managesWebhooks ? webhooks : [],
     deliveries: managesWebhooks ? deliveries : [],
     profiles: managesTokens ? profiles : [],
+    // Whether the upload token from before encryption still works. Only
+    // the fact: Flare has its hash and nothing here returns either.
+    legacyUploadToken: managesTokens && Boolean(owner?.uploadTokenHash),
   }
 }
 

@@ -193,9 +193,9 @@ export function ProfileClient({
               <CardHeader>
                 <CardTitle>Screenshot tools and scripts</CardTitle>
                 <CardDescription className="text-pretty">
-                  Choose your tool and download a ready-to-use configuration. It
-                  includes your upload token, so there is no API key to create
-                  or paste.
+                  Create a configuration for an upload profile, then download
+                  what each tool needs. Every configuration gets its own upload
+                  token, so there is no API key to create or paste.
                 </CardDescription>
               </CardHeader>
               <CardContent>

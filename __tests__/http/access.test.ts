@@ -2,7 +2,6 @@ import { POST as scheduleExpiry } from '@/app/api/files/[id]/expiry/route'
 import { POST as completeChunks } from '@/app/api/files/chunks/[uploadId]/complete/route'
 import { POST as startChunks } from '@/app/api/files/chunks/route'
 import { POST as upload } from '@/app/api/files/route'
-import { POST as replaceUploadToken } from '@/app/api/profile/upload-token/route'
 import { POST as shorten } from '@/app/api/urls/route'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -71,10 +70,6 @@ const sessionWrites = [
       scheduleExpiry(request, { params: Promise.resolve({ id: 'file' }) }),
   ],
   ['POST /api/urls', (request: Request) => shorten(request)],
-  [
-    'POST /api/profile/upload-token',
-    (request: Request) => replaceUploadToken(request),
-  ],
 ] as const
 
 describe('writes the browser session authenticates', () => {

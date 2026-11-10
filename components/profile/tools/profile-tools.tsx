@@ -4,34 +4,30 @@ import { type ComponentType, useState } from 'react'
 
 import Link from 'next/link'
 
-import { ChevronDown } from 'lucide-react'
-
 import { PermissionGate } from '@/components/roles/permission-gate'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
 
-import { allows } from '@/lib/permissions/actions'
 import {
   UPLOADER_CLIENT_IDS,
   type UploaderClientId,
 } from '@/lib/uploads/uploader-clients'
+import type { UploaderConfiguration } from '@/lib/uploads/uploader-clients/render'
+import type { LegacyUploadTokenStatus } from '@/lib/users/legacy-upload-token'
 
-import { usePermissions } from '@/hooks/use-permissions'
+import { useAccountQuery, useAccountRefresh } from '@/hooks/use-account-query'
 
 import { BashTool } from './bash-tool'
+import {
+  ConfigurationPanel,
+  UploaderConfigurationProvider,
+} from './configuration'
 import { FlameshotTool } from './flameshot-tool'
+import { FlareUploadTool } from './flare-upload-tool'
 import { ITakeTool } from './itake-tool'
+import { LegacyTokenWarning } from './legacy-token-warning'
 import { ShareXTool } from './sharex-tool'
 import { SpectacleTool } from './spectacle-tool'
-import type { UploaderToolProps } from './tool-parts'
-import { UploadToken } from './upload-token'
 
-const uploaderTools: {
-  [Id in UploaderClientId]: ComponentType<UploaderToolProps>
-} = {
+const uploaderTools: { [Id in UploaderClientId]: ComponentType } = {
   sharex: ShareXTool,
   itake: ITakeTool,
   flameshot: FlameshotTool,
@@ -39,29 +35,85 @@ const uploaderTools: {
   bash: BashTool,
 }
 
-export function ProfileTools({
-  onOpenIntegrations,
-}: {
-  onOpenIntegrations?: () => void
-}) {
-  const [manualSetupVisited, setManualSetupVisited] = useState(false)
+/** The account query of the card: the public address and the old token. */
+export const UPLOAD_TOOLS = 'upload-tools'
 
+export interface UploadToolsData {
+  origin: string
+  legacyToken: LegacyUploadTokenStatus
+}
+
+export function useUploadTools() {
+  return useAccountQuery<UploadToolsData>(
+    UPLOAD_TOOLS,
+    '/api/profile/upload-tools',
+    { retry: false }
+  )
+}
+
+/**
+ * The helper program and each tool, with the files of `configuration`.
+ * Without one, the downloads wait: a file needs a token.
+ */
+export function UploaderToolRows({
+  configuration,
+}: {
+  configuration: UploaderConfiguration | null
+}) {
   return (
-    <div className="space-y-6">
-      <div className="divide-y rounded-xl border bg-muted/30 px-4 [&>div]:py-4">
+    <UploaderConfigurationProvider value={configuration}>
+      <div
+        className="divide-y rounded-xl border bg-muted/30 px-4 [&>div]:py-4"
+        data-upload-tools={configuration ? 'ready' : 'waiting'}
+      >
+        <FlareUploadTool />
         {UPLOADER_CLIENT_IDS.map((id) => {
           const Tool = uploaderTools[id]
           return <Tool key={id} />
         })}
       </div>
+    </UploaderConfigurationProvider>
+  )
+}
+
+export function ProfileTools({
+  onOpenIntegrations,
+}: {
+  onOpenIntegrations?: () => void
+}) {
+  const tools = useUploadTools()
+  const refresh = useAccountRefresh(UPLOAD_TOOLS)
+  const [configuration, setConfiguration] =
+    useState<UploaderConfiguration | null>(null)
+
+  return (
+    <div className="space-y-6">
+      {tools.data && (
+        <LegacyTokenWarning
+          status={tools.data.legacyToken}
+          onRevoked={refresh}
+        />
+      )}
+      <ConfigurationPanel
+        origin={tools.data?.origin ?? null}
+        configuration={configuration}
+        onChange={(next) => {
+          setConfiguration(next)
+          // A new token ends the wait for a new configuration.
+          if (next) void refresh()
+        }}
+      />
+      <UploaderToolRows configuration={configuration} />
       <div className="space-y-2 text-sm text-muted-foreground">
-        <p>
-          These downloads follow your default upload profile. Keep them private:
-          they include access to upload to your account.
-        </p>
+        {!configuration && (
+          <p>
+            Create a configuration to turn on the downloads. Each one gets its
+            own upload token, which you can revoke in Integrations.
+          </p>
+        )}
         <PermissionGate permission="tokens.manage">
           <p>
-            Need separate permissions or a revocable key for a custom app?{' '}
+            Need separate permissions or a key for a custom app?{' '}
             <Link
               href="/dashboard/profile?section=integrations"
               onNavigate={onOpenIntegrations}
@@ -72,75 +124,6 @@ export function ProfileTools({
             .
           </p>
         </PermissionGate>
-      </div>
-      <Collapsible
-        className="rounded-xl border bg-muted/30"
-        onOpenChange={(open) => {
-          if (open) setManualSetupVisited(true)
-        }}
-      >
-        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-          Manual setup and upload token
-          <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180" />
-        </CollapsibleTrigger>
-        <CollapsibleContent
-          forceMount
-          className="px-4 pb-4 data-[state=closed]:hidden"
-        >
-          {manualSetupVisited && <UploadToken />}
-        </CollapsibleContent>
-      </Collapsible>
-    </div>
-  )
-}
-
-/** The profile editor keeps its own button order. */
-const PROFILE_TOOL_ORDER: UploaderClientId[] = [
-  'sharex',
-  'bash',
-  'flameshot',
-  'spectacle',
-  'itake',
-]
-
-/**
- * Downloads with one upload profile selected, for the profile editor. Shown
- * to the same people as the Screenshot tools card.
- */
-export function ProfileToolDownloads({
-  profileId,
-  profileName,
-  disabled,
-}: {
-  profileId: string
-  profileName: string
-  disabled?: boolean
-}) {
-  const { user } = usePermissions()
-  if (!allows(user, 'uploaderTools')) return null
-
-  return (
-    <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-      <div>
-        <h3 className="text-sm font-medium">Use this profile in your tools</h3>
-        <p className="mt-1 text-pretty text-xs text-muted-foreground">
-          Download an uploader with this profile selected. Generated configs and
-          scripts contain your upload credential; keep them private.
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {PROFILE_TOOL_ORDER.map((id) => {
-          const Tool = uploaderTools[id]
-          return (
-            <Tool
-              key={id}
-              profileId={profileId}
-              profileName={profileName}
-              compact
-              disabled={disabled}
-            />
-          )
-        })}
       </div>
     </div>
   )

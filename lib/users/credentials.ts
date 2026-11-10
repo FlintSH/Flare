@@ -1,6 +1,5 @@
 import type { Prisma } from '@prisma/client'
 import { hash } from 'bcryptjs'
-import { randomUUID } from 'node:crypto'
 
 import { sessionRevocation } from '@/lib/auth/security/service'
 import { invalidateEmailTokens } from '@/lib/email/tokens'
@@ -13,17 +12,16 @@ export function hashAccountPassword(password: string) {
   return hash(password, 10)
 }
 
-/** A new legacy upload token. */
-export function newUploadToken() {
-  return randomUUID()
-}
-
 interface CredentialChange {
   /** A new password, as `hashAccountPassword` stores it. */
   password?: string
   /** A new sign-in address; `verified` when a link sent to it confirmed it. */
   email?: { address: string; verified: boolean }
-  /** Replace the legacy upload token as well. */
+  /**
+   * Revoke the upload token from before end-to-end encryption as well.
+   * Flare stores only its hash and issues no new one: a tool gets a new
+   * configuration with a named token (docs/e2ee-spec.md, section 14.4).
+   */
   rotateUploadToken?: boolean
 }
 
@@ -51,7 +49,10 @@ export async function changeCredentials(
     }),
     pendingEmail: null,
     pendingEmailOldConfirmed: false,
-    ...(rotateUploadToken && { uploadToken: newUploadToken() }),
+    ...(rotateUploadToken && {
+      uploadTokenHash: null,
+      uploadTokenUsedAt: null,
+    }),
     ...(await sessionRevocation(tx, userId)),
   }
 }

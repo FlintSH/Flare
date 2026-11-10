@@ -128,7 +128,6 @@ suite('email configuration against disposable PostgreSQL', () => {
         roles: { connect: { systemKey: 'administrator' } },
         password: 'fixture-only',
         urlId: 'legacy',
-        uploadToken: 'legacy-test-token',
         createdAt: new Date('2020-01-01'),
       },
     })
@@ -160,7 +159,6 @@ suite('email configuration against disposable PostgreSQL', () => {
         roles: { connect: { systemKey: 'administrator' } },
         password: 'fixture-only',
         urlId: 'admin',
-        uploadToken: 'admin-test-token',
       },
     })
     const view = await configModule.saveEmailConfig(input, {
@@ -283,7 +281,6 @@ suite('email configuration against disposable PostgreSQL', () => {
         email: 'profile@example.test',
         password: await hash('old-password', 10),
         urlId: 'profile-user',
-        uploadToken: 'profile-test-token',
       },
     })
     authentication.id = account.id

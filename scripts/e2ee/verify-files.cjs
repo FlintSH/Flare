@@ -633,7 +633,6 @@ async function seed() {
         ...record.columns,
         roles: { connect: { systemKey: 'administrator' } },
         urlId: key === 'alex' ? 'alexm' : 'morgl',
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

@@ -14,6 +14,7 @@ import {
   accountUploadOptions,
   effectiveUploadRevision,
 } from './effective-settings'
+import { plainUploadsForbidden } from './encryption-policy'
 import {
   type UploadProfileInput,
   type UploadProfileOptions,
@@ -94,7 +95,8 @@ export async function listProfiles(user: PermissionSubject & { id: string }) {
     }),
   ])
   if (!account) throw new HttpError(401, 'Account no longer exists.')
-  const accountOptions = accountUploadOptions(account, await getConfig())
+  const config = await getConfig()
+  const accountOptions = accountUploadOptions(account, config)
   const canShare = hasPermission(user, 'files.share')
   const selected = profiles.find(
     (profile) => profile.id === account.defaultUploadProfileId
@@ -122,6 +124,7 @@ export async function listProfiles(user: PermissionSubject & { id: string }) {
     accountOptions,
     canShare,
     effective,
+    plainUploadsForbidden: plainUploadsForbidden(config),
   }
 }
 

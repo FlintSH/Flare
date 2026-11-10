@@ -86,6 +86,14 @@ export const configSchema = z.object({
       ocr: z.object({
         enabled: z.boolean().default(true),
       }),
+      // Encryption itself has no switch: an administrator cannot turn it off
+      // (docs/e2ee-spec.md, section 11.1).
+      encryption: z
+        .object({
+          /** Refuse each plain upload, whatever sends it. */
+          forbidPlainUploads: z.boolean().default(false),
+        })
+        .prefault({}),
       oidc: z
         .object({
           enabled: z.boolean().default(false),
