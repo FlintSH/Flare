@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 15. Not implemented. Not reviewed.            |
+| Status  | Draft 16. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -75,6 +75,53 @@ This document does not use single-letter names.
 7. A user can select a plain upload, for one file or in an upload profile,
    when a file must show its content in a link preview. An encrypted file
    gets a generic preview.
+
+### 1.5 Protocol versions
+
+**PROPOSED**
+
+**Goal:** the project can change a primitive, a parameter or a format later.
+Old files must stay readable. A client must never guess which rules apply.
+
+This document specifies protocol version 1.
+
+#### 1.5.1 Where the version is
+
+| Place                         | How the version is recorded                                           |
+| ----------------------------- | --------------------------------------------------------------------- |
+| Each context string           | The text `v1`, for example `"flare e2ee v1 account stanza"`.          |
+| The file header               | `format_version` (section 7.2).                                       |
+| Each stanza and sealed record | One byte `record_version` before the record. The value is `0x01`.     |
+| The account record            | `protocol_version` and `kdf_parameters` (section 5.3).                |
+| A share link                  | The prefix before the first `.` in the part after `#` (section 10.3). |
+| A script client configuration | `protocol_version`.                                                   |
+
+`record_version` and `protocol_version` are not secret and are not
+authenticated by themselves. They tell the client which rules to use. The
+context string is part of each key derivation, thus a record of one version
+does not open with the rules of a different version. A person who changes
+the version byte causes a failure only.
+
+#### 1.5.2 Rules for a client
+
+1. A client writes only the newest version that it knows.
+2. A client must be able to read each version that was released.
+3. A client that finds a version that it does not know must stop and tell
+   the user to update. It must not try a different version.
+4. A client must reject `kdf_parameters` that are weaker than the minimum of
+   its version (section 4.3). A compromised server could send weak
+   parameters to make the test of passphrases easier.
+
+#### 1.5.3 Rules for a new version
+
+1. A new version uses new context strings, for example `"flare e2ee v2 ..."`.
+2. A new version gets a new `format_version`, `record_version` or link
+   prefix where the format changes.
+3. Existing files are not changed. A client can move an account to new
+   parameters at a key rotation (section 8.3), because a rotation makes each
+   account record again.
+4. The server tells a script client which versions it accepts. The server
+   can reject uploads of a version that is retired.
 
 ## 2. Terms and notation
 
@@ -284,6 +331,10 @@ This document uses the second set. A browser on a phone cannot supply 2 GiB.
 The salt is 32 bytes. RFC 9106 recommends 16 bytes for these sets. A longer
 salt is permitted.
 
+These parameters are the minimum of protocol version 1. The server stores
+the parameters of each account as `kdf_parameters` (section 5.3). An account
+can thus get stronger parameters later without a new protocol version.
+
 A browser without threads calculates the 4 lanes one after the other. The
 result is the same. The time is longer. The implementation must measure the
 time on a slow phone before the release. If the time is not acceptable, the
@@ -370,6 +421,8 @@ boundary.
 | -------------------- | ------------------------------------------------------------------------------------- | ---------------------- |
 | `account_public_key` | Account public key                                                                    | Yes                    |
 | `passphrase_salt`    | `random(32)`                                                                          | Yes                    |
+| `kdf_parameters`     | The Argon2id memory, passes and lanes that made the keys of this account              | Yes                    |
+| `protocol_version`   | The protocol version of the account record                                            | Yes                    |
 | `auth_public_key`    | Public key of the sign-in key pair                                                    | Yes                    |
 | `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)`                        | No                     |
 | `sealed_keyring`     | Old account private keys, encrypted (section 8.3.3). Empty before the first rotation. | No                     |
@@ -388,8 +441,8 @@ The client does these steps:
 4. `passphrase_root = Argon2id(passphrase, passphrase_salt)`.
 5. Calculate `auth_private_key`, `auth_public_key` and `wrap_key`.
 6. `wrapped_root = seal(wrap_key, random(24), account_public_key, root_entropy)`.
-7. Send `account_public_key`, `passphrase_salt`, `auth_public_key` and
-   `wrapped_root` to the server.
+7. Send `account_public_key`, `passphrase_salt`, `kdf_parameters`,
+   `protocol_version`, `auth_public_key` and `wrapped_root` to the server.
 8. Show the mnemonic of `root_entropy` to the user. Tell the user to keep it
    offline.
 9. Erase `passphrase_root`, `auth_private_key` and `wrap_key` from memory.
@@ -413,8 +466,11 @@ cannot take it back. Thus the second factor must protect the release of
 ### 6.1 Salt and challenge request
 
 1. The client sends the account identifier.
-2. The server returns `passphrase_salt` and `challenge = random(32)`. The
-   challenge is valid for one use and for 60 seconds.
+2. The server returns `passphrase_salt`, `kdf_parameters` and
+   `challenge = random(32)`. The challenge is valid for one use and for
+   60 seconds.
+3. The client rejects `kdf_parameters` that are weaker than the minimum
+   (section 1.5.2).
 
 For an unknown identifier, the server must return a fake salt. The fake salt
 is `blake3_keyed_hash(server_secret, identifier)`. The response for an
@@ -1417,6 +1473,12 @@ https://{host}/{user}/{file_id}#p.{base64url(link_secret)}
 The prefix `p.` tells the client that the secret is a `link_secret` and that
 it must ask for the password.
 
+The base64url alphabet has no `.` character. Thus the client can always
+separate a prefix from the secret. A link without a prefix is a `file_key`
+of protocol version 1. A later version uses a new prefix. A client that
+finds a prefix that it does not know must tell the user to update (section
+1.5.2).
+
 - The browser does not send the part after `#` to the server.
 - The uploading client makes the link. It knows the secret and it gets
   `file_id` from the server.
@@ -1803,3 +1865,4 @@ when.
 | 13    | 2026-11-10 | Closed: file address, webhook version 2, token hashes, old tool configurations upload as plain, existing files after a prompt. Custom head stays open with the objection and the conflict with the script policy.                                                                                                                                                                                        |
 | 14    | 2026-11-10 | Review of the full document. Corrections: random nonce for `sealed_link_secret`; the folder key copy of the owner uses a secret key; a rotation needs a proof of the passphrase; a signed request cannot create a session; the script policy permits inline scripts with a nonce; the server stores the full header. New: reset without the mnemonic, limit 8, three open questions. Stale text removed. |
 | 15    | 2026-11-10 | The file name moves out of the header into a separate sealed record. The header has 26 bytes. No sign-in with the account key. The "Custom head" setting continues to operate with scripts, as an accepted limit. Reset without the mnemonic is agreed.                                                                                                                                                  |
+| 16    | 2026-11-10 | Protocol versions: where the version is recorded, rules for a client, rules for a new version. The account record stores its Argon2id parameters.                                                                                                                                                                                                                                                        |
