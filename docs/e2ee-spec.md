@@ -2284,7 +2284,13 @@ for each type of file and the default selection.
    the owner made public or gave a password before the job got to it. The
    user can change the selection later. The user can also request the
    encryption of single plain files. A new selection replaces the jobs that
-   did not start. The application asks only if the account has plain files.
+   did not start. The selection applies to the plain files from before the
+   upgrade. The server knows them: each upload after the upgrade stores its
+   `encryption` setting in the file record, and an older file has none. A
+   file that was uploaded as a plain file after the upgrade is not part of
+   the selection, because that upload was a decision of the owner. The
+   application asks only if the account has plain files from before the
+   upgrade.
 3. **Before the server starts.** The server starts no file of an account
    while a folder of the account has no `folder_public_key` or a tag has no
    `sealed_tag_metadata`. The jobs wait. The browser of the owner makes

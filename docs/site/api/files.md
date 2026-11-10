@@ -686,6 +686,7 @@ Files from before end-to-end encryption are plain. The server has their content,
     "choice": "private",
     "choiceAt": "2026-11-14T09:30:00.000Z",
     "plain": { "private": 0, "public": 3, "password": 1, "total": 4 },
+    "plainLater": 2,
     "libraryReady": true,
     "jobs": {
       "waiting": 0,
@@ -702,11 +703,11 @@ Files from before end-to-end encryption are plain. The server has their content,
 }
 ```
 
-`plain` counts the files that are still plain: `password` is every file with a server-side password, `public` and `private` are the rest by visibility. `choice` is `null` until you answered. `libraryReady` is `false` while a folder has no key pair or a tag has no sealed record; the server starts no file of the account until your browser converted them. `jobs` counts the queue rows of the last 7 days. A `failed` entry is a file that is still plain, which is why the server can name it; `code` is one of `source_missing`, `storage_read_failed`, `storage_write_failed`, `verification_failed`, `account_keys_missing`, `interrupted` and `internal_error`. `passwordPending` counts encrypted files that lost a server-side password and are private until you [set a password again](#set-or-remove-a-password).
+`plain` counts the plain files from before encryption, which are the files the choice covers: `password` is every such file with a server-side password, `public` and `private` are the rest by visibility. A file counts as from before encryption when its stored upload options have no `encryption` setting, which every upload since this release records. `plainLater` counts the other plain files, uploaded as plain since; no choice queues them. `choice` is `null` until you answered. `libraryReady` is `false` while a folder has no key pair or a tag has no sealed record; the server starts no file of the account until your browser converted them. `jobs` counts the queue rows of the last 7 days. A `failed` entry is a file that is still plain, which is why the server can name it; `code` is one of `source_missing`, `storage_read_failed`, `storage_write_failed`, `verification_failed`, `account_keys_missing`, `interrupted` and `internal_error`. `passwordPending` counts encrypted files that lost a server-side password and are private until you [set a password again](#set-or-remove-a-password).
 
-**`PUT /api/files/existing`** takes exactly `{ "choice": "none" | "private" | "all" }`, records it, and answers the same state. `private` queues each private file without a password, and such a job skips a file that you made public or protected in the meantime. `all` queues every plain file. A new answer replaces the jobs that have not started, so `none` empties the queue; a file that is being encrypted at that moment is finished. An account without keys gets `409` with `code: "account_keys_missing"`.
+**`PUT /api/files/existing`** takes exactly `{ "choice": "none" | "private" | "all" }`, records it, and answers the same state. `private` queues each private file from before encryption without a password, and such a job skips a file that you made public or protected in the meantime. `all` queues every plain file from before encryption. A new answer replaces the jobs that have not started, so `none` empties the queue; a file that is being encrypted at that moment is finished. An account without keys gets `409` with `code: "account_keys_missing"`.
 
-**`POST /api/files/existing/encrypt`** takes exactly `{ "fileIds": ["…"] }` with 1 to 500 IDs and answers `{ "data": { "queued": 2 } }`. It queues your plain files among them, also ones that failed before. Other IDs are left out without an error.
+**`POST /api/files/existing/encrypt`** takes exactly `{ "fileIds": ["…"] }` with 1 to 500 IDs and answers `{ "data": { "queued": 2 } }`. It queues your plain files among them, whenever they were uploaded, also ones that failed before. Other IDs are left out without an error.
 
 What changes for a file when its job finishes: `encrypted` becomes `true`, `name` becomes empty, `mimeType` becomes `application/octet-stream`, `urlPath` becomes `/{urlId}/e_…`, and `size` grows by 26 bytes plus 32 bytes per 64 KiB. Its ID, tags, folder, visibility, expiry, counters and upload time stay. The old address answers `404`. A file that had a server-side password becomes `PRIVATE` with `passwordPending: true` in the [file list](#list-and-search-files); storing a password stanza restores the visibility it had. Integrations that stored a file's URL must read it again, and a `file.ready` receiver gets no new event for a converted file.
 

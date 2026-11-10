@@ -752,7 +752,7 @@ async function main() {
           fileKeys.push(fileKey)
         }
         await expect(settings).toContainText(
-          'Every file in your library is encrypted',
+          'No plain file from before encryption is left',
           { timeout: 20000 }
         )
       }
@@ -858,6 +858,8 @@ async function main() {
                 mimeType: 'text/plain',
                 size: content.length / 1048576,
                 visibility,
+                // An upload since the upgrade records its setting.
+                uploadOptions: { encryption: 'encrypted' },
               },
             })),
             content,

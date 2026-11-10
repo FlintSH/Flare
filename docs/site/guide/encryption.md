@@ -153,7 +153,7 @@ Work that needs your browser waits for it. A file that another device or a tool 
 
 ## Files from before encryption
 
-Files that were in your library before this release are plain files, and they stay plain until you decide otherwise. The server already has them, so it can encrypt them for you: your browser does not download or upload anything.
+Files that were in your library before this release are plain files, and they stay plain until you decide otherwise. Flare asks about these files only. A file that you or a tool uploaded as **Plain** after you had keys is your choice already: no answer below touches it, and you can still [encrypt it by itself](#encrypt-single-files). The server already has them, so it can encrypt them for you: your browser does not download or upload anything.
 
 When the server encrypts one of your files:
 
@@ -172,7 +172,7 @@ This protects your files from now on. It does not undo the past: the server stor
 
 ### Choose which files to encrypt
 
-After you have set up your keys, a line above your library says how many files are stored readable. Choose **Choose** to open the question, or close the line to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files.
+After you have set up your keys, a line above your library says how many files are stored readable. Choose **Choose** to open the question, or close the line to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files from before encryption.
 
 <Screenshot src="/screenshots/encryption/existing-files-prompt.webp" alt="File library with a line above it that reads 6 files from before encryption are stored readable, The server can encrypt them for you, with a Choose button and a close button" caption="The question appears above your library one time. Closing it puts it off until you next open Flare." />
 

@@ -172,13 +172,23 @@ export async function libraryReadyForEncryption(
 
 // --- The queue ---
 
+/**
+ * A file from before end-to-end encryption. Each upload since then records
+ * the `encryption` setting it was made with, also a plain one, so a file
+ * without that record is older. A file that its owner or an old tool
+ * uploaded as plain later is not part of the question: the owner can ask
+ * for it by its ID.
+ */
+const FROM_BEFORE_ENCRYPTION = Prisma.sql`NOT (file."uploadOptions" ? 'encryption')`
+
 export type FileEncryptionSelection =
   { scope: 'private' | 'all' } | { fileIds: string[] }
 
 /**
- * Queues plain files of `userId`. `private` is each private file without a
+ * Queues plain files of `userId`. A scope covers the files from before
+ * encryption: `all` of them, or with `private` each private one without a
  * server-side password, and such a job encrypts its file only while that is
- * still true. A file that already has a job is queued again when the job
+ * still true. File IDs name any plain file of the account. A file that already has a job is queued again when the job
  * failed or finished without encrypting. Returns how many jobs wait.
  */
 export async function enqueueFileEncryption(
@@ -191,8 +201,8 @@ export async function enqueueFileEncryption(
     'fileIds' in selection
       ? Prisma.sql`AND file.id IN (${Prisma.join(selection.fileIds)})`
       : onlyIfPrivate
-        ? Prisma.sql`AND file.visibility = 'PRIVATE' AND file.password IS NULL`
-        : Prisma.empty
+        ? Prisma.sql`AND ${FROM_BEFORE_ENCRYPTION} AND file.visibility = 'PRIVATE' AND file.password IS NULL`
+        : Prisma.sql`AND ${FROM_BEFORE_ENCRYPTION}`
   return tx.$executeRaw`
     INSERT INTO "FileEncryptionJob" AS job
       (id, "userId", "fileId", "onlyIfPrivate", "updatedAt")
@@ -1066,11 +1076,12 @@ export async function existingFilesStatus(userId: string) {
       }),
       prisma.$queryRaw<{ kind: string; files: bigint }[]>`
       SELECT CASE
+          WHEN NOT ${FROM_BEFORE_ENCRYPTION} THEN 'later'
           WHEN password IS NOT NULL THEN 'password'
           WHEN visibility = 'PUBLIC' THEN 'public'
           ELSE 'private'
         END AS kind, COUNT(*) AS files
-      FROM "File" WHERE "userId" = ${userId} AND encrypted = false
+      FROM "File" AS file WHERE "userId" = ${userId} AND encrypted = false
       GROUP BY 1
     `,
       prisma.$queryRaw<{ state: string; jobs: bigint }[]>`
@@ -1105,7 +1116,7 @@ export async function existingFilesStatus(userId: string) {
         ).map((file) => [file.id, file.name])
       : []
   )
-  const plain = { private: 0, public: 0, password: 0 }
+  const plain = { private: 0, public: 0, password: 0, later: 0 }
   for (const row of kinds)
     if (row.kind in plain)
       plain[row.kind as keyof typeof plain] = Number(row.files)
@@ -1115,7 +1126,15 @@ export async function existingFilesStatus(userId: string) {
     hasKeys: Boolean(user?.accountPublicKey),
     choice: (user?.existingFilesChoice ?? null) as ExistingFilesChoice | null,
     choiceAt: user?.existingFilesChoiceAt?.toISOString() ?? null,
-    plain: { ...plain, total: plain.private + plain.public + plain.password },
+    /** Plain files from before encryption, by what encryption changes for them. */
+    plain: {
+      private: plain.private,
+      public: plain.public,
+      password: plain.password,
+      total: plain.private + plain.public + plain.password,
+    },
+    /** Plain files that were uploaded as plain since. No answer covers them. */
+    plainLater: plain.later,
     /** False while the browser must first convert folders or tags. */
     libraryReady: ready,
     jobs: {

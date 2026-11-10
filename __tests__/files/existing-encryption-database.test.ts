@@ -513,6 +513,31 @@ describe.skipIf(!databaseUrl)(
       expect(await job.claimFileEncryptions()).toEqual([])
     })
 
+    it('asks only about files from before encryption, and encrypts a later plain file on request', async () => {
+      const old = await plainFile(randomBytes(10))
+      // Uploaded as plain after the account had keys: the upload recorded it.
+      const chosen = await plainFile(randomBytes(10), {
+        uploadOptions: { encryption: 'plain', visibility: 'PRIVATE' },
+      })
+      expect(await job.existingFilesStatus(owner)).toMatchObject({
+        plain: { private: 1, public: 0, password: 0, total: 1 },
+        plainLater: 1,
+      })
+      expect(await queue({ scope: 'private' })).toBe(1)
+      expect(await queue({ scope: 'all' })).toBe(1)
+      expect(await runOne()).toBe('encrypted')
+      expect((await row(old.id)).encrypted).toBe(true)
+      expect((await row(chosen.id)).encrypted).toBe(false)
+      expect(await job.claimFileEncryptions()).toEqual([])
+      // The owner asks for this file.
+      expect(await queue({ fileIds: [chosen.id] })).toBe(1)
+      expect(await runOne()).toBe('encrypted')
+      expect(await job.existingFilesStatus(owner)).toMatchObject({
+        plain: { total: 0 },
+        plainLater: 0,
+      })
+    })
+
     it('skips a file that its owner made public while a job for private files ran', async () => {
       const content = randomBytes(1000)
       const before = await plainFile(content)
