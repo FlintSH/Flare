@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 17. Not implemented. Not reviewed.            |
+| Status  | Draft 18. Phase 1 implemented. Not reviewed.        |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -92,7 +92,7 @@ This document specifies protocol version 1.
 | Each context string           | The text `v1`, for example `"flare e2ee v1 account stanza"`.          |
 | The file header               | `format_version` (section 7.2).                                       |
 | Each stanza and sealed record | One byte `record_version` before the record. The value is `0x01`.     |
-| The account record            | `protocol_version` and `kdf_parameters` (section 5.3).                |
+| The account record            | `protocol_version` (section 5.3).                                     |
 | A share link                  | The prefix before the first `.` in the part after `#` (section 10.3). |
 | A script client configuration | `protocol_version`.                                                   |
 
@@ -108,19 +108,20 @@ the version byte causes a failure only.
 2. A client must be able to read each version that was released.
 3. A client that finds a version that it does not know must stop and tell
    the user to update. It must not try a different version.
-4. A client must reject `kdf_parameters` that are weaker than the minimum of
-   its version (section 4.3). A compromised server could send weak
-   parameters to make the test of passphrases easier.
+4. A client uses only the Argon2id parameters of its protocol version
+   (section 4.3). The server does not send parameters. A compromised server
+   thus cannot make the test of passphrases easier.
 
 #### 1.5.3 Rules for a new version
 
 1. A new version uses new context strings, for example `"flare e2ee v2 ..."`.
 2. A new version gets a new `format_version`, `record_version` or link
    prefix where the format changes.
-3. Existing files are not changed. A client can move an account to new
-   parameters at a key rotation (section 8.3), because a rotation makes each
-   account record again.
-4. The server tells a script client which versions it accepts. The server
+3. Existing files are not changed. An account moves to a new version at a
+   key rotation (section 8.3), because a rotation makes each account record
+   again.
+4. A change of the Argon2id parameters needs a new protocol version.
+5. The server tells a script client which versions it accepts. The server
    can reject uploads of a version that is retired.
 
 ## 2. Terms and notation
@@ -311,6 +312,32 @@ ciphertext (encrypt-then-MAC).
    reject.
 5. The output is `XChaCha20(cipher_key, nonce, ciphertext)`.
 
+A `sealed_box` that has less than 56 bytes is not valid. Reject it.
+
+#### 4.2.1 Sealed box for a key that is used one time
+
+A stanza key encrypts one message only. For such a key, the nonce is not a
+random value and is not part of the output.
+
+`seal_once(key, associated_data, message)`:
+
+1. `nonce = the first 24 bytes of blake3_derive_key("flare e2ee v1 one-time nonce", key)`
+2. `sealed_box = seal(key, nonce, associated_data, message)`
+3. The output is `sealed_box` without its first 24 bytes: `ciphertext || tag`.
+
+`open_once(key, associated_data, sealed_once_box)`:
+
+1. Calculate `nonce` as in step 1 of `seal_once`.
+2. The output is `open(key, associated_data, nonce || sealed_once_box)`.
+
+A `sealed_once_box` that has less than 32 bytes is not valid. Reject it.
+
+**Reason:** the nonce comes from the key, as in HPKE. The record has one
+valid form only, and it is 24 bytes shorter. A reader has no nonce to
+examine. The security depends on a key that is not used again. This is the
+same condition as for a fixed nonce. A caller must never use `seal_once`
+two times with one key.
+
 **Reason for two derived keys:** one key for both operations has no known
 attack with XChaCha20 and BLAKE3. Two keys agree with the standard proof of
 encrypt-then-MAC, and they cost one more derivation.
@@ -331,14 +358,15 @@ This document uses the second set. A browser on a phone cannot supply 2 GiB.
 The salt is 32 bytes. RFC 9106 recommends 16 bytes for these sets. A longer
 salt is permitted.
 
-These parameters are the minimum of protocol version 1. The server stores
-the parameters of each account as `kdf_parameters` (section 5.3). An account
-can thus get stronger parameters later without a new protocol version.
+These parameters are fixed for protocol version 1. They apply to the
+passphrase of an account and to the password of a file. No record stores
+them and no party can select different values. Different parameters need a
+new protocol version (section 1.5.3).
 
 A browser without threads calculates the 4 lanes one after the other. The
 result is the same. The time is longer. The implementation must measure the
 time on a slow phone before the release. If the time is not acceptable, the
-authors must change this section, not the implementation only.
+authors must change this section before the release of version 1.
 
 ### 4.4 Encodings
 
@@ -352,32 +380,56 @@ the same bytes.
    these 32 bytes.
 2. **`ed2curve_private`.** Calculate SHA-512 of the seed. Take the first 32
    bytes. Clamp them as RFC 7748 specifies for X25519.
-3. **`ed2curve_public`.** Decode the Edwards point with the coordinate `y`.
-   The X25519 public key is `u = (1 + y) / (1 - y)` in the field, as 32
-   bytes little-endian. If the point does not decode, or `y = 1`, fail.
+3. **`ed2curve_public`.** Decode the Edwards point as RFC 8032 specifies.
+   Reject a `y` that is not less than `2^255 - 19`, and a `y` that has no
+   `x`. The X25519 public key is `u = (1 + y) / (1 - y)` in the field, as 32
+   bytes little-endian. If `y = 1`, fail.
+   3a. **X25519 public key.** A public key is valid only in its canonical form:
+   the value is less than `2^255 - 19` and the highest bit of the last byte
+   is zero. Reject each other form. This applies to `ephemeral_public_key`,
+   `folder_public_key` and each `recipient_public_key`.
+   3b. **X25519 private key.** A private key is 32 random bytes as they are.
+   The X25519 function clamps them. `folder_private_key` is stored, sealed
+   and put in a link in this form, without clamping.
 4. **XChaCha20.** The block counter starts at `0`.
 5. **Passphrase and file password.** Normalize the text with Unicode NFKC.
    Encode it as UTF-8. Do not remove spaces.
 6. **Argon2id.** Version `0x13`. No secret value. No associated data. The
    output has 32 bytes. Memory is in units of KiB: 64 MiB is `65536`.
-7. **Account identifier in a signature.** Remove spaces at the start and the
-   end. Change to lower case. Encode as UTF-8.
-8. **Signed request.** `method` is in upper case ASCII. `path` is the path
-   and the query of the request as the client sends them, in UTF-8. `body`
-   is the bytes of the request body. For a request without a body, use
+7. **Account identifier.** Normalize with Unicode NFKC. Remove the
+   characters with the Unicode property White_Space at the start and the
+   end. Change to lower case with the default Unicode mapping, without a
+   locale. Encode as UTF-8. Each place that uses the identifier uses this
+   form: the signature of section 6.2 and the fake salt of section 6.1.
+8. **Signed request.** `method` is in upper case ASCII. A verifier rejects
+   each other form. `path` is the path and the query of the request line,
+   in the percent-encoded form that the client sends. The server must use
+   the request line as it arrived, before a proxy or a base path changes it.
+   `body` is the bytes of the request body. For a request without a body, use
    `blake3_hash` of the empty byte string.
 9. **JSON records.** `file_metadata`, `folder_metadata` and `tag_metadata`
-   are UTF-8 JSON. The reader accepts each valid JSON object. The writer
+   are UTF-8 JSON. A field that is absent and a field with the value `null`
+   both mean "no value". `ocr_text` is UTF-8 text without normalization. The reader accepts each valid JSON object. The writer
    does not have to use a canonical form, because the reader never compares
    the bytes.
 10. **Mnemonic.** BIP39 with the English word list. 32 bytes of entropy give
-    24 words.
+    24 words. The writer gives lower case words with one space between them.
+    The reader accepts upper case and more than one space.
 11. **List of old private keys.** `old_private_keys` in `sealed_keyring` is
-    the concatenation of the 32-byte seeds, newest first.
-12. **`record_version`.** A stored stanza or sealed record is
-    `0x01 || record`. The byte is not an input of `seal` or of
-    `public_wrap`.
-13. **Text form.** Where a value is in JSON or in a URL, it is base64url
+    the concatenation of the 32-byte seeds, newest first. An account with no
+    old key has no `sealed_keyring`. A client must not store a sealed empty
+    list.
+12. **`record_version`.** Each stanza and each sealed value that the server
+    stores is `0x01 || record`. This includes `wrapped_root`,
+    `sealed_keyring`, `sealed_metadata`, `sealed_ocr_text`,
+    `sealed_thumbnail`, `sealed_tag_metadata`, `sealed_folder_metadata`,
+    `sealed_folder_private_key` and each stanza. The byte is not an input of
+    `seal` or of `public_wrap`. The sizes in section 2.3 do not include it.
+13. **Unicode version.** NFKC and the lower case mapping depend on the
+    Unicode version of the program. Two programs with different versions can
+    give different bytes for a character that Unicode added recently. This
+    document does not fix a version. It is a known limit.
+14. **Text form.** Where a value is in JSON or in a URL, it is base64url
     without padding. Test vectors use lower case hexadecimal.
 
 ### 4.5 Test vectors
@@ -464,15 +516,14 @@ boundary.
 
 ### 5.3 Data that the server stores for each account
 
-| Field                | Content                                                                               | Readable by the server |
-| -------------------- | ------------------------------------------------------------------------------------- | ---------------------- |
-| `account_public_key` | Account public key                                                                    | Yes                    |
-| `passphrase_salt`    | `random(32)`                                                                          | Yes                    |
-| `kdf_parameters`     | The Argon2id memory, passes and lanes that made the keys of this account              | Yes                    |
-| `protocol_version`   | The protocol version of the account record                                            | Yes                    |
-| `auth_public_key`    | Public key of the sign-in key pair                                                    | Yes                    |
-| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)`                        | No                     |
-| `sealed_keyring`     | Old account private keys, encrypted (section 8.3.3). Empty before the first rotation. | No                     |
+| Field                | Content                                                                                    | Readable by the server |
+| -------------------- | ------------------------------------------------------------------------------------------ | ---------------------- |
+| `account_public_key` | Account public key                                                                         | Yes                    |
+| `passphrase_salt`    | `random(32)`                                                                               | Yes                    |
+| `protocol_version`   | The protocol version of the account record                                                 | Yes                    |
+| `auth_public_key`    | Public key of the sign-in key pair                                                         | Yes                    |
+| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)`                             | No                     |
+| `sealed_keyring`     | Old account private keys, encrypted (section 8.3.3). Absent if the account has no old key. | No                     |
 
 A person who copies the database gets `wrapped_root` and `auth_public_key`.
 That person cannot sign in. That person can test passphrases offline
@@ -488,8 +539,8 @@ The client does these steps:
 4. `passphrase_root = Argon2id(passphrase, passphrase_salt)`.
 5. Calculate `auth_private_key`, `auth_public_key` and `wrap_key`.
 6. `wrapped_root = seal(wrap_key, random(24), account_public_key, root_entropy)`.
-7. Send `account_public_key`, `passphrase_salt`, `kdf_parameters`,
-   `protocol_version`, `auth_public_key` and `wrapped_root` to the server.
+7. Send `account_public_key`, `passphrase_salt`, `protocol_version`,
+   `auth_public_key` and `wrapped_root` to the server.
 8. Show the mnemonic of `root_entropy` to the user. Tell the user to keep it
    offline.
 9. Erase `passphrase_root`, `auth_private_key` and `wrap_key` from memory.
@@ -513,14 +564,13 @@ cannot take it back. Thus the second factor must protect the release of
 ### 6.1 Salt and challenge request
 
 1. The client sends the account identifier.
-2. The server returns `passphrase_salt`, `kdf_parameters` and
+2. The server returns `passphrase_salt`, `protocol_version` and
    `challenge = random(32)`. The challenge is valid for one use and for
    60 seconds.
-3. The client rejects `kdf_parameters` that are weaker than the minimum
-   (section 1.5.2).
 
 For an unknown identifier, the server must return a fake salt. The fake salt
-is `blake3_keyed_hash(server_secret, identifier)`. The response for an
+is `blake3_keyed_hash(server_secret, identifier)`, with the identifier in
+the form of section 4.4, rule 7. The response for an
 unknown identifier must have the same form and timing as a real response.
 
 ### 6.2 Password sign-in
@@ -727,6 +777,16 @@ which has a limit of 256 GiB in the common variant.
    file.
 6. A chunk that is not the last one must have exactly 65536 bytes.
 7. No data must follow the last chunk. If data follows, reject the file.
+8. A last chunk of length zero is valid only if it is chunk `0`, thus only
+   for an empty file. Reject it in each other position. Each plaintext then
+   has one valid encrypted form.
+9. `chunk_size_log2` must be `16`. Reject each other value.
+
+A reader that works as a stream releases each chunk after its tag is
+correct. It can find a truncation only when it reaches the end. Thus a
+program must not use the output as a complete file before the reader
+verified the last chunk. A read of a byte range proves nothing about the
+end of the file, unless the range contains the last chunk.
 
 ### 7.5 Properties
 
@@ -760,18 +820,22 @@ Wrap:
 3. `shared_secret = X25519(ephemeral_private_key, exchange_public_key)`.
    If `shared_secret = zeros(32)`, reject.
 4. `stanza_key = blake3_derive_key("flare e2ee v1 account stanza", shared_secret || ephemeral_public_key || exchange_public_key)`
-5. `wrapped_file_key = seal(stanza_key, zeros(24), header_hash, file_key)`
-6. The stanza is `ephemeral_public_key || wrapped_file_key`.
+5. `wrapped_file_key = seal_once(stanza_key, header_hash, file_key)`
+6. The stanza is `ephemeral_public_key || wrapped_file_key`. It has 96 bytes.
 7. Erase `ephemeral_private_key`, `shared_secret` and `stanza_key`.
 
-The nonce is zero because `stanza_key` encrypts one message only.
+`stanza_key` encrypts one message only, thus the stanza uses `seal_once`
+(section 4.2.1) and contains no nonce.
 
 Unwrap:
 
-1. `shared_secret = X25519(exchange_private_key, ephemeral_public_key)`.
+1. Reject an `ephemeral_public_key` that is not canonical (section 4.4,
+   rule 3a).
+2. `shared_secret = X25519(exchange_private_key, ephemeral_public_key)`.
    If `shared_secret = zeros(32)`, reject.
-2. Calculate `stanza_key` as in step 4 of the wrap procedure.
-3. `file_key = open(stanza_key, header_hash, wrapped_file_key)`
+3. Calculate `stanza_key` as in step 4 of the wrap procedure. The client
+   calculates `exchange_public_key` from its private key.
+4. `file_key = open_once(stanza_key, header_hash, wrapped_file_key)`
 
 ### 8.2 Password stanza
 
@@ -794,9 +858,10 @@ Wrap:
 1. `password_salt = random(32)`
 2. `link_secret = random(32)`
 3. `owner_public_key` = the `account_public_key` of the owner at this time.
-4. `stretched_password = Argon2id(password, password_salt)`
+4. `stretched_password = Argon2id(password, password_salt)`, with the fixed
+   parameters of section 4.3.
 5. `password_key = blake3_derive_key("flare e2ee v1 password stanza", stretched_password || link_secret || owner_public_key || header_hash)`
-6. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
+6. `wrapped_file_key = seal_once(password_key, header_hash, file_key)`
 7. `link_secret_key = blake3_derive_key("flare e2ee v1 link secret copy", file_key)`
 8. `sealed_link_secret = seal(link_secret_key, random(24), header_hash, link_secret)`
 9. The stanza is `password_salt || owner_public_key || wrapped_file_key || sealed_link_secret`.
@@ -809,7 +874,7 @@ Unwrap:
 3. The recipient types the password.
 4. The client calculates `password_key` as in steps 4 and 5 of the wrap
    procedure.
-5. `file_key = open(password_key, header_hash, wrapped_file_key)`
+5. `file_key = open_once(password_key, header_hash, wrapped_file_key)`
 
 Properties:
 
@@ -1000,15 +1065,26 @@ section uses the same procedure with three parameters:
 
 `public_wrap(recipient_public_key, context, associated_data, secret)`:
 
-1. Make an X25519 key pair
+1. Reject a `recipient_public_key` that is not canonical (section 4.4,
+   rule 3a).
+2. Make an X25519 key pair
    `(ephemeral_private_key, ephemeral_public_key)`.
-2. `shared_secret = X25519(ephemeral_private_key, recipient_public_key)`.
+3. `shared_secret = X25519(ephemeral_private_key, recipient_public_key)`.
    If `shared_secret = zeros(32)`, reject.
-3. `stanza_key = blake3_derive_key(context, shared_secret || ephemeral_public_key || recipient_public_key)`
-4. The output is `ephemeral_public_key || seal(stanza_key, zeros(24), associated_data, secret)`.
+4. `stanza_key = blake3_derive_key(context, shared_secret || ephemeral_public_key || recipient_public_key)`
+5. The output is `ephemeral_public_key || seal_once(stanza_key, associated_data, secret)`.
 
-`public_unwrap` is the reverse operation with the private key of the
-recipient.
+`public_unwrap(recipient_private_key, context, associated_data, stanza)`:
+
+1. Reject an `ephemeral_public_key` that is not canonical.
+2. Calculate `recipient_public_key` from `recipient_private_key`.
+3. `shared_secret = X25519(recipient_private_key, ephemeral_public_key)`.
+   If `shared_secret = zeros(32)`, reject.
+4. Calculate `stanza_key` as in step 4 of `public_wrap`.
+5. The output is `open_once(stanza_key, associated_data, sealed part of the stanza)`.
+
+Each call of `public_wrap` makes a new ephemeral key pair. A caller must
+not use one ephemeral key pair for two stanzas.
 
 The account stanza of section 8.1 is
 `public_wrap(exchange_public_key, "flare e2ee v1 account stanza", header_hash, file_key)`.
@@ -1037,6 +1113,11 @@ protect this copy.
 
 The client of the owner must get `folder_public_key` from
 `folder_private_key`. It must not use the copy that the server gives.
+
+A client that opens `sealed_folder_private_key` or a
+`parent_folder_stanza` must calculate the public key from the private key
+that it got. If the result is not the `folder_public_key` of the record,
+reject.
 
 The key pair of a folder does not come from the key pair of its parent. A
 person who has the key of a folder cannot calculate the key of a folder
@@ -1914,3 +1995,4 @@ when.
 | 15    | 2026-11-10 | The file name moves out of the header into a separate sealed record. The header has 26 bytes. No sign-in with the account key. The "Custom head" setting continues to operate with scripts, as an accepted limit. Reset without the mnemonic is agreed.                                                                                                                                                  |
 | 16    | 2026-11-10 | Protocol versions: where the version is recorded, rules for a client, rules for a new version. The account record stores its Argon2id parameters.                                                                                                                                                                                                                                                        |
 | 17    | 2026-11-10 | Protocol versions agreed. Exact encodings for each value. Test vectors.                                                                                                                                                                                                                                                                                                                                  |
+| 18    | 2026-11-11 | Results of the first implementation. `seal_once` for stanzas: the nonce comes from the key and is not stored. Argon2id parameters are fixed for a protocol version; the account record does not store them. One valid encrypted form for each file. Canonical X25519 public keys. Exact identifier form, also for the fake salt. Each stored record has the version byte. No sealed empty keyring.       |
