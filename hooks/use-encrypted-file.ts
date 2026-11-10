@@ -4,20 +4,15 @@ import { useEffect, useSyncExternalStore } from 'react'
 
 import { useAccountKeyState } from '@/components/providers/account-keys-provider'
 
-import {
-  type AccountUnwrapper,
-  type EncryptedRecordsWire,
-  type OpenedFile,
-  createAccountUnwrapper,
-} from '@/lib/e2ee/client/files'
+import type { EncryptedRecordsWire, OpenedFile } from '@/lib/e2ee/client/files'
 import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
 import {
   openedFileState,
   openedFiles,
   rememberOpenedFile,
   rememberUnopenedFile,
-  retryUnopenedFiles,
 } from '@/lib/e2ee/client/opened-files'
+import { unwrapperFor } from '@/lib/e2ee/client/unwrappers'
 
 export type EncryptedFileState =
   /** The keys of this browser are locked. The passphrase unlocks them. */
@@ -27,20 +22,7 @@ export type EncryptedFileState =
   /** No key of this account opens the file's stanza. */
   | { status: 'failed' }
 
-// One set of imported keys per unlocked account record, shared by every card.
-const unwrappers = new WeakMap<StoredAccountKeys, Promise<AccountUnwrapper>>()
 const pending = new Map<string, Promise<void>>()
-
-function unwrapperFor(keys: StoredAccountKeys) {
-  let unwrapper = unwrappers.get(keys)
-  if (!unwrapper) {
-    unwrapper = createAccountUnwrapper(keys)
-    unwrappers.set(keys, unwrapper)
-    // What earlier keys could not open, these keys may.
-    retryUnopenedFiles()
-  }
-  return unwrapper
-}
 
 /** Opens the account stanza of a file once, for every caller that asks. */
 export function openOwnedFile(

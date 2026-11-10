@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     delete: vi.fn(),
   },
   file: { count: vi.fn(), updateMany: vi.fn() },
+  user: { findUnique: vi.fn() },
   $queryRaw: vi.fn(),
   transaction: vi.fn(),
 }))
@@ -44,6 +45,8 @@ beforeEach(() => {
     ...folder,
     ...data,
   }))
+  // An account without encryption keys: its folders keep plain names.
+  mocks.user.findUnique.mockResolvedValue({ accountPublicKey: null })
   mocks.file.count.mockResolvedValue(1)
   mocks.file.updateMany.mockResolvedValue({ count: 1 })
 })
@@ -58,6 +61,7 @@ describe('owner-isolated folder mutations', () => {
       parentId: 'folder',
       shareToken: null,
       fileCount: 2,
+      keys: null,
     })
     expect(mocks.vaultFolder.findFirst).toHaveBeenCalledWith({
       where: { id: 'folder', userId: 'owner' },

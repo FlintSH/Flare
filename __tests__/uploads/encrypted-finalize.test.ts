@@ -31,6 +31,9 @@ const mocks = vi.hoisted(() => ({
     user: { findUnique: vi.fn(), update: vi.fn() },
     file: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     vaultFolder: { findFirst: vi.fn() },
+    vaultTag: { findFirst: vi.fn(), findMany: vi.fn() },
+    vaultFileTag: { createMany: vi.fn() },
+    fileSealedData: { upsert: vi.fn() },
     apiToken: { findUnique: vi.fn() },
     uploadProfile: { findFirst: vi.fn() },
   },
@@ -48,6 +51,7 @@ vi.mock('@/lib/config', () => ({
   readConfig: async () => ({
     settings: {
       general: {
+        ocr: { enabled: true },
         storage: {
           maxUploadSize: { value: 10, unit: 'MB' },
           quotas: { enabled: false, default: { value: 10, unit: 'GB' } },

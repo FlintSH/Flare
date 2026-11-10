@@ -6,8 +6,8 @@ import {
   type EncryptedRecordsWire,
   EncryptedUploadError,
   assertCiphertextLength,
-  encryptedRecordFields,
   encryptedRecordsSchema,
+  encryptedUploadFields,
   parseEncryptedRecords,
 } from '@/lib/files/encrypted'
 
@@ -28,7 +28,7 @@ export function assertEncryptedUploader(user: AuthenticatedUser) {
     )
 }
 
-const RECORD_KEYS = new Set(Object.keys(encryptedRecordFields))
+const RECORD_KEYS = new Set(Object.keys(encryptedUploadFields))
 /** The options an encrypted upload can set. A server password is not one. */
 const OPTION_KEYS = new Set(
   Object.keys(uploadRequestOptionFields).filter((key) => key !== 'password')
@@ -75,7 +75,7 @@ const { password: _serverPassword, ...encryptedOptionFields } =
  */
 const encryptedInitSchema = requestFields({
   ...encryptedOptionFields,
-  ...encryptedRecordFields,
+  ...encryptedUploadFields,
   encrypted: z.literal(true),
   size: z.number().int().positive(),
 })
@@ -100,23 +100,14 @@ export function parseEncryptedInit(body: unknown) {
     throw new EncryptedUploadError(
       'An encrypted upload takes its size, header, sealed metadata, account stanza and account public key, and no file name, file type or server password.'
     )
-  const {
-    encrypted: _encrypted,
-    size,
-    header,
-    sealedMetadata,
-    accountStanza,
-    stanzaAccountPublicKey,
-    passwordStanza,
-    ...bodyOptions
-  } = parsed.data
-  const encrypted: EncryptedRecordsWire = {
-    header,
-    sealedMetadata,
-    accountStanza,
-    stanzaAccountPublicKey,
-    passwordStanza: passwordStanza ?? null,
-  }
+  const { encrypted: _encrypted, size, ...sent } = parsed.data
+  const records: Record<string, unknown> = {}
+  const bodyOptions: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(sent))
+    (RECORD_KEYS.has(key) ? records : bodyOptions)[key] = value
+  // The session of the upload keeps "no password stanza" as an explicit null.
+  records.passwordStanza ??= null
+  const encrypted = records as EncryptedRecordsWire
   parseEncryptedRecords(encrypted)
   assertCiphertextLength(size)
   return { size, encrypted, bodyOptions }

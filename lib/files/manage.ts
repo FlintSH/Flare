@@ -141,6 +141,8 @@ export async function updateFileSettings(
     accountStanza: _accountStanza,
     stanzaAccountPublicKey: _stanzaAccountPublicKey,
     passwordStanza: storedStanza,
+    folderStanza: _folderStanza,
+    folderStanzaPublicKey: _folderStanzaPublicKey,
     ...file
   } = await prisma.file.update({
     where,

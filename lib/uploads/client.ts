@@ -2,9 +2,12 @@ import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
 import { encryptInWorker } from '@/lib/e2ee/client/file-worker'
 import {
   type NewEncryptedFile,
+  type OpenedFile,
   newEncryptedFile,
   newPasswordStanza,
+  sealedThumbnailRecord,
 } from '@/lib/e2ee/client/files'
+import { type OpenedFolder, folderStanzaFor } from '@/lib/e2ee/client/folders'
 import { rememberOpenedFile } from '@/lib/e2ee/client/opened-files'
 import { storedLengthOf } from '@/lib/e2ee/file'
 import { type ShareSecret, shareLink } from '@/lib/e2ee/link'
@@ -46,8 +49,43 @@ export type UploadOptions = {
    * server can read and show in a link preview (section 11).
    */
   encryptFor?: Uint8Array
+  /** What the browser of the owner does for the library around an upload. */
+  library?: UploadLibrary
   /** Stops the upload. The promise rejects with an `AbortError`. */
   signal?: AbortSignal
+}
+
+/**
+ * The work of section 10.1, steps 5 and 7, that needs more than the file:
+ * the keys of its folder, the tag rules of the owner, a thumbnail. Each
+ * part is optional. What a client does not do here, it declares as not
+ * done, and the server keeps it for the browser of the owner (section 9.7).
+ */
+export interface UploadLibrary {
+  /**
+   * The folder of the upload, opened by its owner. A public encrypted file
+   * gets a folder stanza for its key (section 8.4.3).
+   */
+  folder?: Pick<OpenedFolder, 'folderPublicKey'> | null
+  /** The tags that the owner's rules give a file with this name. */
+  ruleTagIds?(name: string): string[]
+  /**
+   * A WebP thumbnail of the file (section 12.1). Null when none can be
+   * made for this kind of file. It rejects when one could not be made now.
+   */
+  thumbnail?(file: File): Promise<Uint8Array | null>
+  /** Called once the server stored the file, with its ID and its key. */
+  uploaded?(result: {
+    id: string
+    file: File
+    plain: boolean
+    opened: OpenedFile | null
+  }): void
+}
+
+/** Whether a type is an image whose text a browser can read (section 9.6). */
+export function isReadableImage(type: string) {
+  return /^image\/(png|jpe?g|webp|gif|bmp)$/i.test(type)
 }
 
 /** Bytes of the file sent so far. */
@@ -169,6 +207,14 @@ async function uploadWhole(
   const uploaded = parseUploadResponse(reply.body)
   onProgress?.(file.size)
   return uploaded
+}
+
+/** A plain upload has no key and no ID in its answer: the queue is only told. */
+function plainUploaded<Result>(file: File, options: UploadOptions) {
+  return (result: Result) => {
+    options.library?.uploaded?.({ id: '', file, plain: true, opened: null })
+    return result
+  }
 }
 
 async function startChunkedUpload(file: File, options: UploadOptions) {
@@ -311,10 +357,39 @@ async function prepareEncryptedUpload(
     secret = stanza.secret
   }
   options.signal?.throwIfAborted()
+  // Section 10.1, steps 5 and 7. Each value is ciphertext, a public key, an
+  // ID or a declaration of the work that was done.
+  const library = options.library
+  const type = file.type || ENCRYPTED_PART_TYPE
+  const extra: Record<string, string> = {
+    rulesApplied: String(Boolean(library?.ruleTagIds)),
+    isImage: String(isReadableImage(type)),
+  }
+  if (library?.folder && options.folderId && options.visibility === 'PUBLIC')
+    Object.assign(extra, folderStanzaFor(library.folder, created, secret))
+  if (library?.ruleTagIds) {
+    const tagIds = library.ruleTagIds(file.name)
+    if (tagIds.length) extra.ruleTagIds = tagIds.join(',')
+  }
+  if (library?.thumbnail)
+    try {
+      const thumbnail = await library.thumbnail(file)
+      if (thumbnail)
+        extra.sealedThumbnail = sealedThumbnailRecord(created, thumbnail)
+      else extra.thumbnail = 'none'
+    } catch {
+      // Not made now: the server marks the file, and the background work
+      // of this browser tries again.
+    }
+  options.signal?.throwIfAborted()
   return {
     created,
     secret,
-    records: { ...created.records, ...(passwordStanza && { passwordStanza }) },
+    records: {
+      ...created.records,
+      ...(passwordStanza && { passwordStanza }),
+      ...extra,
+    },
   }
 }
 
@@ -323,16 +398,19 @@ function encryptedUploadResult(
   body: unknown,
   file: File,
   created: NewEncryptedFile,
-  secret: ShareSecret
+  secret: ShareSecret,
+  library?: UploadLibrary
 ): UploadResponse {
   const uploaded = parseEncryptedUploadResponse(body)
   const link = shareLink(uploaded.pageUrl, secret)
-  rememberOpenedFile(uploaded.id, {
+  const opened: OpenedFile = {
     fileKey: created.fileKey,
     headerHash: created.headerHash,
     name: file.name,
     type: file.type || ENCRYPTED_PART_TYPE,
-  })
+  }
+  rememberOpenedFile(uploaded.id, opened)
+  library?.uploaded?.({ id: uploaded.id, file, plain: false, opened })
   return {
     url: link,
     pageUrl: link,
@@ -398,7 +476,13 @@ async function uploadEncrypted(
       if (!succeeded(reply))
         throw failure(reply, `Upload failed: ${reply.statusText}`)
       onProgress?.(file.size)
-      return encryptedUploadResult(reply.body, file, created, secret)
+      return encryptedUploadResult(
+        reply.body,
+        file,
+        created,
+        secret,
+        options.library
+      )
     }
 
     const started = await send(
@@ -476,7 +560,13 @@ async function uploadEncrypted(
     )
     if (!succeeded(reply)) throw failure(reply, 'Failed to complete upload')
     onProgress?.(file.size)
-    return encryptedUploadResult(reply.body, file, created, secret)
+    return encryptedUploadResult(
+      reply.body,
+      file,
+      created,
+      secret,
+      options.library
+    )
   } finally {
     job.stop()
   }
@@ -493,9 +583,11 @@ export function uploadFile(
       { ...options, encryptFor: options.encryptFor },
       onProgress
     )
-  return file.size > WHOLE_FILE_MAX_BYTES
-    ? uploadInParts(file, options, onProgress)
-    : uploadWhole(file, options, onProgress)
+  return (
+    file.size > WHOLE_FILE_MAX_BYTES
+      ? uploadInParts(file, options, onProgress)
+      : uploadWhole(file, options, onProgress)
+  ).then(plainUploaded(file, options))
 }
 
 /** Always one request, which the server checks for `pastes.create`. */

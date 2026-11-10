@@ -71,6 +71,7 @@ import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
 import { useEncryptedFile } from '@/hooks/use-encrypted-file'
@@ -406,6 +407,9 @@ function OpenFileCard({
         fallback: TRY_AGAIN,
       })
       if (signal.aborted) return
+      // A file that became public in a folder needs its folder stanza
+      // (docs/e2ee-spec.md, section 9.4.4).
+      if (file.encrypted) requestMaintenance('folders')
       toast({
         title: 'Visibility updated',
         description: `This file is now ${visibility.toLowerCase()}.`,

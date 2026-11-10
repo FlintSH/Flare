@@ -4,8 +4,12 @@ import { z } from 'zod'
 
 import { isE2eeError } from '@/lib/e2ee/errors'
 import { HEADER_LENGTH, fileLayout, parseHeader } from '@/lib/e2ee/file'
-import { base64urlDecode, base64urlEncode } from '@/lib/e2ee/primitives'
-import { decodeStoredRecord } from '@/lib/e2ee/records'
+import {
+  base64urlDecode,
+  base64urlEncode,
+  isCanonicalX25519PublicKey,
+} from '@/lib/e2ee/primitives'
+import { type StoredRecordKind, decodeStoredRecord } from '@/lib/e2ee/records'
 import { HttpError } from '@/lib/http/errors'
 
 import { encryptedFileId } from './encrypted-id'
@@ -35,6 +39,16 @@ export const ENCRYPTED_UPLOAD_HEADER = 'x-flare-encrypted'
  */
 const SEALED_METADATA_MAX_BYTES = 4096
 
+/**
+ * The sealed text of an image: 56 bytes of sealed box around UTF-8 text. The
+ * client cuts longer text (docs/e2ee-spec.md, section 9.6.1).
+ */
+export const SEALED_OCR_TEXT_MAX_BYTES = 56 + 256 * 1024
+/** A sealed WebP thumbnail with a longest side of 480 pixels (section 12.1). */
+export const SEALED_THUMBNAIL_MAX_BYTES = 56 + 256 * 1024
+/** The most tags that the rules of an account can add to one file in one request. */
+export const RULE_TAG_LIMIT = 100
+
 const base64url = (maxBytes: number) =>
   z
     .string()
@@ -54,10 +68,66 @@ export const encryptedRecordFields = {
   passwordStanza: base64url(217).nullable().optional(),
 }
 
-export const encryptedRecordsSchema = z.strictObject(encryptedRecordFields)
+/** A form sends text and a JSON body can send a boolean: both are read. */
+const flag = z.union([z.boolean(), z.enum(['true', 'false'])])
+const isSet = (value: boolean | 'true' | 'false' | undefined) =>
+  value === true || value === 'true'
+
+/**
+ * What an encrypted upload can also carry (section 10.1, steps 5, 7 and 8):
+ * the folder stanza with the folder key it is for, the sealed text and
+ * thumbnail, the tags that the rules of the owner gave, and which work the
+ * client did. Every value is a string, because a multipart form has no
+ * other type.
+ */
+export const encryptedLibraryFields = {
+  folderStanza: base64url(97).optional(),
+  folderPublicKey: base64url(32).optional(),
+  sealedOcrText: base64url(SEALED_OCR_TEXT_MAX_BYTES + 1).optional(),
+  sealedThumbnail: base64url(SEALED_THUMBNAIL_MAX_BYTES + 1).optional(),
+  /** Tag IDs: separated by commas, or a list in a JSON body. */
+  ruleTagIds: z
+    .union([
+      z
+        .string()
+        .max(RULE_TAG_LIMIT * 130)
+        .regex(/^[A-Za-z0-9_,-]*$/),
+      z.array(z.string().min(1).max(128)).max(RULE_TAG_LIMIT),
+    ])
+    .optional(),
+  /** The client applied the tag rules of the owner (section 9.7). */
+  rulesApplied: flag.optional(),
+  /** The file is an image, so it can have text (section 9.7). */
+  isImage: flag.optional(),
+  /** `none`: no thumbnail can be made for this file. */
+  thumbnail: z.literal('none').optional(),
+}
+
+export const encryptedUploadFields = {
+  ...encryptedRecordFields,
+  ...encryptedLibraryFields,
+}
+
+export const encryptedRecordsSchema = z.strictObject(encryptedUploadFields)
 export type EncryptedRecordsWire = z.infer<typeof encryptedRecordsSchema>
 
 export const passwordStanzaSchema = encryptedRecordFields.passwordStanza
+
+/** The library records and declarations of an encrypted upload. */
+export interface EncryptedLibraryRecords {
+  /** A folder stanza with the folder public key it was made for. */
+  folderStanza: {
+    stanza: Uint8Array<ArrayBuffer>
+    folderPublicKey: Uint8Array<ArrayBuffer>
+  } | null
+  sealedOcrText: Uint8Array<ArrayBuffer> | null
+  sealedThumbnail: Uint8Array<ArrayBuffer> | null
+  ruleTagIds: string[]
+  rulesApplied: boolean
+  isImage: boolean
+  /** The client says no thumbnail can exist. */
+  noThumbnail: boolean
+}
 
 export interface EncryptedRecords {
   header: Uint8Array<ArrayBuffer>
@@ -65,6 +135,7 @@ export interface EncryptedRecords {
   accountStanza: Uint8Array<ArrayBuffer>
   stanzaAccountPublicKey: Uint8Array<ArrayBuffer>
   passwordStanza: Uint8Array<ArrayBuffer> | null
+  library: EncryptedLibraryRecords
 }
 
 export class EncryptedUploadError extends HttpError {
@@ -103,6 +174,112 @@ export function parsePasswordStanza(text: string): Uint8Array<ArrayBuffer> {
   return stanza
 }
 
+/** A stored record of `kind` in its text form: `record_version || record`. */
+export function parseStoredRecord(
+  kind: StoredRecordKind,
+  text: string,
+  what: string,
+  maxBytes?: number
+): Uint8Array<ArrayBuffer> {
+  const record = bytes(text, what)
+  if (maxBytes !== undefined && record.length > maxBytes + 1)
+    throw new EncryptedUploadError(`${what} is too large.`)
+  checked(what, () => decodeStoredRecord(kind, record))
+  return record
+}
+
+/** An X25519 public key in its canonical form (section 4.4, rule 3a). */
+export function parseFolderPublicKey(text: string): Uint8Array<ArrayBuffer> {
+  const key = bytes(text, 'The folder public key')
+  if (key.length !== 32 || !isCanonicalX25519PublicKey(key))
+    throw new EncryptedUploadError('The folder public key is not valid.')
+  return key
+}
+
+/**
+ * A folder stanza and the folder key it is for. The kind of stanza follows
+ * from the file: a file with a password stanza takes a
+ * `folder_link_secret_stanza`, each other file a `folder_file_stanza`
+ * (section 8.4.3). Both have one length, and the server cannot tell them
+ * apart; the name in a message is for the reader.
+ */
+export function parseFolderStanza(input: {
+  folderStanza: string
+  folderPublicKey: string
+}): NonNullable<EncryptedLibraryRecords['folderStanza']> {
+  return {
+    stanza: parseStoredRecord(
+      'folder_file_stanza',
+      input.folderStanza,
+      'The folder stanza'
+    ),
+    folderPublicKey: parseFolderPublicKey(input.folderPublicKey),
+  }
+}
+
+export function parseSealedOcrText(text: string) {
+  return parseStoredRecord(
+    'sealed_ocr_text',
+    text,
+    'The sealed image text',
+    SEALED_OCR_TEXT_MAX_BYTES
+  )
+}
+
+export function parseSealedThumbnail(text: string) {
+  return parseStoredRecord(
+    'sealed_thumbnail',
+    text,
+    'The sealed thumbnail',
+    SEALED_THUMBNAIL_MAX_BYTES
+  )
+}
+
+function parseLibraryRecords(
+  wire: EncryptedRecordsWire
+): EncryptedLibraryRecords {
+  if (Boolean(wire.folderStanza) !== Boolean(wire.folderPublicKey))
+    throw new EncryptedUploadError(
+      'A folder stanza needs the folder public key it was made for.'
+    )
+  const sentTagIds = wire.ruleTagIds ?? []
+  const ruleTagIds = [
+    ...new Set(
+      (typeof sentTagIds === 'string'
+        ? sentTagIds.split(',')
+        : sentTagIds
+      ).filter(Boolean)
+    ),
+  ]
+  if (ruleTagIds.length > RULE_TAG_LIMIT)
+    throw new EncryptedUploadError(
+      `Rules can add up to ${RULE_TAG_LIMIT} tags to one file.`
+    )
+  if (wire.sealedThumbnail && wire.thumbnail)
+    throw new EncryptedUploadError(
+      'An upload has a thumbnail or says that none can be made, not both.'
+    )
+  return {
+    folderStanza:
+      wire.folderStanza && wire.folderPublicKey
+        ? parseFolderStanza({
+            folderStanza: wire.folderStanza,
+            folderPublicKey: wire.folderPublicKey,
+          })
+        : null,
+    sealedOcrText: wire.sealedOcrText
+      ? parseSealedOcrText(wire.sealedOcrText)
+      : null,
+    sealedThumbnail: wire.sealedThumbnail
+      ? parseSealedThumbnail(wire.sealedThumbnail)
+      : null,
+    ruleTagIds,
+    rulesApplied: isSet(wire.rulesApplied),
+    isImage: isSet(wire.isImage),
+    noThumbnail: wire.thumbnail === 'none',
+  }
+}
+
 /** Checks the form of each record. Nothing here proves that a record opens. */
 export function parseEncryptedRecords(
   wire: EncryptedRecordsWire
@@ -133,6 +310,7 @@ export function parseEncryptedRecords(
     passwordStanza: wire.passwordStanza
       ? parsePasswordStanza(wire.passwordStanza)
       : null,
+    library: parseLibraryRecords(wire),
   }
 }
 

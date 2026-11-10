@@ -89,6 +89,8 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
     ],
     counters: ['views', 'downloads'],
   },
+  // Ciphertext that only a client opens; the file's own events cover it.
+  FileSealedData: null,
   VaultFolder: {
     category: 'folders',
     target: 'folder',

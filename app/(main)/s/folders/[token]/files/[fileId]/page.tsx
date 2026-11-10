@@ -19,6 +19,7 @@ import {
   sharedFolderUrl,
   withPassword,
 } from '@/lib/files/urls'
+import { SHARED_FOLDER_LABEL } from '@/lib/folders/shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +58,7 @@ export default async function SharedFolderFilePage({
       visibility: true,
       password: true,
       urlPath: true,
-      folder: { select: { name: true } },
+      folder: { select: { name: true, folderPublicKey: true } },
     }
   )
   if (!file) notFound()
@@ -84,7 +85,9 @@ export default async function SharedFolderFilePage({
       backLink={
         file.folder && {
           href: sharedFolderUrl(token),
-          label: file.folder.name,
+          // A folder that has keys keeps its name sealed.
+          label: file.folder.name || SHARED_FOLDER_LABEL,
+          history: Boolean(file.folder.folderPublicKey),
         }
       }
     >

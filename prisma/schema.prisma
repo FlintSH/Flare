@@ -243,61 +243,100 @@ model EmailRateLimit {
 }
 
 model File {
-  id                     String         @id @default(cuid())
+  id                     String          @id @default(cuid())
   name                   String
-  urlPath                String         @unique
+  urlPath                String          @unique
   mimeType               String
   size                   Float
-  visibility             FileVisibility @default(PUBLIC)
-  uploadedAt             DateTime       @default(now())
+  visibility             FileVisibility  @default(PUBLIC)
+  uploadedAt             DateTime        @default(now())
   userId                 String
   path                   String
   storageTarget          Json?
-  isOcrProcessed         Boolean        @default(false)
+  isOcrProcessed         Boolean         @default(false)
   ocrText                String?
   password               String?
-  isPaste                Boolean        @default(false)
+  isPaste                Boolean         @default(false)
   ocrConfidence          Float?
   ocrTagsPendingAt       DateTime?
-  views                  Int            @default(0)
-  downloads              Int            @default(0)
-  uploadOptions          Json           @default("{}")
+  views                  Int             @default(0)
+  downloads              Int             @default(0)
+  uploadOptions          Json            @default("{}")
   // End-to-end encryption (docs/e2ee-spec.md, sections 7 to 9). An encrypted
   // file stores no name and no type: `name` is empty and `mimeType` is
   // application/octet-stream. `header` is the 26-byte file header. The
   // sealed record and the stanzas are stored with their record_version byte.
   // `stanzaAccountPublicKey` is the account public key that `accountStanza`
   // is for (section 8.3.4).
-  encrypted              Boolean        @default(false)
+  encrypted              Boolean         @default(false)
   header                 Bytes?
   sealedMetadata         Bytes?
   accountStanza          Bytes?
   stanzaAccountPublicKey Bytes?
   passwordStanza         Bytes?
-  user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Library features of encrypted files (sections 8.4.3, 9.7, 9.8 and 6.9).
+  // `folderStanza` is a folder_file_stanza, or a folder_link_secret_stanza
+  // when the file has a password stanza, for the folder key in
+  // `folderStanzaPublicKey`. A database trigger drops it when the file
+  // becomes private or leaves its folder. `syncSeq` moves on whenever a
+  // value that the local search cache keeps changes (a trigger sets it).
+  // `unreadable` marks a file whose account stanza no key of the account
+  // opens, after a reset without the mnemonic.
+  folderStanza           Bytes?
+  folderStanzaPublicKey  Bytes?
+  rulesPending           Boolean         @default(false)
+  ocrPending             Boolean         @default(false)
+  thumbnailPending       Boolean         @default(false)
+  pendingAttempts        Int             @default(0)
+  unreadable             Boolean         @default(false)
+  syncSeq                Int             @default(autoincrement())
+  sealedData             FileSealedData?
+  user                   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags                   VaultFileTag[]
-  folderId               String?        @map("vaultFolderId")
-  folder                 VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  folderId               String?         @map("vaultFolderId")
+  folder                 VaultFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
+  @@index([userId, syncSeq])
+}
+
+// The sealed records of an encrypted file that only its lists do not need:
+// the text of an image (section 9.6.1) and the thumbnail (section 12.1).
+// Both are ciphertext with their record_version byte.
+model FileSealedData {
+  fileId          String @id
+  sealedOcrText   Bytes?
+  sealedThumbnail Bytes?
+  file            File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
 }
 
 // Independent of retired Folder tables: folders organize existing files without
 // changing their storage paths, links, tags, or visibility.
 model VaultFolder {
-  id             String        @id @default(cuid())
-  userId         String
-  name           String
-  normalizedName String
-  parentId       String?
-  shareToken     String?       @unique
-  createdAt      DateTime      @default(now())
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent         VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
-  children       VaultFolder[] @relation("FolderTree")
-  files          File[]
+  id                     String        @id @default(cuid())
+  userId                 String
+  name                   String
+  normalizedName         String
+  parentId               String?
+  shareToken             String?       @unique
+  // Folder keys (docs/e2ee-spec.md, section 8.4.2). A folder that has keys
+  // stores no name: `name` is empty and `normalizedName` is `/sealed/{id}`.
+  // `parentStanzaPublicKey` is the parent key that `parentFolderStanza` is
+  // for. `rekeyPending` is set when sharing stops, until the owner's browser
+  // replaces the key pair (section 9.4.5).
+  folderPublicKey        Bytes?
+  sealedFolderMetadata   Bytes?
+  sealedFolderPrivateKey Bytes?
+  parentFolderStanza     Bytes?
+  parentStanzaPublicKey  Bytes?
+  rekeyPending           Boolean       @default(false)
+  createdAt              DateTime      @default(now())
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent                 VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
+  children               VaultFolder[] @relation("FolderTree")
+  files                  File[]
 
   // Root names are also unique through a partial index in the migration.
   @@unique([userId, parentId, normalizedName])
@@ -307,15 +346,19 @@ model VaultFolder {
 // Separate tables from the retired folder feature, whose tables may still
 // exist on upgraded installations. Tags never change file paths or visibility.
 model VaultTag {
-  id             String         @id @default(cuid())
-  userId         String
-  name           String
-  normalizedName String
-  ruleSource     String?
-  ruleText       String?
-  createdAt      DateTime       @default(now())
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files          VaultFileTag[]
+  id                String         @id @default(cuid())
+  userId            String
+  name              String
+  normalizedName    String
+  ruleSource        String?
+  ruleText          String?
+  // The name and the rule, sealed with the owner's tag_key (section 9.5.2).
+  // A tag that has it stores no name and no rule: `name` is empty,
+  // `normalizedName` is `/sealed/{id}` and both rule columns are null.
+  sealedTagMetadata Bytes?
+  createdAt         DateTime       @default(now())
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files             VaultFileTag[]
 
   @@unique([userId, normalizedName])
 }

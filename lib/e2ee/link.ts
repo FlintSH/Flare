@@ -1,5 +1,12 @@
 import { base64urlDecode, base64urlEncode } from './primitives'
-import { type FileKey, type LinkSecret, asFileKey, asLinkSecret } from './types'
+import {
+  type FileKey,
+  type FolderPrivateKey,
+  type LinkSecret,
+  asFileKey,
+  asFolderPrivateKey,
+  asLinkSecret,
+} from './types'
 
 /**
  * The part of a share link after `#` (docs/e2ee-spec.md, section 10.3).
@@ -93,4 +100,46 @@ export function fragmentCarriesShareSecret(address: string): boolean {
   if (parsed.kind === 'file_key' || parsed.kind === 'link_secret') return true
   if (parsed.kind !== 'unknown_version') return false
   return SECRET_TEXT.test(text.slice(text.indexOf('.') + 1))
+}
+
+// --- Shared folder link (section 9.4.3) ---
+
+/**
+ * The part of a shared folder link after `#`: `base64url(folder_private_key)`.
+ * The key is 32 bytes as they are, without clamping (section 4.4, rule 3b).
+ * As for a file link, text before a `.` is the prefix of a later protocol
+ * version, which this client does not try to read.
+ */
+export type ParsedFolderFragment =
+  | { readonly kind: 'folder_key'; readonly folderPrivateKey: FolderPrivateKey }
+  /** The link has no part after `#`. It opens no folder that has keys. */
+  | { readonly kind: 'missing' }
+  | { readonly kind: 'unknown_version' }
+  | { readonly kind: 'malformed' }
+
+/** The text after `#`, without the `#`. */
+export function folderShareFragment(
+  folderPrivateKey: FolderPrivateKey
+): string {
+  return base64urlEncode(asFolderPrivateKey(folderPrivateKey))
+}
+
+/** Reads the text after `#`. A leading `#` is accepted. Never throws. */
+export function parseFolderFragment(fragment: string): ParsedFolderFragment {
+  const text = fragment.startsWith('#') ? fragment.slice(1) : fragment
+  if (!text) return { kind: 'missing' }
+  if (text.includes('.')) return { kind: 'unknown_version' }
+  const key = secretBytes(text)
+  return key
+    ? { kind: 'folder_key', folderPrivateKey: key as FolderPrivateKey }
+    : { kind: 'malformed' }
+}
+
+/** `{page address}#{folder_private_key}`. A fragment the address already has is replaced. */
+export function folderShareLink(
+  pageUrl: string,
+  folderPrivateKey: FolderPrivateKey
+): string {
+  const hash = pageUrl.indexOf('#')
+  return `${hash === -1 ? pageUrl : pageUrl.slice(0, hash)}#${folderShareFragment(folderPrivateKey)}`
 }

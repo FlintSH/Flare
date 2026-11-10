@@ -8,6 +8,7 @@ import { Readable } from 'node:stream'
 import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
+import { isWithinSharedFolder } from '@/lib/folders/shared'
 import { parseByteRange } from '@/lib/http/byte-range'
 import { readJson } from '@/lib/http/request'
 import { loggers } from '@/lib/logger'
@@ -33,7 +34,7 @@ const logger = loggers.files
 
 export type FileLocator =
   | { id: string }
-  /** A public file directly inside the folder shared with this token. */
+  /** A public file in the folder shared with this token, or in a folder below it. */
   | { id: string; sharedFolder: string }
   /** A stored `urlPath`, as `/api/files/{urlPath}` names it. */
   | { urlPath: string }
@@ -62,17 +63,24 @@ export async function findFile<S extends Prisma.FileSelect>(
   locator: FileLocator,
   select: S
 ): Promise<Found<S> | null> {
-  if ('sharedFolder' in locator)
-    // Only while the file is public and directly in the folder that link
-    // shares: moving it, making it private or unsharing the folder hides it.
+  if ('sharedFolder' in locator) {
+    // Only while the file is public and in the folder that link shares or a
+    // folder below it: moving it, making it private or unsharing the folder
+    // hides it.
+    const member = await prisma.file.findFirst({
+      where: { id: locator.id, visibility: 'PUBLIC', folderId: { not: null } },
+      select: { folderId: true },
+    })
+    if (
+      !member ||
+      !(await isWithinSharedFolder(locator.sharedFolder, member.folderId))
+    )
+      return null
     return (await prisma.file.findFirst({
-      where: {
-        id: locator.id,
-        visibility: 'PUBLIC',
-        folder: { shareToken: locator.sharedFolder },
-      },
+      where: { id: locator.id, visibility: 'PUBLIC' },
       select,
     })) as Found<S> | null
+  }
   if ('id' in locator)
     return (await prisma.file.findUnique({
       where: { id: locator.id },

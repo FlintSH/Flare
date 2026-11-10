@@ -27,6 +27,7 @@ import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
 import { type OpenedFile, newPasswordStanza } from '@/lib/e2ee/client/files'
 import { shareLink } from '@/lib/e2ee/link'
 import { fileUrls } from '@/lib/files/urls'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -94,6 +95,9 @@ export function EncryptedFilePasswordDialog({
         body: { passwordStanza },
         fallback: 'Please try again.',
       })
+      // In a folder, the stanza for visitors now carries a different secret
+      // (docs/e2ee-spec.md, section 8.4.3).
+      requestMaintenance('folders')
       let copied = false
       if (link)
         try {

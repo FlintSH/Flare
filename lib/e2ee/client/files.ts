@@ -12,6 +12,8 @@ import {
 import {
   createRandomFile,
   sealFileMetadataWithRandomNonce,
+  sealOcrTextWithRandomNonce,
+  sealThumbnailWithRandomNonce,
   wrapAccountStanzaWithRandomKey,
   wrapRandomPasswordStanza,
 } from '../random'
@@ -20,6 +22,8 @@ import {
   encodeStoredRecord,
   jsonValue,
   openFileMetadata,
+  openOcrText,
+  openThumbnail,
 } from '../records'
 import {
   openSealedLinkSecret,
@@ -331,4 +335,87 @@ export function newEncryptedFile(input: {
       stanzaAccountPublicKey: base64urlEncode(accountPublicKey),
     },
   }
+}
+
+// --- Sealed text and thumbnail (sections 9.6.1 and 12.1) ---
+
+type FileSecrets = Pick<OpenedFile, 'fileKey' | 'headerHash'>
+
+/**
+ * The most UTF-8 bytes of image text that a client seals. Longer text is
+ * cut at a character boundary (section 9.6.1): the server refuses a larger
+ * record.
+ */
+export const OCR_TEXT_MAX_BYTES = 250_000
+/** The most bytes of a thumbnail that a client seals. */
+export const THUMBNAIL_MAX_BYTES = 250_000
+
+/** `text` cut to at most `maxBytes` bytes of UTF-8, never inside a character. */
+export function cutUtf8(text: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(text)
+  if (bytes.length <= maxBytes) return text
+  let end = maxBytes
+  // A continuation byte has the form 10xxxxxx: step back to a first byte.
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--
+  return new TextDecoder().decode(bytes.subarray(0, end))
+}
+
+/** `sealed_ocr_text` in the form a request carries: base64url, with `record_version`. */
+export function sealedOcrTextRecord(file: FileSecrets, text: string): string {
+  return base64urlEncode(
+    encodeStoredRecord(
+      'sealed_ocr_text',
+      sealOcrTextWithRandomNonce({
+        fileKey: file.fileKey,
+        headerHash: file.headerHash,
+        ocrText: cutUtf8(text, OCR_TEXT_MAX_BYTES),
+      })
+    )
+  )
+}
+
+/** Opens a stored `sealed_ocr_text`: base64url text or the bytes, with `record_version`. */
+export function openSealedOcrText(
+  file: FileSecrets,
+  stored: string | Uint8Array
+): string {
+  return openOcrText({
+    fileKey: file.fileKey,
+    headerHash: file.headerHash,
+    sealedOcrText: decodeStoredRecord(
+      'sealed_ocr_text',
+      typeof stored === 'string' ? base64urlDecode(stored) : stored
+    ),
+  })
+}
+
+/** `sealed_thumbnail` in the form a request carries. */
+export function sealedThumbnailRecord(
+  file: FileSecrets,
+  thumbnail: Uint8Array
+): string {
+  if (thumbnail.length > THUMBNAIL_MAX_BYTES)
+    throw new E2eeError('invalid_argument', 'The thumbnail is too large')
+  return base64urlEncode(
+    encodeStoredRecord(
+      'sealed_thumbnail',
+      sealThumbnailWithRandomNonce({
+        fileKey: file.fileKey,
+        headerHash: file.headerHash,
+        thumbnail,
+      })
+    )
+  )
+}
+
+/** Opens a stored `sealed_thumbnail`. The result is bytes that the uploader chose: not trusted. */
+export function openSealedThumbnail(
+  file: FileSecrets,
+  stored: Uint8Array
+): Uint8Array {
+  return openThumbnail({
+    fileKey: file.fileKey,
+    headerHash: file.headerHash,
+    sealedThumbnail: decodeStoredRecord('sealed_thumbnail', stored),
+  })
 }

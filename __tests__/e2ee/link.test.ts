@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  folderShareFragment,
+  folderShareLink,
   fragmentCarriesShareSecret,
+  parseFolderFragment,
   parseShareFragment,
   shareFragment,
   shareLink,
 } from '@/lib/e2ee/link'
 import { base64urlEncode } from '@/lib/e2ee/primitives'
-import type { FileKey, LinkSecret } from '@/lib/e2ee/types'
+import type { FileKey, FolderPrivateKey, LinkSecret } from '@/lib/e2ee/types'
 
 const fileKey = Uint8Array.from({ length: 32 }, (_, i) => i + 1) as FileKey
 const linkSecret = Uint8Array.from(
@@ -115,5 +118,49 @@ describe('share link fragment (section 10.3)', () => {
     expect(fragmentCarriesShareSecret('https://x.test/docs#v1.2-notes')).toBe(
       false
     )
+  })
+})
+
+describe('shared folder link (section 9.4.3)', () => {
+  const folderPrivateKey = Uint8Array.from(
+    { length: 32 },
+    (_, i) => 200 - i
+  ) as FolderPrivateKey
+  const text = base64urlEncode(folderPrivateKey)
+
+  it('carries the folder private key after #, as it is', () => {
+    expect(folderShareFragment(folderPrivateKey)).toBe(text)
+    const link = folderShareLink(
+      'https://flare.test/s/folders/token?folder=x#old',
+      folderPrivateKey
+    )
+    const url = new URL(link)
+    expect(url.pathname + url.search).toBe('/s/folders/token?folder=x')
+    expect(url.hash).toBe(`#${text}`)
+    expect(parseFolderFragment(url.hash)).toEqual({
+      kind: 'folder_key',
+      folderPrivateKey,
+    })
+    expect(() =>
+      folderShareFragment(new Uint8Array(31) as FolderPrivateKey)
+    ).toThrow()
+  })
+
+  it('tells a missing key, a cut key and a later version apart', () => {
+    expect(parseFolderFragment('')).toEqual({ kind: 'missing' })
+    expect(parseFolderFragment('#')).toEqual({ kind: 'missing' })
+    expect(parseFolderFragment(text.slice(0, 42))).toEqual({
+      kind: 'malformed',
+    })
+    expect(parseFolderFragment(`${text}=`)).toEqual({ kind: 'malformed' })
+    expect(parseFolderFragment(`v2.${text}`)).toEqual({
+      kind: 'unknown_version',
+    })
+  })
+
+  it('is refused as the target of a short link, like a file link', () => {
+    expect(
+      fragmentCarriesShareSecret(`https://x.test/s/folders/token#${text}`)
+    ).toBe(true)
   })
 })

@@ -23,6 +23,11 @@ import {
   storedExpiry,
 } from '@/lib/files/expiry'
 import { urlSafeFilename } from '@/lib/files/filename'
+import {
+  applyRuleTags,
+  newFileLibraryState,
+  storeSealedData,
+} from '@/lib/files/library-records'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { tokenUsable } from '@/lib/integrations/tokens'
@@ -230,6 +235,18 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       profileEffectiveRevision: _profileEffectiveRevision,
       ...persistedOptions
     } = options
+    const visibility = hasPermission(access, 'files.share')
+      ? options.visibility
+      : 'PRIVATE'
+    // The folder stanza, and the work that the uploader left for the
+    // browser of the owner (sections 8.4.3 and 9.7).
+    const library = await newFileLibraryState(tx, {
+      userId: user.id,
+      records: input.encrypted ?? null,
+      visibility,
+      folderId,
+      automaticOcr: config.settings.general.ocr.enabled,
+    })
     const file = await tx.file.create({
       data: {
         name: displayName,
@@ -238,9 +255,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
         storageTarget,
         mimeType,
         size: sizeMB,
-        visibility: hasPermission(access, 'files.share')
-          ? options.visibility
-          : 'PRIVATE',
+        visibility,
         isPaste: input.isPaste ?? false,
         password: passwordHash,
         userId: user.id,
@@ -257,9 +272,12 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           stanzaAccountPublicKey: input.encrypted.stanzaAccountPublicKey,
           passwordStanza: input.encrypted.passwordStanza,
         }),
+        ...library.columns,
       },
     })
+    if (library.sealed) await storeSealedData(tx, file.id, library.sealed)
     await applyProfileTags(tx, file, options.tagIds ?? [])
+    await applyRuleTags(tx, file, library.ruleTagIds)
     // A name rule needs the name, which only a client has (section 9.3).
     if (!file.encrypted) await applyAutomaticTags(file.id, 'filename', tx)
     await tx.user.update({

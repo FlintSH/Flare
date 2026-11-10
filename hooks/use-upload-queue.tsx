@@ -14,6 +14,7 @@ import type { UploadOptions, UploadResponse } from '@/lib/uploads/client'
 import { type UploadBatch, createUploadQueue } from '@/lib/uploads/queue'
 
 import { toast } from '@/hooks/use-toast'
+import { useUploadLibrary } from '@/hooks/use-upload-library'
 
 /** Copies upload links and says whether that worked. */
 export async function copyUploadLinks(text: string) {
@@ -116,6 +117,7 @@ function notifyUploaded(files: readonly UploadResponse[]) {
  */
 export function useUploadQueue() {
   const encryption = useUploadEncryption()
+  const libraryFor = useUploadLibrary()
   const [queue] = useState(() => createUploadQueue())
   const { files, uploading } = useSyncExternalStore(
     queue.subscribe,
@@ -169,12 +171,13 @@ export function useUploadQueue() {
     options: UploadOptions,
     plain: boolean | undefined
   ): UploadOptions | null => {
-    if (plain) return options
+    const library = libraryFor(options)
+    if (plain) return { ...options, library }
     if (!encryption.encryptFor) {
       notifyKeysLocked()
       return null
     }
-    return { ...options, encryptFor: encryption.encryptFor }
+    return { ...options, library, encryptFor: encryption.encryptFor }
   }
 
   const uploadFiles = async (

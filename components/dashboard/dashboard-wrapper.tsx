@@ -5,6 +5,7 @@ import { UserNav } from '@/components/dashboard/user-nav'
 import { UnlockBanner } from '@/components/encryption/unlock-dialog'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
+import { LibraryMaintenance } from '@/components/library/library-maintenance'
 import { PermissionGate } from '@/components/roles/permission-gate'
 
 interface DashboardWrapperProps {
@@ -59,6 +60,7 @@ export function DashboardWrapper({
         </div>
       </main>
       {showFooter && <Footer />}
+      <LibraryMaintenance />
     </div>
   )
 }

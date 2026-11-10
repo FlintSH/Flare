@@ -17,8 +17,12 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 
 import { apiRequest } from '@/lib/client/request'
+import { folderShareLink } from '@/lib/e2ee/link'
 import { sharedFolderUrl } from '@/lib/files/urls'
+import { folderRequestBody } from '@/lib/folders/client'
+import { ownedFolderKeys } from '@/lib/folders/owned'
 import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 
 import { FOLDER_REQUEST_FAILED, useFolders } from '@/hooks/use-folders'
 import { useToast } from '@/hooks/use-toast'
@@ -38,7 +42,7 @@ export function FolderDialog({
   onCreated: (folder: FolderView) => void
   onDeleted: (folder: FolderView) => void
 }) {
-  const { folders, loading, error: loadError, changed } = useFolders()
+  const { folders, keys, loading, error: loadError, changed } = useFolders()
   const snapshot = action.kind === 'create' ? null : action.folder
   const current = folders.find((folder) => folder.id === snapshot?.id)
   const existing = current ?? snapshot
@@ -62,9 +66,19 @@ export function FolderDialog({
       setCopied(false)
     }
   }, [current?.shareToken, loading, loadError])
+  // The link of a folder that has keys carries its private key after `#`
+  // (docs/e2ee-spec.md, section 9.4.3). The browser never sends that part.
+  const openedKeys =
+    existing?.keys && keys ? ownedFolderKeys(existing, keys) : null
+  const lockedKeys = Boolean(existing?.keys) && !openedKeys
   const shareUrl =
-    token && typeof window !== 'undefined'
-      ? sharedFolderUrl(token, { origin: window.location.origin })
+    token && typeof window !== 'undefined' && !lockedKeys
+      ? openedKeys
+        ? folderShareLink(
+            sharedFolderUrl(token, { origin: window.location.origin }),
+            openedKeys.folderPrivateKey
+          )
+        : sharedFolderUrl(token, { origin: window.location.origin })
       : ''
   const run = async (operation: () => Promise<void>) => {
     if (busy || unavailable) return
@@ -86,14 +100,18 @@ export function FolderDialog({
         existing ? `/api/folders/${existing.id}` : '/api/folders',
         {
           method: existing ? 'PATCH' : 'POST',
-          body: {
-            name: name.trim(),
-            ...(action.kind === 'create' && { parentId: action.parentId }),
-          },
+          body: folderRequestBody({
+            name,
+            existing,
+            parentId: action.kind === 'create' ? action.parentId : null,
+            folders,
+            keys,
+          }),
           fallback: FOLDER_REQUEST_FAILED,
         }
       )
       const loaded = changed()
+      requestMaintenance('folders')
       toast({ title: existing ? 'Folder renamed' : 'Folder created' })
       if (!existing) {
         await loaded
@@ -109,6 +127,8 @@ export function FolderDialog({
         fallback: FOLDER_REQUEST_FAILED,
       })
       void changed()
+      // Files and folders that moved up need stanzas for their new parent.
+      requestMaintenance('folders')
       onDeleted(existing)
       toast({
         title: 'Folder removed',
@@ -126,6 +146,9 @@ export function FolderDialog({
       setToken(folder.shareToken)
       setCopied(false)
       void changed()
+      // After sharing stops, this folder and each folder below it get new
+      // keys (section 9.4.5).
+      requestMaintenance('folders')
       toast({ title: sharing ? 'Folder link created' : 'Folder link disabled' })
     })
   return (
@@ -153,7 +176,7 @@ export function FolderDialog({
                 ? 'Choose a name that makes this folder easy to find.'
                 : action.kind === 'delete'
                   ? `“${existing?.name}” will be removed. Its files and subfolders move ${existing?.parentId ? 'up to the parent folder' : 'out of this folder'}. No files are deleted. Its folder link stops working.`
-                  : `Share the public files directly inside “${existing?.name}” with one link.`}
+                  : `Share the public files in “${existing?.name}” and in the folders inside it with one link.`}
           </DialogDescription>
         </DialogHeader>
         {unavailable && (
@@ -250,12 +273,18 @@ export function FolderDialog({
                   : 'Only you can browse this folder'}
               </p>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Private files and subfolders stay hidden. Password-protected
-                files still need their password. Adding public files to this
-                folder adds them to the shared page.
+                Private files stay hidden. Folders inside this one are part of
+                the link. Password-protected files still need their password.
+                Adding public files to this folder adds them to the shared page.
               </p>
             </div>
-            {token && (
+            {token && lockedKeys && (
+              <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+                Unlock your encryption keys to see this link. The link carries
+                the key of the folder, which only your browser can open.
+              </p>
+            )}
+            {token && !lockedKeys && (
               <div className="space-y-2">
                 <Label htmlFor="folder-share-link">Folder link</Label>
                 <div className="flex gap-2">
@@ -299,6 +328,13 @@ export function FolderDialog({
                   </p>
                 )}
               </div>
+            )}
+            {token && (
+              <p className="text-xs leading-5 text-muted-foreground">
+                Disabling the link closes the shared page. A person who opened
+                it keeps the link of each public file they saw. Make a file
+                private or delete it to end that.
+              </p>
             )}
             {error && (
               <p role="alert" className="text-sm text-destructive">

@@ -359,9 +359,10 @@ suite('vault folders against disposable PostgreSQL', () => {
     ).toBe(404)
   })
 
-  it('shares only direct public files, keeps protected metadata hidden, and revokes old tokens', async () => {
+  it('shares public files and the folders below, keeps protected metadata hidden, and revokes old tokens', async () => {
     const photos = await newFolder('Photos')
-    const child = await newFolder('Hidden child', photos.id)
+    const child = await newFolder('Week one', photos.id)
+    const outside = await newFolder('Not shared')
     const publicFile = await file({ folderId: photos.id, name: 'Logo.png' })
     await file({
       folderId: photos.id,
@@ -374,12 +375,39 @@ suite('vault folders against disposable PostgreSQL', () => {
       name: 'Protected secret.png',
       urlPath: '/folder-owner/Protected-secret.png',
     })
-    await file({ folderId: child.id, name: 'Nested.png' })
+    const nested = await file({ folderId: child.id, name: 'Nested.png' })
+    await file({
+      folderId: child.id,
+      visibility: 'PRIVATE',
+      name: 'Nested private.png',
+    })
     const enabled = await service.updateFolder('folder-owner', photos.id, {
       sharing: true,
     })
     const result = await shared.getSharedFolder(enabled.shareToken!)
-    expect(result).toMatchObject({ name: 'Photos', total: 2 })
+    expect(result).toMatchObject({
+      root: { id: photos.id, name: 'Photos', keys: null },
+      total: 2,
+      // A shared folder link includes the folders below it.
+      folders: [{ id: child.id, name: 'Week one', keys: null }],
+    })
+    const below = await shared.getSharedFolder(enabled.shareToken!, 1, child.id)
+    expect(below).toMatchObject({
+      trail: [{ id: photos.id }, { id: child.id, name: 'Week one' }],
+      total: 1,
+      files: [{ id: nested.id, name: 'Nested.png' }],
+    })
+    expect(JSON.stringify(below)).not.toContain('Nested private')
+    // A folder outside the shared one is not reachable with its token.
+    expect(
+      await shared.getSharedFolder(enabled.shareToken!, 1, outside.id)
+    ).toBeNull()
+    expect(
+      await shared.isWithinSharedFolder(enabled.shareToken!, child.id)
+    ).toBe(true)
+    expect(
+      await shared.isWithinSharedFolder(enabled.shareToken!, outside.id)
+    ).toBe(false)
     expect(result!.files).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -403,8 +431,8 @@ suite('vault folders against disposable PostgreSQL', () => {
       'Protected secret',
       'Protected-secret',
       'never-expose-this-hash',
-      'Hidden child',
       'Nested.png',
+      'Not shared',
       'userId',
       'folder-owner',
       'storage-path',
