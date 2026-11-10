@@ -523,6 +523,10 @@ export function ExistingFiles() {
   const active = activeJobs(status)
   const total = active + status.jobs.encrypted + status.jobs.failed
   const asking = shouldAsk(status) && !later
+  // The statuses that share the edge of the page with the question.
+  const statusesBelow =
+    (maintenance.progress ? 1 : 0) +
+    (active > 0 || status.jobs.failed > 0 ? 1 : 0)
   const dismiss = () => {
     setLater(true)
     try {
@@ -535,43 +539,58 @@ export function ExistingFiles() {
   return (
     <>
       {asking && (
+        // The question floats at the edge of the page, above the statuses
+        // of background work. Its answer from the server arrives after the
+        // library is drawn, and a line in the page would push the library
+        // down at that moment.
         <div
-          role="status"
-          data-existing-files-prompt=""
-          className="mb-4 flex flex-wrap items-start gap-x-3 gap-y-2 rounded-xl border border-border/60 bg-card/80 px-4 py-2.5 text-sm shadow-sm backdrop-blur-xl sm:items-center sm:gap-x-4"
+          className={cn(
+            'pointer-events-none fixed inset-x-0 z-40 flex justify-center px-4 sm:inset-x-auto sm:left-4 sm:justify-start sm:px-0',
+            statusesBelow === 2
+              ? 'bottom-24'
+              : statusesBelow === 1
+                ? 'bottom-14'
+                : 'bottom-4'
+          )}
         >
-          <ShieldCheck
-            className="mt-1 h-4 w-4 shrink-0 text-muted-foreground sm:mt-0"
-            aria-hidden="true"
-          />
-          <p className="min-w-0 flex-1 basis-56 leading-relaxed">
-            {files(status.plain.total)} from before encryption{' '}
-            {status.plain.total === 1 ? 'is' : 'are'} stored readable.{' '}
-            <span className="text-muted-foreground">
-              The server can encrypt {status.plain.total === 1 ? 'it' : 'them'}{' '}
-              for you.
-            </span>
-          </p>
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={openExistingFilesChoice}
-            >
-              Choose
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              aria-label="Decide later"
-              title="Decide later"
-              onClick={dismiss}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+          <div
+            role="status"
+            data-existing-files-prompt=""
+            className="pointer-events-auto flex max-w-md flex-wrap items-start gap-x-3 gap-y-2 rounded-xl border border-border/60 bg-overlay px-4 py-2.5 text-sm shadow-lg sm:items-center"
+          >
+            <ShieldCheck
+              className="mt-1 h-4 w-4 shrink-0 text-muted-foreground sm:mt-0"
+              aria-hidden="true"
+            />
+            <p className="min-w-0 flex-1 basis-56 leading-relaxed">
+              {files(status.plain.total)} from before encryption{' '}
+              {status.plain.total === 1 ? 'is' : 'are'} stored readable.{' '}
+              <span className="text-muted-foreground">
+                The server can encrypt{' '}
+                {status.plain.total === 1 ? 'it' : 'them'} for you.
+              </span>
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={openExistingFilesChoice}
+              >
+                Choose
+              </Button>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                aria-label="Decide later"
+                title="Decide later"
+                onClick={dismiss}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
       )}

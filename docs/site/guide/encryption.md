@@ -172,9 +172,9 @@ This protects your files from now on. It does not undo the past: the server stor
 
 ### Choose which files to encrypt
 
-After you have set up your keys, a line above your library says how many files are stored readable. Choose **Choose** to open the question, or close the line to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files.
+After you have set up your keys, a small card at the lower edge of the page says how many files are stored readable. Choose **Choose** to open the question, or close the card to decide later. It comes back the next time you open Flare until you answer, and it never appears if you have no plain files. The card counts every plain file you have, also one that you uploaded as plain on purpose after the upgrade.
 
-<Screenshot src="/screenshots/encryption/existing-files-prompt.webp" alt="File library with a line above it that reads 6 files from before encryption are stored readable, The server can encrypt them for you, with a Choose button and a close button" caption="The question appears above your library one time. Closing it puts it off until you next open Flare." />
+<Screenshot src="/screenshots/encryption/existing-files-prompt.webp" alt="File library with a small card at its lower left edge that reads 6 files from before encryption are stored readable, The server can encrypt them for you, with a Choose button and a close button" caption="The question appears at the edge of the page one time. Closing it puts it off until you next open Flare." />
 
 1. Read the table. It counts your private files, your public files and your files with a password, and says what encryption changes for each.
 2. Pick **Private files** (the suggestion), **All files** or **None**.
