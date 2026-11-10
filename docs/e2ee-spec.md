@@ -90,42 +90,42 @@ This document does not use single-letter names.
 
 ### 2.2 Notation
 
-| Notation      | Meaning                                                     |
-| ------------- | ----------------------------------------------------------- |
-| `a \|\| b`    | Concatenation of byte strings `a` and `b`.                  |
-| `LE64(n)`     | The integer `n` as 8 bytes, little-endian.                  |
-| `length(a)`   | The length of `a` in bytes.                                 |
-| `random(n)`   | `n` bytes from a cryptographically secure random generator. |
-| `zeros(n)`    | `n` bytes with the value zero.                              |
-| `base64url(a)`| Base64url encoding of `a` without padding.                  |
+| Notation       | Meaning                                                     |
+| -------------- | ----------------------------------------------------------- |
+| `a \|\| b`     | Concatenation of byte strings `a` and `b`.                  |
+| `LE64(n)`      | The integer `n` as 8 bytes, little-endian.                  |
+| `length(a)`    | The length of `a` in bytes.                                 |
+| `random(n)`    | `n` bytes from a cryptographically secure random generator. |
+| `zeros(n)`     | `n` bytes with the value zero.                              |
+| `base64url(a)` | Base64url encoding of `a` without padding.                  |
 
 All context strings are ASCII. A context string does not have a terminator.
 
 ### 2.3 Names of values
 
-| Name                     | Size     | Meaning                                                    |
-| ------------------------ | -------- | ---------------------------------------------------------- |
-| `root_entropy`           | 32 bytes | Root secret of the account. The mnemonic encodes it.       |
-| `account_seed`           | 32 bytes | Seed of the account key pair.                              |
-| `account_private_key`    | 32 bytes | Ed25519 private key of the account.                        |
-| `account_public_key`     | 32 bytes | Ed25519 public key of the account.                         |
-| `exchange_private_key`   | 32 bytes | X25519 form of `account_private_key`.                      |
-| `exchange_public_key`    | 32 bytes | X25519 form of `account_public_key`.                       |
-| `passphrase_salt`        | 32 bytes | Random input to Argon2id. Not secret.                      |
-| `passphrase_root`        | 32 bytes | Output of Argon2id.                                        |
-| `auth_key`               | 32 bytes | Proof of the passphrase. The client sends it to the server.|
-| `auth_verifier`          | 32 bytes | Hash of `auth_key`. The server stores it.                  |
-| `wrap_key`               | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client. |
-| `wrapped_root`           | 88 bytes | `root_entropy` encrypted with `wrap_key`.                  |
-| `file_key`               | 32 bytes | Random key of one file.                                    |
-| `content_cipher_key`     | 32 bytes | Encrypts the chunks of a file.                             |
-| `content_mac_key`        | 32 bytes | Authenticates the chunks of a file.                        |
-| `metadata_key`           | 32 bytes | Encrypts the name and the type of a file.                  |
-| `header_hash`            | 32 bytes | BLAKE3 hash of the file header.                            |
-| `ephemeral_private_key`  | 32 bytes | X25519 private key that the sender uses for one stanza.    |
-| `ephemeral_public_key`   | 32 bytes | Its public key. It is part of the stanza.                  |
-| `shared_secret`          | 32 bytes | Output of X25519.                                          |
-| `stanza_key`             | 32 bytes | Key that encrypts one `file_key` in one stanza.            |
+| Name                    | Size     | Meaning                                                     |
+| ----------------------- | -------- | ----------------------------------------------------------- |
+| `root_entropy`          | 32 bytes | Root secret of the account. The mnemonic encodes it.        |
+| `account_seed`          | 32 bytes | Seed of the account key pair.                               |
+| `account_private_key`   | 32 bytes | Ed25519 private key of the account.                         |
+| `account_public_key`    | 32 bytes | Ed25519 public key of the account.                          |
+| `exchange_private_key`  | 32 bytes | X25519 form of `account_private_key`.                       |
+| `exchange_public_key`   | 32 bytes | X25519 form of `account_public_key`.                        |
+| `passphrase_salt`       | 32 bytes | Random input to Argon2id. Not secret.                       |
+| `passphrase_root`       | 32 bytes | Output of Argon2id.                                         |
+| `auth_key`              | 32 bytes | Proof of the passphrase. The client sends it to the server. |
+| `auth_verifier`         | 32 bytes | Hash of `auth_key`. The server stores it.                   |
+| `wrap_key`              | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client.  |
+| `wrapped_root`          | 88 bytes | `root_entropy` encrypted with `wrap_key`.                   |
+| `file_key`              | 32 bytes | Random key of one file.                                     |
+| `content_cipher_key`    | 32 bytes | Encrypts the chunks of a file.                              |
+| `content_mac_key`       | 32 bytes | Authenticates the chunks of a file.                         |
+| `metadata_key`          | 32 bytes | Encrypts the name and the type of a file.                   |
+| `header_hash`           | 32 bytes | BLAKE3 hash of the file header.                             |
+| `ephemeral_private_key` | 32 bytes | X25519 private key that the sender uses for one stanza.     |
+| `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                   |
+| `shared_secret`         | 32 bytes | Output of X25519.                                           |
+| `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.             |
 
 ## 3. Threat model
 
@@ -283,12 +283,12 @@ that the server cannot see.
 
 ### 5.3 Data that the server stores for each account
 
-| Field                | Content                                                                 | Readable by the server |
-| -------------------- | ----------------------------------------------------------------------- | ---------------------- |
-| `account_public_key` | Account public key                                                      | Yes                    |
-| `passphrase_salt`    | `random(32)`                                                            | Yes                    |
-| `auth_verifier`      | `blake3_derive_key("flare e2ee v1 auth verifier", auth_key)`            | Yes                    |
-| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)`          | No                     |
+| Field                | Content                                                        | Readable by the server |
+| -------------------- | -------------------------------------------------------------- | ---------------------- |
+| `account_public_key` | Account public key                                             | Yes                    |
+| `passphrase_salt`    | `random(32)`                                                   | Yes                    |
+| `auth_verifier`      | `blake3_derive_key("flare e2ee v1 auth verifier", auth_key)`   | Yes                    |
+| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)` | No                     |
 
 The server must not store `auth_key`. The server stores only `auth_verifier`.
 A person who copies the database cannot sign in with `auth_verifier`.
@@ -458,13 +458,13 @@ safe to use.
 
 ### 7.2 Header
 
-| Field             | Size     | Content                                                        |
-| ----------------- | -------- | -------------------------------------------------------------- |
-| `magic`           | 8 bytes  | ASCII `FLAREE2E`                                               |
-| `format_version`  | 1 byte   | `0x01`                                                         |
-| `chunk_size_log2` | 1 byte   | `16`. The chunk size is 65536 bytes.                           |
-| `nonce_prefix`    | 16 bytes | `random(16)`                                                   |
-| `metadata_length` | 4 bytes  | Length of `sealed_metadata`, little-endian.                    |
+| Field             | Size     | Content                                                                    |
+| ----------------- | -------- | -------------------------------------------------------------------------- |
+| `magic`           | 8 bytes  | ASCII `FLAREE2E`                                                           |
+| `format_version`  | 1 byte   | `0x01`                                                                     |
+| `chunk_size_log2` | 1 byte   | `16`. The chunk size is 65536 bytes.                                       |
+| `nonce_prefix`    | 16 bytes | `random(16)`                                                               |
+| `metadata_length` | 4 bytes  | Length of `sealed_metadata`, little-endian.                                |
 | `sealed_metadata` | variable | `seal(metadata_key, random(24), magic \|\| format_version, file_metadata)` |
 
 `file_metadata` is the encrypted metadata of the file (section 9).
@@ -590,12 +590,12 @@ Each account stanza records the `key_generation` of its recipient key.
 
 #### 8.3.2 What rotation gives and does not give
 
-| Attacker has                                              | Result after rotation                         |
-| --------------------------------------------------------- | --------------------------------------------- |
-| An old private key only                                   | Reads nothing.                                |
-| An old private key, and later a copy of the database      | Reads nothing. The old stanzas are deleted.   |
-| An old private key and a copy of the old stanzas          | Reads the old files. Does not read new files. |
-| `root_entropy` or the passphrase                          | Reads all files. Use section 8.3.4.           |
+| Attacker has                                         | Result after rotation                         |
+| ---------------------------------------------------- | --------------------------------------------- |
+| An old private key only                              | Reads nothing.                                |
+| An old private key, and later a copy of the database | Reads nothing. The old stanzas are deleted.   |
+| An old private key and a copy of the old stanzas     | Reads the old files. Does not read new files. |
+| `root_entropy` or the passphrase                     | Reads all files. Use section 8.3.4.           |
 
 #### 8.3.3 Rotation procedure
 
@@ -817,7 +817,7 @@ file with a link preview cannot be encrypted.
 
 ## 14. Change log
 
-| Draft | Date       | Change                                                                 |
-| ----- | ---------- | ---------------------------------------------------------------------- |
-| 0     | 2026-11-10 | First draft.                                                           |
+| Draft | Date       | Change                                                                                                                                  |
+| ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | 2026-11-10 | First draft.                                                                                                                            |
 | 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations. |
