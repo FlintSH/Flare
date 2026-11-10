@@ -362,6 +362,17 @@ const clickButton = (name) => `(() => {
 
 // ---------------------------------------------------------------- run
 
+/**
+ * A text as a string in a script that the page runs. JSON leaves a few
+ * characters as they are that end a line or a script element in a page.
+ */
+function scriptText(text) {
+  return JSON.stringify(text).replace(
+    /[<>\u2028\u2029]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
+  )
+}
+
 async function seed() {
   await fetch(`${upstream}/auth/login`)
   const config = await prisma.config.findUnique({
@@ -422,7 +433,7 @@ async function upload(tab, file) {
     assert.ok(attempt < 8, 'The upload form did not take the file')
   }
   await tab.until(
-    `[...document.querySelectorAll('a')].some((link) => (link.getAttribute('aria-label') || link.textContent).trim() === ${JSON.stringify(`Open ${name}`)})`,
+    `[...document.querySelectorAll('a')].some((link) => (link.getAttribute('aria-label') || link.textContent).trim() === ${scriptText(`Open ${name}`)})`,
     uploadTimeoutMs,
     500
   )

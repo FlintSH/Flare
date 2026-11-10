@@ -29,7 +29,7 @@
 // FLARE_SCRIPT_UPLOAD_ORIGIN and FLARE_SCRIPT_UPLOAD_UPSTREAM change both.
 const assert = require('node:assert/strict')
 const { spawn } = require('node:child_process')
-const { createHash, randomBytes } = require('node:crypto')
+const { createHash, randomBytes, randomInt } = require('node:crypto')
 const { existsSync } = require('node:fs')
 const {
   chmod,
@@ -184,7 +184,7 @@ function startRecordingProxy() {
   // The program sends no forwarding header. Each run gives its requests an
   // address of their own, so a run after a run does not meet the upload
   // rate limit of the one before. The recorded request is not changed.
-  const programAddress = `203.0.113.${1 + (randomBytes(1)[0] % 250)}`
+  const programAddress = `203.0.113.${randomInt(1, 251)}`
   const server = http.createServer((request, response) => {
     const chunks = []
     request.on('data', (chunk) => chunks.push(chunk))

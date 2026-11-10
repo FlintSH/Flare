@@ -1329,10 +1329,12 @@ async function testPlain(browser, alex) {
   const html = await (await fetch(`${origin}${row.urlPath}`)).text()
   // A production build writes these addresses with https, whatever the test origin is.
   const host = new URL(origin).host
+  // Text as it is, with every character that a pattern reads as a rule escaped.
+  const literal = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   assert.match(
     html,
     new RegExp(
-      `property="og:image" content="https?://${host}${row.urlPath.replace(/\./g, '\\.')}/raw"`
+      `property="og:image" content="https?://${literal(host)}${literal(row.urlPath)}/raw"`
     )
   )
   assert.ok(html.includes(PLAIN.name))

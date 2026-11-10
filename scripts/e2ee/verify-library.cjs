@@ -1402,9 +1402,10 @@ async function testTagsAndPending(alex) {
     ocrAssets.some((request) => request.target.endsWith('/eng.traineddata.gz'))
   )
   assert.ok(
-    ocrAssets.some((request) =>
-      /tesseract-core.*\.wasm\.js$/.test(request.target)
-    )
+    ocrAssets.some((request) => {
+      const name = request.target.split('/').pop()
+      return name.startsWith('tesseract-core') && name.endsWith('.wasm.js')
+    })
   )
   assert.deepEqual(
     external.slice(externalBefore),

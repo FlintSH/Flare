@@ -475,7 +475,7 @@ The run needs a database that it starts empty: create it again before each run. 
 
 It simulates one thing: a script client's upload is an ordinary browser upload whose flags are then set and whose sealed records are deleted in the database, because token uploads of encrypted files are a later change. The reset uses a reset link that the script writes to the database in place of an email. `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as below, and the video thumbnail needs the same `ffmpeg`. A mobile capture is the 390×844 screen; when the page is longer, a second image whose name ends in `-full` shows all of it, taken with a screen that tall because the library only renders the rows on screen.
 
-The database-backed unit suites of these features read `FLARE_LIBRARY_DATABASE_URL`, a disposable database named `flare_library_test_local` or `flare_library_test_ci`.
+The database-backed unit suites of these features read `FLARE_LIBRARY_DATABASE_URL`, a disposable database named `flare_library_test_local` or `flare_library_test_ci`. The cipher tests in `__tests__/e2ee/file.test.ts` run with a 30-second limit for each test: they encrypt and decrypt megabytes several times with ciphers in JavaScript, which takes more than the default 5 seconds on a shared CI runner.
 
 ### Existing files browser checks
 

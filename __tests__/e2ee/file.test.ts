@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import { CONTEXTS } from '@/lib/e2ee/contexts'
 import { E2eeError } from '@/lib/e2ee/errors'
@@ -80,6 +80,10 @@ async function releasedBeforeFailure(stored: Uint8Array) {
     released: concatBytes(...released),
   }
 }
+
+// These tests encrypt and decrypt megabytes several times with ciphers in
+// JavaScript. A shared test machine needs more than the default 5 seconds.
+vi.setConfig({ testTimeout: 30_000 })
 
 describe('file keys', () => {
   it('derives each key with its own context', () => {
