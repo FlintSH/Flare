@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 18. Phase 1 implemented. Not reviewed.        |
+| Status  | Draft 19. Phase 1 implemented. Not reviewed.        |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -573,7 +573,10 @@ is `blake3_keyed_hash(server_secret, identifier)`, with the identifier in
 the form of section 4.4, rule 7. The response for an
 unknown identifier must have the same form and timing as a real response.
 
-### 6.2 Password sign-in
+### 6.2 Passphrase sign-in
+
+Sign-in has two requests. The first creates the session. The second
+releases the key material. Each request has its own challenge.
 
 1. The client gets `passphrase_salt` and `challenge` (section 6.1).
 2. `passphrase_root = Argon2id(passphrase, passphrase_salt)`.
@@ -584,30 +587,43 @@ unknown identifier must have the same form and timing as a real response.
 5. The server deletes `challenge`.
 6. The server verifies `sign_in_signature` with `auth_public_key`.
 7. The server checks the second factor.
-8. If steps 6 and 7 pass, the server creates a session and returns
-   `wrapped_root` and `sealed_keyring`.
-9. `root_entropy = open(wrap_key, account_public_key, wrapped_root)`.
-10. The client calculates `account_private_key` from `root_entropy`.
-11. The client checks that `account_private_key` gives `account_public_key`.
-    If not, reject.
-12. The client erases the passphrase, `passphrase_root`, `auth_private_key`,
-    `wrap_key` and `root_entropy`.
+8. If steps 6 and 7 pass, the server creates a session.
+9. The client does the unlock procedure of section 6.3 from step 3. It uses
+   the `auth_private_key` and the `wrap_key` that it has in memory. It does
+   not calculate Argon2id again.
 
 The server must limit the rate of step 4 for each identifier and each address.
 
-### 6.3 Passkey and OIDC sign-in
+### 6.3 Unlock
 
-1. The user signs in with the passkey or OIDC. The server creates a session.
-2. The client asks the user for the passphrase.
-3. The client does steps 1 to 3 of section 6.2.
-4. The client calculates `sign_in_signature` and sends it in the session.
-5. The server does steps 5 and 6 of section 6.2.
+Unlock gives the key material to a client that has a session. A client does
+it after a passphrase sign-in, and after a sign-in with a passkey or OIDC.
+
+1. After a sign-in with a passkey or OIDC, the client asks the user for the
+   passphrase.
+2. The client does steps 1 to 3 of section 6.2, if it does not have the
+   keys in memory.
+3. The client requests a new `challenge` (section 6.1).
+4. `unlock_signature = Ed25519_sign(auth_private_key, "flare e2ee v1 unlock" || challenge || blake3_hash(identifier))`.
+   The client sends `challenge` and `unlock_signature` in the session.
+5. The server deletes `challenge` and verifies `unlock_signature` with
+   `auth_public_key`.
 6. If the check passes, the server returns `wrapped_root` and
    `sealed_keyring`.
-7. The client does steps 9 to 12 of section 6.2.
+7. `root_entropy = open(wrap_key, account_public_key, wrapped_root)`.
+8. The client calculates `account_private_key` from `root_entropy`.
+9. The client checks that `account_private_key` gives `account_public_key`.
+   If not, reject.
+10. The client erases the passphrase, `passphrase_root`, `auth_private_key`,
+    `wrap_key` and `root_entropy`.
 
 A session alone must not release `wrapped_root`. A person who steals a
 session thus cannot start offline guesses.
+
+The sign-in signature and the unlock signature have different context
+strings. A signature for one request is not valid for the other.
+
+The server must limit the rate of step 4 for each account and each address.
 
 ### 6.4 Key storage in the browser
 
@@ -947,7 +963,7 @@ list, the `sealed_keyring`. The old stanzas stay valid. A later task moves
 the stanzas to the new key (section 8.3.4).
 
 1. The client asks for the passphrase and gets the old `root_entropy` and
-   the old `account_private_key` (section 6.2). In recovery, the mnemonic
+   the old `account_private_key` (sections 6.2 and 6.3). In recovery, the mnemonic
    gives them (section 6.8).
 2. The client asks for a new passphrase. The strength check of section 5.2.1
    applies. The new passphrase must be different from the old one.
@@ -1996,3 +2012,4 @@ when.
 | 16    | 2026-11-10 | Protocol versions: where the version is recorded, rules for a client, rules for a new version. The account record stores its Argon2id parameters.                                                                                                                                                                                                                                                        |
 | 17    | 2026-11-10 | Protocol versions agreed. Exact encodings for each value. Test vectors.                                                                                                                                                                                                                                                                                                                                  |
 | 18    | 2026-11-11 | Results of the first implementation. `seal_once` for stanzas: the nonce comes from the key and is not stored. Argon2id parameters are fixed for a protocol version; the account record does not store them. One valid encrypted form for each file. Canonical X25519 public keys. Exact identifier form, also for the fake salt. Each stored record has the version byte. No sealed empty keyring.       |
+| 19    | 2026-11-11 | Sign-in has two requests: one for the session, one for the key material. Unlock is one procedure for each sign-in method, with its own context string.                                                                                                                                                                                                                                                   |
