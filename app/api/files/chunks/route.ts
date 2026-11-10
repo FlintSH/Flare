@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { rateLimit, uploadLimiter } from '@/lib/security/rate-limit'
@@ -52,3 +53,5 @@ export const GET = api(async (request) => {
   await saveUploadMetadata(id, metadata)
   return { data: { url, presignedUrl: url } }
 })
+
+export const OPTIONS = preflight('token')

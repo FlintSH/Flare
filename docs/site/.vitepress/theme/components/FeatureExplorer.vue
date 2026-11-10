@@ -147,7 +147,7 @@ const features = [
   [
     'Automate',
     'Upload & listing API',
-    'Use multipart or chunked uploads, list files, and create or manage short links.',
+    'Use multipart or chunked uploads, list files, and create or manage short links, from servers or, once the instance allows their origin, from web apps in the browser.',
     '/api/files',
   ],
   [

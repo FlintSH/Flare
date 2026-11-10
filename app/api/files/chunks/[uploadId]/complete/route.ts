@@ -1,4 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { completeChunkUpload } from '@/lib/uploads/chunks'
@@ -14,3 +15,5 @@ export const POST = api(async (request, { params }: Context) => {
   // Keep the established unwrapped response of this completion endpoint.
   return completeChunkUpload(user, uploadId, await readJson(request))
 })
+
+export const OPTIONS = preflight('token')

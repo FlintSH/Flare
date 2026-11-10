@@ -37,6 +37,8 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
+These routes also answer `OPTIONS` preflight requests. When the instance sets [`FLARE_CORS_ORIGINS`](./authentication#call-flare-from-a-web-app), an allowed origin gets CORS headers for the methods above, and only those; without the setting, preflights get a plain `204` that browsers treat as a refusal.
+
 See [files](./files), [short links](./short-links), and [authentication](./authentication) for request/response details. When the dashboard calls the write routes above with a browser session, they follow the [browser-session write rule](./authentication#browser-session-writes); token requests don't. Chunk part and completion routes reject `409` when the actual storage target changed or older session metadata lacks provenance; initialize a fresh upload. This does not add scopes or alter successful response shapes.
 
 ## File content and access checks
@@ -49,6 +51,8 @@ These routes check the file's visibility, password, and an optional **browser se
 | `/api/files/{id}/download`  | GET, POST | Download content. GET accepts a password query value and one `Range`; POST accepts password JSON and ignores `Range`. S3 storage can redirect after access validation to a signed URL, which makes S3 send the `Content-Disposition` Flare would. |
 | `/api/files/{id}/thumbnail` | GET       | Serve an image for thumbnail display; currently streams the original image. Access is checked before the type, so only someone who may read the file gets `400` for a non-image.                                                                  |
 | `/api/files/{id}/ocr`       | GET       | Fetch image OCR text after access validation; unsaved text waits for the OCR queue ([limits](#ocr-request-limits)). A non-image answers `400` only after access validation.                                                                       |
+
+These routes answer `OPTIONS` preflights, as do `/{userUrlId}/{filename}/raw` and `/{userUrlId}/{filename}/direct`. With [`FLARE_CORS_ORIGINS`](./authentication#call-flare-from-a-web-app) set, allowed sites can read their `GET` and `HEAD` answers as an anonymous visitor would. A browser may still send the session cookie with a `credentials: 'include'` request, but without `Access-Control-Allow-Credentials` it won't let the page read that answer.
 
 Raw/thumbnail/OCR GET requests accept a `password` query parameter when applicable. Prefer the normal share-page password flow for people using a browser; URLs containing passwords can be retained in history or logs. After 10 different incorrect passwords for a file from one client address, or 100 from all addresses, within 15 minutes, these routes, downloads, and shared-archive reads answer `429` with `Retry-After` in seconds until the window ends, even for the correct password, unless that address unlocked the file in the last 10 minutes. Repeating an identical wrong password does not count again. See [incorrect password attempts](/guide/sharing#incorrect-password-attempts).
 

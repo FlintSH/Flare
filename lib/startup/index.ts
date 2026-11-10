@@ -2,6 +2,7 @@ import { startAuditRetentionWorker } from '@/lib/audit/retention'
 import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 import { startMailWorker } from '@/lib/email/worker'
 import { startFileExpiryWorker } from '@/lib/files/expiry-worker'
+import { CORS_ENV, corsWarnings } from '@/lib/http/cors'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
@@ -17,6 +18,11 @@ function warnAboutSessionSecret() {
     logger.warn(warning)
 }
 
+function warnAboutCorsOrigins() {
+  for (const warning of corsWarnings(process.env[CORS_ENV]))
+    logger.warn(warning)
+}
+
 /**
  * Starts each task on its own, so one that throws can't keep the others from
  * starting. Workers are process-wide singletons: a second call starts none twice.
@@ -27,6 +33,7 @@ export async function runStartupTasks() {
 
   const tasks: [name: string, start: () => unknown][] = [
     ['session secret check', warnAboutSessionSecret],
+    ['CORS origin check', warnAboutCorsOrigins],
     ['security cleanup', startSecurityCleanupWorker],
     ['audit retention', startAuditRetentionWorker],
     ['storage deletion', startStorageDeletionWorker],

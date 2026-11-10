@@ -123,6 +123,12 @@ Flare reads `NEXTAUTH_URL` in one place. It must be an `http` or `https` URL wit
 
 Earlier builds read it seven ways. Account security accepted only the exact `NEXTAUTH_URL` origin and answered `503` while it was unset; account email also accepted the origin of the email public URL, and failed with an unrelated error when `NEXTAUTH_URL` wasn't a URL. Both now follow the rule above, and only passkeys need `NEXTAUTH_URL`. A value without `http://` or `https://` used to end up in upload links as written.
 
+## CORS and proxies
+
+Configure cross-origin access with [`FLARE_CORS_ORIGINS`](./configuration#cross-origin-browser-access), not proxy rules. Flare answers preflight requests itself and sends CORS headers only on routes where named tokens or anonymous file reads apply. A proxy rule that adds `Access-Control-Allow-Origin` to every response would also expose session-only routes to the listed sites, and one added on top of Flare's produces two values, which browsers reject. Pass `OPTIONS` requests and the `Origin`, `Access-Control-Request-Method` and `Access-Control-Request-Headers` headers through unchanged, as the examples above do.
+
+With a list of origins, file content answers vary by the requesting site and carry `Vary: Origin`. A CDN that caches public videos or thumbnails but ignores `Vary` can then serve one site's answer to another, and the browser refuses it. Either set `FLARE_CORS_ORIGINS=*`, whose answers are the same for every site, or include `Origin` in the CDN's cache key.
+
 ## Passkeys and hostname changes
 
 Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.

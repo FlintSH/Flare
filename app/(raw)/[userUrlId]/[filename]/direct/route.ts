@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 
 import { authorizeFile } from '@/lib/files/delivery'
 import { fileUrls } from '@/lib/files/urls'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { getStorageProvider } from '@/lib/storage'
 
@@ -9,6 +10,7 @@ type Context = { params: Promise<{ userUrlId: string; filename: string }> }
 
 const api = routes('/[userUrlId]/[filename]/direct', {
   failure: { message: 'Internal server error' },
+  cors: 'file',
 })
 
 export const GET = api(
@@ -37,3 +39,5 @@ export const GET = api(
   },
   { audit: { action: 'file.read', category: 'files' } }
 )
+
+export const OPTIONS = preflight('file')

@@ -8,6 +8,7 @@ import {
 } from '@/lib/files/gallery-navigation'
 import { fileListFilters } from '@/lib/files/list-filters'
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { HttpError } from '@/lib/http/errors'
 import { apiResponse, paginatedResponse } from '@/lib/http/response'
 import { routes } from '@/lib/http/route'
@@ -105,3 +106,5 @@ export const GET = api(
     failure: { message: 'Failed to fetch files' },
   }
 )
+
+export const OPTIONS = preflight('token')

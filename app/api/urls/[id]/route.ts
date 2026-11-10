@@ -1,4 +1,5 @@
 import { requireAccount } from '@/lib/http/access'
+import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
 import { deleteOwnShortLink } from '@/lib/links/service'
 import { loggers } from '@/lib/logger'
@@ -17,3 +18,5 @@ export const DELETE = api(async (request, { params }: Context) => {
   await deleteOwnShortLink(user.id, id)
   return new Response(null, { status: 204 })
 })
+
+export const OPTIONS = preflight('token')

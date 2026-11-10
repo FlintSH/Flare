@@ -5,6 +5,7 @@ import type { ZodError } from 'zod'
 import { auditRequest } from '@/lib/audit'
 import { type Logger, loggers } from '@/lib/logger'
 
+import { type CorsKind, applyCors } from './cors'
 import { AccessError, HttpError, InvalidInput } from './errors'
 import { mediaType } from './request'
 
@@ -14,6 +15,12 @@ export interface RouteContract {
   envelope?: 'api'
   /** Sends what a handler returned when it isn't a Response; defaults to plain JSON. */
   respond?: (value: unknown) => Response
+  /**
+   * Which cross-origin access FLARE_CORS_ORIGINS can grant: `token` (the
+   * default) for the methods named tokens may call, `file` for public file
+   * content. Routes no named token can call get no CORS headers either way.
+   */
+  cors?: CorsKind
   /** Sent with every response these routes give, unless a handler set it. */
   headers?: Record<string, string>
   /**
@@ -89,7 +96,7 @@ export function routes(template: string, contract: RouteContract) {
             mediaType(response) === 'application/json'
           )
             response.headers.set('Cache-Control', 'private, no-store')
-          return response
+          return applyCors(request, response, settings.cors ?? 'token')
         }
       )) as RouteHandler<Context>
   }
