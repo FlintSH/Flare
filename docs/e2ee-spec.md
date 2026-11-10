@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 9. Not implemented. Not reviewed.             |
+| Status  | Draft 10. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -725,6 +725,9 @@ the stanzas to the new key (section 8.3.4).
 9. The client shows the new mnemonic. The user must save it. The old
    mnemonic does not open the account after this step.
 
+In step 6, the client also sends a new `sealed_tag_metadata` for each tag
+(section 9.5.5).
+
 The server returns `sealed_keyring` together with `wrapped_root` at sign-in.
 The client opens it and keeps the old private keys with the current one
 (section 6.4).
@@ -891,6 +894,10 @@ records and the database today. The server searches and sorts by name.
 
 A person who has `file_key` can read `file_metadata`. The server cannot.
 
+The server keeps a copy of `sealed_metadata` in the database. The server
+sends it in each list of files. Without the copy, a list would need a read of
+each file in the storage.
+
 ### 9.2 Metadata that stays visible to the server
 
 - the size of the ciphertext,
@@ -1013,9 +1020,162 @@ below the folder.
   not shared. The owner can then share the folder with no work for each
   file, and a script client does not need to know if a folder is shared.
 
-### 9.5 Tags and OCR
+### 9.5 Tags
 
-**OPEN**. See section 13.
+**AGREED** for the structure. **PROPOSED** for the exact strings.
+
+**Goal:** the server must not learn the names of tags or the text of tag
+rules. The filter by tag must continue to work.
+
+**Idea:** the reference from a file to a tag stays visible, as for folders.
+The name and the rule of a tag are encrypted with a key that only the owner
+has.
+
+**Restriction:** a tag can have an automatic rule. Example: "add this tag if
+the file name contains `invoice`". Only a client that can read the rule and
+the file name can apply it. The server cannot. A script client cannot,
+because it has no key that opens the rules.
+
+#### 9.5.1 Tag key
+
+`tag_key = blake3_derive_key("flare e2ee v1 tag metadata", account_private_key)`
+
+Tags are not shared. Thus a tag needs no key pair and no stanza.
+
+#### 9.5.2 Tag record
+
+`sealed_tag_metadata = seal(tag_key, random(24), account_public_key, tag_metadata)`
+
+`tag_metadata` is a JSON object with these fields:
+
+| Field         | Content                                          |
+| ------------- | ------------------------------------------------ |
+| `name`        | The name of the tag                              |
+| `rule_source` | `filename`, `ocr`, or no value                   |
+| `rule_text`   | The text that the rule searches for, or no value |
+
+#### 9.5.3 What the server sees
+
+- the number of tags of an account,
+- which file has which tag,
+- that the user removed a tag from a file by hand.
+
+The server does not see the name of a tag, and does not see if a tag has a
+rule.
+
+The server cannot compare names. The client rejects a second tag with the
+same name.
+
+#### 9.5.4 Tags from an upload profile
+
+An upload profile can add fixed tags to each upload. These are references
+to tags. The server adds them, as today. No key is necessary.
+
+#### 9.5.5 Key rotation
+
+A rotation changes `account_private_key`, thus it changes `tag_key`. In the
+rotation procedure (section 8.3.3), the client makes a new
+`sealed_tag_metadata` for each tag and sends them with the new account data.
+An account has few tags, thus this work is small.
+
+### 9.6 Text from images (OCR)
+
+**AGREED** for the structure. **PROPOSED** for the exact strings.
+
+**Goal:** the user can search for text that is in an image. The server must
+not learn that text.
+
+**Idea:** a client that has the plaintext image does the recognition. It
+encrypts the text with a key from `file_key`. The server stores the result.
+
+**Restriction:** the recognition needs the plaintext image. Flare uses
+tesseract.js on the server today. The same library operates in a browser.
+
+#### 9.6.1 Encrypted text
+
+1. `ocr_text_key = blake3_derive_key("flare e2ee v1 ocr text", file_key)`
+2. `sealed_ocr_text = seal(ocr_text_key, random(24), header_hash, ocr_text)`
+
+A person who has `file_key` can read the text. That person can read the
+image too, thus the text gives that person nothing new.
+
+The server sees the length of `sealed_ocr_text`. Thus the server knows
+approximately how much text an image contains.
+
+#### 9.6.2 Where the recognition occurs
+
+| Client                       | When                                                                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Browser of the owner, upload | At the time of the upload.                                                                                                    |
+| Script client                | At the time of the upload, if a tesseract program is on the machine. This is optional. Most machines do not have the program. |
+| Browser of the owner, later  | For each image that has no text (section 9.7).                                                                                |
+| Browser of a visitor         | When the visitor selects "Extract text" and no text is stored. The result is not stored.                                      |
+
+The instance setting for automatic recognition continues to apply. If it is
+off, the recognition occurs only on the request of the user.
+
+The application must supply the recognition program and the language data
+from its own origin. It must not load them from a different site.
+
+#### 9.6.3 Plain files
+
+For a plain file (section 11), the server does the recognition, as today.
+
+### 9.7 Work that waits for the browser of the owner
+
+**AGREED**
+
+A script client cannot apply tag rules, and frequently cannot do the
+recognition. The browser of the owner does this work later.
+
+Each file has two flags that the server stores:
+
+| Flag            | Meaning                                            |
+| --------------- | -------------------------------------------------- |
+| `rules_pending` | No client applied the tag rules to this file.      |
+| `ocr_pending`   | The file is an image and has no `sealed_ocr_text`. |
+
+The uploading client tells the server which work it did. The server sets
+the flags for the work that is not done. The server cannot examine the file
+to decide `ocr_pending`. Thus the uploading client tells the server that
+the file is an image.
+
+When the owner opens the library, the client does this in the background:
+
+1. Request the files that have a flag.
+2. For each file with `ocr_pending`: get the file, decrypt it, do the
+   recognition, and send `sealed_ocr_text`.
+3. For each file with `rules_pending`: decrypt the name and the text, apply
+   each tag rule, and send the new tag references.
+4. The server clears the flags.
+
+Results for the user:
+
+- A file from a script client gets its automatic tags when the owner next
+  opens the library. It does not get them at the time of the upload.
+- The text of such a file is not in the search before step 2 is done.
+- Step 2 downloads each image one time. Step 3 is fast.
+
+### 9.8 Search
+
+**AGREED**
+
+The server cannot search encrypted names or encrypted text. The client
+does the search.
+
+1. The client gets `sealed_metadata` and `sealed_ocr_text` of the files.
+2. The client decrypts them and builds a search index.
+3. The client keeps the index for the session. It deletes the index on
+   sign-out, together with the keys (section 6.4).
+
+The client must use the X25519 function of the browser, not an
+implementation in JavaScript. A test on a server computer gave 0.07 ms for
+each account stanza. That is approximately 4 seconds for 50 000 files. A
+phone is slower. The client shows the first files before the index is
+complete.
+
+The same applies to the sort by name and to the "apply to existing files"
+operation of a tag rule.
 
 ## 10. Upload and share links
 
@@ -1162,13 +1322,14 @@ Today the server redirects known crawlers to the raw file.
 4. A moderator permission must not give access to encrypted content.
 5. The legacy upload token is stored without a hash today. The server must
    store a hash only.
+6. The Content-Security-Policy must permit WebAssembly from the origin of the
+   application. The recognition program (section 9.6) needs it.
 
 ## 13. Open questions
 
 1. **Folders.** Closed. See section 9.4.
-2. **Tags.** Do tag names get encryption under a key of the account?
-3. **OCR.** Does OCR move to the client? Where does the encrypted text go, and
-   how does search use it?
+2. **Tags.** Closed. See section 9.5.
+3. **OCR.** Closed. See sections 9.6 to 9.8.
 4. **One key or two in `seal`.** This draft derives separate cipher and MAC
    keys. One shared key has no known attack with XChaCha20 and BLAKE3. The
    separate keys agree with the standard encrypt-then-MAC proof.
@@ -1205,3 +1366,4 @@ Today the server redirects known crawlers to the raw file.
 | 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                      |
 | 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                    |
 | 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                   |
+| 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                             |
