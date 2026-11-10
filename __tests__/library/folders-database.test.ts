@@ -217,11 +217,12 @@ describe.skipIf(!databaseUrl)('folder keys and stanzas (PostgreSQL)', () => {
       created: ReturnType<typeof encryptedFile>,
       folder: { folderPublicKey: Uint8Array } | null,
       options: Record<string, unknown>,
-      extra: Record<string, string> = {}
+      extra: Record<string, string> = {},
+      uploader = user
     ) =>
       finalize.finalizeUpload(
         encryptedUploadInput(
-          user,
+          uploader,
           created,
           {
             ...(folder &&
@@ -258,15 +259,34 @@ describe.skipIf(!databaseUrl)('folder keys and stanzas (PostgreSQL)', () => {
         visibility: 'PUBLIC',
       })
     ).rejects.toMatchObject({ status: 409, body: { code: 'stale_folder_key' } })
+    // A script client cannot make a new stanza, so its file is stored
+    // without the one that cannot be used (section 8.4.3).
+    const script = { ...user, credential: 'token' as const }
+    for (const [folder, options] of [
+      [other.opened, { folderId: view.id, visibility: 'PUBLIC' }],
+      [opened, { folderId: view.id, visibility: 'PRIVATE' }],
+    ] as const) {
+      const stored = await upload(
+        encryptedFile(keys),
+        folder,
+        options,
+        {},
+        script
+      )
+      expect(stored.folderStanza).toBeNull()
+    }
     // A public upload without a stanza is accepted: a browser makes it later.
     const bare = await upload(encryptedFile(keys), null, {
       folderId: view.id,
       visibility: 'PUBLIC',
     })
     expect(bare.folderStanza).toBeNull()
-    expect((await service.folderRepairs(owner)).fileStanzas).toEqual([
-      expect.objectContaining({ id: bare.id, folderId: view.id }),
-    ])
+    const repairs = (await service.folderRepairs(owner)).fileStanzas
+    expect(repairs).toContainEqual(
+      expect.objectContaining({ id: bare.id, folderId: view.id })
+    )
+    // The public file of the script client waits for its stanza too.
+    expect(repairs).toHaveLength(2)
   })
 
   it('deletes the folder stanza when a file becomes private, moves or changes its password', async () => {
