@@ -4,6 +4,9 @@ import { createTag, listTags, updateTag } from '@/lib/tags/manage'
 
 const mocks = vi.hoisted(() => ({
   vaultTag: { findMany: vi.fn(), create: vi.fn(), update: vi.fn() },
+  user: { findUnique: vi.fn() },
+  $queryRaw: vi.fn(),
+  $transaction: vi.fn(),
 }))
 vi.mock('@/lib/database/prisma', () => ({ prisma: mocks }))
 
@@ -12,6 +15,7 @@ const row = {
   name: 'Work Notes',
   ruleSource: 'filename',
   ruleText: 'invoice',
+  sealedTagMetadata: null,
   _count: { files: 3 },
 }
 const view = {
@@ -20,6 +24,7 @@ const view = {
   ruleSource: 'filename',
   ruleText: 'invoice',
   fileCount: 3,
+  sealed: null,
 }
 const input = {
   name: 'Work Notes',
@@ -29,6 +34,9 @@ const input = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.$transaction.mockImplementation((callback) => callback(mocks))
+  // An account without encryption keys: its tags keep plain names.
+  mocks.user.findUnique.mockResolvedValue({ accountPublicKey: null })
   mocks.vaultTag.findMany.mockResolvedValue([row])
   mocks.vaultTag.create.mockResolvedValue(row)
   mocks.vaultTag.update.mockResolvedValue(row)
@@ -40,7 +48,7 @@ describe('an account’s tags', () => {
     expect(mocks.vaultTag.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { userId: 'owner' },
-        orderBy: { normalizedName: 'asc' },
+        orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
       })
     )
   })
@@ -49,7 +57,12 @@ describe('an account’s tags', () => {
     expect(await createTag('owner', input)).toEqual(view)
     expect(mocks.vaultTag.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        data: { ...input, userId: 'owner', normalizedName: 'work notes' },
+        data: {
+          ...input,
+          id: expect.any(String),
+          userId: 'owner',
+          normalizedName: 'work notes',
+        },
       })
     )
     expect(await updateTag('owner', 'tag', input)).toEqual(view)

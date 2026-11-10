@@ -78,6 +78,7 @@ import { useEncryptedFile } from '@/hooks/use-encrypted-file'
 import { useOcr } from '@/hooks/use-ocr'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
+import { useNamedTags } from '@/hooks/use-tags'
 import { useToast } from '@/hooks/use-toast'
 
 // Folder and tag labels share one fixed-height line with the activity counts,
@@ -472,7 +473,8 @@ function OpenFileCard({
   const isImage = !opened && file.mimeType.startsWith('image/')
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
-  const tags = file.tags ?? []
+  // The server lists a sealed tag by its ID. Its name is opened here.
+  const tags = useNamedTags(file.tags)
   const visibleTags = tags.slice(0, folder ? 1 : 2)
   const permitted = (id: FileActionId) => fileActionAllowed(user, id)
   const browseArchive = permitted('browseArchive') ? onBrowseArchive : undefined

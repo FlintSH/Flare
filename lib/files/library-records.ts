@@ -35,7 +35,10 @@ export const PENDING_PAGE_SIZE = 20
 type Tx = Prisma.TransactionClient
 
 /** Whether the account has a tag whose rule only a browser can read. */
-export async function accountHasSealedTags(tx: Tx, userId: string) {
+export async function accountHasSealedTags(
+  tx: Pick<Tx, 'vaultTag'>,
+  userId: string
+) {
   return Boolean(
     await tx.vaultTag.findFirst({
       where: { userId, sealedTagMetadata: { not: null } },

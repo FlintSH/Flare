@@ -25,7 +25,10 @@ import {
 import { Switch } from '@/components/ui/switch'
 
 import { apiRequest } from '@/lib/client/request'
+import { unwrapperFor } from '@/lib/e2ee/client/unwrappers'
 import { allows } from '@/lib/permissions/actions'
+import { tagsApi } from '@/lib/tags/browser'
+import { applyRuleToExistingFiles, tagRequestBody } from '@/lib/tags/client'
 import { TAG_NAME_MAX_LENGTH, TAG_RULE_MAX_LENGTH } from '@/lib/tags/schema'
 import type { TagView } from '@/lib/tags/schema'
 
@@ -45,7 +48,7 @@ export function TagManager({
 }) {
   const lifetime = useRequestLifetime()
   const { user } = usePermissions()
-  const { tags, loading, error: loadError, reload, changed } = useTags()
+  const { tags, keys, loading, error: loadError, reload, changed } = useTags()
   const { toast } = useToast()
   const [editing, setEditing] = useState<TagView | 'new' | null>(null)
   const [name, setName] = useState('')
@@ -85,11 +88,18 @@ export function TagManager({
     try {
       await apiRequest(existing ? `/api/tags/${existing.id}` : '/api/tags', {
         method: existing ? 'PATCH' : 'POST',
-        body: {
-          name: name.trim(),
-          ruleSource: automatic ? source : null,
-          ruleText: automatic ? phrase.trim() : null,
-        },
+        // The name and the rule are sealed in this browser for an account
+        // that has keys (docs/e2ee-spec.md, section 9.5.2).
+        body: tagRequestBody({
+          fields: {
+            name,
+            ruleSource: automatic ? source : null,
+            ruleText: automatic ? phrase.trim() : null,
+          },
+          existing,
+          tags,
+          keys,
+        }),
         signal,
         fallback: TAG_REQUEST_FAILED,
       })
@@ -142,10 +152,25 @@ export function TagManager({
     setBusy(true)
     setError('')
     try {
-      const result = await apiRequest<{ count: number }>(
-        `/api/tags/${existing.id}/apply`,
-        { method: 'POST', signal, fallback: TAG_REQUEST_FAILED }
-      )
+      // The server cannot read a sealed rule, or the name and text of an
+      // encrypted file: this browser matches the rule (section 9.8.3).
+      const result = existing.sealed
+        ? keys
+          ? {
+              count: await applyRuleToExistingFiles(
+                tagsApi,
+                existing,
+                await unwrapperFor(keys),
+                { signal }
+              ),
+            }
+          : await Promise.reject(
+              new Error('Unlock your encryption keys to apply this rule.')
+            )
+        : await apiRequest<{ count: number }>(
+            `/api/tags/${existing.id}/apply`,
+            { method: 'POST', signal, fallback: TAG_REQUEST_FAILED }
+          )
       if (signal.aborted) return
       void changed()
       setConfirmApply(false)

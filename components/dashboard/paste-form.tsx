@@ -39,6 +39,7 @@ import { uploadPaste } from '@/lib/uploads/client'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
+import { useUploadLibrary } from '@/hooks/use-upload-library'
 import { useUploadEncryption } from '@/hooks/use-upload-queue'
 
 export function PasteForm() {
@@ -53,6 +54,7 @@ export function PasteForm() {
   const [encryption, setEncryption] = useState<EncryptionMode>('encrypted')
   const encrypted = encryption === 'encrypted'
   const keys = useUploadEncryption()
+  const libraryFor = useUploadLibrary()
   const passwordStrength = useFilePasswordStrength(password, encrypted)
   const passwordProblem = encrypted
     ? passwordStrength.problem
@@ -97,6 +99,12 @@ export function PasteForm() {
             : undefined,
         password,
         encryptFor: encrypted ? keys.encryptFor : undefined,
+        // The tag rules of the owner run in this browser on the name.
+        library: {
+          ...libraryFor({}),
+          // A paste is text: no thumbnail can be made for it.
+          thumbnail: async () => null,
+        },
       })
       const url = paste.pageUrl || paste.url
       setCreated({

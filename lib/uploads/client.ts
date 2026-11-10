@@ -595,7 +595,7 @@ export async function uploadPaste(
   file: File,
   options: Pick<
     UploadOptions,
-    'profileId' | 'visibility' | 'password' | 'encryptFor'
+    'profileId' | 'visibility' | 'password' | 'encryptFor' | 'library'
   >
 ): Promise<UploadResponse> {
   // A paste is a file, encrypted like any other (section 12.5).
@@ -615,5 +615,8 @@ export async function uploadPaste(
   })
   if (!succeeded(reply))
     throw failure(reply, 'Could not create your paste. Please try again.')
-  return parseUploadResponse(reply.body)
+  return plainUploaded<UploadResponse>(
+    file,
+    options
+  )(parseUploadResponse(reply.body))
 }

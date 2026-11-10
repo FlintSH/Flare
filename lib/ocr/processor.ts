@@ -2,6 +2,7 @@ import { createWorker } from 'tesseract.js'
 
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { accountHasSealedTags } from '@/lib/files/library-records'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
@@ -41,6 +42,11 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
       data: { text, confidence },
     } = await worker.recognize(fileBuffer).finally(() => worker.terminate())
 
+    // The server cannot read the rule of a sealed tag. A rule on image text
+    // waits for the browser of the owner (docs/e2ee-spec.md, section 9.7).
+    const sealedRules = file
+      ? await accountHasSealedTags(prisma, file.userId)
+      : false
     await prisma.file.update({
       where: { id: fileId },
       data: {
@@ -48,6 +54,7 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
         ocrConfidence: confidence,
         isOcrProcessed: true,
         ocrTagsPendingAt: new Date(),
+        ...(sealedRules && { rulesPending: true, pendingAttempts: 0 }),
       },
     })
 

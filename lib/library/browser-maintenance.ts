@@ -7,6 +7,8 @@ import {
   repairFolders,
 } from '@/lib/folders/repairs'
 import type { FolderView } from '@/lib/folders/schema'
+import { tagsApi } from '@/lib/tags/browser'
+import { sealPlainTags } from '@/lib/tags/client'
 
 import {
   type JobContext,
@@ -54,7 +56,13 @@ async function runFolderRepairs({ keys, signal, report }: Context) {
     libraryChanged?.()
 }
 
+async function runTagConversion({ keys, signal, report }: Context) {
+  report({ label: 'Encrypting tag names', done: 0, total: null })
+  if (await sealPlainTags(tagsApi, keys, { signal })) libraryChanged?.()
+}
+
 const runners: Partial<Record<MaintenanceJob, JobRunner<StoredAccountKeys>>> = {
+  tags: runTagConversion,
   folders: runFolderRepairs,
 }
 

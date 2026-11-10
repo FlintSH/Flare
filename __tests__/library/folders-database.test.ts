@@ -89,8 +89,9 @@ describe.skipIf(!databaseUrl)('folder keys and stanzas (PostgreSQL)', () => {
     keys = clientKeys()
     owner = (await createUser(prisma, keys)).id
   })
+  // Each test has accounts of its own. No suite deletes every user: the
+  // library suites share one database and run at the same time.
   afterAll(async () => {
-    await prisma?.user.deleteMany()
     await prisma?.$disconnect()
   })
 

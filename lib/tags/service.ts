@@ -103,6 +103,37 @@ export async function changeFileTags(
   })
 }
 
+/**
+ * Adds a tag to files that its rule matches, as the owner's browser found
+ * them (docs/e2ee-spec.md, section 9.8.3). The server cannot read the rule
+ * of a sealed tag. A tag that the owner removed from a file by hand stays
+ * removed, as with every automatic rule.
+ */
+export async function applyTagToFiles(
+  userId: string,
+  tagId: string,
+  fileIds: string[]
+): Promise<number> {
+  const ids = [...new Set(fileIds)]
+  return prisma.$transaction(async (tx) => {
+    const tag = await tx.vaultTag.findFirst({
+      where: { id: tagId, userId },
+      select: { id: true },
+    })
+    if (!tag) throw new TagError('Tag not found.', 404)
+    const owned = await tx.file.findMany({
+      where: { id: { in: ids }, userId },
+      select: { id: true },
+    })
+    if (!owned.length) return 0
+    const result = await tx.vaultFileTag.createMany({
+      data: owned.map((file) => ({ fileId: file.id, tagId: tag.id })),
+      skipDuplicates: true,
+    })
+    return result.count
+  })
+}
+
 /** Explicit backfill. Editing a rule never silently retags the existing vault. */
 export async function applyTagToExistingFiles(
   userId: string,
@@ -110,9 +141,19 @@ export async function applyTagToExistingFiles(
 ): Promise<number> {
   const tag = await prisma.vaultTag.findFirst({
     where: { id: tagId, userId },
-    select: { id: true, ruleSource: true, ruleText: true },
+    select: {
+      id: true,
+      ruleSource: true,
+      ruleText: true,
+      sealedTagMetadata: true,
+    },
   })
   if (!tag) throw new TagError('Tag not found.', 404)
+  if (tag.sealedTagMetadata)
+    throw new TagError(
+      'The rule of this tag is encrypted, so the server cannot apply it. Apply it in Flare, in a browser where your keys are unlocked.',
+      409
+    )
   if (!tag.ruleSource || !tag.ruleText)
     throw new TagError(
       'Add an automatic rule before applying it to existing files.'
