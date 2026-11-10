@@ -281,7 +281,7 @@ function ChoiceDialog({
           <DialogTitle>Encrypt your existing files</DialogTitle>
           <DialogDescription>
             {status.plain.total > 0
-              ? `${files(status.plain.total)} in your library ${status.plain.total === 1 ? 'is' : 'are'} from before encryption and stored readable. The server can encrypt them for you without a download. After that, only your keys open them.`
+              ? `${files(status.plain.total)} in your library ${status.plain.total === 1 ? 'is' : 'are'} from before encryption and stored readable. The server can encrypt ${status.plain.total === 1 ? 'it' : 'them'} for you without a download. After that, only your keys open ${status.plain.total === 1 ? 'it' : 'them'}.`
               : 'Every file in your library is encrypted.'}
           </DialogDescription>
         </DialogHeader>
@@ -341,7 +341,8 @@ function ChoiceDialog({
             </p>
           </>
         )}
-        <DialogFooter className="gap-2 sm:gap-2">
+        {/* On a phone the dialog scrolls, and the answer stays in view. */}
+        <DialogFooter className="sticky bottom-0 -mx-5 -mb-5 gap-2 border-t border-border/60 bg-overlay px-5 pb-5 pt-3 sm:static sm:m-0 sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0">
           <Button
             type="button"
             variant="ghost"
@@ -547,7 +548,8 @@ export function ExistingFiles() {
             {files(status.plain.total)} from before encryption{' '}
             {status.plain.total === 1 ? 'is' : 'are'} stored readable.{' '}
             <span className="text-muted-foreground">
-              The server can encrypt them for you.
+              The server can encrypt {status.plain.total === 1 ? 'it' : 'them'}{' '}
+              for you.
             </span>
           </p>
           <div className="flex items-center gap-1">

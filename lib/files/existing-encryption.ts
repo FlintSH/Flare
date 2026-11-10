@@ -475,6 +475,19 @@ async function writeCiphertext(input: {
       )
     throw new JobError('storage_write_failed')
   }
+  // A read that ended early without an error would pass the verification,
+  // because the ciphertext matches what was read. The plaintext object is
+  // deleted later, so every byte of it must have been read.
+  let stored: number
+  try {
+    stored = await input.storage.getFileSize(input.sourcePath)
+  } catch (error) {
+    throw new JobError(
+      isMissingObject(error) ? 'source_missing' : 'storage_read_failed',
+      !isMissingObject(error)
+    )
+  }
+  if (stored !== length) throw new JobError('storage_read_failed')
   return {
     length,
     digest: hash.digest(),
@@ -530,8 +543,14 @@ async function verifyCiphertext(input: {
 }
 
 type SwitchResult =
-  | { outcome: FileEncryptionResult; purgeImages?: boolean; archive?: boolean }
-  | { outcome: 'lost' | 'postponed' }
+  | {
+      outcome: 'encrypted'
+      /** The queued deletion of the plaintext object in the storage that was read. */
+      cleanupId: string
+      purgeImages: boolean
+      archive: boolean
+    }
+  | { outcome: 'skipped' | 'gone' | 'lost' | 'postponed' }
 
 /**
  * Step 5. Everything that makes the file an encrypted file is one
@@ -745,13 +764,14 @@ async function switchFile(input: {
         WHERE id = ${job.userId}
       `
       // The plaintext object, in the storage that delivery read it from.
-      await tx.storageDeletion.create({
+      const cleanup = await tx.storageDeletion.create({
         data: {
           ownerId: job.userId,
           path: input.sourcePath,
           provider: input.sourceTarget.provider,
           target: input.sourceTarget,
         },
+        select: { id: true },
       })
       // A copy that the row records in a different storage is plaintext too.
       const recorded = parseStorageTarget(file.storageTarget)
@@ -789,6 +809,7 @@ async function switchFile(input: {
       await input.steps.beforeCommit?.()
       return {
         outcome: 'encrypted',
+        cleanupId: cleanup.id,
         purgeImages: file.visibility === 'PUBLIC' && isImage,
         archive: ARCHIVE_TYPE.test(file.mimeType),
       }
@@ -964,19 +985,6 @@ export async function processFileEncryption(
       lost: () => lost,
       signal: abort.signal,
     })
-    // A read that ended early without an error must not become the file:
-    // the bytes that were read are the whole stored object, or the attempt
-    // stops here and the plaintext object stays.
-    let sourceBytes: number
-    try {
-      sourceBytes = await storage.getFileSize(file.path)
-    } catch (error) {
-      throw new JobError(
-        isMissingObject(error) ? 'source_missing' : 'storage_read_failed',
-        !isMissingObject(error)
-      )
-    }
-    if (sourceBytes !== pass.length) throw new JobError('storage_read_failed')
     await steps.afterWrite?.()
     await verifyCiphertext({
       storage,
@@ -1011,28 +1019,16 @@ export async function processFileEncryption(
     written = null
     await steps.afterCommit?.()
 
-    // Step 6. The queued deletion of step 5 covers a failure here.
+    // Step 6. The queued deletion of step 5 covers a failure here: the
+    // storage worker deletes the object later.
+    const queued = { id: result.cleanupId, status: 'pending' }
     try {
       await storage.deleteFile(file.path)
-      await prisma.storageDeletion.deleteMany({
-        where: {
-          ownerId: job.userId,
-          path: file.path,
-          status: 'pending',
-          provider: target.provider,
-        },
-      })
+      await prisma.storageDeletion.deleteMany({ where: queued })
     } catch (error) {
       if (isMissingObject(error))
         await prisma.storageDeletion
-          .deleteMany({
-            where: {
-              ownerId: job.userId,
-              path: file.path,
-              status: 'pending',
-              provider: target.provider,
-            },
-          })
+          .deleteMany({ where: queued })
           .catch(() => undefined)
     }
     if (result.purgeImages) await purgeImageOptimizerCache()

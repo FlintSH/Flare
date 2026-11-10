@@ -268,9 +268,16 @@ async function context(browser, { record = true } = {}) {
   return { ctx, page }
 }
 
+/** On a phone the library renders only the rows on screen, so the steps use a tall one. */
+const TALL = { width: 390, height: 3600 }
+
 async function shot(page, name) {
   if (!screenshots) return
   await mkdir(screenshots, { recursive: true })
+  const size = page.viewportSize()
+  // The picture is of the real phone size.
+  if (mobile && size && size.height !== 844)
+    await page.setViewportSize({ width: 390, height: 844 })
   await page.waitForTimeout(350)
   await page.screenshot({
     path: path.join(
@@ -278,6 +285,10 @@ async function shot(page, name) {
       `${name}-${mobile ? 'mobile' : 'desktop'}-${theme}.png`
     ),
   })
+  if (mobile && size && size.height !== 844) {
+    await page.setViewportSize(size)
+    await page.waitForTimeout(200)
+  }
 }
 
 const card = (page, name) =>
@@ -287,6 +298,34 @@ const card = (page, name) =>
       has: page.getByRole('link', { name: `Open ${name}`, exact: true }),
     })
     .first()
+
+/**
+ * Opens the menu of a file card. The library loads its rows again when
+ * background work finishes, which closes an open menu: this waits for that
+ * work and opens the menu again if it closed.
+ */
+async function openMenu(page, name) {
+  for (let attempt = 0; ; attempt++) {
+    await expect(
+      page.locator(
+        '[data-library-work], [data-existing-files-progress="running"]'
+      )
+    ).toHaveCount(0, { timeout: 60000 })
+    await page.waitForTimeout(400)
+    await card(page, name)
+      .getByRole('button', { name: `Manage ${name}` })
+      .click()
+    const menu = page.getByRole('menu')
+    try {
+      await menu.waitFor({ state: 'visible', timeout: 5000 })
+      await page.waitForTimeout(600)
+      if (await menu.isVisible()) return
+    } catch {
+      // The menu closed or never opened.
+    }
+    assert.ok(attempt < 4, `The menu of ${name} does not stay open`)
+  }
+}
 
 async function until(what, read, { timeout = 150000 } = {}) {
   const deadline = Date.now() + timeout
@@ -303,6 +342,23 @@ async function check(name, run) {
   await run()
   results.push(`${name} (${Date.now() - started} ms)`)
   console.log(`ok - ${name}`)
+}
+
+/** The instance shows the theme that this run takes pictures of. */
+async function useTheme(ctx) {
+  const headers = { Origin: origin }
+  const current = await ctx.request.get(`${origin}/api/customization`, {
+    headers,
+  })
+  assert.equal(current.status(), 200)
+  const { data } = await current.json()
+  const document = structuredClone(data.draft ?? data.published)
+  document.theme = { ...document.theme, enabled: true, defaultMode: theme }
+  const published = await ctx.request.post(`${origin}/api/customization`, {
+    headers,
+    data: { action: 'publish', revision: data.revision, document },
+  })
+  assert.equal(published.status(), 200, await published.text())
 }
 
 // ---------------------------------------------------------------- seed
@@ -484,6 +540,9 @@ async function main() {
           password: PASSWORD,
         })
         await page.waitForURL(/\/dashboard/, { timeout: 90000 })
+        await useTheme(robin.ctx)
+        // The page that is open takes the theme of the instance on a load.
+        await page.reload()
         accountPrivateKey = shared.keysOfMnemonic(mnemonic).accountPrivateKey
         const user = await prisma.user.findUniqueOrThrow({
           where: { id: ROBIN.id },
@@ -546,6 +605,7 @@ async function main() {
         await confirm.click()
         await expect(dialog).toHaveCount(0)
         await expect(prompt).toHaveCount(0)
+        if (mobile) await page.setViewportSize(TALL)
       }
     )
 
@@ -713,9 +773,7 @@ async function main() {
         await page.goto(`${origin}/dashboard`)
         const posterCard = card(page, NAMES.poster)
         await expect(posterCard).toBeVisible()
-        await posterCard
-          .getByRole('button', { name: `Manage ${NAMES.poster}` })
-          .click()
+        await openMenu(page, NAMES.poster)
         await page.getByRole('menuitem', { name: 'Copy link' }).click()
         const link = await until('the link is on the clipboard', async () => {
           const text = await page.evaluate(() => navigator.clipboard.readText())
@@ -752,9 +810,7 @@ async function main() {
         const planCard = card(page, NAMES.plan)
         await expect(planCard).toContainText('Password removed')
         await shot(page, 'migration-library-all')
-        await planCard
-          .getByRole('button', { name: `Manage ${NAMES.plan}` })
-          .click()
+        await openMenu(page, NAMES.plan)
         await page.getByRole('menuitem', { name: 'Add password' }).click()
         const dialog = page.getByRole('dialog')
         await dialog.getByPlaceholder('Enter a password').fill(FILE_PASSWORD)
@@ -812,9 +868,7 @@ async function main() {
         await page.goto(`${origin}/dashboard`)
         const lateCard = card(page, NAMES.late)
         await expect(lateCard).toBeVisible()
-        await lateCard
-          .getByRole('button', { name: `Manage ${NAMES.late}` })
-          .click()
+        await openMenu(page, NAMES.late)
         await expect(
           page.getByRole('menuitem', { name: 'Encrypt', exact: true })
         ).toBeVisible()
@@ -835,9 +889,7 @@ async function main() {
           card(page, NAMES.late).locator('[data-file-encryption="encrypted"]')
         ).toBeVisible({ timeout: 30000 })
         // An encrypted file has no such action.
-        await card(page, NAMES.late)
-          .getByRole('button', { name: `Manage ${NAMES.late}` })
-          .click()
+        await openMenu(page, NAMES.late)
         await expect(
           page.getByRole('menuitem', { name: 'Copy link' })
         ).toBeVisible()
@@ -872,6 +924,75 @@ async function main() {
         await page
           .getByRole('button', { name: 'Finish selecting files' })
           .click()
+      }
+    )
+
+    await check(
+      'a file that cannot be encrypted is listed with a reason and a retry, and stays plain',
+      async () => {
+        // The stored object of this file is gone, so the server cannot read it.
+        const name = 'missing-object.txt'
+        const broken = await prisma.file.create({
+          data: {
+            userId: ROBIN.id,
+            name,
+            urlPath: `/${ROBIN.urlId}/${name}`,
+            path: `uploads/${ROBIN.urlId}/${randomUUID()}/${name}`,
+            storageTarget: { provider: 'local' },
+            mimeType: 'text/plain',
+            size: 0.0001,
+            visibility: 'PRIVATE',
+          },
+        })
+        await page.goto(`${origin}/dashboard`)
+        await openMenu(page, name)
+        await page
+          .getByRole('menuitem', { name: 'Encrypt', exact: true })
+          .click()
+        await page.locator('[data-encrypt-files-confirm]').click()
+        const failed = page.locator('[data-existing-files-progress="failed"]')
+        await expect(failed).toBeVisible({ timeout: 60000 })
+        await expect(failed).toContainText('1 file could not be encrypted')
+        await shot(page, 'migration-failed-status')
+        await failed.getByRole('button').click()
+        const list = page.locator('[data-existing-files-failed]')
+        await expect(list).toContainText(name)
+        await expect(list).toContainText('The stored file is missing')
+        await expect(list).toContainText('unchanged and still plain')
+        await shot(page, 'migration-failed-list')
+        const row = await rowOf(broken.id)
+        assert.equal(row.encrypted, false)
+        assert.equal(row.name, name)
+        const job = await prisma.fileEncryptionJob.findUniqueOrThrow({
+          where: { fileId: broken.id },
+        })
+        assert.equal(job.status, 'failed')
+        assert.equal(job.errorCode, 'source_missing')
+        // The retry queues the file again.
+        await list.getByRole('button', { name: 'Try again' }).click()
+        await until('the file is queued again', async () => {
+          const again = await prisma.fileEncryptionJob.findUniqueOrThrow({
+            where: { fileId: broken.id },
+          })
+          return again.status !== 'failed' || again.updatedAt > job.updatedAt
+        })
+        await page.keyboard.press('Escape')
+        // The owner deletes the file: nothing of it stays.
+        await until('the retry ended', async () =>
+          ['failed', 'done'].includes(
+            (
+              await prisma.fileEncryptionJob.findUniqueOrThrow({
+                where: { fileId: broken.id },
+              })
+            ).status
+          )
+        )
+        await prisma.file.delete({ where: { id: broken.id } })
+        await prisma.fileEncryptionJob.deleteMany({
+          where: { fileId: broken.id },
+        })
+        await prisma.auditEvent.deleteMany({ where: { targetId: broken.id } })
+        allEncryptedAt = Date.now()
       }
     )
 
