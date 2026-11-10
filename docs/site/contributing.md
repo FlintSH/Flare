@@ -454,7 +454,7 @@ They check Argon2id through WebAssembly against the real-parameter vector and th
 
 ### Encrypted library browser checks
 
-`scripts/e2ee/verify-library.cjs` drives the library features of encrypted files in headless Chromium against a production build: conversion of plain folders and tags at the first unlock, folders with keys, a shared folder link opened signed out, stop sharing, moving and deleting folders, sealed tags and rules, files left as a script client leaves them, thumbnails, text recognition in the browser, search with the local cache, sign-out, key rotation with the stanza migration, and a reset. It uses the same recording proxy as the check below, on other ports and its own database:
+`scripts/e2ee/verify-library.cjs` drives the library features of encrypted files in headless Chromium against a production build: conversion of plain folders and tags at the first unlock, folders with keys, a shared folder link opened signed out, stop sharing, moving and deleting folders, sealed tags and rules, files left as a script client leaves them, thumbnails, text recognition in the browser, search with the local cache, sign-out, key rotation with the stanza migration and the new key pairs of folders that no link shares, and a reset. It uses the same recording proxy as the check below, on other ports and its own database:
 
 ```sh
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_library_local'
@@ -536,7 +536,7 @@ What the run cannot show: ShareX itself, any Windows or macOS behavior of the pr
 
 ### Encrypted media, archive and export browser checks
 
-`scripts/e2ee/verify-media.cjs` drives what encrypted files do with their content: video and audio from a local address of the [service worker](/guide/encryption#video-audio-and-downloads), streamed downloads, PDF, [archives](/guide/archives#archives-that-are-encrypted-files), the [account export](/guide/account#an-account-with-encrypted-files), pastes and short links. It uses a production build, a disposable database named exactly `flare_e2ee_media_local`, and the same recording proxy as the suite above, on ports 3294 (the browser's origin) and 3293 (the application):
+`scripts/e2ee/verify-media.cjs` drives what encrypted files do with their content: video and audio from a local address of the [service worker](/guide/encryption#video-audio-and-downloads), streamed downloads, PDF, [archives](/guide/archives#archives-that-are-encrypted-files), the [account export](/guide/account#an-account-with-encrypted-files), pastes and short links. An extraction is checked with independent code: the suite opens the sealed names of the new folders and compares each extracted file with its archive entry. It uses a production build, a disposable database named exactly `flare_e2ee_media_local`, and the same recording proxy as the suite above, on ports 3294 (the browser's origin) and 3293 (the application):
 
 ```sh
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_media_local'

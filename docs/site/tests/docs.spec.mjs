@@ -434,8 +434,13 @@ test('archive guide, API contracts, tour, and recordings are discoverable', asyn
 }) => {
   await page.goto('./features.html')
   await page.getByLabel('Find a capability').fill('archives')
-  await expect(page.locator('.feature-card')).toHaveCount(1)
-  await page.locator('.feature-card').click()
+  // The encryption capability names archives too, so the search has two
+  // matches. The card of the archive tools is the one with that heading.
+  const archiveCard = page.locator('.feature-card').filter({
+    has: page.getByRole('heading', { name: /^Archives/ }),
+  })
+  await expect(archiveCard).toHaveCount(1)
+  await archiveCard.click()
   await expect(page).toHaveURL(/guide\/archives\.html$/)
   await expect(
     page.locator('h2#choose-an-upload-profile-deliberately')

@@ -1856,8 +1856,10 @@ async function testRotation(browser, alex, cacheOf) {
     secret: NEXT_PASSPHRASE,
   })
   await page.goto(`${origin}/dashboard`)
+  // The cards of the files in a folder have a button with the same name,
+  // so the folder itself is looked for in the list of folders.
   await expect(
-    page.getByRole('button', {
+    page.getByRole('region', { name: 'Folders' }).getByRole('button', {
       name: `Open folder ${FOLDERS.top}`,
       exact: true,
     })
@@ -1880,6 +1882,38 @@ async function testRotation(browser, alex, cacheOf) {
       { timeout: 120000, intervals: [500] }
     )
     .toBe('0 old stanzas, keyring pruned')
+  // The old account key opened every folder key. Each folder that no link
+  // shares has a new key pair now, and a folder that a link shares kept its
+  // own (docs/e2ee-spec.md, section 8.3.4).
+  await settled(page)
+  const rekeyed = await prisma.vaultFolder.findMany({
+    where: { userId: ALEX.id },
+  })
+  const rekeyedById = new Map(rekeyed.map((row) => [row.id, row]))
+  const linkReaches = (row) => {
+    for (let at = row; at; at = rekeyedById.get(at.parentId))
+      if (at.shareToken) return true
+    return false
+  }
+  let newKeyPairs = 0
+  for (const row of rekeyed) {
+    const before = folders.find((folder) => folder.id === row.id)
+    assert.equal(row.rekeyPending, false)
+    const same = Buffer.from(row.folderPublicKey).equals(
+      Buffer.from(before.folderPublicKey)
+    )
+    assert.equal(
+      same,
+      linkReaches(row),
+      `A folder ${same ? 'kept' : 'changed'} its key pair against the rule`
+    )
+    if (!same) newKeyPairs++
+  }
+  assert.ok(newKeyPairs > 0, 'No folder got a new key pair after the rotation')
+  assert.deepEqual(
+    Object.values(await recordFolderKeys()).sort(),
+    [FOLDERS.top, FOLDERS.other].sort()
+  )
   await recordFiles()
   const keyring = requests.filter(
     (request) =>
