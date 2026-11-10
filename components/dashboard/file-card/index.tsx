@@ -23,6 +23,7 @@ import {
   ShieldOff,
   Tag,
   Timer,
+  Trash2,
 } from 'lucide-react'
 
 import {
@@ -117,6 +118,10 @@ interface FileCardProps {
 export function FileCard(props: FileCardProps) {
   const encryption = useEncryptedFile(props.file)
   if (!encryption) return <OpenFileCard {...props} />
+  // After a reset without the recovery phrase, no key of the account opens
+  // this file (docs/e2ee-spec.md, section 6.9). The owner can delete it.
+  if (props.file.unreadable)
+    return <LockedFileCard {...props} state="unreadable" />
   if (encryption.status !== 'open')
     return <LockedFileCard {...props} state={encryption.status} />
   const { opened } = encryption
@@ -147,8 +152,41 @@ function LockedFileCard({
   state,
   selected,
   onSelect,
-}: FileCardProps & { state: 'locked' | 'opening' | 'failed' }) {
+  onDelete,
+}: FileCardProps & {
+  state: 'locked' | 'opening' | 'failed' | 'unreadable'
+}) {
+  const { user } = usePermissions()
+  const { toast } = useToast()
   const [unlocking, setUnlocking] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const canDelete =
+    state === 'unreadable' && fileActionAllowed(user, 'delete') && !!onDelete
+  const remove = async () => {
+    if (deleting) return
+    setDeleting(true)
+    try {
+      await apiRequest(`/api/files/${file.id}`, {
+        method: 'DELETE',
+        fallback: TRY_AGAIN,
+      })
+      setConfirming(false)
+      onDelete?.(file.id)
+      toast({
+        title: 'File deleted',
+        description: 'The file has been permanently deleted.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Couldn’t delete this file',
+        description: failure(error),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
   return (
     <Card
       data-encrypted-file={state}
@@ -174,8 +212,21 @@ function LockedFileCard({
             ? 'Unlock your keys to see this file.'
             : state === 'opening'
               ? 'Decrypting…'
-              : 'Your keys do not open this file.'}
+              : state === 'unreadable'
+                ? 'This file was encrypted for keys that were reset. It cannot be opened here.'
+                : 'Your keys do not open this file.'}
         </p>
+        {canDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-background"
+            onClick={() => setConfirming(true)}
+          >
+            <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            Delete
+          </Button>
+        )}
         {state === 'locked' && (
           <Button
             variant="outline"
@@ -214,7 +265,7 @@ function LockedFileCard({
       <div className="border-t border-border/40 p-3">
         <div className="flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
-            Encrypted file
+            {state === 'unreadable' ? 'Unreadable file' : 'Encrypted file'}
           </span>
           <span className="shrink-0 text-xs text-muted-foreground">
             {formatFileSize(file.size)}
@@ -225,6 +276,43 @@ function LockedFileCard({
         </div>
       </div>
       <UnlockDialog open={unlocking} onOpenChange={setUnlocking} />
+      {canDelete && (
+        <Dialog
+          open={confirming}
+          onOpenChange={(open) => {
+            if (!deleting) setConfirming(open)
+          }}
+        >
+          <DialogContent className="rounded-2xl sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete this file?</DialogTitle>
+              <DialogDescription>
+                No key of your account opens this file since your passphrase was
+                reset without the recovery phrase. A person who has its share
+                link can still open it until you delete it. This cannot be
+                undone.
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={deleting}
+                onClick={() => setConfirming(false)}
+              >
+                Keep file
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => void remove()}
+              >
+                {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete file
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   )
 }

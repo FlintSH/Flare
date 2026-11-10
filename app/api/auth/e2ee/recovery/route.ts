@@ -1,10 +1,10 @@
 import { z } from 'zod'
 
+import { e2eeRoutes, resetLinkField } from '@/lib/auth/e2ee/http'
 import {
-  E2EE_BODY_LIMIT,
-  e2eeRoutes,
-  resetLinkField,
-} from '@/lib/auth/e2ee/http'
+  ROTATION_BODY_LIMIT,
+  rotatedLibraryFields,
+} from '@/lib/auth/e2ee/library-records'
 import {
   accountRecordSchema,
   sealedKeyringField,
@@ -23,6 +23,7 @@ const recoverySchema = z.strictObject({
   token: resetLinkField,
   account: accountRecordSchema,
   sealedKeyring: sealedKeyringField,
+  ...rotatedLibraryFields,
 })
 
 /**
@@ -37,13 +38,16 @@ export const POST = api(
     assertBrowserWrite(request)
     const config = await getEmailConfig()
     await limitEmailRequest(request, config)
-    const signed = await readSignedRequest(request, { limit: E2EE_BODY_LIMIT })
+    const signed = await readSignedRequest(request, {
+      limit: ROTATION_BODY_LIMIT,
+    })
     const body = signed.body(recoverySchema)
     const account = await readResetLink(body.token, config)
     await signed.verify('e2ee_recovery', account)
     await replaceKeysByEmail(body.token, config, body.account, {
       proven: account,
       sealedKeyring: body.sealedKeyring,
+      library: { folders: body.folders, tags: body.tags },
     })
     return {
       message: 'Your passphrase was changed. Sign in with your new passphrase.',

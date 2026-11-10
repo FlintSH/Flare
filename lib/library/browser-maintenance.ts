@@ -1,5 +1,11 @@
 import { apiRequest } from '@/lib/client/request'
+import { replaceKeyring } from '@/lib/e2ee/client/api'
 import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
+import {
+  type MigrationApi,
+  type OldStanzas,
+  migrateStanzas,
+} from '@/lib/e2ee/client/rotation'
 import { unwrapperFor } from '@/lib/e2ee/client/unwrappers'
 import {
   type FolderRepairs,
@@ -56,6 +62,38 @@ async function runFolderRepairs({ keys, signal, report }: Context) {
     libraryChanged?.()
 }
 
+/** Told the old private keys that stay, after the keyring lost keys with no stanza left. */
+let keyringPruned: ((oldPrivateKeys: Uint8Array[]) => void) | null = null
+
+export function onKeyringPruned(
+  listener: ((oldPrivateKeys: Uint8Array[]) => void) | null
+) {
+  keyringPruned = listener
+}
+
+async function runStanzaMigration({ keys, signal, report }: Context) {
+  // Nothing to do for an account that never rotated its keys.
+  if (!keys.oldPrivateKeys.length) return
+  const api: MigrationApi = {
+    oldStanzas: (after) =>
+      apiRequest<OldStanzas>(
+        `/api/files/stanzas${after ? `?after=${encodeURIComponent(after)}` : ''}`
+      ),
+    replace: (body) =>
+      apiRequest('/api/files/stanzas', { method: 'PUT', body }),
+    replaceKeyring: (sealedKeyring) =>
+      replaceKeyring(keys.accountPrivateKey, sealedKeyring),
+  }
+  report({ label: 'Updating file keys', done: 0, total: null })
+  const result = await migrateStanzas(api, keys, await unwrapperFor(keys), {
+    signal,
+    onProgress: (done, total) =>
+      report({ label: 'Updating file keys', done, total }),
+  })
+  if (result.migrated) libraryChanged?.()
+  if (result.pruned) keyringPruned?.(result.oldPrivateKeys)
+}
+
 async function runTagConversion({ keys, signal, report }: Context) {
   report({ label: 'Encrypting tag names', done: 0, total: null })
   if (await sealPlainTags(tagsApi, keys, { signal })) libraryChanged?.()
@@ -64,6 +102,7 @@ async function runTagConversion({ keys, signal, report }: Context) {
 const runners: Partial<Record<MaintenanceJob, JobRunner<StoredAccountKeys>>> = {
   tags: runTagConversion,
   folders: runFolderRepairs,
+  migration: runStanzaMigration,
 }
 
 /** Adds the runner of a job. Each feature registers its own. */

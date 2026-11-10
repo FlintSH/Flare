@@ -24,6 +24,11 @@ import {
   wipeAccountKeys,
   wipePassphraseKeys,
 } from './procedures'
+import {
+  type RotatedLibraryWire,
+  type SealedLibrary,
+  resealLibrary,
+} from './rotation'
 import { buildSignedRequest } from './signed-request'
 import {
   accountPublicKeyFromWire,
@@ -315,6 +320,59 @@ async function sendSigned(input: Parameters<typeof buildSignedRequest>[0]) {
 }
 
 /**
+ * The sealed folder keys and tag records of the session's account, as the
+ * library lists them. A rotation seals each of them again.
+ */
+async function readSealedLibrary(): Promise<SealedLibrary> {
+  const [folders, tags] = await Promise.all([
+    apiRequest<
+      {
+        id: string
+        keys?: {
+          folderPublicKey: string
+          sealedFolderMetadata: string
+          sealedFolderPrivateKey: string
+        } | null
+      }[]
+    >('/api/folders', {
+      fallback: 'Unable to read your folders. Please try again.',
+    }),
+    apiRequest<{ id: string; sealed?: string | null }[]>('/api/tags', {
+      fallback: 'Unable to read your tags. Please try again.',
+    }),
+  ])
+  return {
+    folders: folders.flatMap((folder) =>
+      folder.keys ? [{ id: folder.id, ...folder.keys }] : []
+    ),
+    tags: tags.flatMap((tag) =>
+      tag.sealed ? [{ id: tag.id, sealed: tag.sealed }] : []
+    ),
+  }
+}
+
+/**
+ * Step 5 of section 8.3.4: stores a keyring without the old keys that have
+ * no stanza left, in a request signed with the current account key. `null`
+ * stores no keyring.
+ */
+export async function replaceKeyring(
+  accountPrivateKey: Uint8Array,
+  sealedKeyring: Uint8Array | null
+): Promise<void> {
+  const { challenge } = await requestSessionChallenge()
+  await sendSigned({
+    accountPrivateKey: accountPrivateKey as Parameters<
+      typeof buildSignedRequest
+    >[0]['accountPrivateKey'],
+    challenge,
+    method: 'PUT',
+    path: '/api/auth/e2ee/keyring',
+    body: { sealedKeyring: sealedKeyringToWire(sealedKeyring) },
+  })
+}
+
+/**
  * A passphrase change, which is a key rotation. The current passphrase is
  * proven two times with one Argon2id: by the unlock that gives the old
  * account key, and by the sign-in signature of the request. The server ends
@@ -337,6 +395,13 @@ export async function changePassphrase(input: {
       oldAccountPrivateKey: opened.accountKeys.accountPrivateKey,
       oldKeyring: opened.oldPrivateKeys,
     })
+    // The folder keys and tag records, sealed again for the new account
+    // key in the same request (section 8.3.3, step 6).
+    const library = resealLibrary(
+      opened.accountKeys,
+      rotation.accountKeys,
+      await readSealedLibrary()
+    )
     // Each proof needs a challenge of its own.
     const proofChallenge = await requestSessionChallenge()
     const requestChallenge = await requestSessionChallenge()
@@ -348,6 +413,7 @@ export async function changePassphrase(input: {
       body: {
         account: accountRecordToWire(rotation.record),
         sealedKeyring: sealedKeyringToWire(rotation.sealedKeyring),
+        ...library,
         passphraseProof: {
           challenge: proofChallenge.challenge,
           signature: base64urlEncode(
@@ -384,6 +450,9 @@ export type ResetLink =
       readonly protocolVersion: number
       readonly sealedKeyring: string | null
       readonly challenge: string
+      /** The sealed folder keys and tag records, which a recovery seals again. */
+      readonly folders?: SealedLibrary['folders']
+      readonly tags?: readonly { id: string; sealedTagMetadata: string }[]
     }
 
 /** What an email reset link can do, without using it up. Each call issues a new recovery challenge. */
@@ -449,12 +518,27 @@ export async function recoverWithRecoveryPhrase(input: {
       oldKeyring,
     })
     let challenge = link.challenge
+    let sealed = link
     if (Date.now() - issued >= CHALLENGE_FRESH_MS) {
       const again = await readResetLink(input.token)
       if (!again.hasKeys || again.accountPublicKey !== link.accountPublicKey)
         throw new Error('This account changed. Request a new reset link.')
       challenge = again.challenge
+      sealed = again
     }
+    // A recovery is a rotation: the folder keys and tag records are sealed
+    // again for the new account key (section 8.3.3, step 6).
+    const library: RotatedLibraryWire = resealLibrary(
+      oldKeys,
+      rotation.accountKeys,
+      {
+        folders: sealed.folders ?? [],
+        tags: (sealed.tags ?? []).map((tag) => ({
+          id: tag.id,
+          sealed: tag.sealedTagMetadata,
+        })),
+      }
+    )
     await sendSigned({
       accountPrivateKey: oldKeys.accountPrivateKey,
       challenge,
@@ -464,6 +548,7 @@ export async function recoverWithRecoveryPhrase(input: {
         token: input.token,
         account: accountRecordToWire(rotation.record),
         sealedKeyring: sealedKeyringToWire(rotation.sealedKeyring),
+        ...library,
       },
     })
     return { mnemonic: rotation.mnemonic }

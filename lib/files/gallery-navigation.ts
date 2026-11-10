@@ -27,6 +27,9 @@ export const fileListSelect = {
   accountStanza: true,
   stanzaAccountPublicKey: true,
   passwordStanza: true,
+  unreadable: true,
+  thumbnailPending: true,
+  ocrPending: true,
   user: { select: { urlId: true } },
   tags: {
     where: { excluded: false },
@@ -49,6 +52,9 @@ export function fileListItem(
     accountStanza,
     stanzaAccountPublicKey,
     passwordStanza,
+    unreadable,
+    thumbnailPending,
+    ocrPending,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
   expiry: FileExpiry | null
@@ -70,6 +76,10 @@ export function fileListItem(
     ...file,
     encrypted,
     ...(records && { encryption: records }),
+    // Only an encrypted file has these: a plain file never sets them.
+    ...(unreadable && { unreadable }),
+    ...(thumbnailPending && { thumbnailPending }),
+    ...(ocrPending && { ocrPending }),
     tags: tags.map(({ tag }) => tag),
     hasPassword: Boolean(password) || Boolean(passwordStanza),
     expiresAt: expiry?.expiresAt ?? null,

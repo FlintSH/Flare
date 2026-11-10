@@ -1774,6 +1774,10 @@ describe.skipIf(!databaseUrl)(
             accountPublicKey: keys.record.accountPublicKey,
             protocolVersion: 1,
             sealedKeyring,
+            // The sealed folder keys and tag records, which a recovery seals
+            // again for the new account key. This account has none.
+            folders: [],
+            tags: [],
             challenge: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
           })
         }

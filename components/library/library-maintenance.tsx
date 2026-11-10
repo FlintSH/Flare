@@ -5,10 +5,11 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Loader2, Pause, Play } from 'lucide-react'
 
-import { useAccountKeyState } from '@/components/providers/account-keys-provider'
+import { useAccountKeys } from '@/components/providers/account-keys-provider'
 
 import {
   libraryMaintenance,
+  onKeyringPruned,
   onMaintenanceChange,
 } from '@/lib/library/browser-maintenance'
 import { libraryChanged } from '@/lib/library/changes'
@@ -20,7 +21,7 @@ import { libraryChanged } from '@/lib/library/changes'
  * browser locks or the session ends.
  */
 export function LibraryMaintenance() {
-  const account = useAccountKeyState()
+  const { state: account, adopt } = useAccountKeys()
   const client = useQueryClient()
   const keys = account.status === 'unlocked' ? account.keys : null
   const state = useSyncExternalStore(
@@ -32,12 +33,24 @@ export function LibraryMaintenance() {
   useEffect(() => {
     if (!keys) return
     onMaintenanceChange(() => void libraryChanged(client))
+    // After the stanza migration, the browser keeps only the old keys that
+    // the new keyring holds (docs/e2ee-spec.md, section 8.3.4, step 5).
+    onKeyringPruned((oldPrivateKeys) => {
+      void adopt({
+        accountKeys: {
+          accountPrivateKey: keys.accountPrivateKey,
+          accountPublicKey: keys.accountPublicKey,
+        } as Parameters<typeof adopt>[0]['accountKeys'],
+        oldPrivateKeys,
+      })
+    })
     libraryMaintenance.start(keys)
     return () => {
       libraryMaintenance.stop()
       onMaintenanceChange(null)
+      onKeyringPruned(null)
     }
-  }, [keys, client])
+  }, [keys, client, adopt])
 
   const { progress, paused } = state
   if (!progress) return null

@@ -16,6 +16,11 @@ import { consumeEmailToken, findEmailToken } from '@/lib/email/tokens'
 import { changeCredentials } from '@/lib/users/credentials'
 
 import {
+  type RotatedLibrary,
+  replaceLibraryRecords,
+  resetLibraryRecords,
+} from './library-records'
+import {
   type AccountRecordInput,
   type StoredBytes,
   accountRecordColumns,
@@ -121,16 +126,17 @@ async function replaceAccountRecord(
   tx: Prisma.TransactionClient,
   userId: string,
   record: AccountRecordInput,
-  sealedKeyring: StoredBytes | null
+  sealedKeyring: StoredBytes | null,
+  /**
+   * The folder keys and tag records sealed for the new account key (sections
+   * 8.4.2 and 9.5.5). Null for a reset: no key opens the old ones, so they
+   * are given up (section 6.9).
+   */
+  library: RotatedLibrary | null
 ) {
   await tx.apiToken.deleteMany({ where: { userId } })
-  // EXTENSION POINT (sections 8.4.2 and 9.5.5): when folders and tags have
-  // sealed records, a rotation request also carries a new
-  // `sealed_folder_private_key` for each folder and a new
-  // `sealed_tag_metadata` for each tag. Replace them here, in this
-  // transaction, and refuse a request that does not cover every folder and
-  // tag of the account. Those models have no sealed columns yet, and the
-  // strict request schemas refuse the fields until they do.
+  if (library) await replaceLibraryRecords(tx, userId, library)
+  else await resetLibraryRecords(tx, userId)
   await tx.user.update({
     where: { id: userId },
     data: {
@@ -150,13 +156,14 @@ export async function rotateAccountKeys(
   userId: string,
   proven: ProvenKeys,
   record: AccountRecordInput,
-  sealedKeyring: StoredBytes | null
+  sealedKeyring: StoredBytes | null,
+  library: RotatedLibrary
 ) {
   await prisma.$transaction(async (tx) => {
     const user = await lockSecurityUser(tx, userId)
     assertKeysUnchanged(user, proven)
     assertNewKeys(user, record)
-    await replaceAccountRecord(tx, user.id, record, sealedKeyring)
+    await replaceAccountRecord(tx, user.id, record, sealedKeyring, library)
   })
 }
 
@@ -234,7 +241,11 @@ export async function replaceKeysByEmail(
   token: string,
   config: EmailConfig,
   record: AccountRecordInput,
-  recovery?: { proven: ProvenKeys; sealedKeyring: StoredBytes | null }
+  recovery?: {
+    proven: ProvenKeys
+    sealedKeyring: StoredBytes | null
+    library: RotatedLibrary
+  }
 ) {
   if (!(await isPasswordRecoveryAvailable(config)))
     throw new EmailHttpError('Password recovery is disabled.')
@@ -250,16 +261,17 @@ export async function replaceKeysByEmail(
       assertKeysUnchanged(user, recovery.proven)
       assertNewKeys(user, record)
     }
+    // A reset (`!recovery`) marks each encrypted file of the account as
+    // unreadable and gives up the sealed folder and tag records (section
+    // 6.9, step 4). A reset of an account that had no keys changes nothing
+    // there: it has no encrypted file.
     await replaceAccountRecord(
       tx,
       user.id,
       record,
-      recovery ? recovery.sealedKeyring : null
+      recovery ? recovery.sealedKeyring : null,
+      recovery ? recovery.library : null
     )
-    // EXTENSION POINT (section 6.9, step 4): a reset must mark each encrypted
-    // file of the account as unreadable, because no key of the account opens
-    // its stanza any more. Files are not encrypted yet. When they are, set
-    // that mark here for a reset (`!recovery`), in this transaction.
     const message = renderAccountEmail(config, {
       kind: 'password_changed',
       recipient: link.email,

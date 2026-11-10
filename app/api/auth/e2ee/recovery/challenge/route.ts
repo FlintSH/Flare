@@ -6,9 +6,11 @@ import {
   e2eeRoutes,
   resetLinkField,
 } from '@/lib/auth/e2ee/http'
+import { sealedLibraryRecords } from '@/lib/auth/e2ee/library-records'
 import { encodeBytes, hasAccountKeys } from '@/lib/auth/e2ee/records'
 import { readResetLink } from '@/lib/auth/e2ee/service'
 import { securityLimit } from '@/lib/auth/security/shared'
+import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
 import { refuseApiCredentials } from '@/lib/http/access'
 import { assertBrowserWrite, readJson } from '@/lib/http/request'
@@ -27,6 +29,11 @@ const api = routes('/api/auth/e2ee/recovery/challenge', e2eeRoutes)
  * account key of the mnemonic opens. It never has `wrapped_root`: a person
  * who has the link and no mnemonic must not get anything to guess the
  * passphrase against.
+ *
+ * It also has the sealed folder keys and tag records of the account. A
+ * recovery is a rotation, so its client seals each of them again for the
+ * new account key (section 8.3.3), and it has no session to list them with.
+ * Only the account key of the mnemonic opens them.
  */
 export const POST = api(async (request) => {
   refuseApiCredentials(request)
@@ -47,6 +54,7 @@ export const POST = api(async (request) => {
     accountPublicKey: encodeBytes(account.accountPublicKey),
     protocolVersion: account.e2eeProtocolVersion,
     sealedKeyring: account.sealedKeyring && encodeBytes(account.sealedKeyring),
+    ...(await sealedLibraryRecords(prisma, account.id)),
     challenge: await issueE2eeChallenge('e2ee_recovery', {
       userId: account.id,
       sessionVersion: account.sessionVersion,

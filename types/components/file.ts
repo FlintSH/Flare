@@ -25,4 +25,12 @@ export interface FileType {
    */
   encrypted?: boolean
   encryption?: EncryptedRecordsWire | null
+  /**
+   * No key of the account opens this encrypted file: its keys were reset
+   * without the recovery phrase (docs/e2ee-spec.md, section 6.9).
+   */
+  unreadable?: boolean
+  /** Work that waits for the owner's browser (section 9.7). */
+  thumbnailPending?: boolean
+  ocrPending?: boolean
 }

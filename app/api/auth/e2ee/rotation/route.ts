@@ -1,12 +1,11 @@
 import { z } from 'zod'
 
 import { verifyAuthKeyProof } from '@/lib/auth/e2ee/accounts'
+import { e2eeRoutes, keyedSession, limitKeyAttempt } from '@/lib/auth/e2ee/http'
 import {
-  E2EE_BODY_LIMIT,
-  e2eeRoutes,
-  keyedSession,
-  limitKeyAttempt,
-} from '@/lib/auth/e2ee/http'
+  ROTATION_BODY_LIMIT,
+  rotatedLibraryFields,
+} from '@/lib/auth/e2ee/library-records'
 import {
   accountRecordSchema,
   challengeField,
@@ -27,6 +26,9 @@ const rotationSchema = z.strictObject({
     challenge: challengeField,
     signature: signatureField,
   }),
+  // A new sealed record for each folder key and each tag, for the new
+  // account key (section 8.3.3, step 6).
+  ...rotatedLibraryFields,
 })
 
 /**
@@ -46,7 +48,9 @@ export const POST = api(
     const { user } = await keyedSession(request)
     await securityLimit(`management:${user.id}`)
     await limitKeyAttempt(request, 'e2ee-rotation', user.id)
-    const signed = await readSignedRequest(request, { limit: E2EE_BODY_LIMIT })
+    const signed = await readSignedRequest(request, {
+      limit: ROTATION_BODY_LIMIT,
+    })
     const body = signed.body(rotationSchema)
     // Check both proofs before either answer, so each challenge is used up.
     const passphraseProven = await verifyAuthKeyProof(
@@ -62,7 +66,10 @@ export const POST = api(
         400,
         { body: { code: 'invalid_proof' } }
       )
-    await rotateAccountKeys(user.id, user, body.account, body.sealedKeyring)
+    await rotateAccountKeys(user.id, user, body.account, body.sealedKeyring, {
+      folders: body.folders,
+      tags: body.tags,
+    })
     // Every session ended, this one too: the client signs in with the new passphrase.
     return { ok: true, signInAgain: true }
   },
