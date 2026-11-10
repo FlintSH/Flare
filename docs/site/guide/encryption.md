@@ -75,19 +75,41 @@ Opening a password-protected link takes a moment while your browser derives the 
 
 Your browser fetches the ciphertext, checks every 64 KiB chunk and the end of the file, and decrypts it. A file that was changed or cut after upload is refused: Flare neither shows nor saves it.
 
-Because an encrypted file is decrypted in your browser's memory before it can be shown, previews have size limits in this release:
+### Video, audio and downloads
 
-| Kind            | Largest file previewed | Above that |
-| --------------- | ---------------------- | ---------- |
-| Images          | 64 MB                  | Download   |
-| Video and audio | 128 MB                 | Download   |
-| PDF             | 64 MB                  | Download   |
-| Text and code   | 1 MB                   | Download   |
-| SVG images      | 2 MB                   | Download   |
+A video or audio file plays without being downloaded first. A [service worker](https://developer.mozilla.org/docs/Web/API/Service_Worker_API) of Flare, a small script your browser runs in the background for this site, answers the player from a local address of the form `/_flare/local/{random}`. When the player asks for a part of the file, the worker fetches the 64 KiB chunks that hold that part, checks them, decrypts them and hands them over. Seeking in a long video therefore fetches the place you seek to, not everything before it, and there is no size limit.
 
-A PDF preview needs a browser that opens PDFs inside an isolated frame. Chrome, Edge and other Chromium browsers do not, so they offer the download instead.
+**Download** works the same way: the worker decrypts the file as a stream and your browser writes it to disk, so a file of several gigabytes does not have to fit in memory. If the file fails its integrity check part-way, the browser reports a failed download and keeps no file.
 
-Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download.
+What to know about the worker:
+
+- It holds a file's key in memory only, for the page that opened the file. It writes nothing to browser storage and caches nothing. It handles requests for local addresses and no other request: pages, the API and other sites are untouched.
+- Browsers stop an idle worker after about 30 seconds. Its keys go with it. When you press play again, the page hands the key over again and playback continues. You do not have to do anything.
+- Signing out, locking your keys, or signing in as someone else makes the worker forget every key at once.
+- A local address works only inside the page that made it. Opening one in a new tab shows a refusal, not the file.
+
+**Browsers without a service worker.** Service workers need a secure page (HTTPS, or `localhost`), and some private windows and privacy settings turn them off. A page reloaded with the cache bypassed (Shift and reload) also runs without one until the next normal load. Flare then falls back to the earlier behavior: it downloads and decrypts the whole file in memory before it plays or saves it, with these limits:
+
+| Kind            | Largest file previewed without a service worker | Above that |
+| --------------- | ----------------------------------------------- | ---------- |
+| Video and audio | 128 MB                                          | Download   |
+| PDF             | 64 MB                                           | Download   |
+
+A download without a service worker has no fixed limit, but the whole file must fit in your browser's memory.
+
+### Other previews
+
+Images, text and SVG are small enough to decrypt in memory, with these limits:
+
+| Kind          | Largest file previewed | Above that |
+| ------------- | ---------------------- | ---------- |
+| Images        | 64 MB                  | Download   |
+| Text and code | 1 MB                   | Download   |
+| SVG images    | 2 MB                   | Download   |
+
+A PDF opens in your browser's own PDF viewer inside the page. In Chrome, Edge and other Chromium browsers it comes from a local address, whose answer tells the browser to isolate it. In Firefox and Safari it is decrypted in memory and shown in an isolated frame. A Chromium browser without a service worker offers the download instead, because it shows no PDF in an isolated frame.
+
+Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download. A local address answers only with the exact types of images, video, audio and PDF, or as a download, and every answer tells the browser not to guess a type and to run nothing.
 
 ## What does not work yet
 
@@ -99,7 +121,6 @@ These features read file content on the server, so they do not work for encrypte
 - **Automatic tag rules** that match filenames or image text.
 - **Archive tools:** browsing, extracting and creating archives.
 - **Shared folder links.** An encrypted file in a shared folder is not listed on the folder's public page.
-- **Video streaming.** A video is downloaded and decrypted whole before it plays.
 - **Uploads from screenshot tools and API tokens.** They are plain.
 
 Your [data export](./account) contains encrypted files as ciphertext, named by their file ID, with the records that open them listed in `user-data.json`.

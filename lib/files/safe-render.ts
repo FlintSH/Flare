@@ -68,6 +68,21 @@ const AUDIO = new Map([
   ['audio/x-flac', 'audio/flac'],
 ])
 
+/**
+ * The exact types that decrypted bytes may have at an address of this
+ * origin, which is the local address a service worker answers
+ * (docs/e2ee-spec.md, section 12.2). None of them is a document a browser
+ * runs script in: no HTML, no SVG, no XML. The worker refuses each other
+ * type, whatever the page asked for.
+ */
+export const LOCAL_MEDIA_TYPES: ReadonlySet<string> = new Set([
+  ...RASTER_IMAGES.values(),
+  ...VIDEOS.values(),
+  ...AUDIO.values(),
+])
+/** The one type a frame may show from a local address. */
+export const LOCAL_FRAME_TYPE = 'application/pdf'
+
 /** The one type every download and every unknown file gets. */
 export const DOWNLOAD_BLOB_TYPE = 'application/octet-stream'
 

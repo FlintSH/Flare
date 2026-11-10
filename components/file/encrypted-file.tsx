@@ -31,7 +31,10 @@ import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
 
 import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
-import type { DecryptedContent } from '@/lib/e2ee/client/file-worker'
+import {
+  CiphertextRefused,
+  type DecryptedContent,
+} from '@/lib/e2ee/client/file-worker'
 import {
   type EncryptedRecordsWire,
   type OpenedFile,
@@ -40,12 +43,19 @@ import {
   openWithPassword,
   shareSecretOf,
 } from '@/lib/e2ee/client/files'
+import {
+  type LocalAddress,
+  localAddresses,
+} from '@/lib/e2ee/client/local-address'
 import { isE2eeError } from '@/lib/e2ee/errors'
+import { E2eeError } from '@/lib/e2ee/errors'
 import { parseShareFragment, shareLink } from '@/lib/e2ee/link'
 import type { LinkSecret } from '@/lib/e2ee/types'
 import {
   decryptionProblem,
+  downloadDecrypted,
   fetchDecrypted,
+  localFileSource,
   plaintextSize,
   saveDecrypted,
 } from '@/lib/files/encrypted-client'
@@ -99,7 +109,8 @@ type View =
   | { renderer: 'svg'; src: string }
   | { renderer: 'video'; src: string; type: string }
   | { renderer: 'audio'; src: string; type: string }
-  | { renderer: 'pdf'; src: string }
+  /** `local`: the address of the service worker, which sandboxes its answer. */
+  | { renderer: 'pdf'; src: string; local: boolean }
   | {
       renderer: 'text'
       text: string
@@ -143,6 +154,9 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
   const [copied, setCopied] = useState(false)
   const [saving, setSaving] = useState(false)
   const content = useRef<DecryptedContent | null>(null)
+  // A player whose local address stopped answering asks for a new one.
+  const [attempt, setAttempt] = useState(0)
+  const recoveries = useRef(0)
   const { records } = file
   const accountKeys = keys.status === 'unlocked' ? keys.keys : null
   const keyStatus = keys.status
@@ -203,7 +217,11 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
     return () => setEncryptedFileTitle(null)
   }, [name, file.showFilename])
 
-  // Step 2: fetch, verify and decrypt the content, then pick the renderer.
+  // Step 2: pick the renderer, then give it the content. A video, an audio
+  // file and (where a sandboxed frame cannot show one) a PDF play from a
+  // local address that a service worker answers with decrypted ranges
+  // (docs/e2ee-spec.md, section 12.2). Each other file, and each browser
+  // without a service worker, is fetched, verified and decrypted whole.
   useEffect(() => {
     if (!opened || !rendering) return
     content.current = null
@@ -211,9 +229,10 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
       setPreview({ status: 'download-only' })
       return
     }
-    if (
-      rendering.renderer === 'pdf' &&
-      !canPreviewSandboxedPdf({
+    const { renderer } = rendering
+    const sandboxedPdf =
+      renderer === 'pdf' &&
+      canPreviewSandboxedPdf({
         pdfViewerEnabled: navigator.pdfViewerEnabled,
         userAgent: navigator.userAgent,
         brands: (
@@ -222,86 +241,167 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
           }
         ).userAgentData?.brands,
       })
-    ) {
-      setPreview({ status: 'pdf-unavailable' })
-      return
-    }
-    const limit = INLINE_PREVIEW_MAX_BYTES[rendering.renderer]
-    const size = plaintextSize(file.sizeBytes)
-    if (size !== null && size > limit) {
-      setPreview({ status: 'too-large' })
-      return
-    }
     const controller = new AbortController()
     let address: string | null = null
-    setPreview({ status: 'loading', loaded: 0, total: file.sizeBytes })
-    fetchDecrypted(file, opened, {
-      signal: controller.signal,
-      // The server's size is not trusted: stop at the limit whatever it said.
-      maxBytes: limit,
-      onProgress: (loaded, total) => {
-        if (!controller.signal.aborted)
-          setPreview({
-            status: 'loading',
-            loaded,
-            total: total ?? file.sizeBytes,
-          })
-      },
-    }).then(
-      (decrypted) => {
-        if (controller.signal.aborted) return
-        content.current = decrypted
-        if (rendering.renderer === 'text') {
-          setPreview({
-            status: 'ready',
-            view: {
-              renderer: 'text',
-              text: decodeText(decrypted),
-              language: rendering.language,
-            },
-          })
-          return
-        }
-        if (rendering.renderer === 'svg') {
-          setPreview({
-            status: 'ready',
-            view: { renderer: 'svg', src: svgDataUrl(decrypted) },
-          })
-          return
-        }
-        // The Blob type is the fixed type of the renderer, never the type
-        // the file claims.
-        address = URL.createObjectURL(
-          new Blob(decrypted.parts, { type: rendering.blobType })
-        )
-        setPreview({
-          status: 'ready',
-          view:
-            rendering.renderer === 'video' || rendering.renderer === 'audio'
-              ? {
-                  renderer: rendering.renderer,
-                  src: address,
-                  type: rendering.blobType,
-                }
-              : { renderer: rendering.renderer, src: address },
-        })
-      },
-      (error: unknown) => {
-        if (controller.signal.aborted) return
-        setPreview(
-          error instanceof RangeError
-            ? { status: 'too-large' }
-            : { status: 'failed', message: decryptionProblem(error) }
-        )
+    let local: LocalAddress | null = null
+
+    const wholeFile = () => {
+      if (renderer === 'pdf' && !sandboxedPdf) {
+        setPreview({ status: 'pdf-unavailable' })
+        return
       }
-    )
+      const limit = INLINE_PREVIEW_MAX_BYTES[renderer]
+      const size = plaintextSize(file.sizeBytes)
+      if (size !== null && size > limit) {
+        setPreview({ status: 'too-large' })
+        return
+      }
+      setPreview({ status: 'loading', loaded: 0, total: file.sizeBytes })
+      fetchDecrypted(file, opened, {
+        signal: controller.signal,
+        // The server's size is not trusted: stop at the limit whatever it said.
+        maxBytes: limit,
+        onProgress: (loaded, total) => {
+          if (!controller.signal.aborted)
+            setPreview({
+              status: 'loading',
+              loaded,
+              total: total ?? file.sizeBytes,
+            })
+        },
+      }).then(
+        (decrypted) => {
+          if (controller.signal.aborted) return
+          content.current = decrypted
+          if (rendering.renderer === 'text') {
+            setPreview({
+              status: 'ready',
+              view: {
+                renderer: 'text',
+                text: decodeText(decrypted),
+                language: rendering.language,
+              },
+            })
+            return
+          }
+          if (rendering.renderer === 'svg') {
+            setPreview({
+              status: 'ready',
+              view: { renderer: 'svg', src: svgDataUrl(decrypted) },
+            })
+            return
+          }
+          // The Blob type is the fixed type of the renderer, never the type
+          // the file claims.
+          address = URL.createObjectURL(
+            new Blob(decrypted.parts, { type: rendering.blobType })
+          )
+          setPreview({
+            status: 'ready',
+            view:
+              rendering.renderer === 'video' || rendering.renderer === 'audio'
+                ? {
+                    renderer: rendering.renderer,
+                    src: address,
+                    type: rendering.blobType,
+                  }
+                : rendering.renderer === 'pdf'
+                  ? { renderer: 'pdf', src: address, local: false }
+                  : { renderer: rendering.renderer, src: address },
+          })
+        },
+        (error: unknown) => {
+          if (controller.signal.aborted) return
+          setPreview(
+            error instanceof RangeError
+              ? { status: 'too-large' }
+              : { status: 'failed', message: decryptionProblem(error) }
+          )
+        }
+      )
+    }
+
+    if (
+      rendering.renderer === 'video' ||
+      rendering.renderer === 'audio' ||
+      (rendering.renderer === 'pdf' && !sandboxedPdf)
+    ) {
+      const { blobType } = rendering
+      setPreview({ status: 'idle' })
+      void localAddresses().then((service) => {
+        if (controller.signal.aborted) return
+        if (!service) return wholeFile()
+        const created = service.create({
+          mode: renderer === 'pdf' ? 'frame' : 'media',
+          contentType: blobType,
+          source: localFileSource(
+            {
+              id: file.id,
+              urlPath: file.urlPath,
+              header: records.header,
+              sizeBytes: file.sizeBytes,
+            },
+            opened
+          ),
+        })
+        local = created
+        created.watch((event) => {
+          if (controller.signal.aborted || event.type !== 'failed') return
+          // The worker says why it gave no bytes. A lost connection is left
+          // to the player, which asks again.
+          if (event.reason === 'integrity')
+            setPreview({
+              status: 'failed',
+              message: decryptionProblem(new E2eeError('tag_mismatch', '')),
+            })
+          else if (event.reason === 'refused')
+            setPreview({
+              status: 'failed',
+              message: decryptionProblem(new CiphertextRefused(404)),
+            })
+        })
+        created.registered.then(
+          () => {
+            if (controller.signal.aborted) return
+            setPreview({
+              status: 'ready',
+              view:
+                renderer === 'pdf'
+                  ? { renderer: 'pdf', src: created.url, local: true }
+                  : {
+                      renderer: renderer as 'video' | 'audio',
+                      src: created.url,
+                      type: blobType,
+                    },
+            })
+          },
+          () => {
+            if (controller.signal.aborted) return
+            created.release()
+            local = null
+            wholeFile()
+          }
+        )
+      })
+    } else wholeFile()
+
     return () => {
       controller.abort()
       if (address) URL.revokeObjectURL(address)
+      local?.release()
     }
     // `file` is the page's own prop and does not change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, rendering])
+  }, [opened, rendering, attempt])
+
+  // A new address for a player whose address failed: at most two times in
+  // a row, so a file that cannot play ends in the player's error.
+  const recover = useCallback(() => {
+    if (recoveries.current >= 2) return false
+    recoveries.current++
+    setAttempt((value) => value + 1)
+    return true
+  }, [])
 
   useEffect(() => {
     if (!copied) return
@@ -338,10 +438,19 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
     if (!opened || saving) return
     setSaving(true)
     try {
-      const decrypted =
-        content.current ??
-        (await fetchDecrypted(file, opened, { download: true }))
-      saveDecrypted(decrypted, opened.name)
+      // What the preview decrypted is saved as it is. Each other file is
+      // streamed to disk where a service worker can do that.
+      if (content.current) saveDecrypted(content.current, opened.name)
+      else
+        await downloadDecrypted(
+          {
+            id: file.id,
+            urlPath: file.urlPath,
+            header: records.header,
+            sizeBytes: file.sizeBytes,
+          },
+          opened
+        )
     } catch (error) {
       toast({
         title: 'Couldn’t download this file',
@@ -351,7 +460,7 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
     } finally {
       setSaving(false)
     }
-  }, [file, opened, saving, toast])
+  }, [file, records.header, opened, saving, toast])
 
   const copyLink = async () => {
     if (!opened) return
@@ -594,14 +703,24 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
           <ImageViewer file={{ id: file.id, name }} src={view.src} />
         )}
         {view?.renderer === 'video' && (
-          <VideoPlayer file={{ name, mimeType: view.type }} src={view.src} />
+          <VideoPlayer
+            file={{ name, mimeType: view.type }}
+            src={view.src}
+            recover={view.src.startsWith('blob:') ? undefined : recover}
+          />
         )}
         {view?.renderer === 'audio' && (
-          <AudioViewer file={{ name, mimeType: view.type }} src={view.src} />
+          <AudioViewer
+            file={{ name, mimeType: view.type }}
+            src={view.src}
+            recover={view.src.startsWith('blob:') ? undefined : recover}
+          />
         )}
         {view?.renderer === 'pdf' && (
           <div className="min-w-0 max-w-full">
-            <PdfViewer name={name} src={view.src} sandboxed />
+            {/* The answer of a local address carries its own sandbox policy,
+                and Chromium shows no PDF in a frame with the attribute. */}
+            <PdfViewer name={name} src={view.src} sandboxed={!view.local} />
             <p className="px-6 pt-2 text-center text-xs text-muted-foreground">
               If the preview stays empty, download the file to read it.
             </p>

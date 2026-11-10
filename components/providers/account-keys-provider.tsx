@@ -19,6 +19,7 @@ import type { AccountKeys } from '@/lib/e2ee/account'
 import { unlockWithPassphrase } from '@/lib/e2ee/client/api'
 import { browserKeyStore } from '@/lib/e2ee/client/browser-store'
 import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
+import { dropLocalAddresses } from '@/lib/e2ee/client/local-address'
 import { forgetOpenedFiles } from '@/lib/e2ee/client/opened-files'
 import {
   type AccountKeyEvent,
@@ -143,9 +144,15 @@ export function AccountKeysProvider({
 
   // The file keys this page opened are useless and unwanted without the
   // account keys: erase them when the browser locks or the session ends.
+  const hadKeys = useRef(false)
   useEffect(() => {
-    if (state.status === 'locked' || state.status === 'signed-out')
+    if (state.status === 'locked' || state.status === 'signed-out') {
       forgetOpenedFiles()
+      // The service worker holds file keys for local addresses. They are
+      // dropped with the account keys, for every page (section 12.2).
+      if (hadKeys.current) dropLocalAddresses()
+      hadKeys.current = false
+    } else if (state.status === 'unlocked') hadKeys.current = true
   }, [state.status])
 
   const adopt = useCallback(

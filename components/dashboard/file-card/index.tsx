@@ -64,14 +64,14 @@ import { type OpenedFile, shareSecretOf } from '@/lib/e2ee/client/files'
 import { shareLink } from '@/lib/e2ee/link'
 import {
   decryptionProblem,
-  fetchDecrypted,
-  saveDecrypted,
+  downloadDecrypted,
 } from '@/lib/files/encrypted-client'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
+import { mbToBytes } from '@/lib/utils/size'
 
 import { useEncryptedFile } from '@/hooks/use-encrypted-file'
 import { useOcr } from '@/hooks/use-ocr'
@@ -313,10 +313,18 @@ function OpenFileCard({
     if (!opened || downloading || signal.aborted) return
     setDownloading(true)
     try {
-      // Saved only after every chunk and the end of the file verified.
-      saveDecrypted(
-        await fetchDecrypted(file, opened, { download: true, signal }),
-        opened.name
+      // Streamed to disk by the service worker where there is one, and
+      // decrypted in memory first where there is none. Either way a file
+      // that fails its integrity check is not kept.
+      await downloadDecrypted(
+        {
+          id: file.id,
+          urlPath: file.urlPath,
+          header: file.encryption?.header ?? '',
+          sizeBytes: Math.round(mbToBytes(file.size)),
+        },
+        opened,
+        { signal }
       )
     } catch (error) {
       if (signal.aborted) return

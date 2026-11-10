@@ -4,6 +4,7 @@ import { RefusedRequest, apiRequest } from '@/lib/client/request'
 
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
+import { useMediaRecovery } from '../use-media-recovery'
 
 const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 
@@ -53,13 +54,16 @@ export function VideoViewer({
 export function VideoPlayer({
   file,
   src,
+  recover,
 }: {
   file: { name: string; mimeType: string }
   src: string
+  /** Asks for a new `src` after a failure. True if one is on its way. */
+  recover?: () => boolean
 }) {
-  const [failedUrl, setFailedUrl] = useState<string>()
+  const { failed, onError, onLoadedMetadata } = useMediaRecovery(src, recover)
 
-  if (failedUrl === src) {
+  if (failed) {
     return <ErrorState error="This video couldn’t be played in your browser." />
   }
 
@@ -71,7 +75,8 @@ export function VideoPlayer({
         src={src}
         controls
         aria-label={`${file.name} video player`}
-        onError={() => setFailedUrl(src)}
+        onError={onError}
+        onLoadedMetadata={onLoadedMetadata}
         className="block max-h-[60vh] w-full object-contain focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
