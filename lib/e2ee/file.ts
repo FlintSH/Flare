@@ -121,6 +121,8 @@ export interface ParsedHeader {
 /**
  * Steps 1 and 2 of section 7.4. An unknown `format_version` stops with
  * `unknown_version`: the client must not try other rules (section 1.5.2).
+ * A `chunk_size_log2` other than `16` stops with `unsupported_chunk_size`
+ * (rule 9).
  */
 export function parseHeader(header: Uint8Array): ParsedHeader {
   if (header.length !== HEADER_LENGTH) {
@@ -224,8 +226,9 @@ export function encryptChunkUnchecked(
 
 /**
  * Encrypts one chunk. A chunk that is not the last one must have exactly
- * 65536 bytes. The last one has 1 to 65536 bytes, or 0 bytes if the file is
- * empty.
+ * 65536 bytes. The last one has 1 to 65536 bytes, or 0 bytes if it is chunk
+ * `0` of an empty file. A writer thus cannot make an empty final chunk after
+ * a full chunk, and each plaintext has one encrypted form.
  */
 export function encryptChunk(
   context: ContentContext,
@@ -246,15 +249,22 @@ export function encryptChunk(
   return encryptChunkUnchecked(context, chunkIndex, isFinal, chunkPlaintext)
 }
 
-type ChunkCheck = 'ok' | 'bad_length' | 'truncated' | 'tag_mismatch'
+type ChunkCheck =
+  'ok' | 'bad_length' | 'truncated' | 'empty_final_chunk' | 'tag_mismatch'
 
 function checkStoredChunk(
   context: ContentContext,
+  chunkIndex: number,
   chunkIndexLe: Uint8Array,
   isFinal: boolean,
   storedChunk: Uint8Array
 ): ChunkCheck {
   if (storedChunk.length < CHUNK_TAG_LENGTH) return 'truncated'
+  // Section 7.4, rule 8. The length is public, so this check can come
+  // before the tag.
+  if (isFinal && chunkIndex !== 0 && storedChunk.length === CHUNK_TAG_LENGTH) {
+    return 'empty_final_chunk'
+  }
   if (
     isFinal
       ? storedChunk.length > STORED_CHUNK_SIZE
@@ -275,11 +285,15 @@ function checkStoredChunk(
 }
 
 /**
- * Verifies and decrypts one stored chunk (section 7.4, steps 3, 4 and 6).
- * The cipher does not run before the tag is correct, so no unverified
+ * Verifies and decrypts one stored chunk (section 7.4, rules 3, 4, 6 and
+ * 8). The cipher does not run before the tag is correct, so no unverified
  * plaintext exists. `isFinal` is the caller's knowledge of the position: a
  * chunk that was stored as final does not verify as non-final, and the
- * reverse.
+ * reverse. A final chunk of length zero is valid only as chunk `0`; in each
+ * other position it fails with `empty_final_chunk`.
+ *
+ * A chunk that verifies proves nothing about the end of the file, unless it
+ * is the final chunk.
  */
 export function decryptChunk(
   context: ContentContext,
@@ -288,7 +302,13 @@ export function decryptChunk(
   storedChunk: Uint8Array
 ): Uint8Array {
   const chunkIndexLe = le64(chunkIndex)
-  const check = checkStoredChunk(context, chunkIndexLe, isFinal, storedChunk)
+  const check = checkStoredChunk(
+    context,
+    chunkIndex,
+    chunkIndexLe,
+    isFinal,
+    storedChunk
+  )
   if (check !== 'ok') {
     throw new E2eeError(check, chunkFailureMessage(check, chunkIndex, isFinal))
   }
@@ -309,6 +329,9 @@ function chunkFailureMessage(
   }
   if (check === 'truncated') {
     return `Chunk ${chunkIndex} is shorter than its tag`
+  }
+  if (check === 'empty_final_chunk') {
+    return `The final chunk ${chunkIndex} is empty, which is valid only for chunk 0`
   }
   return isFinal
     ? `The final chunk ${chunkIndex} is longer than ${STORED_CHUNK_SIZE} bytes`
@@ -396,6 +419,8 @@ export async function* encryptFile(
         wipe(chunk)
       }
     }
+    // The queue holds 1 to 65536 bytes here, or 0 bytes only if the source
+    // was empty and `chunkIndex` is 0. `encryptChunk` enforces the same rule.
     const last = queue.take(queue.length)
     yield encryptChunk(context, chunkIndex, true, last)
     wipe(last)
@@ -404,28 +429,48 @@ export async function* encryptFile(
   }
 }
 
+/** What `decryptFile` returns after it verified the final chunk. */
+export interface VerifiedFileEnd {
+  /** Always `true`. The value exists only after the final chunk verified. */
+  readonly complete: true
+  readonly plaintextLength: number
+  readonly chunkCount: number
+}
+
 /**
  * Decrypts a stored file as a stream and enforces every rule of section
  * 7.4. Yields the plaintext of a chunk only after its tag is correct. The
  * source can have pieces of any size.
  *
- * The consumer must treat the output as incomplete until the generator
- * returns: a truncated file fails at its end, after the earlier chunks were
- * given out. Each given byte is authentic for its position.
+ * COMPLETENESS. The yielded bytes are authentic for their position, but
+ * they are not a complete file until the generator completes normally. A
+ * reader that works as a stream can find a truncation only when it reaches
+ * the end, so a truncated file throws after the earlier chunks were given
+ * out. The signal that the file is complete is the normal completion of the
+ * generator: the `for await` loop ends without an exception, or `next()`
+ * gives `{ done: true, value: VerifiedFileEnd }`. This occurs only after
+ * the final chunk verified and no data followed it.
+ *
+ * A caller must not treat partial output as a complete file. Do not
+ * save, open, execute, cache or show the output as the file before that
+ * signal. If the generator throws, or the caller stops it early, discard
+ * what was written.
  *
  * Failure reasons: `truncated` if the input ends before a final chunk,
- * `trailing_data` if bytes follow the final chunk, `tag_mismatch` for each
+ * `trailing_data` if bytes follow the final chunk, `empty_final_chunk` for
+ * a final chunk of length zero after chunk `0`, `tag_mismatch` for each
  * other change. A short chunk before the end shifts every later byte, so it
  * shows as `tag_mismatch`.
  */
 export async function* decryptFile(
   fileKey: FileKey,
   stored: ByteSource
-): AsyncGenerator<Uint8Array, void, undefined> {
+): AsyncGenerator<Uint8Array, VerifiedFileEnd, undefined> {
   asFileKey(fileKey)
   const queue = new ByteQueue()
   let context: ContentContext | undefined
   let chunkIndex = 0
+  let plaintextLength = 0
   try {
     for await (const piece of stored) {
       queue.push(piece)
@@ -443,6 +488,7 @@ export async function* decryptFile(
           false,
           storedChunk
         )
+        plaintextLength += plaintext.length
         yield plaintext
       }
     }
@@ -459,7 +505,9 @@ export async function* decryptFile(
       true,
       queue.take(queue.length)
     )
+    plaintextLength += last.length
     if (last.length > 0) yield last
+    return { complete: true, plaintextLength, chunkCount: chunkIndex + 1 }
   } finally {
     if (context) wipeContentContext(context)
   }
@@ -477,9 +525,21 @@ function decryptStreamChunk(
   storedChunk: Uint8Array
 ): Uint8Array {
   const chunkIndexLe = le64(chunkIndex)
-  const check = checkStoredChunk(context, chunkIndexLe, isFinal, storedChunk)
+  const check = checkStoredChunk(
+    context,
+    chunkIndex,
+    chunkIndexLe,
+    isFinal,
+    storedChunk
+  )
   if (check === 'tag_mismatch') {
-    const other = checkStoredChunk(context, chunkIndexLe, !isFinal, storedChunk)
+    const other = checkStoredChunk(
+      context,
+      chunkIndex,
+      chunkIndexLe,
+      !isFinal,
+      storedChunk
+    )
     if (other === 'ok') {
       throw isFinal
         ? new E2eeError(
@@ -517,7 +577,9 @@ export function storedLengthOf(plaintextLength: number): number {
 /**
  * The chunk layout that a stored length implies. The server reports the
  * stored length, so it is not trusted: a wrong value makes a tag fail later,
- * because the final chunk is then at a different position.
+ * because the final chunk is then at a different position. A length that
+ * implies an empty final chunk after a full chunk is not the length of a
+ * valid file (section 7.4, rule 8) and fails with `empty_final_chunk`.
  */
 export function fileLayout(storedLength: number): FileLayout {
   if (!Number.isSafeInteger(storedLength) || storedLength < 0) {
@@ -538,6 +600,12 @@ export function fileLayout(storedLength: number): FileLayout {
     )
   }
   const chunkCount = Math.ceil(body / STORED_CHUNK_SIZE)
+  if (remainder === CHUNK_TAG_LENGTH && chunkCount > 1) {
+    throw new E2eeError(
+      'empty_final_chunk',
+      'The stored length implies an empty final chunk after a full chunk'
+    )
+  }
   return {
     storedLength,
     plaintextLength: body - chunkCount * CHUNK_TAG_LENGTH,
@@ -602,6 +670,10 @@ export function storedRangeForPlaintextRange(
  * the stored bytes `[storedStart, storedEnd)` of
  * `storedRangeForPlaintextRange`. Every fetched chunk is verified before any
  * byte is returned.
+ *
+ * A read of a range proves nothing about the end of the file, unless the
+ * range contains the final chunk: `storedLength` comes from the server. A
+ * caller must not treat ranges as proof of a complete file.
  */
 export function decryptRange(input: {
   readonly context: ContentContext

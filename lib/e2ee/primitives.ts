@@ -114,7 +114,7 @@ function requireLength(name: string, bytes: Uint8Array, length: number): void {
   }
 }
 
-// --- Text forms (section 4.4, rule 13) ---
+// --- Text forms (section 4.4, rule 14) ---
 
 const HEX_DIGITS = '0123456789abcdef'
 
@@ -236,9 +236,58 @@ export function xchacha20Xor(
   return xchacha20(key, nonce, data, undefined, 0)
 }
 
-// --- X25519 (RFC 7748) ---
+// --- X25519 (RFC 7748 and section 4.4, rules 3a and 3b) ---
 
-/** The public key of an X25519 private key. The private key is clamped inside. */
+/**
+ * True if the 32 bytes, read as a little-endian integer without the highest
+ * bit of the last byte, are less than the field prime `2^255 - 19`. The
+ * prime is `ed ff ... ff 7f`.
+ */
+function isBelowFieldPrime(bytes: Uint8Array): boolean {
+  if ((bytes[31] & 0x7f) !== 0x7f) return true
+  for (let index = 30; index >= 1; index--) {
+    if (bytes[index] !== 0xff) return true
+  }
+  return bytes[0] < 0xed
+}
+
+/**
+ * Section 4.4, rule 3a: the value is less than `2^255 - 19` and the highest
+ * bit of the last byte is zero. A public key is public, so this does not
+ * have to run in constant time.
+ */
+export function isCanonicalX25519PublicKey(publicKey: Uint8Array): boolean {
+  return (
+    publicKey.length === 32 &&
+    (publicKey[31] & 0x80) === 0 &&
+    isBelowFieldPrime(publicKey)
+  )
+}
+
+/**
+ * Rejects an `ephemeral_public_key`, a `folder_public_key` or a
+ * `recipient_public_key` that is not canonical, with
+ * `non_canonical_public_key`. RFC 7748 would mask the highest bit and reduce
+ * the value instead, which gives one key several encodings.
+ */
+export function assertCanonicalX25519PublicKey(
+  publicKey: Uint8Array,
+  name = 'The X25519 public key'
+): void {
+  requireLength(name, publicKey, 32)
+  if (!isCanonicalX25519PublicKey(publicKey)) {
+    throw new E2eeError(
+      'non_canonical_public_key',
+      `${name} is not in its canonical form`
+    )
+  }
+}
+
+/**
+ * The public key of an X25519 private key. A private key is 32 random bytes
+ * as they are (rule 3b): the X25519 function clamps a copy inside, and no
+ * caller stores, seals or sends a clamped form.
+ */
 export function x25519PublicKey<Kind extends string = 'x25519_public_key'>(
   privateKey: X25519PrivateKey
 ): Bytes<Kind> {
@@ -247,15 +296,16 @@ export function x25519PublicKey<Kind extends string = 'x25519_public_key'>(
 }
 
 /**
- * `X25519(private_key, public_key)`. Rejects each input that gives the
- * all-zero shared secret (sections 8.1 and 8.4.1).
+ * `X25519(private_key, public_key)`. Rejects a public key that is not
+ * canonical (section 4.4, rule 3a), then each input that gives the all-zero
+ * shared secret (sections 8.1 and 8.4.1).
  */
 export function x25519SharedSecret(
   privateKey: X25519PrivateKey,
   publicKey: X25519PublicKey
 ): SharedSecret {
   requireLength('X25519 private key', privateKey, 32)
-  requireLength('X25519 public key', publicKey, 32)
+  assertCanonicalX25519PublicKey(publicKey)
   let shared: Uint8Array
   try {
     // The library rejects the low-order points before the ladder. Those are
@@ -333,15 +383,28 @@ export function ed2curvePrivate(
 }
 
 /**
- * Decodes the Edwards point and returns `u = (1 + y) / (1 - y)` as 32 bytes
- * little-endian. Fails if the point does not decode (RFC 8032, section
- * 5.1.3) or if `y = 1`.
+ * Section 4.4, rule 3. Decodes the Edwards point as RFC 8032, section 5.1.3,
+ * specifies and returns `u = (1 + y) / (1 - y)` as 32 bytes little-endian.
+ *
+ * The decode is strict. It fails for a `y` that is not less than
+ * `2^255 - 19`, for a `y` that has no `x`, and for `x = 0` with the sign bit
+ * set. It also fails if `y = 1`, where `u` has no value. The result is
+ * always a canonical X25519 public key (rule 3a).
  */
 export function ed2curvePublic(publicKey: Ed25519PublicKey): ExchangePublicKey {
   requireLength('Ed25519 public key', publicKey, 32)
+  // The check of `y` is explicit, so it does not depend on an option of the
+  // curve library.
+  if (!isBelowFieldPrime(publicKey)) {
+    throw new E2eeError(
+      'invalid_public_key',
+      'The Ed25519 public key has a y that is not less than 2^255 - 19'
+    )
+  }
   const field = ed25519.Point.Fp
   let y: bigint
   try {
+    // `false` turns ZIP-215 leniency off: RFC 8032 rules only.
     y = ed25519.Point.fromBytes(publicKey, false).toAffine().y
   } catch {
     throw new E2eeError(

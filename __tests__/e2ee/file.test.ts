@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { CONTEXTS } from './contexts'
-import { E2eeError } from './errors'
+import { CONTEXTS } from '@/lib/e2ee/contexts'
+import { E2eeError } from '@/lib/e2ee/errors'
 import {
   CHUNK_SIZE,
   HEADER_LENGTH,
@@ -21,7 +21,7 @@ import {
   storedChunkOffset,
   storedLengthOf,
   storedRangeForPlaintextRange,
-} from './file'
+} from '@/lib/e2ee/file'
 import {
   blake3DeriveKey,
   blake3Hash,
@@ -30,7 +30,10 @@ import {
   concatBytes,
   le64,
   xchacha20Xor,
-} from './primitives'
+} from '@/lib/e2ee/primitives'
+import { encryptChunkUnchecked } from '@/lib/e2ee/testing'
+import { asFileKey, asNoncePrefix } from '@/lib/e2ee/types'
+
 import {
   collect,
   expectReason,
@@ -40,8 +43,6 @@ import {
   pattern,
   pieces,
 } from './test-support'
-import { encryptChunkUnchecked } from './testing'
-import { asFileKey, asNoncePrefix } from './types'
 
 const fileKey = asFileKey(pattern(32, 21))
 const noncePrefix = asNoncePrefix(pattern(16, 22))
@@ -493,15 +494,119 @@ describe('file stream', () => {
     )
   })
 
-  it('reads a zero-length final chunk after full chunks (7.4 does not forbid it)', async () => {
-    const plaintext = mod251(CHUNK_SIZE)
-    const stored = concatBytes(
-      header,
-      encryptChunk(context, 0, false, plaintext),
-      encryptChunkUnchecked(context, 1, true, new Uint8Array(0))
-    )
-    expect(await decryptAll(stored)).toEqual(plaintext)
-    expect(fileLayout(stored.length).plaintextLength).toBe(CHUNK_SIZE)
+  it('rejects a zero-length final chunk after full chunks (7.4, rule 8)', async () => {
+    for (const fullChunks of [1, 2]) {
+      const parts: Uint8Array[] = [header]
+      for (let index = 0; index < fullChunks; index++) {
+        parts.push(encryptChunk(context, index, false, mod251(CHUNK_SIZE)))
+      }
+      // An authentic chunk: the tag is correct, only the position is not valid.
+      const emptyFinal = encryptChunkUnchecked(
+        context,
+        fullChunks,
+        true,
+        new Uint8Array(0)
+      )
+      const stored = concatBytes(...parts, emptyFinal)
+      const result = await releasedBeforeFailure(stored)
+      expect(result.reason).toBe('empty_final_chunk')
+      expectReason(
+        () => decryptChunk(context, fullChunks, true, emptyFinal),
+        'empty_final_chunk'
+      )
+      expectReason(() => fileLayout(stored.length), 'empty_final_chunk')
+      expectReason(
+        () => storedRangeForPlaintextRange(stored.length, 0, 1),
+        'empty_final_chunk'
+      )
+    }
+  })
+
+  it('accepts a zero-length final chunk only as chunk 0', async () => {
+    const emptyFile = await encryptAll(new Uint8Array(0))
+    expect(emptyFile).toHaveLength(26 + 32)
+    expect(await decryptAll(emptyFile)).toEqual(new Uint8Array(0))
+    expect(fileLayout(emptyFile.length).plaintextLength).toBe(0)
+    expect(
+      decryptChunk(
+        context,
+        0,
+        true,
+        encryptChunk(context, 0, true, new Uint8Array(0))
+      )
+    ).toEqual(new Uint8Array(0))
+    for (const chunkIndex of [1, 2, 1000]) {
+      expectReason(
+        () => encryptChunk(context, chunkIndex, true, new Uint8Array(0)),
+        'bad_length'
+      )
+    }
+  })
+
+  it('the writer never makes an empty final chunk after full chunks', async () => {
+    for (const fullChunks of [1, 2, 3]) {
+      const plaintext = mod251(fullChunks * CHUNK_SIZE)
+      // Pieces that end exactly on a chunk boundary, and one large piece.
+      for (const sizes of [[CHUNK_SIZE], [4096], [plaintext.length]]) {
+        const stored = await collect(
+          encryptFile(fileKey, noncePrefix, pieces(plaintext, sizes))
+        )
+        expect(stored).toHaveLength(26 + fullChunks * (CHUNK_SIZE + 32))
+        expect(await decryptAll(stored)).toEqual(plaintext)
+      }
+      // Empty pieces at the end do not add a chunk.
+      const stored = await collect(
+        encryptFile(fileKey, noncePrefix, [
+          plaintext,
+          new Uint8Array(0),
+          new Uint8Array(0),
+        ])
+      )
+      expect(stored).toHaveLength(26 + fullChunks * (CHUNK_SIZE + 32))
+    }
+  })
+
+  it('completes normally only after the final chunk verified', async () => {
+    const plaintext = mod251(CHUNK_SIZE * 2 + 10)
+    const stored = await encryptAll(plaintext)
+    const reader = decryptFile(fileKey, [stored])
+    let length = 0
+    for (;;) {
+      const step = await reader.next()
+      if (step.done) {
+        expect(step.value).toEqual({
+          complete: true,
+          plaintextLength: plaintext.length,
+          chunkCount: 3,
+        })
+        break
+      }
+      length += step.value.length
+    }
+    expect(length).toBe(plaintext.length)
+
+    // A truncated file gives out its first chunks and then throws. It never
+    // gives the completion value.
+    const truncated = decryptFile(fileKey, [
+      stored.subarray(0, 26 + 2 * (CHUNK_SIZE + 32)),
+    ])
+    const first = await truncated.next()
+    expect(first.done).toBe(false)
+    let completed = false
+    let reason: string | undefined
+    try {
+      for (;;) {
+        const step = await truncated.next()
+        if (step.done) {
+          completed = true
+          break
+        }
+      }
+    } catch (error) {
+      reason = (error as { reason?: string }).reason
+    }
+    expect(completed).toBe(false)
+    expect(reason).toBe('truncated')
   })
 })
 

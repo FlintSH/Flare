@@ -8,6 +8,12 @@ Usage:
 Each input is fixed, thus two runs give the same bytes. Before a vector is
 written, its output is opened again by the reverse procedure of reference.py
 (which uses separate pure Python primitives) and compared with the input.
+
+A vector whose name starts with `rejects ` or `decrypt_rejects ` has the
+output `{"error": true}`. Before it is written, the strict procedure of
+reference.py must reject its input for the stated cause, and a second check
+shows that no other cause exists: a reader without the rule opens the same
+input, or the input without the change opens.
 """
 
 from __future__ import annotations
@@ -68,10 +74,59 @@ def expect_reject(message: str, function, *arguments) -> None:
     raise AssertionError(f"self-check failed: no rejection: {message}")
 
 
+def expect_reason(reason: str, message: str, function, *arguments) -> None:
+    """The call must fail, and for this cause."""
+    try:
+        function(*arguments)
+    except ref.Reject as error:
+        check(error.reason == reason, f"{message}: rejected for '{error.reason}', not for '{reason}'")
+        return
+    raise AssertionError(f"self-check failed: no rejection: {message}")
+
+
 def flip(data: bytes, index: int = 0) -> bytes:
     changed = bytearray(data)
     changed[index] ^= 0x01
     return bytes(changed)
+
+
+def one_byte_differs(first: bytes, second: bytes) -> bool:
+    return len(first) == len(second) and sum(x != y for x, y in zip(first, second)) == 1
+
+
+ERROR_OUTPUT = {"error": True}
+P = ref.FIELD_PRIME
+
+
+def set_highest_bit(public_key: bytes) -> bytes:
+    """A form that is not canonical: the highest bit of the last byte is 1."""
+    return public_key[:31] + bytes([public_key[31] | 0x80])
+
+
+# A form that is not canonical: the value 2^255 - 19 + 9. The highest bit is
+# 0. X25519 of RFC 7748 reads it as u = 9, the base point.
+BASE_POINT_PLUS_P = (P + 9).to_bytes(32, "little")
+
+
+def lax_stanza(recipient_private_key: bytes, ephemeral_public_key: bytes, context: str, associated_data: bytes, secret: bytes) -> bytes:
+    """A stanza for given `ephemeral_public_key` bytes, made WITHOUT rule 3a.
+
+    It is what a wrong writer would send. Each step is section 8.4.1 except
+    the check of the canonical form. A reader without that check opens it.
+    """
+    recipient_public_key = ref.x25519_pure(recipient_private_key, ref.X25519_BASE_POINT)
+    shared_secret = ref.x25519_checked_pure(recipient_private_key, ephemeral_public_key)
+    stanza_key = ref.blake3_derive_key(context, shared_secret + ephemeral_public_key + recipient_public_key)
+    return ephemeral_public_key + ref.seal_once(stanza_key, associated_data, secret)
+
+
+def lax_unwrap(recipient_private_key: bytes, context: str, associated_data: bytes, stanza: bytes) -> bytes:
+    """`public_unwrap` WITHOUT rule 3a."""
+    ephemeral_public_key = stanza[:32]
+    recipient_public_key = ref.x25519_pure(recipient_private_key, ref.X25519_BASE_POINT)
+    shared_secret = ref.x25519_checked_pure(recipient_private_key, ephemeral_public_key)
+    stanza_key = ref.blake3_derive_key(context, shared_secret + ephemeral_public_key + recipient_public_key)
+    return ref.open_once(stanza_key, associated_data, stanza[32:])
 
 
 # --------------------------------------------------------------------------
@@ -100,6 +155,15 @@ def run_seal(i: dict) -> dict:
     expect_reject("seal, changed key", ref.open_sealed, flip(key), associated_data, sealed_box)
     if message:
         expect_reject("seal, changed ciphertext", ref.open_sealed, key, associated_data, flip(sealed_box, 24))
+    expect_reason("length", "seal, 55 bytes", ref.open_sealed, key, associated_data, sealed_box[:24] + sealed_box[-31:])
+    # Section 4.2.1: seal_once is seal with the nonce from the key, without the nonce in the output.
+    once = ref.seal_once(key, associated_data, message)
+    check(len(once) == len(message) + 32, "seal_once length")
+    check(ref.one_time_nonce(key) + once == ref.seal(key, ref.one_time_nonce(key), associated_data, message), "seal_once is seal")
+    check(ref.open_once(key, associated_data, once) == message, "seal_once round trip")
+    expect_reason("tag", "seal_once, changed tag", ref.open_once, key, associated_data, flip(once, -1))
+    expect_reason("tag", "seal_once, changed key", ref.open_once, flip(key), associated_data, once)
+    expect_reason("length", "seal_once, 31 bytes", ref.open_once, key, associated_data, once[-31:])
     return {"sealed_box": sealed_box.hex()}
 
 
@@ -107,6 +171,9 @@ def run_account_keys(i: dict) -> dict:
     root_entropy = b(i["root_entropy"])
     keys = ref.account_keys(root_entropy)
     check(ref.entropy_from_mnemonic(keys["mnemonic_text"]) == root_entropy, "mnemonic round trip")
+    check(keys["mnemonic_text"] == keys["mnemonic_text"].lower(), "mnemonic is lower case")
+    loose = keys["mnemonic_text"].upper().replace(" ", "  ")
+    check(ref.entropy_from_mnemonic(loose) == root_entropy, "mnemonic reader accepts upper case and more spaces")
     check(len(keys["mnemonic_text"].split(" ")) == 24, "mnemonic has 24 words")
     check(
         ref.x25519_pure(keys["exchange_private_key"], ref.X25519_BASE_POINT) == keys["exchange_public_key"],
@@ -142,7 +209,10 @@ def run_sign_in_signature(i: dict) -> dict:
     message = ref.sign_in_message(challenge, i["identifier_text"])
     check(len(message) == 21 + 32 + 32, "sign-in message length")
     check(ref.ed25519_verify(ref.ed25519_public_key(auth_private_key), message, signature), "sign-in signature")
-    return {"signature": signature.hex()}
+    normalized = ref.normalize_identifier(i["identifier_text"])
+    check(message[53:] == ref.blake3_hash(normalized.encode("utf-8")), "sign-in message uses the normalized identifier")
+    check(ref.normalize_identifier(normalized) == normalized, "normalization of the normalized identifier changes nothing")
+    return {"signature": signature.hex(), "identifier_normalized_text": normalized}
 
 
 def run_signed_request(i: dict) -> dict:
@@ -154,6 +224,20 @@ def run_signed_request(i: dict) -> dict:
     check(
         ref.ed25519_verify(ref.ed25519_public_key(account_private_key), signed_message, signature),
         "request signature",
+    )
+    public_key = ref.ed25519_public_key(account_private_key)
+    arguments = (b(i["challenge"]), i["method_text"], i["path_text"], b(i["body"]), signature)
+    ref.verify_signed_request(public_key, *arguments)
+    check(i["path_text"].isascii(), "path is in the percent-encoded form")
+    # Rule 8: a verifier rejects a method that is not upper case ASCII.
+    for method in (i["method_text"].lower(), i["method_text"].capitalize(), i["method_text"] + " ", ""):
+        expect_reason(
+            "method", f"signed request, method {method!r}", ref.verify_signed_request,
+            public_key, b(i["challenge"]), method, i["path_text"], b(i["body"]), signature,
+        )
+    expect_reason(
+        "signature", "signed request, other method", ref.verify_signed_request,
+        public_key, b(i["challenge"]), "OPTIONS", i["path_text"], b(i["body"]), signature,
     )
     return {"signed_message": signed_message.hex(), "signature": signature.hex()}
 
@@ -186,7 +270,48 @@ def run_file_chunk(i: dict) -> dict:
     check(expected_tag == tag, "chunk tag")
     nonce = nonce_prefix + chunk_index.to_bytes(8, "little")
     check(ref.xchacha20_pure(keys["content_cipher_key"], nonce, ciphertext) == chunk_plaintext, "chunk round trip")
+    check(
+        ref.decrypt_chunk(file_key, nonce_prefix, chunk_index, is_final, stored_chunk) == chunk_plaintext,
+        "decrypt_chunk round trip",
+    )
+    expect_reason("tag", "chunk, other index", ref.decrypt_chunk, file_key, nonce_prefix, chunk_index + 1, is_final, stored_chunk)
+    expect_reason("tag", "chunk, changed tag", ref.decrypt_chunk, file_key, nonce_prefix, chunk_index, is_final, flip(stored_chunk, -1))
+    if len(chunk_plaintext) == 65536:
+        expect_reason("tag", "chunk, other final flag", ref.decrypt_chunk, file_key, nonce_prefix, chunk_index, not is_final, stored_chunk)
     return {"stored_chunk": stored_chunk.hex()}
+
+
+def raw_stored_chunk(file_key: bytes, nonce_prefix: bytes, chunk_index: int, is_final: bool, chunk_plaintext: bytes) -> bytes:
+    """Section 7.3 steps 1 to 5 WITHOUT the rules of section 7.4.
+
+    It makes a chunk with a correct tag that a writer must not make, for
+    example a final chunk of length zero at an index above 0.
+    """
+    keys = ref.file_keys(file_key)
+    header_hash = ref.header_hash_of(ref.build_header(nonce_prefix))
+    ciphertext = ref.xchacha20_pure(keys["content_cipher_key"], nonce_prefix + ref.le64(chunk_index), chunk_plaintext)
+    tag = ref.blake3_keyed_hash(
+        keys["content_mac_key"],
+        header_hash + ref.le64(chunk_index) + (b"\x01" if is_final else b"\x00") + ciphertext,
+    )
+    return ciphertext + tag
+
+
+def run_file_chunk_decrypt_rejects(i: dict, expect: dict) -> dict:
+    check(set(i) == {"file_key", "nonce_prefix", "chunk_index", "is_final", "stored_chunk"}, "decrypt_rejects input fields")
+    file_key, nonce_prefix = b(i["file_key"]), b(i["nonce_prefix"])
+    arguments = (file_key, nonce_prefix, i["chunk_index"], i["is_final"], b(i["stored_chunk"]))
+    expect_reason(expect["reason"], "decrypt_rejects", ref.decrypt_chunk, *arguments)
+    if expect["reason"] != "tag":
+        # The tag is correct, thus the stated rule is the only cause.
+        check(raw_stored_chunk(*arguments[:4], expect["plaintext"]) == arguments[4], "decrypt_rejects chunk has a correct tag")
+    else:
+        # The chunk opens with the values of `opens_as`.
+        original = dict(i, **expect["opens_as"])
+        ref.decrypt_chunk(
+            b(original["file_key"]), b(original["nonce_prefix"]), original["chunk_index"], original["is_final"], b(original["stored_chunk"])
+        )
+    return dict(ERROR_OUTPUT)
 
 
 def run_file(i: dict) -> dict:
@@ -198,7 +323,21 @@ def run_file(i: dict) -> dict:
     check(ref.decrypt_file(file_key, stored_file) == plaintext, "file round trip")
     expect_reject("file, last byte removed", ref.decrypt_file, file_key, stored_file[:-1])
     expect_reject("file, one byte added", ref.decrypt_file, file_key, stored_file + b"\x00")
-    expect_reject("file, changed header", ref.decrypt_file, file_key, flip(stored_file, 10))
+    expect_reason("tag", "file, changed nonce prefix", ref.decrypt_file, file_key, flip(stored_file, 10))
+    expect_reason("header", "file, changed magic", ref.decrypt_file, file_key, flip(stored_file, 0))
+    expect_reason("header", "file, changed format_version", ref.decrypt_file, file_key, flip(stored_file, 8))
+    for value in (0, 15, 17, 255):  # section 7.4 rule 9
+        other = stored_file[:9] + bytes([value]) + stored_file[10:]
+        expect_reason("header", f"file, chunk_size_log2 = {value}", ref.decrypt_file, file_key, other)
+    if plaintext_length > 0 and plaintext_length % 65536 == 0:
+        # Section 7.4 rule 8. The second form of the same plaintext: each
+        # full chunk is not final, and a final chunk of length zero follows.
+        # Each tag is correct. The reader must reject it all the same.
+        second_form = bytearray(ref.build_header(nonce_prefix))
+        for index in range(chunk_count):
+            second_form += ref.encrypt_chunk(file_key, nonce_prefix, index, False, plaintext[index * 65536 : (index + 1) * 65536])
+        second_form += raw_stored_chunk(file_key, nonce_prefix, chunk_count, True, b"")
+        expect_reason("empty_final_chunk", "file, zero-length final chunk after a full chunk", ref.decrypt_file, file_key, bytes(second_form))
     if chunk_count > 1:
         expect_reject("file, last chunk removed", ref.decrypt_file, file_key, stored_file[: 26 + 65568])
         for index in range(chunk_count):
@@ -259,19 +398,30 @@ def run_public_wrap(i: dict) -> dict:
     stanza = ref.public_wrap(
         recipient_public_key, b(i["ephemeral_private_key"]), i["context_text"], associated_data, secret
     )
-    check(len(stanza) == 32 + 24 + len(secret) + 32, "stanza length")
+    check(len(stanza) == 32 + len(secret) + 32, "stanza length")
+    check(stanza[:32] == ref.x25519_pure(b(i["ephemeral_private_key"]), ref.X25519_BASE_POINT), "ephemeral public key")
+    ref.check_canonical_x25519_public_key(stanza[:32], "ephemeral_public_key")
     private_key = KNOWN_X25519_PRIVATE_KEYS[recipient_public_key]
     check(ref.public_unwrap(private_key, i["context_text"], associated_data, stanza) == secret, "public_wrap round trip")
-    expect_reject(
-        "public_wrap, other context", ref.public_unwrap, private_key, i["context_text"] + "x", associated_data, stanza
+    check(lax_unwrap(private_key, i["context_text"], associated_data, stanza) == secret, "public_wrap, second reader")
+    check(
+        lax_stanza(private_key, stanza[:32], i["context_text"], associated_data, secret) == stanza,
+        "public_wrap, stanza made from the side of the recipient",
     )
+    expect_reason(
+        "tag", "public_wrap, other context", ref.public_unwrap, private_key, i["context_text"] + "x", associated_data, stanza
+    )
+    expect_reason(
+        "tag", "public_wrap, other associated data", ref.public_unwrap, private_key, i["context_text"], associated_data + b"\x00", stanza
+    )
+    expect_reason("length", "public_wrap, 63 bytes", ref.public_unwrap, private_key, i["context_text"], associated_data, stanza[:63])
     return {"stanza": stanza.hex()}
 
 
 def run_account_stanza(i: dict) -> dict:
     account_public_key, header_hash, file_key = b(i["account_public_key"]), b(i["header_hash"]), b(i["file_key"])
     stanza = ref.account_stanza(account_public_key, b(i["ephemeral_private_key"]), header_hash, file_key)
-    check(len(stanza) == 120, "account stanza has 120 bytes")
+    check(len(stanza) == 96, "account stanza has 96 bytes")
     seed = KNOWN_ED25519_SEEDS[account_public_key]
     check(ref.open_account_stanza(seed, header_hash, stanza) == file_key, "account stanza round trip")
     # Section 8.4.1: the account stanza is public_wrap with the exchange key.
@@ -283,7 +433,7 @@ def run_account_stanza(i: dict) -> dict:
         file_key,
     )
     check(same == stanza, "account stanza is public_wrap")
-    expect_reject("account stanza, other file", ref.open_account_stanza, seed, flip(header_hash), stanza)
+    expect_reason("tag", "account stanza, other file", ref.open_account_stanza, seed, flip(header_hash), stanza)
     return {"stanza": stanza.hex()}
 
 
@@ -300,13 +450,17 @@ def run_password_stanza(i: dict) -> dict:
         b(i["link_secret_nonce"]),
         *parameters,
     )
-    check(len(stanza) == 240, "password stanza has 240 bytes")
+    check(len(stanza) == 216, "password stanza has 216 bytes")
+    check(stanza[:32] == b(i["password_salt"]) and stanza[32:64] == b(i["owner_public_key"]), "password stanza layout")
+    check(stanza[128:152] == b(i["link_secret_nonce"]), "sealed_link_secret has its nonce")
+    check(stanza[64:128] == ref.seal_once(password_key, header_hash, file_key), "wrapped_file_key is seal_once")
     check(ref.open_link_secret_copy(file_key, header_hash, stanza) == link_secret, "sealed_link_secret round trip")
     if parameters == (FAST["memory_kib"], FAST["passes"], FAST["lanes"]):
         # The visitor path runs Argon2id again. Only the fast vectors do it, to keep the CPU use low.
         opened = ref.open_password_stanza(i["password_text"], link_secret, header_hash, stanza, *parameters)
         check(opened == file_key, "password stanza round trip")
-        expect_reject(
+        expect_reason(
+            "tag",
             "password stanza, wrong password",
             ref.open_password_stanza,
             i["password_text"] + "x",
@@ -315,7 +469,8 @@ def run_password_stanza(i: dict) -> dict:
             stanza,
             *parameters,
         )
-        expect_reject(
+        expect_reason(
+            "tag",
             "password stanza, wrong link secret",
             ref.open_password_stanza,
             i["password_text"],
@@ -325,7 +480,7 @@ def run_password_stanza(i: dict) -> dict:
             *parameters,
         )
     else:
-        check(ref.open_sealed(password_key, header_hash, stanza[64:152]) == file_key, "password stanza round trip")
+        check(ref.open_once(password_key, header_hash, stanza[64:128]) == file_key, "password stanza round trip")
     return {"password_key": password_key.hex(), "stanza": stanza.hex()}
 
 
@@ -339,6 +494,8 @@ def run_sealed_keyring(i: dict) -> dict:
         ref.open_keyring(account_private_key, account_public_key, sealed_keyring) == old_private_keys,
         "sealed_keyring round trip",
     )
+    # Section 4.4 rule 11: no sealed empty list.
+    expect_reason("empty_keyring", "sealed empty keyring", ref.seal_keyring, account_private_key, account_public_key, b(i["nonce"]), [])
     return {"keyring_key": keyring_key.hex(), "sealed_keyring": sealed_keyring.hex()}
 
 
@@ -358,37 +515,47 @@ def run_folder(i: dict) -> dict:
         == folder_private_key,
         "sealed_folder_private_key round trip",
     )
+    ref.check_canonical_x25519_public_key(out["folder_public_key"], "folder_public_key")
+    check(out["folder_public_key"] == ref.x25519_pure(folder_private_key, ref.X25519_BASE_POINT), "folder key pair")
+    # Section 8.4.2: the copy of a different folder does not open as this folder.
+    other_private_key = flip(folder_private_key, 5)
+    other_copy = ref.seal(out["folder_owner_key"], b(i["private_key_nonce"]), out["folder_public_key"], other_private_key)
+    expect_reason(
+        "key_mismatch", "sealed_folder_private_key with a key of a different folder",
+        ref.open_folder_private_key, account_private_key, out["folder_public_key"], other_copy,
+    )
     return {name: value.hex() for name, value in out.items()}
 
 
 def run_folder_stanzas(i: dict) -> dict:
-    folder_public_key, ephemeral_private_key = b(i["folder_public_key"]), b(i["ephemeral_private_key"])
+    folder_public_key = b(i["folder_public_key"])
+    ephemeral_keys = [b(i[f"{kind}_ephemeral_private_key"]) for kind in ("file", "link_secret", "parent")]
+    # Section 8.4.1: a caller must not use one ephemeral key pair for two stanzas.
+    check(len(set(ephemeral_keys)) == 3, "each folder stanza has its own ephemeral key")
+    check("ephemeral_private_key" not in i, "no shared ephemeral key")
     header_hash, file_key, link_secret = b(i["header_hash"]), b(i["file_key"]), b(i["link_secret"])
     child_private_key, child_public_key = b(i["child_folder_private_key"]), b(i["child_folder_public_key"])
     check(ref.x25519_public_key(child_private_key) == child_public_key, "child folder key pair")
-    file_stanza = ref.folder_file_stanza(folder_public_key, ephemeral_private_key, header_hash, file_key)
-    link_stanza = ref.folder_link_secret_stanza(folder_public_key, ephemeral_private_key, header_hash, link_secret)
-    parent_stanza = ref.parent_folder_stanza(folder_public_key, ephemeral_private_key, child_public_key, child_private_key)
+    file_stanza = ref.folder_file_stanza(folder_public_key, ephemeral_keys[0], header_hash, file_key)
+    link_stanza = ref.folder_link_secret_stanza(folder_public_key, ephemeral_keys[1], header_hash, link_secret)
+    parent_stanza = ref.parent_folder_stanza(folder_public_key, ephemeral_keys[2], child_public_key, child_private_key)
+    check(len({file_stanza[:32], link_stanza[:32], parent_stanza[:32]}) == 3, "three ephemeral public keys")
+    check(len(file_stanza) == 96 and len(link_stanza) == 96 and len(parent_stanza) == 96, "folder stanzas have 96 bytes")
     private_key = KNOWN_X25519_PRIVATE_KEYS[folder_public_key]
+    check(ref.open_folder_file_stanza(private_key, header_hash, file_stanza) == file_key, "folder_file_stanza round trip")
     check(
-        ref.public_unwrap(private_key, "flare e2ee v1 folder file stanza", header_hash, file_stanza) == file_key,
-        "folder_file_stanza round trip",
-    )
-    check(
-        ref.public_unwrap(private_key, "flare e2ee v1 folder link secret stanza", header_hash, link_stanza)
-        == link_secret,
+        ref.open_folder_link_secret_stanza(private_key, header_hash, link_stanza) == link_secret,
         "folder_link_secret_stanza round trip",
     )
     check(
-        ref.public_unwrap(private_key, "flare e2ee v1 parent folder stanza", child_public_key, parent_stanza)
-        == child_private_key,
+        ref.open_parent_folder_stanza(private_key, child_public_key, parent_stanza) == child_private_key,
         "parent_folder_stanza round trip",
     )
-    expect_reject(
+    expect_reason(
+        "tag",
         "a folder file stanza does not open as a link secret stanza",
-        ref.public_unwrap,
+        ref.open_folder_link_secret_stanza,
         private_key,
-        "flare e2ee v1 folder link secret stanza",
         header_hash,
         file_stanza,
     )
@@ -397,6 +564,136 @@ def run_folder_stanzas(i: dict) -> dict:
         "folder_link_secret_stanza": link_stanza.hex(),
         "parent_folder_stanza": parent_stanza.hex(),
     }
+
+
+# --------------------------------------------------------------------------
+# `rejects ...` vectors of the procedures that wrap or open a stanza.
+#
+# input, unwrap:  direction_text "unwrap", the private key of the reader,
+#                 the values that the reader has, and `stanza`.
+# input, wrap:    direction_text "wrap" and the inputs of the wrap vector,
+#                 with the public key that is not canonical.
+# folder_stanzas: also stanza_kind_text "file", "link_secret" or "parent".
+# output:         {"error": true}
+# --------------------------------------------------------------------------
+
+FOLDER_CONTEXTS = {
+    "file": "flare e2ee v1 folder file stanza",
+    "link_secret": "flare e2ee v1 folder link secret stanza",
+    "parent": "flare e2ee v1 parent folder stanza",
+}
+
+UNWRAP_FIELDS = {
+    ("public_wrap", None): {"direction_text", "recipient_private_key", "context_text", "associated_data", "stanza"},
+    ("account_stanza", None): {"direction_text", "account_private_key", "header_hash", "stanza"},
+    ("password_stanza", None): {"direction_text", "password_text", "link_secret", "header_hash", "stanza", "memory_kib", "passes", "lanes"},
+    ("folder_stanzas", "file"): {"direction_text", "stanza_kind_text", "folder_private_key", "header_hash", "stanza"},
+    ("folder_stanzas", "link_secret"): {"direction_text", "stanza_kind_text", "folder_private_key", "header_hash", "stanza"},
+    ("folder_stanzas", "parent"): {"direction_text", "stanza_kind_text", "folder_private_key", "child_folder_public_key", "stanza"},
+}
+
+
+def strict_unwrap(procedure: str, i: dict) -> bytes:
+    """The reader of reference.py for the `input` of an unwrap rejection."""
+    stanza = b(i["stanza"])
+    if procedure == "public_wrap":
+        return ref.public_unwrap(b(i["recipient_private_key"]), i["context_text"], b(i["associated_data"]), stanza)
+    if procedure == "account_stanza":
+        return ref.open_account_stanza(b(i["account_private_key"]), b(i["header_hash"]), stanza)
+    if procedure == "password_stanza":
+        return ref.open_password_stanza(
+            i["password_text"], b(i["link_secret"]), b(i["header_hash"]), stanza, i["memory_kib"], i["passes"], i["lanes"]
+        )
+    kind, private_key = i["stanza_kind_text"], b(i["folder_private_key"])
+    if kind == "file":
+        return ref.open_folder_file_stanza(private_key, b(i["header_hash"]), stanza)
+    if kind == "link_secret":
+        return ref.open_folder_link_secret_stanza(private_key, b(i["header_hash"]), stanza)
+    return ref.open_parent_folder_stanza(private_key, b(i["child_folder_public_key"]), stanza)
+
+
+def lax_reader_arguments(procedure: str, i: dict) -> tuple[bytes, str, bytes]:
+    """(X25519 private key, context, associated data) of an unwrap rejection of a public-key stanza."""
+    if procedure == "public_wrap":
+        return b(i["recipient_private_key"]), i["context_text"], b(i["associated_data"])
+    if procedure == "account_stanza":
+        return ref.ed2curve_private(b(i["account_private_key"])), "flare e2ee v1 account stanza", b(i["header_hash"])
+    kind = i["stanza_kind_text"]
+    associated_data = b(i["child_folder_public_key"]) if kind == "parent" else b(i["header_hash"])
+    return b(i["folder_private_key"]), FOLDER_CONTEXTS[kind], associated_data
+
+
+def strict_wrap(procedure: str, i: dict) -> bytes:
+    """The writer of reference.py for the `input` of a wrap rejection."""
+    if procedure == "public_wrap":
+        return ref.public_wrap(
+            b(i["recipient_public_key"]), b(i["ephemeral_private_key"]), i["context_text"], b(i["associated_data"]), b(i["secret"])
+        )
+    if procedure == "account_stanza":
+        return ref.account_stanza(b(i["account_public_key"]), b(i["ephemeral_private_key"]), b(i["header_hash"]), b(i["file_key"]))
+    kind, folder_public_key = i["stanza_kind_text"], b(i["folder_public_key"])
+    if kind == "file":
+        return ref.folder_file_stanza(folder_public_key, b(i["file_ephemeral_private_key"]), b(i["header_hash"]), b(i["file_key"]))
+    if kind == "link_secret":
+        return ref.folder_link_secret_stanza(
+            folder_public_key, b(i["link_secret_ephemeral_private_key"]), b(i["header_hash"]), b(i["link_secret"])
+        )
+    return ref.parent_folder_stanza(
+        folder_public_key, b(i["parent_ephemeral_private_key"]), b(i["child_folder_public_key"]), b(i["child_folder_private_key"])
+    )
+
+
+def run_rejects(procedure: str, i: dict, expect: dict) -> dict:
+    """`expect` is not written to the file. It says why the input must fail.
+
+    reason        the cause that the strict procedure must give
+    secret        for a key that is not canonical in a stanza: what a reader
+                  without rule 3a gets from the same stanza
+    original      for a changed byte: the stanza before the change
+    """
+    reason = expect["reason"]
+    kind = i.get("stanza_kind_text")
+    check((kind is not None) == (procedure == "folder_stanzas"), "stanza_kind_text is for folder_stanzas only")
+
+    if i["direction_text"] == "wrap":
+        check(reason == "not_canonical", "a wrap rejection is for a key that is not canonical")
+        expect_reason(reason, f"{procedure} wrap", strict_wrap, procedure, i)
+        if procedure == "account_stanza":
+            # The Edwards y is p + k. Without the rule, it is the point with y = k, and the wrap works.
+            y = int.from_bytes(b(i["account_public_key"]), "little")
+            check(P <= y < 1 << 255, "account public key has y >= p and no sign bit")
+            same_point = (y - P).to_bytes(32, "little")
+            ref.account_stanza(same_point, b(i["ephemeral_private_key"]), b(i["header_hash"]), b(i["file_key"]))
+        else:
+            # Without the rule, X25519 gives a shared secret that is not zero, thus the wrap would work.
+            name = "recipient_public_key" if procedure == "public_wrap" else "folder_public_key"
+            ephemeral_name = "ephemeral_private_key" if procedure == "public_wrap" else f"{kind}_ephemeral_private_key"
+            ref.x25519_checked_pure(b(i[ephemeral_name]), b(i[name]))
+            # The same input with the canonical form of the key is accepted.
+            canonical = (int.from_bytes(b(i[name]), "little") % (1 << 255) % P).to_bytes(32, "little")
+            strict_wrap(procedure, dict(i, **{name: canonical.hex()}))
+        return dict(ERROR_OUTPUT)
+
+    check(i["direction_text"] == "unwrap", "direction_text")
+    check(set(i) == UNWRAP_FIELDS[(procedure, kind)], f"{procedure} unwrap rejection: input fields")
+    expect_reason(reason, f"{procedure} unwrap", strict_unwrap, procedure, i)
+    if reason == "not_canonical":
+        check(int.from_bytes(b(i["stanza"])[:32], "little") >= P, "ephemeral public key is not canonical")
+        private_key, context, associated_data = lax_reader_arguments(procedure, i)
+        check(lax_unwrap(private_key, context, associated_data, b(i["stanza"])) == expect["secret"], "a reader without rule 3a opens the stanza")
+    elif reason == "tag":
+        original = expect["original"]
+        check(one_byte_differs(original, b(i["stanza"])), "exactly one byte is changed")
+        check(strict_unwrap(procedure, dict(i, stanza=original.hex())) == expect["secret"], "the stanza without the change opens")
+    elif reason == "key_mismatch":
+        # Section 8.4.2. The stanza itself is correct: public_unwrap opens it.
+        private_key, context, associated_data = lax_reader_arguments(procedure, i)
+        opened = ref.public_unwrap(private_key, context, associated_data, b(i["stanza"]))
+        check(opened == expect["secret"], "the stanza opens")
+        check(ref.x25519_public_key(opened) != b(i["child_folder_public_key"]), "the private key gives a different public key")
+    else:
+        raise AssertionError(f"self-check failed: no check for the cause '{reason}'")
+    return dict(ERROR_OUTPUT)
 
 
 def run_tag(i: dict) -> dict:
@@ -449,11 +746,16 @@ PROCEDURES = {
 # --------------------------------------------------------------------------
 
 
-def build_inputs() -> list[tuple[str, str, dict]]:
-    cases: list[tuple[str, str, dict]] = []
+def build_inputs() -> list[tuple[str, str, dict, dict | None]]:
+    cases: list[tuple[str, str, dict, dict | None]] = []
 
     def add(procedure: str, name: str, **inputs) -> None:
-        cases.append((procedure, name, inputs))
+        cases.append((procedure, name, inputs, None))
+
+    def add_rejects(procedure: str, name: str, expect: dict, **inputs) -> None:
+        """`expect` goes to the self-check only, not to the file."""
+        check(name.startswith(("rejects ", "decrypt_rejects ")), "name of a rejection vector")
+        cases.append((procedure, name, inputs, expect))
 
     # Values that several procedures share.
     file_key_a, file_key_b = sequence(32), fixed("file key b")
@@ -491,9 +793,11 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("seal", "empty message", key=seal_key.hex(), nonce=seal_nonce.hex(), associated_data=sequence(32, 0x80).hex(), message="")
     add("seal", "empty associated data", key=seal_key.hex(), nonce=seal_nonce.hex(), associated_data="", message=sequence(32, 0xC0).hex())
     add("seal", "empty message and empty associated data", key=seal_key.hex(), nonce=seal_nonce.hex(), associated_data="", message="")
-    add("seal", "zero nonce", key=fixed("seal key").hex(), nonce=ref.zeros(24).hex(), associated_data=fixed("seal associated data", 7).hex(), message=fixed("seal message", 1).hex())
+    add("seal", "nonce of ff bytes", key=fixed("seal key").hex(), nonce=(b"\xff" * 24).hex(), associated_data=fixed("seal associated data", 7).hex(), message=fixed("seal message", 1).hex())
     add("seal", "message longer than one cipher block", key=fixed("seal key").hex(), nonce=fixed("seal nonce", 24).hex(), associated_data=fixed("seal associated data", 300).hex(), message=pattern(200).hex())
     add("seal", "message of exactly one cipher block", key=fixed("seal key").hex(), nonce=fixed("seal nonce 2", 24).hex(), associated_data=sequence(1).hex(), message=pattern(64).hex())
+
+    add("seal", "nonce from the key as in seal_once (section 4.2.1); seal_once gives this box without its first 24 bytes", key=fixed("seal key").hex(), nonce=ref.one_time_nonce(fixed("seal key")).hex(), associated_data=header_hash_a.hex(), message=file_key_a.hex())
 
     # account_keys
     add("account_keys", "sequence root entropy", root_entropy=root_entropy_a.hex())
@@ -524,6 +828,12 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     auth_private_key, challenge_a, challenge_b = fixed("auth private key"), sequence(32, 0x30), fixed("challenge b")
     add("sign_in_signature", "lower case identifier", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="alice@example.com")
     add("sign_in_signature", "identifier with spaces and upper case, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="  Alice@Example.COM ")
+    # Rule 7. Each character here is in Unicode since version 1.1 and has one case mapping in each locale.
+    add("sign_in_signature", "tab and no-break space at the ends, a fullwidth letter and mixed case, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="\t\uff21lice@Example.COM\u00a0")
+    add("sign_in_signature", "White_Space that is not a space: U+0085 and U+2028 at the ends, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="\u0085\u2028alice@EXAMPLE.com\u3000\u0085")
+    add("sign_in_signature", "U+FEFF at the start does not have White_Space and stays, different output", auth_private_key=auth_private_key.hex(), challenge=challenge_a.hex(), identifier_text="\ufeffalice@example.com")
+    add("sign_in_signature", "spaces inside the identifier stay, a fullwidth space becomes U+0020", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text=" Alice\u3000Example ")
+    add("sign_in_signature", "decomposed upper case letter, same output as the lower case form", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text="E\u0301milie")
     add("sign_in_signature", "user name with an upper case non-ASCII letter", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text=" Émilie ")
     add("sign_in_signature", "the lower case form of the non-ASCII user name, same output", auth_private_key=auth_private_key.hex(), challenge=challenge_b.hex(), identifier_text="émilie")
 
@@ -532,7 +842,8 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("signed_request", "POST with a JSON body", account_private_key=request_key.hex(), challenge=challenge_a.hex(), method_text="POST", path_text="/api/e2ee/keyring", body=b'{"sealed_keyring":"AQ"}'.hex())
     add("signed_request", "DELETE with a query and an empty body", account_private_key=request_key.hex(), challenge=challenge_a.hex(), method_text="DELETE", path_text="/api/e2ee/folders/42?recursive=true", body="")
     add("signed_request", "PUT with a binary body and a percent-encoded path", account_private_key=account_b["account_private_key"].hex(), challenge=challenge_b.hex(), method_text="PUT", path_text="/api/e2ee/tags/caf%C3%A9?x=1&y=2", body=sequence(256).hex())
-    add("signed_request", "path with a non-ASCII character, encoded as UTF-8", account_private_key=account_b["account_private_key"].hex(), challenge=challenge_b.hex(), method_text="PATCH", path_text="/api/e2ee/tags/café", body="")
+    add("signed_request", "GET with the path / and an empty body", account_private_key=account_b["account_private_key"].hex(), challenge=challenge_b.hex(), method_text="GET", path_text="/", body="")
+    add("signed_request", "PATCH with percent-encoded characters in lower case hexadecimal, used as sent", account_private_key=account_b["account_private_key"].hex(), challenge=challenge_b.hex(), method_text="PATCH", path_text="/flare/api/e2ee/tags/caf%c3%a9%20%2F?q=a+b", body="")
 
     # file_keys
     add("file_keys", "sequence file key", file_key=file_key_a.hex())
@@ -551,6 +862,19 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("file_chunk", "final chunk with an index above 32 bits", file_key=file_key_b.hex(), nonce_prefix=nonce_prefix_b.hex(), chunk_index=0x0102030405, is_final=True, chunk_plaintext=pattern(100).hex())
     add("file_chunk", "full 65536-byte chunk that is not final, index 0", file_key=file_key_b.hex(), nonce_prefix=nonce_prefix_b.hex(), chunk_index=0, is_final=False, chunk_plaintext=pattern(65536).hex())
     add("file_chunk", "full 65536-byte final chunk, index 1", file_key=file_key_b.hex(), nonce_prefix=nonce_prefix_b.hex(), chunk_index=1, is_final=True, chunk_plaintext=pattern(131072)[65536:].hex())
+
+    # file_chunk, decrypt_rejects (section 7.4 rules 6 and 8, and the tag)
+    def chunk_input(file_key: bytes, nonce_prefix: bytes, chunk_index: int, is_final: bool, stored_chunk: bytes) -> dict:
+        return {"file_key": file_key.hex(), "nonce_prefix": nonce_prefix.hex(), "chunk_index": chunk_index, "is_final": is_final, "stored_chunk": stored_chunk.hex()}
+
+    add_rejects("file_chunk", "decrypt_rejects a zero-length final chunk at index 1, the tag is correct", {"reason": "empty_final_chunk", "plaintext": b""}, **chunk_input(file_key_a, nonce_prefix_a, 1, True, raw_stored_chunk(file_key_a, nonce_prefix_a, 1, True, b"")))
+    add_rejects("file_chunk", "decrypt_rejects a zero-length final chunk with an index above 32 bits, the tag is correct", {"reason": "empty_final_chunk", "plaintext": b""}, **chunk_input(file_key_b, nonce_prefix_b, 0x0102030405, True, raw_stored_chunk(file_key_b, nonce_prefix_b, 0x0102030405, True, b"")))
+    add_rejects("file_chunk", "decrypt_rejects a chunk that is not final and has less than 65536 bytes, the tag is correct", {"reason": "chunk_length", "plaintext": pattern(100)}, **chunk_input(file_key_a, nonce_prefix_a, 0, False, raw_stored_chunk(file_key_a, nonce_prefix_a, 0, False, pattern(100))))
+    good_chunk = ref.encrypt_chunk(file_key_a, nonce_prefix_a, 0, True, b"Flare test vector")
+    add_rejects("file_chunk", "decrypt_rejects a chunk with one changed byte in the ciphertext", {"reason": "tag", "opens_as": {"stored_chunk": good_chunk.hex()}}, **chunk_input(file_key_a, nonce_prefix_a, 0, True, flip(good_chunk, 0)))
+    add_rejects("file_chunk", "decrypt_rejects a chunk with one changed byte in the tag", {"reason": "tag", "opens_as": {"stored_chunk": good_chunk.hex()}}, **chunk_input(file_key_a, nonce_prefix_a, 0, True, flip(good_chunk, -1)))
+    add_rejects("file_chunk", "decrypt_rejects a chunk at a different index", {"reason": "tag", "opens_as": {"chunk_index": 0}}, **chunk_input(file_key_a, nonce_prefix_a, 1, True, good_chunk))
+    add_rejects("file_chunk", "decrypt_rejects a zero-length chunk of index 0 with the tag of a different file key", {"reason": "tag", "opens_as": {"file_key": file_key_b.hex()}}, **chunk_input(file_key_a, nonce_prefix_a, 0, True, ref.encrypt_chunk(file_key_b, nonce_prefix_a, 0, True, b"")))
 
     # file
     for length in REQUIRED_FILE_LENGTHS:
@@ -577,9 +901,35 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("public_wrap", "empty secret", recipient_public_key=recipient_public_key_2.hex(), ephemeral_private_key=fixed("ephemeral private key 3").hex(), context_text="flare e2ee v1 test vector", associated_data=sequence(5).hex(), secret="")
     add("public_wrap", "ephemeral private key with all bits set", recipient_public_key=recipient_public_key_2.hex(), ephemeral_private_key=(b"\xff" * 32).hex(), context_text="flare e2ee v1 parent folder stanza", associated_data=fixed("public wrap associated data", 48).hex(), secret=fixed("public wrap secret", 80).hex())
 
+    top_bit_ephemeral = set_highest_bit(ref.x25519_public_key(fixed("ephemeral private key for a rejection")))
+    check(int.from_bytes(top_bit_ephemeral, "little") >= P and int.from_bytes(BASE_POINT_PLUS_P, "little") >= P, "forms that are not canonical")
+    check(BASE_POINT_PLUS_P[31] & 0x80 == 0, "the second form has no highest bit")
+    HIGH_BIT = "with the highest bit set"
+    NOT_LESS = "that is not less than 2^255 - 19"
+
+    def unwrap_rejects(procedure: str, suffix: str, private_key: bytes, context: str, associated_data: bytes, secret: bytes, good_stanza: bytes, changed_at: list[tuple[str, int]], /, **reader_inputs) -> None:
+        """The unwrap rejections of one public-key stanza. `private_key` is the X25519 key of the reader."""
+        for form, ephemeral_public_key in ((HIGH_BIT, top_bit_ephemeral), (NOT_LESS, BASE_POINT_PLUS_P)):
+            stanza = lax_stanza(private_key, ephemeral_public_key, context, associated_data, secret)
+            add_rejects(procedure, f"rejects an ephemeral public key {form}{suffix}", {"reason": "not_canonical", "secret": secret}, direction_text="unwrap", **reader_inputs, stanza=stanza.hex())
+        for where, index in changed_at:
+            add_rejects(procedure, f"rejects a stanza with one changed byte in the {where}{suffix}", {"reason": "tag", "secret": secret, "original": good_stanza}, direction_text="unwrap", **reader_inputs, stanza=flip(good_stanza, index).hex())
+
+    wrap_inputs = dict(ephemeral_private_key=sequence(32, 0x70).hex(), context_text="flare e2ee v1 folder file stanza", associated_data=header_hash_a.hex(), secret=file_key_a.hex())
+    add_rejects("public_wrap", f"rejects a recipient public key {HIGH_BIT}", {"reason": "not_canonical"}, direction_text="wrap", recipient_public_key=set_highest_bit(recipient_public_key).hex(), **wrap_inputs)
+    add_rejects("public_wrap", f"rejects a recipient public key {NOT_LESS}", {"reason": "not_canonical"}, direction_text="wrap", recipient_public_key=BASE_POINT_PLUS_P.hex(), **wrap_inputs)
+    good_stanza = ref.public_wrap(recipient_public_key, sequence(32, 0x70), "flare e2ee v1 folder file stanza", header_hash_a, file_key_a)
+    unwrap_rejects("public_wrap", "", recipient_private_key, "flare e2ee v1 folder file stanza", header_hash_a, file_key_a, good_stanza, [("ciphertext", 32), ("tag", 95)], recipient_private_key=recipient_private_key.hex(), context_text="flare e2ee v1 folder file stanza", associated_data=header_hash_a.hex())
+
     # account_stanza
     add("account_stanza", "account of the sequence root entropy", account_public_key=account_a["account_public_key"].hex(), ephemeral_private_key=sequence(32, 0x70).hex(), header_hash=header_hash_a.hex(), file_key=file_key_a.hex())
     add("account_stanza", "second account", account_public_key=account_b["account_public_key"].hex(), ephemeral_private_key=fixed("ephemeral private key 4").hex(), header_hash=header_hash_b.hex(), file_key=file_key_b.hex())
+
+    # An Edwards y that is not canonical: p + k, where y = k is a point of the curve (not y = 1).
+    small_y = next(k for k in range(2, 19) if decodes(k.to_bytes(32, "little")))
+    add_rejects("account_stanza", "rejects an account public key with y that is not less than 2^255 - 19", {"reason": "not_canonical"}, direction_text="wrap", account_public_key=(P + small_y).to_bytes(32, "little").hex(), ephemeral_private_key=sequence(32, 0x70).hex(), header_hash=header_hash_a.hex(), file_key=file_key_a.hex())
+    good_stanza = ref.account_stanza(account_a["account_public_key"], sequence(32, 0x70), header_hash_a, file_key_a)
+    unwrap_rejects("account_stanza", "", account_a["exchange_private_key"], "flare e2ee v1 account stanza", header_hash_a, file_key_a, good_stanza, [("ciphertext", 32), ("tag", 95)], account_private_key=account_a["account_private_key"].hex(), header_hash=header_hash_a.hex())
 
     # password_stanza
     password_fullwidth = "Ｐａｓｓword ⁵"  # fullwidth "Pass", superscript five
@@ -589,11 +939,16 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("password_stanza", "the NFKC form of that password, same output", password_text="Password 5", password_salt=fixed("password salt b").hex(), link_secret=link_secret_b.hex(), owner_public_key=account_b["account_public_key"].hex(), header_hash=header_hash_b.hex(), file_key=file_key_b.hex(), link_secret_nonce=fixed("link secret nonce b", 24).hex(), **FAST)
     add("password_stanza", "real parameters", password_text="open sesame 42", password_salt=sequence(32, 0x90).hex(), link_secret=link_secret_a.hex(), owner_public_key=owner_public_key.hex(), header_hash=header_hash_a.hex(), file_key=file_key_a.hex(), link_secret_nonce=sequence(24, 0xB0).hex(), **REAL)
 
+    # A change in sealed_link_secret (the last 88 bytes) does not stop the visitor, thus no vector changes a byte there.
+    good_stanza = ref.password_stanza("open sesame 42", sequence(32, 0x90), link_secret_a, owner_public_key, header_hash_a, file_key_a, sequence(24, 0xB0), **FAST)[1]
+    for where, index in (("password_salt", 0), ("owner_public_key", 32), ("ciphertext of wrapped_file_key", 64), ("tag of wrapped_file_key", 127)):
+        add_rejects("password_stanza", f"rejects a stanza with one changed byte in the {where}", {"reason": "tag", "secret": file_key_a, "original": good_stanza}, direction_text="unwrap", password_text="open sesame 42", link_secret=link_secret_a.hex(), header_hash=header_hash_a.hex(), stanza=flip(good_stanza, index).hex(), **FAST)
+
     # sealed_keyring
     old_keys = [fixed(f"old account private key {n}") for n in (3, 2, 1)]
     add("sealed_keyring", "one old private key", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xD0).hex(), old_private_keys=[old_keys[2].hex()])
     add("sealed_keyring", "three old private keys, newest first", account_private_key=account_b["account_private_key"].hex(), account_public_key=account_b["account_public_key"].hex(), nonce=fixed("keyring nonce b", 24).hex(), old_private_keys=[key.hex() for key in old_keys])
-    add("sealed_keyring", "empty list of old private keys", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xD1).hex(), old_private_keys=[])
+    add("sealed_keyring", "two old private keys, newest first", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xD1).hex(), old_private_keys=[old_keys[1].hex(), old_keys[2].hex()])
 
     # folder
     add("folder", "folder a", folder_private_key=folder_private_key_a.hex(), account_private_key=account_a["account_private_key"].hex(), metadata_nonce=sequence(24, 0xE0).hex(), private_key_nonce=sequence(24, 0xE8).hex(), folder_metadata_text='{"name":"Screenshots"}')
@@ -601,8 +956,22 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     add("folder", "folder private key that is not a clamped scalar", folder_private_key=(b"\xff" * 32).hex(), account_private_key=account_a["account_private_key"].hex(), metadata_nonce=sequence(24, 0xE1).hex(), private_key_nonce=sequence(24, 0xE9).hex(), folder_metadata_text='{"name":"x"}')
 
     # folder_stanzas
-    add("folder_stanzas", "folder a", folder_public_key=folder_public_key_a.hex(), ephemeral_private_key=sequence(32, 0x70).hex(), header_hash=header_hash_a.hex(), file_key=file_key_a.hex(), link_secret=link_secret_a.hex(), child_folder_private_key=child_private_key_a.hex(), child_folder_public_key=child_public_key_a.hex())
-    add("folder_stanzas", "folder b", folder_public_key=folder_public_key_b.hex(), ephemeral_private_key=fixed("ephemeral private key 5").hex(), header_hash=header_hash_b.hex(), file_key=file_key_b.hex(), link_secret=link_secret_b.hex(), child_folder_private_key=child_private_key_b.hex(), child_folder_public_key=child_public_key_b.hex())
+    stanzas_a = dict(folder_public_key=folder_public_key_a.hex(), file_ephemeral_private_key=sequence(32, 0x70).hex(), link_secret_ephemeral_private_key=sequence(32, 0x71).hex(), parent_ephemeral_private_key=sequence(32, 0x72).hex(), header_hash=header_hash_a.hex(), file_key=file_key_a.hex(), link_secret=link_secret_a.hex(), child_folder_private_key=child_private_key_a.hex(), child_folder_public_key=child_public_key_a.hex())
+    add("folder_stanzas", "folder a", **stanzas_a)
+    add("folder_stanzas", "folder b", folder_public_key=folder_public_key_b.hex(), file_ephemeral_private_key=fixed("ephemeral private key 5").hex(), link_secret_ephemeral_private_key=fixed("ephemeral private key 6").hex(), parent_ephemeral_private_key=fixed("ephemeral private key 7").hex(), header_hash=header_hash_b.hex(), file_key=file_key_b.hex(), link_secret=link_secret_b.hex(), child_folder_private_key=child_private_key_b.hex(), child_folder_public_key=child_public_key_b.hex())
+    kinds = {
+        "file": (header_hash_a, file_key_a, ref.folder_file_stanza(folder_public_key_a, sequence(32, 0x70), header_hash_a, file_key_a), {"header_hash": header_hash_a.hex()}),
+        "link_secret": (header_hash_a, link_secret_a, ref.folder_link_secret_stanza(folder_public_key_a, sequence(32, 0x71), header_hash_a, link_secret_a), {"header_hash": header_hash_a.hex()}),
+        "parent": (child_public_key_a, child_private_key_a, ref.parent_folder_stanza(folder_public_key_a, sequence(32, 0x72), child_public_key_a, child_private_key_a), {"child_folder_public_key": child_public_key_a.hex()}),
+    }
+    for kind, (associated_data, secret, good_stanza, reader_inputs) in kinds.items():
+        suffix = f" ({kind} stanza)"
+        add_rejects("folder_stanzas", f"rejects a folder public key {HIGH_BIT}{suffix}", {"reason": "not_canonical"}, direction_text="wrap", stanza_kind_text=kind, **dict(stanzas_a, folder_public_key=set_highest_bit(folder_public_key_a).hex()))
+        add_rejects("folder_stanzas", f"rejects a folder public key {NOT_LESS}{suffix}", {"reason": "not_canonical"}, direction_text="wrap", stanza_kind_text=kind, **dict(stanzas_a, folder_public_key=BASE_POINT_PLUS_P.hex()))
+        unwrap_rejects("folder_stanzas", suffix, folder_private_key_a, FOLDER_CONTEXTS[kind], associated_data, secret, good_stanza, [("tag", 95)], stanza_kind_text=kind, folder_private_key=folder_private_key_a.hex(), **reader_inputs)
+    # Section 8.4.2: a correct stanza that holds the private key of a different folder.
+    wrong_child = ref.parent_folder_stanza(folder_public_key_a, sequence(32, 0x73), child_public_key_a, child_private_key_b)
+    add_rejects("folder_stanzas", "rejects a parent folder stanza with a private key that does not give the folder public key (parent stanza)", {"reason": "key_mismatch", "secret": child_private_key_b}, direction_text="unwrap", stanza_kind_text="parent", folder_private_key=folder_private_key_a.hex(), child_folder_public_key=child_public_key_a.hex(), stanza=wrong_child.hex())
 
     # tag
     add("tag", "tag with a file name rule", account_private_key=account_a["account_private_key"].hex(), account_public_key=account_a["account_public_key"].hex(), nonce=sequence(24, 0xF0).hex(), tag_metadata_text='{"name":"Invoices","rule_source":"filename","rule_text":"invoice"}')
@@ -618,10 +987,30 @@ def build_inputs() -> list[tuple[str, str, dict]]:
     return cases
 
 
+def decodes(account_public_key: bytes) -> bool:
+    """True if the Edwards point decodes and gives an X25519 key that X25519 accepts."""
+    try:
+        ref.x25519_checked_pure(sequence(32, 0x70), ref.ed2curve_public(account_public_key))
+        return True
+    except ref.Reject:
+        return False
+
+
+def is_rejection(name: str) -> bool:
+    return name.startswith(("rejects ", "decrypt_rejects "))
+
+
 def build_vectors() -> list[dict]:
     vectors = []
-    for procedure, name, inputs in build_inputs():
-        output = PROCEDURES[procedure](inputs)
+    for procedure, name, inputs, expect in build_inputs():
+        if expect is None:
+            check(not is_rejection(name), "a vector with a result has a name without `rejects`")
+            output = PROCEDURES[procedure](inputs)
+        elif name.startswith("decrypt_rejects "):
+            check(procedure == "file_chunk", "decrypt_rejects is for file_chunk")
+            output = run_file_chunk_decrypt_rejects(inputs, expect)
+        else:
+            output = run_rejects(procedure, inputs, expect)
         vectors.append({"procedure": procedure, "name": name, "input": inputs, "output": output})
     check_vector_set(vectors)
     return vectors
@@ -632,13 +1021,34 @@ def check_vector_set(vectors: list[dict]) -> None:
     by_procedure: dict[str, list[dict]] = {}
     for vector in vectors:
         by_procedure.setdefault(vector["procedure"], []).append(vector)
+    rejections = [v for v in vectors if is_rejection(v["name"])]
+    for vector in vectors:
+        check(("error" in vector["output"]) == is_rejection(vector["name"]), "only a rejection vector has an error output")
+    for vector in rejections:
+        check(vector["output"] == {"error": True}, "the output of a rejection vector is exactly error: true")
     for procedure in PROCEDURES:
-        check(len(by_procedure.get(procedure, [])) >= 2, f"{procedure} has at least two vectors")
+        with_result = [v for v in by_procedure.get(procedure, []) if not is_rejection(v["name"])]
+        check(len(with_result) >= 2, f"{procedure} has at least two vectors")
+        has_rejection = any(is_rejection(v["name"]) for v in by_procedure[procedure])
+        expected = procedure in ("public_wrap", "account_stanza", "password_stanza", "folder_stanzas", "file_chunk")
+        check(has_rejection == expected, f"{procedure}: rejection vectors")
+    for procedure in ("public_wrap", "account_stanza", "folder_stanzas"):
+        names = [v["name"] for v in by_procedure[procedure]]
+        check(any("public key" in n and n.startswith("rejects ") for n in names), f"{procedure} rejects a key that is not canonical")
+        check(any("one changed byte" in n for n in names), f"{procedure} rejects a changed byte")
+    check(any("one changed byte" in v["name"] for v in by_procedure["password_stanza"]), "password_stanza rejects a changed byte")
+    check(
+        any(v["name"].startswith("decrypt_rejects a zero-length final chunk") and v["input"]["chunk_index"] > 0 for v in by_procedure["file_chunk"]),
+        "file_chunk has a decrypt_rejects vector for a zero-length final chunk above index 0",
+    )
+    check(all(v["input"]["old_private_keys"] for v in by_procedure["sealed_keyring"]), "no sealed_keyring vector has an empty list")
+    check(all("ephemeral_private_key" not in v["input"] for v in by_procedure["folder_stanzas"]), "folder_stanzas has no shared ephemeral key")
+    # Section 4.3: the real parameters are 65536, 3, 4. Each other vector uses the fast test values.
     for procedure in ("passphrase_keys", "password_stanza"):
-        check(
-            any(v["input"]["memory_kib"] == 65536 and v["input"]["passes"] == 3 and v["input"]["lanes"] == 4 for v in by_procedure[procedure]),
-            f"{procedure} has a vector with the real parameters",
-        )
+        parameters = [(v["input"]["memory_kib"], v["input"]["passes"], v["input"]["lanes"]) for v in by_procedure[procedure]]
+        check(parameters.count((65536, 3, 4)) == 1, f"{procedure} has one vector with the real parameters")
+        check(set(parameters) == {(65536, 3, 4), (8, 1, 1)}, f"{procedure} uses the real and the fast parameters only")
+    check((ref.ARGON2_MEMORY_KIB, ref.ARGON2_PASSES, ref.ARGON2_LANES) == (65536, 3, 4), "fixed Argon2id parameters")
     lengths = {v["input"]["plaintext_length"] for v in by_procedure["file"]}
     check(lengths >= set(REQUIRED_FILE_LENGTHS), "file has each required plaintext length")
     names = [(v["procedure"], v["name"]) for v in vectors]
@@ -678,6 +1088,33 @@ def check_vector_set(vectors: list[dict]) -> None:
         == output_of("sign_in_signature", "the lower case form of the non-ASCII user name, same output"),
         "non-ASCII identifier pair",
     )
+    alice = output_of("sign_in_signature", "lower case identifier")
+    check(alice["identifier_normalized_text"] == "alice@example.com", "normalized identifier")
+    for name in (
+        "tab and no-break space at the ends, a fullwidth letter and mixed case, same output as the lower case form",
+        "White_Space that is not a space: U+0085 and U+2028 at the ends, same output as the lower case form",
+    ):
+        check(output_of("sign_in_signature", name) == alice, f"identifier: {name}")
+    kept = output_of("sign_in_signature", "U+FEFF at the start does not have White_Space and stays, different output")
+    check(kept["identifier_normalized_text"] == "\ufeffalice@example.com" and kept["signature"] != alice["signature"], "U+FEFF stays")
+    check(
+        output_of("sign_in_signature", "spaces inside the identifier stay, a fullwidth space becomes U+0020")["identifier_normalized_text"]
+        == "alice example",
+        "inner space",
+    )
+    check(
+        output_of("sign_in_signature", "decomposed upper case letter, same output as the lower case form")
+        == output_of("sign_in_signature", "the lower case form of the non-ASCII user name, same output"),
+        "decomposed identifier",
+    )
+    for vector in by_procedure["sign_in_signature"]:
+        check(set(vector["output"]) == {"signature", "identifier_normalized_text"}, "sign_in_signature outputs")
+        # The vectors use no character that Unicode added after version 13.
+        # Only characters of Unicode 1.1: Latin, U+0301, U+2028, U+3000, U+FEFF and the fullwidth forms.
+        check(
+            all(ord(c) < 0x250 or ord(c) in (0x301, 0x2028, 0x3000, 0xFEFF) or 0xFF01 <= ord(c) <= 0xFF5E for c in vector["input"]["identifier_text"]),
+            "identifier characters are old and stable",
+        )
     # The `file` vectors agree with the `header` and `file_chunk` procedures.
     empty_file = output_of("file", "plaintext of 0 bytes")
     header = output_of("header", "sequence nonce prefix")["header"]
@@ -688,7 +1125,8 @@ def check_vector_set(vectors: list[dict]) -> None:
     check(output_of("file", "plaintext of 131072 bytes")["stored_length"] == 26 + 2 * 65568, "131072 bytes give two chunks")
     # No output has the record_version byte, except in encode_record: check the fixed lengths.
     for vector in by_procedure["account_stanza"]:
-        check(len(vector["output"]["stanza"]) == 240, "account stanza hex length")
+        if not is_rejection(vector["name"]):
+            check(len(vector["output"]["stanza"]) == 192, "account stanza hex length")
     for vector in by_procedure["wrapped_root"]:
         check(len(vector["output"]["wrapped_root"]) == 176, "wrapped_root hex length")
 
@@ -711,9 +1149,11 @@ def main() -> int:
     counts: dict[str, int] = {}
     for vector in vectors:
         counts[vector["procedure"]] = counts.get(vector["procedure"], 0) + 1
+    rejections = {p: sum(1 for v in vectors if v["procedure"] == p and is_rejection(v["name"])) for p in counts}
     for procedure, count in counts.items():
-        print(f"vectors {count:2d}  {procedure}")
-    print(f"vectors {len(vectors)} in total, each round-trip self-check passed")
+        note = f"  ({rejections[procedure]} with error: true)" if rejections[procedure] else ""
+        print(f"vectors {count:2d}  {procedure}{note}")
+    print(f"vectors {len(vectors)} in total, {sum(rejections.values())} with error: true, each self-check passed")
 
     text = render(vectors)
     if arguments.check:

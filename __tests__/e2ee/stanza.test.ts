@@ -1,19 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
-import { deriveAccountKeys } from './account'
-import { nobleArgon2id } from './argon2-noble'
-import { CONTEXTS } from './contexts'
-import { deriveLinkSecretKey } from './file'
-import { V1_KDF_PARAMETERS } from './kdf'
+import { deriveAccountKeys } from '@/lib/e2ee/account'
+import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
+import { CONTEXTS } from '@/lib/e2ee/contexts'
+import { deriveLinkSecretKey } from '@/lib/e2ee/file'
+import { V1_ARGON2ID_PARAMETERS } from '@/lib/e2ee/kdf'
 import {
   blake3DeriveKey,
   concatBytes,
   utf8,
   x25519PublicKey,
   x25519SharedSecret,
-} from './primitives'
-import { folderPublicKeyOf } from './records'
-import { open, seal } from './seal'
+} from '@/lib/e2ee/primitives'
+import { folderPublicKeyOf } from '@/lib/e2ee/records'
+import { open, openOnce, seal, sealOnce } from '@/lib/e2ee/seal'
 import {
   ACCOUNT_STANZA_LENGTH,
   PASSWORD_STANZA_LENGTH,
@@ -31,20 +31,11 @@ import {
   wrapFolderLinkSecretStanza,
   wrapParentFolderStanza,
   wrapPasswordStanza,
-} from './stanza'
+} from '@/lib/e2ee/stanza'
 import {
-  FAST_KDF,
-  expectReason,
-  expectReasonAsync,
-  fakeArgon2id,
-  flipBit,
-  hex,
-  pattern,
-} from './test-support'
-import {
-  unwrapPasswordStanzaForTestsOnly,
-  wrapPasswordStanzaForTestsOnly,
-} from './testing'
+  unwrapPasswordStanzaWithParametersForTestsOnly,
+  wrapPasswordStanzaWithParametersForTestsOnly,
+} from '@/lib/e2ee/testing'
 import {
   asAccountPublicKey,
   asEphemeralPrivateKey,
@@ -58,7 +49,17 @@ import {
   asPasswordSalt,
   asRootEntropy,
   asSealNonce,
-} from './types'
+} from '@/lib/e2ee/types'
+
+import {
+  FAST_KDF,
+  expectReason,
+  expectReasonAsync,
+  fakeArgon2id,
+  flipBit,
+  hex,
+  pattern,
+} from './test-support'
 
 const accountKeys = deriveAccountKeys(asRootEntropy(pattern(32, 61)))
 const otherAccountKeys = deriveAccountKeys(asRootEntropy(pattern(32, 62)))
@@ -69,6 +70,19 @@ const fileKey = asFileKey(pattern(32, 66))
 const linkSecret = asLinkSecret(pattern(32, 67))
 const LOW_ORDER_POINT =
   'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800'
+/** Section 4.4, rule 3a: a value of 2^255 - 19 or more, or the highest bit set. */
+const NON_CANONICAL_KEYS = [
+  // 2^255 - 19, the same point as 0
+  'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+  // 2^255 - 18, the same point as 1
+  'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+  // 2^255 - 1
+  'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+  // 9 with the highest bit set
+  '0900000000000000000000000000000000000000000000000000000000000080',
+  // 2^256 - 1
+  'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+]
 
 describe('public_wrap', () => {
   const recipientPrivateKey = asFolderPrivateKey(pattern(32, 70))
@@ -84,7 +98,7 @@ describe('public_wrap', () => {
     secret,
   })
 
-  it('is ephemeral_public_key || seal(stanza_key, zeros(24), associated_data, secret)', () => {
+  it('is ephemeral_public_key || seal_once(stanza_key, associated_data, secret)', () => {
     const ephemeralPublicKey = x25519PublicKey(ephemeralPrivateKey)
     const sharedSecret = x25519SharedSecret(
       ephemeralPrivateKey,
@@ -97,15 +111,71 @@ describe('public_wrap', () => {
     expect(stanza).toEqual(
       concatBytes(
         ephemeralPublicKey,
-        seal(
-          asGenericSealKey(stanzaKey),
-          asSealNonce(new Uint8Array(24)),
-          associatedData,
-          secret
+        sealOnce(asGenericSealKey(stanzaKey), associatedData, secret)
+      )
+    )
+    // No nonce: the public key, the ciphertext and the tag.
+    expect(stanza).toHaveLength(32 + 32 + 32)
+    // The sealed part is the box of section 4.2 with the derived nonce,
+    // without that nonce.
+    const nonce = blake3DeriveKey(
+      'flare e2ee v1 one-time nonce',
+      stanzaKey
+    ).subarray(0, 24)
+    expect(stanza.subarray(32)).toEqual(
+      seal(
+        asGenericSealKey(stanzaKey),
+        asSealNonce(nonce),
+        associatedData,
+        secret
+      ).subarray(24)
+    )
+    expect(
+      openOnce(asGenericSealKey(stanzaKey), associatedData, stanza.subarray(32))
+    ).toEqual(secret)
+  })
+
+  it('does not use a zero nonce', () => {
+    const ephemeralPublicKey = x25519PublicKey(ephemeralPrivateKey)
+    const stanzaKey = asGenericSealKey(
+      blake3DeriveKey(
+        context,
+        concatBytes(
+          x25519SharedSecret(ephemeralPrivateKey, recipientPublicKey),
+          ephemeralPublicKey,
+          recipientPublicKey
         )
       )
     )
-    expect(stanza).toHaveLength(32 + 24 + 32 + 32)
+    const withZeroNonce = seal(
+      stanzaKey,
+      asSealNonce(new Uint8Array(24)),
+      associatedData,
+      secret
+    )
+    expect(stanza.subarray(32)).not.toEqual(withZeroNonce.subarray(24))
+    // A stanza in the form of draft 17 does not open.
+    expectReason(
+      () =>
+        publicUnwrap({
+          recipientPrivateKey,
+          context,
+          associatedData,
+          stanza: concatBytes(ephemeralPublicKey, withZeroNonce),
+        }),
+      'tag_mismatch'
+    )
+    expectReason(
+      () =>
+        publicUnwrap({
+          recipientPrivateKey,
+          context,
+          associatedData,
+          stanza: concatBytes(ephemeralPublicKey, withZeroNonce),
+          secretLength: 32,
+        }),
+      'bad_length'
+    )
   })
 
   it('round-trips secrets of several lengths', () => {
@@ -169,7 +239,7 @@ describe('public_wrap', () => {
   it('rejects a short stanza and a wrong secret length', () => {
     const base = { recipientPrivateKey, context, associatedData }
     expectReason(
-      () => publicUnwrap({ ...base, stanza: stanza.subarray(0, 87) }),
+      () => publicUnwrap({ ...base, stanza: stanza.subarray(0, 63) }),
       'truncated'
     )
     expectReason(
@@ -177,8 +247,63 @@ describe('public_wrap', () => {
       'bad_length'
     )
     expectReason(
-      () => publicUnwrap({ ...base, stanza: stanza.subarray(0, 119) }),
+      () => publicUnwrap({ ...base, stanza: stanza.subarray(0, 95) }),
       'tag_mismatch'
+    )
+    // The shortest stanza: an empty secret.
+    const empty = publicWrap({
+      recipientPublicKey,
+      ephemeralPrivateKey,
+      context,
+      associatedData,
+      secret: new Uint8Array(0),
+    })
+    expect(empty).toHaveLength(64)
+    expect(publicUnwrap({ ...base, stanza: empty })).toEqual(new Uint8Array(0))
+  })
+
+  it('rejects a recipient public key that is not canonical', () => {
+    for (const key of NON_CANONICAL_KEYS) {
+      expectReason(
+        () =>
+          publicWrap({
+            recipientPublicKey: asFolderPublicKey(hex(key)),
+            ephemeralPrivateKey,
+            context,
+            associatedData,
+            secret,
+          }),
+        'non_canonical_public_key'
+      )
+    }
+  })
+
+  it('rejects an ephemeral public key that is not canonical', () => {
+    for (const key of NON_CANONICAL_KEYS) {
+      expectReason(
+        () =>
+          publicUnwrap({
+            recipientPrivateKey,
+            context,
+            associatedData,
+            stanza: concatBytes(hex(key), stanza.subarray(32)),
+          }),
+        'non_canonical_public_key'
+      )
+    }
+    // The same point with the highest bit set gives the same shared secret
+    // in RFC 7748, so without the rule this second form would open.
+    const sameKeyOtherForm = stanza.slice()
+    sameKeyOtherForm[31] |= 0x80
+    expectReason(
+      () =>
+        publicUnwrap({
+          recipientPrivateKey,
+          context,
+          associatedData,
+          stanza: sameKeyOtherForm,
+        }),
+      'non_canonical_public_key'
     )
   })
 
@@ -228,7 +353,7 @@ describe('public_wrap', () => {
       secret,
     })
     expect(second).not.toEqual(stanza)
-    expect(second.subarray(56, 88)).not.toEqual(stanza.subarray(56, 88))
+    expect(second.subarray(32, 64)).not.toEqual(stanza.subarray(32, 64))
   })
 })
 
@@ -242,7 +367,7 @@ describe('account stanza', () => {
 
   it('is public_wrap to the exchange key with the account stanza context', () => {
     expect(stanza).toHaveLength(ACCOUNT_STANZA_LENGTH)
-    expect(ACCOUNT_STANZA_LENGTH).toBe(120)
+    expect(ACCOUNT_STANZA_LENGTH).toBe(96)
     expect(stanza).toEqual(
       publicWrap({
         recipientPublicKey: accountKeys.exchangePublicKey,
@@ -289,7 +414,7 @@ describe('account stanza', () => {
       )
     }
     expectReason(
-      () => unwrapAccountStanza({ ...base, stanza: stanza.subarray(0, 119) }),
+      () => unwrapAccountStanza({ ...base, stanza: stanza.subarray(0, 95) }),
       'bad_length'
     )
     expectReason(
@@ -361,12 +486,10 @@ describe('password stanza', () => {
   }
 
   it('has the layout of section 8.2', async () => {
-    const { passwordKey, stanza } = await wrapPasswordStanzaForTestsOnly(
-      wrapInput,
-      FAST_KDF
-    )
+    const { passwordKey, stanza } =
+      await wrapPasswordStanzaWithParametersForTestsOnly(wrapInput, FAST_KDF)
     expect(stanza).toHaveLength(PASSWORD_STANZA_LENGTH)
-    expect(PASSWORD_STANZA_LENGTH).toBe(240)
+    expect(PASSWORD_STANZA_LENGTH).toBe(32 + 32 + 64 + 88)
     const parts = parsePasswordStanza(stanza)
     expect(parts.passwordSalt).toEqual(passwordSalt)
     expect(parts.ownerPublicKey).toEqual(accountKeys.accountPublicKey)
@@ -390,9 +513,21 @@ describe('password stanza', () => {
         )
       )
     )
+    // seal_once: 64 bytes, no nonce, and not the box of a zero nonce.
+    expect(parts.wrappedFileKey).toHaveLength(64)
     expect(parts.wrappedFileKey).toEqual(
-      seal(passwordKey, asSealNonce(new Uint8Array(24)), headerHash, fileKey)
+      sealOnce(passwordKey, headerHash, fileKey)
     )
+    expect(parts.wrappedFileKey).not.toEqual(
+      seal(
+        passwordKey,
+        asSealNonce(new Uint8Array(24)),
+        headerHash,
+        fileKey
+      ).subarray(24)
+    )
+    // sealed_link_secret keeps a random nonce: 88 bytes.
+    expect(parts.sealedLinkSecret).toHaveLength(88)
     expect(parts.sealedLinkSecret).toEqual(
       seal(
         deriveLinkSecretKey(fileKey),
@@ -404,7 +539,10 @@ describe('password stanza', () => {
   })
 
   it('opens with the password and the link secret', async () => {
-    const { stanza } = await wrapPasswordStanzaForTestsOnly(wrapInput, FAST_KDF)
+    const { stanza } = await wrapPasswordStanzaWithParametersForTestsOnly(
+      wrapInput,
+      FAST_KDF
+    )
     const unwrapInput = {
       password: 'correct horse',
       linkSecret,
@@ -413,15 +551,18 @@ describe('password stanza', () => {
       argon2id: nobleArgon2id,
     }
     expect(
-      await unwrapPasswordStanzaForTestsOnly(unwrapInput, FAST_KDF)
+      await unwrapPasswordStanzaWithParametersForTestsOnly(
+        unwrapInput,
+        FAST_KDF
+      )
     ).toEqual(fileKey)
     // NFKC: a composed and a decomposed password are the same password.
-    const composed = await wrapPasswordStanzaForTestsOnly(
+    const composed = await wrapPasswordStanzaWithParametersForTestsOnly(
       { ...wrapInput, password: 'café' },
       FAST_KDF
     )
     expect(
-      await unwrapPasswordStanzaForTestsOnly(
+      await unwrapPasswordStanzaWithParametersForTestsOnly(
         { ...unwrapInput, password: 'café', stanza: composed.stanza },
         FAST_KDF
       )
@@ -429,7 +570,10 @@ describe('password stanza', () => {
   })
 
   it('rejects a wrong password, link secret, header_hash and each changed part', async () => {
-    const { stanza } = await wrapPasswordStanzaForTestsOnly(wrapInput, FAST_KDF)
+    const { stanza } = await wrapPasswordStanzaWithParametersForTestsOnly(
+      wrapInput,
+      FAST_KDF
+    )
     const base = {
       password: 'correct horse',
       linkSecret,
@@ -441,23 +585,23 @@ describe('password stanza', () => {
       { ...base, password: 'correct horse ' },
       { ...base, linkSecret: asLinkSecret(flipBit(linkSecret, 0)) },
       { ...base, headerHash: otherHeaderHash },
-      // password_salt, owner_public_key, the zero nonce, wrapped key, tag
+      // password_salt, owner_public_key, wrapped key, its tag
       { ...base, stanza: flipBit(stanza, 0) },
       { ...base, stanza: flipBit(stanza, 40) },
       { ...base, stanza: flipBit(stanza, 64) },
       { ...base, stanza: flipBit(stanza, 100) },
-      { ...base, stanza: flipBit(stanza, 151) },
+      { ...base, stanza: flipBit(stanza, 127) },
     ]
     for (const attempt of attempts) {
       await expectReasonAsync(
-        () => unwrapPasswordStanzaForTestsOnly(attempt, FAST_KDF),
+        () => unwrapPasswordStanzaWithParametersForTestsOnly(attempt, FAST_KDF),
         'tag_mismatch'
       )
     }
     await expectReasonAsync(
       () =>
-        unwrapPasswordStanzaForTestsOnly(
-          { ...base, stanza: stanza.subarray(0, 239) },
+        unwrapPasswordStanzaWithParametersForTestsOnly(
+          { ...base, stanza: stanza.subarray(0, 215) },
           FAST_KDF
         ),
       'bad_length'
@@ -465,7 +609,7 @@ describe('password stanza', () => {
     // Different Argon2id parameters give a different key.
     await expectReasonAsync(
       () =>
-        unwrapPasswordStanzaForTestsOnly(base, {
+        unwrapPasswordStanzaWithParametersForTestsOnly(base, {
           memoryKib: 16,
           passes: 1,
           lanes: 1,
@@ -475,7 +619,10 @@ describe('password stanza', () => {
   })
 
   it('lets the owner get link_secret back with file_key', async () => {
-    const { stanza } = await wrapPasswordStanzaForTestsOnly(wrapInput, FAST_KDF)
+    const { stanza } = await wrapPasswordStanzaWithParametersForTestsOnly(
+      wrapInput,
+      FAST_KDF
+    )
     expect(openSealedLinkSecret({ fileKey, headerHash, stanza })).toEqual(
       linkSecret
     )
@@ -497,7 +644,7 @@ describe('password stanza', () => {
         }),
       'tag_mismatch'
     )
-    for (const index of [152, 176, 200, 239]) {
+    for (const index of [128, 152, 176, 215]) {
       expectReason(
         () =>
           openSealedLinkSecret({
@@ -522,16 +669,22 @@ describe('password stanza', () => {
         argon2id,
       })
     ).toEqual(fileKey)
-    expect(calls).toEqual([V1_KDF_PARAMETERS, V1_KDF_PARAMETERS])
+    expect(calls).toEqual([V1_ARGON2ID_PARAMETERS, V1_ARGON2ID_PARAMETERS])
+    // The production functions take one argument: no parameters.
+    expect(wrapPasswordStanza).toHaveLength(1)
+    expect(unwrapPasswordStanza).toHaveLength(1)
   })
 
   it('does not open after the owner key in the stanza is replaced', async () => {
-    const { stanza } = await wrapPasswordStanzaForTestsOnly(wrapInput, FAST_KDF)
+    const { stanza } = await wrapPasswordStanzaWithParametersForTestsOnly(
+      wrapInput,
+      FAST_KDF
+    )
     const replaced = stanza.slice()
     replaced.set(otherAccountKeys.accountPublicKey, 32)
     await expectReasonAsync(
       () =>
-        unwrapPasswordStanzaForTestsOnly(
+        unwrapPasswordStanzaWithParametersForTestsOnly(
           {
             password: 'correct horse',
             linkSecret,
@@ -688,6 +841,77 @@ describe('folder stanzas', () => {
         }),
       'key_mismatch'
     )
+  })
+
+  it('rejects a folder public key that is not canonical', () => {
+    const stanza = wrapParentFolderStanza({
+      parentFolderPublicKey: folderPublicKey,
+      ephemeralPrivateKey,
+      folderPrivateKey: childPrivateKey,
+    })
+    for (const key of NON_CANONICAL_KEYS) {
+      const nonCanonical = asFolderPublicKey(hex(key))
+      expectReason(
+        () =>
+          wrapFolderFileStanza({
+            folderPublicKey: nonCanonical,
+            ephemeralPrivateKey,
+            headerHash,
+            fileKey,
+          }),
+        'non_canonical_public_key'
+      )
+      expectReason(
+        () =>
+          wrapFolderLinkSecretStanza({
+            folderPublicKey: nonCanonical,
+            ephemeralPrivateKey,
+            headerHash,
+            linkSecret,
+          }),
+        'non_canonical_public_key'
+      )
+      expectReason(
+        () =>
+          wrapParentFolderStanza({
+            parentFolderPublicKey: nonCanonical,
+            ephemeralPrivateKey,
+            folderPrivateKey: childPrivateKey,
+          }),
+        'non_canonical_public_key'
+      )
+      // The listed public key of the folder below.
+      expectReason(
+        () =>
+          unwrapParentFolderStanza({
+            parentFolderPrivateKey: folderPrivateKey,
+            folderPublicKey: nonCanonical,
+            stanza,
+          }),
+        'non_canonical_public_key'
+      )
+    }
+  })
+
+  it('wraps a folder private key as it is, without clamping', () => {
+    // Bits that clamping would change: the low 3 bits and the top 2 bits.
+    const raw = asFolderPrivateKey(pattern(32, 106))
+    raw[0] |= 0x07
+    raw[31] |= 0x80
+    raw[31] &= 0xbf
+    const stanza = wrapParentFolderStanza({
+      parentFolderPublicKey: folderPublicKey,
+      ephemeralPrivateKey,
+      folderPrivateKey: raw,
+    })
+    const opened = unwrapParentFolderStanza({
+      parentFolderPrivateKey: folderPrivateKey,
+      folderPublicKey: folderPublicKeyOf(raw),
+      stanza,
+    })
+    expect(opened).toEqual(raw)
+    expect(opened[0] & 0x07).toBe(0x07)
+    expect(opened[31] & 0xc0).toBe(0x80)
   })
 
   it('opens a chain of folders from the top key only', () => {

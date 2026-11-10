@@ -1,29 +1,35 @@
 import { describe, expect, it } from 'vitest'
 
-import { deriveAccountKeys } from './account'
-import { CONTEXTS } from './contexts'
-import { deriveFileKeys } from './file'
+import { deriveAccountKeys } from '@/lib/e2ee/account'
+import { CONTEXTS } from '@/lib/e2ee/contexts'
+import { deriveFileKeys } from '@/lib/e2ee/file'
 import {
   blake3DeriveKey,
   bytesToHex,
   utf8,
   x25519PublicKey,
-} from './primitives'
+} from '@/lib/e2ee/primitives'
 import {
+  STORED_RECORD_KINDS,
+  type StoredRecordKind,
   decodeJsonObject,
   decodeRecord,
+  decodeStoredRecord,
   deriveFolderMetadataKey,
   deriveFolderOwnerKey,
   deriveTagKey,
   encodeJsonObject,
   encodeRecord,
+  encodeStoredRecord,
   folderPublicKeyOf,
+  jsonValue,
   openFileMetadata,
   openFolderMetadata,
   openFolderPrivateKey,
   openOcrText,
   openTagMetadata,
   openThumbnail,
+  readTagMetadata,
   sealFileMetadata,
   sealFileMetadataBytes,
   sealFolderMetadata,
@@ -31,9 +37,8 @@ import {
   sealOcrText,
   sealTagMetadata,
   sealThumbnail,
-} from './records'
-import { seal } from './seal'
-import { expectReason, flipBit, pattern } from './test-support'
+} from '@/lib/e2ee/records'
+import { seal } from '@/lib/e2ee/seal'
 import {
   asFileKey,
   asFolderPrivateKey,
@@ -41,7 +46,9 @@ import {
   asHeaderHash,
   asRootEntropy,
   asSealNonce,
-} from './types'
+} from '@/lib/e2ee/types'
+
+import { expectReason, flipBit, pattern } from './test-support'
 
 const fileKey = asFileKey(pattern(32, 110))
 const otherFileKey = asFileKey(pattern(32, 111))
@@ -486,5 +493,263 @@ describe('tag records', () => {
         'tag_mismatch'
       )
     }
+  })
+})
+
+describe('record_version of each stored record type', () => {
+  // A possible length of each type, without the version byte.
+  const LENGTHS: Record<StoredRecordKind, number> = {
+    wrapped_root: 88,
+    sealed_keyring: 56 + 64,
+    sealed_metadata: 56 + 40,
+    sealed_ocr_text: 56,
+    sealed_thumbnail: 56 + 5000,
+    sealed_tag_metadata: 56 + 20,
+    sealed_folder_metadata: 56 + 15,
+    sealed_folder_private_key: 88,
+    account_stanza: 96,
+    password_stanza: 216,
+    folder_file_stanza: 96,
+    folder_link_secret_stanza: 96,
+    parent_folder_stanza: 96,
+  }
+
+  it('covers each type of section 4.4, rule 12', () => {
+    expect([...STORED_RECORD_KINDS].sort()).toEqual(Object.keys(LENGTHS).sort())
+    for (const name of [
+      'wrapped_root',
+      'sealed_keyring',
+      'sealed_metadata',
+      'sealed_ocr_text',
+      'sealed_thumbnail',
+      'sealed_tag_metadata',
+      'sealed_folder_metadata',
+      'sealed_folder_private_key',
+    ]) {
+      expect(STORED_RECORD_KINDS).toContain(name)
+    }
+  })
+
+  it.each(STORED_RECORD_KINDS)('%s is stored as 0x01 || record', (kind) => {
+    const record = pattern(LENGTHS[kind], 7)
+    const stored = encodeStoredRecord(kind, record)
+    expect(stored).toHaveLength(record.length + 1)
+    expect(stored[0]).toBe(0x01)
+    expect(stored.subarray(1)).toEqual(record)
+    expect(stored).toEqual(encodeRecord(record))
+    expect(decodeStoredRecord(kind, stored)).toEqual(record)
+    const unknown = stored.slice()
+    unknown[0] = 0x02
+    expectReason(() => decodeStoredRecord(kind, unknown), 'unknown_version')
+    expectReason(() => decodeStoredRecord(kind, new Uint8Array(0)), 'truncated')
+    // A record without the byte is not a stored record. Its first byte is
+    // not 0x01 here, so the version check stops it.
+    expectReason(() => decodeStoredRecord(kind, record), 'unknown_version')
+  })
+
+  it('rejects a length that the type cannot have, in both directions', () => {
+    const impossible: Array<[StoredRecordKind, number[]]> = [
+      ['wrapped_root', [87, 89, 56]],
+      // No sealed empty list, and only whole keys.
+      ['sealed_keyring', [56, 57, 87, 89]],
+      ['sealed_metadata', [0, 55]],
+      ['sealed_ocr_text', [55]],
+      ['sealed_thumbnail', [55]],
+      ['sealed_tag_metadata', [55]],
+      ['sealed_folder_metadata', [55]],
+      ['sealed_folder_private_key', [87, 89]],
+      // 120 and 240 are the stanza lengths of draft 17.
+      ['account_stanza', [95, 97, 120]],
+      ['password_stanza', [215, 217, 240]],
+      ['folder_file_stanza', [95, 97, 120]],
+      ['folder_link_secret_stanza', [95, 97, 120]],
+      ['parent_folder_stanza', [95, 97, 120]],
+    ]
+    for (const [kind, lengths] of impossible) {
+      for (const length of lengths) {
+        const record = pattern(length, 7)
+        expectReason(() => encodeStoredRecord(kind, record), 'bad_length')
+        expectReason(
+          () => decodeStoredRecord(kind, encodeRecord(record)),
+          'bad_length'
+        )
+      }
+    }
+    expectReason(
+      () =>
+        encodeStoredRecord('file' as unknown as StoredRecordKind, pattern(96)),
+      'invalid_argument'
+    )
+    expectReason(
+      () =>
+        encodeStoredRecord(
+          'constructor' as unknown as StoredRecordKind,
+          pattern(96)
+        ),
+      'invalid_argument'
+    )
+  })
+
+  it('agrees with the records that the library makes', () => {
+    const sealedFolderPrivateKey = sealFolderPrivateKey({
+      accountPrivateKey: accountKeys.accountPrivateKey,
+      nonce,
+      folderPrivateKey: asFolderPrivateKey(pattern(32, 120)),
+    })
+    expect(
+      decodeStoredRecord(
+        'sealed_folder_private_key',
+        encodeStoredRecord('sealed_folder_private_key', sealedFolderPrivateKey)
+      )
+    ).toEqual(sealedFolderPrivateKey)
+    const emptyOcrText = sealOcrText({
+      fileKey,
+      nonce,
+      headerHash,
+      ocrText: '',
+    })
+    expect(encodeStoredRecord('sealed_ocr_text', emptyOcrText)).toHaveLength(57)
+  })
+})
+
+describe('tag metadata reader (section 4.4, rule 9)', () => {
+  it('reads absent and null as the same "no value"', () => {
+    const noValue = { name: 'invoices', rule_source: null, rule_text: null }
+    expect(readTagMetadata({ name: 'invoices' })).toEqual(noValue)
+    expect(
+      readTagMetadata({ name: 'invoices', rule_source: null, rule_text: null })
+    ).toEqual(noValue)
+    expect(readTagMetadata({ name: 'invoices', rule_text: null })).toEqual(
+      noValue
+    )
+    expect(
+      readTagMetadata({ name: 'invoices', rule_source: undefined })
+    ).toEqual(noValue)
+  })
+
+  it('reads a rule and ignores fields that it does not know', () => {
+    expect(
+      readTagMetadata({
+        name: 'invoices',
+        rule_source: 'filename',
+        rule_text: 'invoice',
+        colour: 'red',
+      })
+    ).toEqual({
+      name: 'invoices',
+      rule_source: 'filename',
+      rule_text: 'invoice',
+    })
+    expect(
+      readTagMetadata({ name: 't', rule_source: 'ocr', rule_text: '' })
+    ).toEqual({ name: 't', rule_source: 'ocr', rule_text: '' })
+    expect(readTagMetadata({ name: '' }).name).toBe('')
+  })
+
+  it('gives the same result for both forms through seal and open', () => {
+    const base = {
+      accountPrivateKey: accountKeys.accountPrivateKey,
+      accountPublicKey: accountKeys.accountPublicKey,
+    }
+    const results = [
+      { name: 'x' },
+      { name: 'x', rule_source: null, rule_text: null },
+    ].map((metadata) =>
+      readTagMetadata(
+        openTagMetadata({
+          ...base,
+          sealedTagMetadata: sealTagMetadata({ ...base, nonce, metadata }),
+        })
+      )
+    )
+    expect(results[0]).toEqual(results[1])
+    expect(results[0]).toEqual({
+      name: 'x',
+      rule_source: null,
+      rule_text: null,
+    })
+  })
+
+  it('rejects a missing name and values of a wrong type', () => {
+    const invalid = [
+      {},
+      { name: null },
+      { name: 5 },
+      { name: 'x', rule_source: 'content' },
+      { name: 'x', rule_source: 1 },
+      { name: 'x', rule_source: '' },
+      { name: 'x', rule_text: 5 },
+      { name: 'x', rule_text: ['a'] },
+    ]
+    for (const record of invalid) {
+      expectReason(() => readTagMetadata(record), 'invalid_encoding')
+    }
+  })
+
+  it('jsonValue treats absent and null the same, and ignores inherited fields', () => {
+    expect(jsonValue({ a: null }, 'a')).toBeUndefined()
+    expect(jsonValue({}, 'a')).toBeUndefined()
+    expect(jsonValue({ a: 0 }, 'a')).toBe(0)
+    expect(jsonValue({ a: '' }, 'a')).toBe('')
+    expect(jsonValue({ a: false }, 'a')).toBe(false)
+    expect(jsonValue({}, 'toString')).toBeUndefined()
+    expect(jsonValue({}, 'constructor')).toBeUndefined()
+  })
+})
+
+describe('canonical folder public key', () => {
+  it('rejects a listed folder_public_key that is not canonical', () => {
+    const folderPrivateKey = asFolderPrivateKey(pattern(32, 121))
+    const sealedFolderPrivateKey = sealFolderPrivateKey({
+      accountPrivateKey: accountKeys.accountPrivateKey,
+      nonce,
+      folderPrivateKey,
+    })
+    const listed = folderPublicKeyOf(folderPrivateKey)
+    expect(
+      openFolderPrivateKey({
+        accountPrivateKey: accountKeys.accountPrivateKey,
+        folderPublicKey: listed,
+        sealedFolderPrivateKey,
+      }).folderPrivateKey
+    ).toEqual(folderPrivateKey)
+    // The same point with the highest bit set.
+    const otherForm = listed.slice()
+    otherForm[31] |= 0x80
+    const prime = new Uint8Array(32).fill(0xff)
+    prime[0] = 0xed
+    prime[31] = 0x7f
+    for (const key of [otherForm, prime]) {
+      expectReason(
+        () =>
+          openFolderPrivateKey({
+            accountPrivateKey: accountKeys.accountPrivateKey,
+            folderPublicKey: asFolderPublicKey(key),
+            sealedFolderPrivateKey,
+          }),
+        'non_canonical_public_key'
+      )
+    }
+  })
+
+  it('stores a folder private key as it is, without clamping', () => {
+    const raw = asFolderPrivateKey(pattern(32, 122))
+    raw[0] |= 0x07
+    raw[31] |= 0x80
+    raw[31] &= 0xbf
+    const before = raw.slice()
+    const sealedFolderPrivateKey = sealFolderPrivateKey({
+      accountPrivateKey: accountKeys.accountPrivateKey,
+      nonce,
+      folderPrivateKey: raw,
+    })
+    // The public key comes from the clamped scalar; the stored key does not change.
+    expect(raw).toEqual(before)
+    const opened = openFolderPrivateKey({
+      accountPrivateKey: accountKeys.accountPrivateKey,
+      folderPublicKey: folderPublicKeyOf(raw),
+      sealedFolderPrivateKey,
+    })
+    expect(opened.folderPrivateKey).toEqual(before)
   })
 })

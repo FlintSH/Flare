@@ -71,3 +71,22 @@ chunk; the `file_chunk` procedure has one with `"error": true` in a
 The `sealed_keyring` procedure has no vector with an empty list.
 
 The `sign_in_signature` procedure has one more output, `identifier_normalized_text`.
+
+## Vectors that must be rejected
+
+A vector whose `name` starts with `rejects ` has the output `{ "error": true }`.
+Its `procedure` is the base procedure. Its `input` has `direction_text`:
+
+- `wrap`: the normal inputs of the wrap, with a public key that is not valid.
+- `unwrap`: `stanza` and the values that a reader has. The private key has the
+  name of the public key of the wrap vector with `private` in place of `public`
+  (`recipient_private_key`, `account_private_key`, `folder_private_key`), then
+  `context_text` and `associated_data` for `public_wrap`, or `header_hash`. A
+  `password_stanza` vector has `password_text`, `link_secret`, `header_hash`,
+  `stanza` and the Argon2id inputs.
+
+A `folder_stanzas` vector also has `stanza_kind_text`: `file`, `link_secret` or
+`parent`. The `parent` kind has `child_folder_public_key`.
+
+A `file_chunk` vector whose `name` starts with `decrypt_rejects ` has the input
+`file_key`, `nonce_prefix`, `chunk_index`, `is_final`, `stored_chunk`.

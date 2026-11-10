@@ -33,7 +33,9 @@ NONCE_SIZE = 24
 HEADER_SIZE = 26
 STORED_CHUNK_SIZE = CHUNK_SIZE + TAG_SIZE  # 65568, section 7.5
 
-# Section 4.3. The minimum of protocol version 1.
+# Section 4.3. Fixed for protocol version 1. No record stores them. The
+# functions below take them as arguments only because SCHEMA.md has fast test
+# vectors; a caller that is not a test uses the default values.
 ARGON2_MEMORY_KIB = 65536
 ARGON2_PASSES = 3
 ARGON2_LANES = 4
@@ -41,6 +43,7 @@ ARGON2_LANES = 4
 # Each context string of the sections that this program implements.
 CONTEXT_SEAL_CIPHER = "flare e2ee v1 seal cipher"
 CONTEXT_SEAL_MAC = "flare e2ee v1 seal mac"
+CONTEXT_ONE_TIME_NONCE = "flare e2ee v1 one-time nonce"
 CONTEXT_ACCOUNT_SEED = "flare e2ee v1 account seed"
 CONTEXT_AUTH = "flare e2ee v1 auth"
 CONTEXT_WRAP = "flare e2ee v1 wrap"
@@ -68,12 +71,20 @@ CHUNK_SIZE_LOG2 = 16
 
 
 class Reject(Exception):
-    """A step failed. Section 1.3: stop the procedure and reject the input."""
+    """A step failed. Section 1.3: stop the procedure and reject the input.
+
+    `reason` is a short fixed word. The self-checks of the generator use it
+    to prove that an input fails for the stated cause and not for another.
+    """
+
+    def __init__(self, message: str, reason: str = "other") -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 def _need(value: bytes, size: int, name: str) -> None:
     if len(value) != size:
-        raise Reject(f"{name} must have {size} bytes, got {len(value)}")
+        raise Reject(f"{name} must have {size} bytes, got {len(value)}", "length")
 
 
 # --------------------------------------------------------------------------
@@ -246,20 +257,34 @@ def x25519(private_key: bytes, public_key: bytes) -> bytes:
     try:
         shared_secret = nacl.bindings.crypto_scalarmult(private_key, public_key)
     except Exception as error:  # libsodium refuses an all-zero output itself
-        raise Reject("shared_secret = zeros(32)") from error
+        raise Reject("shared_secret = zeros(32)", "zero_shared_secret") from error
     if shared_secret == zeros(32):
-        raise Reject("shared_secret = zeros(32)")
+        raise Reject("shared_secret = zeros(32)", "zero_shared_secret")
     return shared_secret
 
 
 def x25519_checked_pure(private_key: bytes, public_key: bytes) -> bytes:
     shared_secret = x25519_pure(private_key, public_key)
     if shared_secret == zeros(32):
-        raise Reject("shared_secret = zeros(32)")
+        raise Reject("shared_secret = zeros(32)", "zero_shared_secret")
     return shared_secret
 
 
+def check_canonical_x25519_public_key(public_key: bytes, name: str) -> None:
+    """Section 4.4 rule 3a.
+
+    The 32 bytes, read as one little-endian number of 256 bits, must be less
+    than 2^255 - 19. This one comparison also rejects a set highest bit of
+    the last byte, because such a number is not less than 2^255.
+    """
+    _need(public_key, 32, name)
+    if int.from_bytes(public_key, "little") >= FIELD_PRIME:
+        raise Reject(f"{name} is not canonical", "not_canonical")
+
+
 def x25519_public_key(private_key: bytes) -> bytes:
+    """Rule 3b: the private key is 32 bytes as they are. X25519 clamps them."""
+    _need(private_key, 32, "X25519 private key")
     return nacl.bindings.crypto_scalarmult_base(private_key)
 
 
@@ -301,7 +326,7 @@ def _decode_edwards_y(public_key: bytes) -> int:
     sign = encoded >> 255
     y = encoded & ((1 << 255) - 1)
     if y >= p:
-        raise Reject("Edwards point does not decode: y is not canonical")
+        raise Reject("Edwards point does not decode: y is not canonical", "not_canonical")
     numerator = (y * y - 1) % p
     denominator = (_EDWARDS_D * y * y + 1) % p
     x_squared = numerator * _field_inverse(denominator) % p
@@ -309,9 +334,9 @@ def _decode_edwards_y(public_key: bytes) -> int:
     if (x * x - x_squared) % p != 0:
         x = x * _SQRT_MINUS_ONE % p
     if (x * x - x_squared) % p != 0:
-        raise Reject("Edwards point does not decode: no square root")
+        raise Reject("Edwards point does not decode: no square root", "edwards")
     if x == 0 and sign == 1:
-        raise Reject("Edwards point does not decode: x = 0 with sign bit")
+        raise Reject("Edwards point does not decode: x = 0 with sign bit", "edwards")
     return y
 
 
@@ -319,7 +344,7 @@ def ed2curve_public(public_key: bytes) -> bytes:
     """Rule 3: u = (1 + y) / (1 - y), 32 bytes little-endian."""
     y = _decode_edwards_y(public_key)
     if y == 1:
-        raise Reject("ed2curve_public: y = 1")
+        raise Reject("ed2curve_public: y = 1", "edwards")
     u = (1 + y) * _field_inverse((1 - y) % FIELD_PRIME) % FIELD_PRIME
     return u.to_bytes(32, "little")
 
@@ -349,7 +374,7 @@ def open_sealed(key: bytes, associated_data: bytes, sealed_box: bytes) -> bytes:
     """`open` of section 4.2. Uses the pure Python XChaCha20."""
     _need(key, 32, "open key")
     if len(sealed_box) < NONCE_SIZE + TAG_SIZE:
-        raise Reject("sealed_box is too short")
+        raise Reject("sealed_box has less than 56 bytes", "length")
     nonce = sealed_box[:NONCE_SIZE]
     ciphertext = sealed_box[NONCE_SIZE:-TAG_SIZE]
     tag = sealed_box[-TAG_SIZE:]
@@ -357,8 +382,30 @@ def open_sealed(key: bytes, associated_data: bytes, sealed_box: bytes) -> bytes:
     mac_key = blake3_derive_key(CONTEXT_SEAL_MAC, key)
     expected_tag = _seal_tag(mac_key, associated_data, nonce, ciphertext)
     if not hmac.compare_digest(expected_tag, tag):
-        raise Reject("sealed_box tag is not correct")
+        raise Reject("sealed_box tag is not correct", "tag")
     return xchacha20_pure(cipher_key, nonce, ciphertext)
+
+
+# --------------------------------------------------------------------------
+# Section 4.2.1. Sealed box for a key that is used one time.
+# --------------------------------------------------------------------------
+
+
+def one_time_nonce(key: bytes) -> bytes:
+    _need(key, 32, "seal_once key")
+    return blake3_derive_key(CONTEXT_ONE_TIME_NONCE, key)[:NONCE_SIZE]
+
+
+def seal_once(key: bytes, associated_data: bytes, message: bytes) -> bytes:
+    """The output is ciphertext || tag. It has no nonce."""
+    return seal(key, one_time_nonce(key), associated_data, message)[NONCE_SIZE:]
+
+
+def open_once(key: bytes, associated_data: bytes, sealed_once_box: bytes) -> bytes:
+    """Uses `open`, thus the pure Python XChaCha20."""
+    if len(sealed_once_box) < TAG_SIZE:
+        raise Reject("sealed_once_box has less than 32 bytes", "length")
+    return open_sealed(key, associated_data, one_time_nonce(key) + sealed_once_box)
 
 
 # --------------------------------------------------------------------------
@@ -391,13 +438,25 @@ def argon2id(
     )
 
 
-def encode_identifier(identifier: str) -> bytes:
-    """Rule 7: remove spaces at the start and the end, lower case, UTF-8.
+# The characters with the Unicode property White_Space (PropList.txt). The set
+# did not change since Unicode 6.3. Python `str.strip()` is not used: it also
+# removes U+001C to U+001F, which do not have the property.
+WHITE_SPACE = (
+    "\u0009\u000a\u000b\u000c\u000d\u0020\u0085\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000"
+)
 
-    Literal reading: "spaces" are U+0020 only. Lower case is the Unicode
-    default mapping (Python str.lower).
-    """
-    return identifier.strip(" ").lower().encode("utf-8")
+
+def normalize_identifier(identifier: str) -> str:
+    """Rule 7, in the sequence of the text: NFKC, then remove White_Space at
+    the start and the end, then lower case with the default Unicode mapping
+    (Python `str.lower`, which uses no locale)."""
+    return unicodedata.normalize("NFKC", identifier).strip(WHITE_SPACE).lower()
+
+
+def encode_identifier(identifier: str) -> bytes:
+    return normalize_identifier(identifier).encode("utf-8")
 
 
 def _bip39_word_list() -> list[str]:
@@ -417,8 +476,9 @@ def mnemonic_from_entropy(root_entropy: bytes) -> str:
 
 
 def entropy_from_mnemonic(mnemonic_text: str) -> bytes:
+    """Rule 10: the reader accepts upper case and more than one space."""
     words = _bip39_word_list()
-    parts = mnemonic_text.split(" ")
+    parts = [part for part in mnemonic_text.lower().split(" ") if part]
     if len(parts) != 24:
         raise Reject("mnemonic must have 24 words")
     number = 0
@@ -433,7 +493,7 @@ def entropy_from_mnemonic(mnemonic_text: str) -> bytes:
 
 
 def encode_record(record: bytes) -> bytes:
-    """Rule 12: a stored stanza or sealed record is 0x01 || record."""
+    """Rule 12: each stanza and each sealed value that the server stores is 0x01 || record."""
     return RECORD_VERSION + record
 
 
@@ -463,7 +523,11 @@ def account_keys(root_entropy: bytes) -> dict[str, bytes | str]:
 
 
 def passphrase_keys(
-    passphrase: str, passphrase_salt: bytes, memory_kib: int, passes: int, lanes: int
+    passphrase: str,
+    passphrase_salt: bytes,
+    memory_kib: int = ARGON2_MEMORY_KIB,
+    passes: int = ARGON2_PASSES,
+    lanes: int = ARGON2_LANES,
 ) -> dict[str, bytes]:
     passphrase_root = argon2id(
         encode_secret_text(passphrase), passphrase_salt, memory_kib, passes, lanes
@@ -490,7 +554,7 @@ def unwrap_root(wrap_key: bytes, account_public_key: bytes, wrapped_root: bytes)
     _need(root_entropy, 32, "root_entropy")
     account_seed = blake3_derive_key(CONTEXT_ACCOUNT_SEED, root_entropy)
     if ed25519_public_key(account_seed) != account_public_key:
-        raise Reject("account_private_key does not give account_public_key")
+        raise Reject("account_private_key does not give account_public_key", "key_mismatch")
     return root_entropy
 
 
@@ -508,17 +572,26 @@ def sign_in_signature(auth_private_key: bytes, challenge: bytes, identifier: str
     return ed25519_sign(auth_private_key, sign_in_message(challenge, identifier))
 
 
+def check_method(method: str) -> bytes:
+    """Rule 8: `method` is in upper case ASCII. Each other form is rejected.
+
+    Reading: one or more of the letters A to Z, and no other character.
+    """
+    if not method or any(not "A" <= character <= "Z" for character in method):
+        raise Reject("method must be upper case ASCII", "method")
+    return method.encode("ascii")
+
+
 def signed_request_message(challenge: bytes, method: str, path: str, body: bytes) -> bytes:
     """Section 6.6 step 2 with rule 8.
 
     `method` must be upper case ASCII already. This function does not change
-    it. A request without a body has `body = b""`, thus the last part is
-    blake3_hash of the empty byte string.
+    it. `path` is the percent-encoded form that the client sends, thus ASCII;
+    the UTF-8 encoding gives the same bytes. A request without a body has
+    `body = b""`, thus the last part is blake3_hash of the empty byte string.
     """
     _need(challenge, 32, "challenge")
-    method_bytes = method.encode("ascii")
-    if method_bytes != method_bytes.upper():
-        raise Reject("method must be upper case ASCII")
+    method_bytes = check_method(method)
     return (
         CONTEXT_REQUEST.encode("ascii")
         + challenge
@@ -532,6 +605,15 @@ def signed_request(
 ) -> tuple[bytes, bytes]:
     signed_message = signed_request_message(challenge, method, path, body)
     return signed_message, ed25519_sign(account_private_key, signed_message)
+
+
+def verify_signed_request(
+    account_public_key: bytes, challenge: bytes, method: str, path: str, body: bytes, signature: bytes
+) -> None:
+    """Section 6.6 step 5 with rule 8. The verifier rejects a method that is not upper case ASCII."""
+    signed_message = signed_request_message(challenge, method, path, body)
+    if not ed25519_verify(account_public_key, signed_message, signature):
+        raise Reject("request signature is not correct", "signature")
 
 
 # --------------------------------------------------------------------------
@@ -577,9 +659,11 @@ def encrypt_chunk(
 ) -> bytes:
     """Section 7.3 steps 1 to 5. The output is the stored chunk."""
     if len(chunk_plaintext) > CHUNK_SIZE:
-        raise Reject("a chunk has at most 65536 bytes")
+        raise Reject("a chunk has at most 65536 bytes", "chunk_length")
     if not is_final and len(chunk_plaintext) != CHUNK_SIZE:
-        raise Reject("a chunk that is not the last one has exactly 65536 bytes")
+        raise Reject("a chunk that is not the last one has exactly 65536 bytes", "chunk_length")
+    if is_final and len(chunk_plaintext) == 0 and chunk_index != 0:
+        raise Reject("a last chunk of length zero is valid only as chunk 0", "empty_final_chunk")
     keys = file_keys(file_key)
     header_hash = header_hash_of(build_header(nonce_prefix))
     chunk_nonce = nonce_prefix + le64(chunk_index)
@@ -609,16 +693,36 @@ def encrypt_file(file_key: bytes, nonce_prefix: bytes, plaintext: bytes) -> byte
     return bytes(stored)
 
 
+def decrypt_chunk(
+    file_key: bytes, nonce_prefix: bytes, chunk_index: int, is_final: bool, stored_chunk: bytes
+) -> bytes:
+    """Section 7.4 rules 3, 4, 6 and 8 for one stored chunk. Uses the pure Python XChaCha20."""
+    if len(stored_chunk) < TAG_SIZE or len(stored_chunk) > STORED_CHUNK_SIZE:
+        raise Reject("stored chunk has a length that is not possible", "chunk_length")
+    if not is_final and len(stored_chunk) != STORED_CHUNK_SIZE:
+        raise Reject("a chunk that is not the last one must have 65536 bytes", "chunk_length")
+    keys = file_keys(file_key)
+    header_hash = header_hash_of(build_header(nonce_prefix))
+    chunk_ciphertext, chunk_tag = stored_chunk[:-TAG_SIZE], stored_chunk[-TAG_SIZE:]
+    expected_tag = _chunk_tag(keys["content_mac_key"], header_hash, chunk_index, is_final, chunk_ciphertext)
+    if not hmac.compare_digest(expected_tag, chunk_tag):
+        raise Reject(f"tag of chunk {chunk_index} is not correct", "tag")
+    if is_final and len(chunk_ciphertext) == 0 and chunk_index != 0:
+        # Rule 8. The tag is correct here. The chunk is rejected all the same.
+        raise Reject("a last chunk of length zero is valid only as chunk 0", "empty_final_chunk")
+    return xchacha20_pure(keys["content_cipher_key"], nonce_prefix + le64(chunk_index), chunk_ciphertext)
+
+
 def decrypt_file(file_key: bytes, stored_file: bytes) -> bytes:
     """Section 7.4. Uses the pure Python XChaCha20."""
     if len(stored_file) < HEADER_SIZE + TAG_SIZE:
-        raise Reject("stored file is too short")
+        raise Reject("stored file is too short", "length")
     header = stored_file[:HEADER_SIZE]
-    if header[:8] != HEADER_MAGIC or header[8] != FORMAT_VERSION or header[9] != CHUNK_SIZE_LOG2:
-        raise Reject("header is not correct")
+    if header[:8] != HEADER_MAGIC or header[8] != FORMAT_VERSION:
+        raise Reject("header is not correct", "header")
+    if header[9] != CHUNK_SIZE_LOG2:
+        raise Reject("chunk_size_log2 must be 16", "header")  # rule 9
     nonce_prefix = header[10:26]
-    header_hash = header_hash_of(header)
-    keys = file_keys(file_key)
     body = stored_file[HEADER_SIZE:]
     plaintext = bytearray()
     chunk_index = 0
@@ -626,18 +730,9 @@ def decrypt_file(file_key: bytes, stored_file: bytes) -> bytes:
     while True:
         stored_chunk = body[offset : offset + STORED_CHUNK_SIZE]
         offset += len(stored_chunk)
+        # The chunk that ends the stored bytes is the last one (rules 5 and 7).
         is_final = offset == len(body)
-        if len(stored_chunk) < TAG_SIZE:
-            raise Reject("stored chunk is too short")
-        if not is_final and len(stored_chunk) != STORED_CHUNK_SIZE:
-            raise Reject("a chunk that is not the last one must have 65536 bytes")
-        chunk_ciphertext, chunk_tag = stored_chunk[:-TAG_SIZE], stored_chunk[-TAG_SIZE:]
-        expected_tag = _chunk_tag(keys["content_mac_key"], header_hash, chunk_index, is_final, chunk_ciphertext)
-        if not hmac.compare_digest(expected_tag, chunk_tag):
-            raise Reject(f"tag of chunk {chunk_index} is not correct")
-        plaintext += xchacha20_pure(
-            keys["content_cipher_key"], nonce_prefix + le64(chunk_index), chunk_ciphertext
-        )
+        plaintext += decrypt_chunk(file_key, nonce_prefix, chunk_index, is_final, stored_chunk)
         if is_final:
             return bytes(plaintext)
         chunk_index += 1
@@ -687,33 +782,37 @@ def public_wrap(
     associated_data: bytes,
     secret: bytes,
 ) -> bytes:
-    """Section 8.4.1. `ephemeral_private_key` is an input, thus the output is fixed."""
-    _need(recipient_public_key, 32, "recipient_public_key")
+    """Section 8.4.1. `ephemeral_private_key` is an input, thus the output is fixed.
+
+    A caller must not use one ephemeral key pair for two stanzas.
+    """
+    check_canonical_x25519_public_key(recipient_public_key, "recipient_public_key")
     ephemeral_public_key = x25519_public_key(ephemeral_private_key)
     shared_secret = x25519(ephemeral_private_key, recipient_public_key)
     stanza_key = blake3_derive_key(
         context, shared_secret + ephemeral_public_key + recipient_public_key
     )
-    return ephemeral_public_key + seal(stanza_key, zeros(NONCE_SIZE), associated_data, secret)
+    return ephemeral_public_key + seal_once(stanza_key, associated_data, secret)
 
 
 def public_unwrap(recipient_private_key: bytes, context: str, associated_data: bytes, stanza: bytes) -> bytes:
-    """The reverse of public_wrap. Uses the pure Python X25519 and XChaCha20."""
-    if len(stanza) < 32 + NONCE_SIZE + TAG_SIZE:
-        raise Reject("stanza is too short")
+    """Section 8.4.1. Uses the pure Python X25519 and XChaCha20."""
+    if len(stanza) < 32 + TAG_SIZE:
+        raise Reject("stanza is too short", "length")
     ephemeral_public_key = stanza[:32]
+    check_canonical_x25519_public_key(ephemeral_public_key, "ephemeral_public_key")
     recipient_public_key = x25519_pure(recipient_private_key, X25519_BASE_POINT)
     shared_secret = x25519_checked_pure(recipient_private_key, ephemeral_public_key)
     stanza_key = blake3_derive_key(
         context, shared_secret + ephemeral_public_key + recipient_public_key
     )
-    return open_sealed(stanza_key, associated_data, stanza[32:])
+    return open_once(stanza_key, associated_data, stanza[32:])
 
 
 def account_stanza(
     account_public_key: bytes, ephemeral_private_key: bytes, header_hash: bytes, file_key: bytes
 ) -> bytes:
-    """Section 8.1, wrap."""
+    """Section 8.1, wrap. The stanza has 96 bytes."""
     _need(header_hash, 32, "header_hash")
     _need(file_key, 32, "file_key")
     exchange_public_key = ed2curve_public(account_public_key)
@@ -722,6 +821,7 @@ def account_stanza(
 
 def open_account_stanza(account_private_key: bytes, header_hash: bytes, stanza: bytes) -> bytes:
     """Section 8.1, unwrap."""
+    _need(stanza, 96, "account stanza")
     exchange_private_key = ed2curve_private(account_private_key)
     return public_unwrap(exchange_private_key, CONTEXT_ACCOUNT_STANZA, header_hash, stanza)
 
@@ -737,9 +837,9 @@ def password_key_of(
     link_secret: bytes,
     owner_public_key: bytes,
     header_hash: bytes,
-    memory_kib: int,
-    passes: int,
-    lanes: int,
+    memory_kib: int = ARGON2_MEMORY_KIB,
+    passes: int = ARGON2_PASSES,
+    lanes: int = ARGON2_LANES,
 ) -> bytes:
     _need(password_salt, 32, "password_salt")
     _need(link_secret, 32, "link_secret")
@@ -759,41 +859,59 @@ def password_stanza(
     header_hash: bytes,
     file_key: bytes,
     link_secret_nonce: bytes,
-    memory_kib: int,
-    passes: int,
-    lanes: int,
+    memory_kib: int = ARGON2_MEMORY_KIB,
+    passes: int = ARGON2_PASSES,
+    lanes: int = ARGON2_LANES,
 ) -> tuple[bytes, bytes]:
-    """Section 8.2, wrap. Returns (password_key, stanza). The stanza has 240 bytes."""
+    """Section 8.2, wrap. Returns (password_key, stanza).
+
+    The stanza has 32 + 32 + 64 + 88 = 216 bytes: `wrapped_file_key` is a
+    `seal_once` box without a nonce, `sealed_link_secret` is a `seal` box
+    with its random nonce.
+    """
     _need(file_key, 32, "file_key")
     password_key = password_key_of(
         password, password_salt, link_secret, owner_public_key, header_hash, memory_kib, passes, lanes
     )
-    wrapped_file_key = seal(password_key, zeros(NONCE_SIZE), header_hash, file_key)
+    wrapped_file_key = seal_once(password_key, header_hash, file_key)
     link_secret_key = file_keys(file_key)["link_secret_key"]
     sealed_link_secret = seal(link_secret_key, link_secret_nonce, header_hash, link_secret)
     return password_key, password_salt + owner_public_key + wrapped_file_key + sealed_link_secret
 
 
-_WRAPPED_KEY_SIZE = NONCE_SIZE + 32 + TAG_SIZE  # 88
+_WRAPPED_FILE_KEY_SIZE = 32 + TAG_SIZE  # 64, seal_once
+_SEALED_LINK_SECRET_SIZE = NONCE_SIZE + 32 + TAG_SIZE  # 88, seal
+PASSWORD_STANZA_SIZE = 64 + _WRAPPED_FILE_KEY_SIZE + _SEALED_LINK_SECRET_SIZE  # 216
 
 
 def open_password_stanza(
-    password: str, link_secret: bytes, header_hash: bytes, stanza: bytes, memory_kib: int, passes: int, lanes: int
+    password: str,
+    link_secret: bytes,
+    header_hash: bytes,
+    stanza: bytes,
+    memory_kib: int = ARGON2_MEMORY_KIB,
+    passes: int = ARGON2_PASSES,
+    lanes: int = ARGON2_LANES,
 ) -> bytes:
-    """Section 8.2, unwrap. For the visitor, who has the link and the password."""
-    _need(stanza, 64 + 2 * _WRAPPED_KEY_SIZE, "password stanza")
+    """Section 8.2, unwrap. For the visitor, who has the link and the password.
+
+    The visitor does not open `sealed_link_secret`: its key comes from
+    `file_key`. A change in the last 88 bytes thus does not stop this
+    procedure.
+    """
+    _need(stanza, PASSWORD_STANZA_SIZE, "password stanza")
     password_salt, owner_public_key = stanza[:32], stanza[32:64]
-    wrapped_file_key = stanza[64 : 64 + _WRAPPED_KEY_SIZE]
+    wrapped_file_key = stanza[64 : 64 + _WRAPPED_FILE_KEY_SIZE]
     password_key = password_key_of(
         password, password_salt, link_secret, owner_public_key, header_hash, memory_kib, passes, lanes
     )
-    return open_sealed(password_key, header_hash, wrapped_file_key)
+    return open_once(password_key, header_hash, wrapped_file_key)
 
 
 def open_link_secret_copy(file_key: bytes, header_hash: bytes, stanza: bytes) -> bytes:
     """Section 8.2: the owner has file_key and gets link_secret back."""
-    _need(stanza, 64 + 2 * _WRAPPED_KEY_SIZE, "password stanza")
-    sealed_link_secret = stanza[64 + _WRAPPED_KEY_SIZE :]
+    _need(stanza, PASSWORD_STANZA_SIZE, "password stanza")
+    sealed_link_secret = stanza[64 + _WRAPPED_FILE_KEY_SIZE :]
     return open_sealed(file_keys(file_key)["link_secret_key"], header_hash, sealed_link_secret)
 
 
@@ -810,8 +928,14 @@ def keyring_key_of(account_private_key: bytes) -> bytes:
 def seal_keyring(
     account_private_key: bytes, account_public_key: bytes, nonce: bytes, old_private_keys: list[bytes]
 ) -> tuple[bytes, bytes]:
-    """Steps 4 and 5 with rule 11. Returns (keyring_key, sealed_keyring)."""
+    """Steps 4 and 5 with rule 11. Returns (keyring_key, sealed_keyring).
+
+    Rule 11: an account with no old key has no `sealed_keyring`. An empty
+    list is an error.
+    """
     _need(account_public_key, 32, "account_public_key")
+    if not old_private_keys:
+        raise Reject("a sealed empty list of old private keys is not permitted", "empty_keyring")
     for key in old_private_keys:
         _need(key, 32, "old private key")
     keyring_key = keyring_key_of(account_private_key)
@@ -867,8 +991,29 @@ def open_folder_private_key(
     folder_owner_key = blake3_derive_key(CONTEXT_FOLDER_OWNER, account_private_key)
     folder_private_key = open_sealed(folder_owner_key, folder_public_key, sealed_folder_private_key)
     if x25519_pure(folder_private_key, X25519_BASE_POINT) != folder_public_key:
-        raise Reject("folder_private_key does not give folder_public_key")
+        raise Reject("folder_private_key does not give folder_public_key", "key_mismatch")
     return folder_private_key
+
+
+def open_parent_folder_stanza(
+    parent_folder_private_key: bytes, child_folder_public_key: bytes, stanza: bytes
+) -> bytes:
+    """Section 8.4.2: open the stanza, then check that the private key gives the public key of the record."""
+    child_folder_private_key = public_unwrap(
+        parent_folder_private_key, CONTEXT_PARENT_FOLDER_STANZA, child_folder_public_key, stanza
+    )
+    _need(child_folder_private_key, 32, "folder_private_key")
+    if x25519_pure(child_folder_private_key, X25519_BASE_POINT) != child_folder_public_key:
+        raise Reject("folder_private_key does not give folder_public_key", "key_mismatch")
+    return child_folder_private_key
+
+
+def open_folder_file_stanza(folder_private_key: bytes, header_hash: bytes, stanza: bytes) -> bytes:
+    return public_unwrap(folder_private_key, CONTEXT_FOLDER_FILE_STANZA, header_hash, stanza)
+
+
+def open_folder_link_secret_stanza(folder_private_key: bytes, header_hash: bytes, stanza: bytes) -> bytes:
+    return public_unwrap(folder_private_key, CONTEXT_FOLDER_LINK_SECRET_STANZA, header_hash, stanza)
 
 
 def parent_folder_stanza(

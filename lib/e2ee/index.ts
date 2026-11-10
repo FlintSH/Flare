@@ -3,8 +3,9 @@
  *
  * The specification is `docs/e2ee-spec.md`. Every procedure is a pure
  * function with explicit random inputs. `random.ts` adds the wrappers that
- * draw randomness. The `...ForTestsOnly` functions are not exported here;
- * tests import them from `testing.ts`.
+ * draw randomness. The Argon2id parameters are fixed, so no function here
+ * takes them. The `...ForTestsOnly` functions are not exported here; tests
+ * import them from `testing.ts`.
  */
 export * from './contexts'
 export * from './errors'
@@ -14,11 +15,9 @@ export * from './seal'
 export {
   type Argon2id,
   type Argon2idInput,
-  type KdfParameters,
+  type Argon2idParameters,
   KDF_OUTPUT_LENGTH,
-  V1_KDF_PARAMETERS,
-  assertKdfParametersMeetMinimum,
-  assertValidKdfParameters,
+  V1_ARGON2ID_PARAMETERS,
   encodeSecretText,
   stretchSecretText,
 } from './kdf'
@@ -36,7 +35,9 @@ export {
   deriveKeyringKey,
   derivePassphraseKeys,
   encodeIdentifier,
+  isSignedRequestMethod,
   mnemonicFromRootEntropy,
+  normalizeIdentifier,
   openKeyring,
   passphraseKeysFromRoot,
   rootEntropyFromMnemonic,
@@ -58,6 +59,7 @@ export {
   type FileLayout,
   type ParsedHeader,
   type StoredRange,
+  type VerifiedFileEnd,
   CHUNK_SIZE,
   CHUNK_SIZE_LOG2,
   CHUNK_TAG_LENGTH,

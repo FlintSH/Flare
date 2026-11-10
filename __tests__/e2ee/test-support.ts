@@ -1,8 +1,13 @@
 import { expect } from 'vitest'
 
-import { E2eeError, type E2eeErrorReason } from './errors'
-import type { Argon2id, KdfParameters } from './kdf'
-import { blake3Hash, concatBytes, hexToBytes, le64 } from './primitives'
+import { E2eeError, type E2eeErrorReason } from '@/lib/e2ee/errors'
+import type { Argon2id, Argon2idParameters } from '@/lib/e2ee/kdf'
+import {
+  blake3Hash,
+  concatBytes,
+  hexToBytes,
+  le64,
+} from '@/lib/e2ee/primitives'
 
 /** Helpers for the tests of this directory. Not part of the library. */
 
@@ -56,11 +61,15 @@ export async function expectReasonAsync(
 }
 
 /** Cheap Argon2id parameters for tests that run the real function. */
-export const FAST_KDF: KdfParameters = { memoryKib: 8, passes: 1, lanes: 1 }
+export const FAST_KDF: Argon2idParameters = {
+  memoryKib: 8,
+  passes: 1,
+  lanes: 1,
+}
 
 /**
  * A stand-in for Argon2id that hashes its whole input. It lets a test use
- * the production path, which insists on 64 MiB, without the cost. `calls`
+ * the production path, which always asks for 64 MiB, without the cost. `calls`
  * records what the library asked for.
  */
 export function fakeArgon2id() {

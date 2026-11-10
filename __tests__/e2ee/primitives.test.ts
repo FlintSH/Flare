@@ -4,10 +4,15 @@ import { argon2id } from '@noble/hashes/argon2.js'
 import { createCipheriv } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 
-import { nobleArgon2id } from './argon2-noble'
-import { CONTEXTS } from './contexts'
+import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
+import {
+  CONTEXTS,
+  PROTOCOL_VERSION,
+  assertSupportedProtocolVersion,
+} from '@/lib/e2ee/contexts'
 import {
   asciiBytes,
+  assertCanonicalX25519PublicKey,
   base64urlDecode,
   base64urlEncode,
   blake3DeriveKey,
@@ -22,20 +27,22 @@ import {
   ed25519Sign,
   ed25519Verify,
   hexToBytes,
+  isCanonicalX25519PublicKey,
   le64,
   utf8,
   x25519PublicKey,
   x25519SharedSecret,
   xchacha20Xor,
-} from './primitives'
-import { expectReason, hex, mod251, pattern } from './test-support'
+} from '@/lib/e2ee/primitives'
 import {
   asAccountPrivateKey,
   asAccountPublicKey,
   asEphemeralPrivateKey,
   asEphemeralPublicKey,
   asFileKey,
-} from './types'
+} from '@/lib/e2ee/types'
+
+import { expectReason, hex, mod251, pattern } from './test-support'
 
 describe('published known answers', () => {
   // RFC 8032, section 7.1, TEST 1 to TEST 3.
@@ -322,6 +329,188 @@ describe('ed2curve', () => {
   })
 })
 
+describe('ed2curve_public strict decode (section 4.4, rule 3)', () => {
+  const p = (BigInt(1) << BigInt(255)) - BigInt(19)
+  const encode = (y: bigint, sign = 0) => {
+    const out = new Uint8Array(32)
+    let rest = y
+    for (let index = 0; index < 32; index++) {
+      out[index] = Number(rest & BigInt(0xff))
+      rest >>= BigInt(8)
+    }
+    out[31] |= sign << 7
+    return asAccountPublicKey(out)
+  }
+
+  it('rejects a y that is not less than 2^255 - 19', () => {
+    // p + 3 is another encoding of y = 3, which is a point: only the strict
+    // rule rejects it. p + 1 is another encoding of y = 1.
+    expect(() => ed2curvePublic(encode(BigInt(3)))).not.toThrow()
+    for (const y of [
+      p,
+      p + BigInt(1),
+      p + BigInt(3),
+      p + BigInt(18),
+      (BigInt(1) << BigInt(255)) - BigInt(1),
+    ]) {
+      for (const sign of [0, 1]) {
+        expectReason(
+          () => ed2curvePublic(encode(y, sign)),
+          'invalid_public_key'
+        )
+      }
+    }
+    // The largest valid field element decodes or fails only by the curve.
+    expect(() => ed2curvePublic(encode(p - BigInt(1)))).not.toThrow()
+  })
+
+  it('rejects a y that has no x', () => {
+    // y = 2 is not on the curve.
+    expectReason(() => ed2curvePublic(encode(BigInt(2))), 'invalid_public_key')
+    expectReason(
+      () => ed2curvePublic(encode(BigInt(2), 1)),
+      'invalid_public_key'
+    )
+  })
+
+  it('rejects x = 0 with the sign bit set', () => {
+    // y = -1 has x = 0. RFC 8032, section 5.1.3, step 4.
+    expect(() => ed2curvePublic(encode(p - BigInt(1)))).not.toThrow()
+    expectReason(
+      () => ed2curvePublic(encode(p - BigInt(1), 1)),
+      'invalid_public_key'
+    )
+    // y = 1 has x = 0 too, and no X25519 form with either sign.
+    expectReason(() => ed2curvePublic(encode(BigInt(1))), 'invalid_public_key')
+    expectReason(
+      () => ed2curvePublic(encode(BigInt(1), 1)),
+      'invalid_public_key'
+    )
+  })
+
+  it('gives the same u for both signs of x, and always a canonical key', () => {
+    const publicKey = ed25519PublicKey<'account_public_key'>(
+      asAccountPrivateKey(pattern(32, 9))
+    )
+    const otherSign = publicKey.slice()
+    otherSign[31] ^= 0x80
+    const u = ed2curvePublic(publicKey)
+    expect(ed2curvePublic(asAccountPublicKey(otherSign))).toEqual(u)
+    expect(isCanonicalX25519PublicKey(u)).toBe(true)
+    for (let seed = 0; seed < 20; seed++) {
+      const key = ed25519PublicKey<'account_public_key'>(
+        asAccountPrivateKey(pattern(32, seed))
+      )
+      expect(isCanonicalX25519PublicKey(ed2curvePublic(key))).toBe(true)
+    }
+  })
+})
+
+describe('canonical X25519 public key (section 4.4, rule 3a)', () => {
+  const key = (hexText: string) => hex(hexText)
+
+  it('accepts each value below 2^255 - 19 with the highest bit zero', () => {
+    for (const text of [
+      '0000000000000000000000000000000000000000000000000000000000000000',
+      '0900000000000000000000000000000000000000000000000000000000000000',
+      // 2^255 - 20, the largest canonical value
+      'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff3f',
+      'edfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe7f',
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff007f',
+      'ffffffffffffffffffffffffffffff00ffffffffffffffffffffffffffffff7f',
+    ]) {
+      expect(isCanonicalX25519PublicKey(key(text))).toBe(true)
+      expect(() => assertCanonicalX25519PublicKey(key(text))).not.toThrow()
+    }
+  })
+
+  it('rejects a value of 2^255 - 19 or more, and the highest bit', () => {
+    for (const text of [
+      'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+      'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+      '0000000000000000000000000000000000000000000000000000000000000080',
+      '0900000000000000000000000000000000000000000000000000000000000080',
+      'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+    ]) {
+      expect(isCanonicalX25519PublicKey(key(text))).toBe(false)
+      expectReason(
+        () => assertCanonicalX25519PublicKey(key(text)),
+        'non_canonical_public_key'
+      )
+      expectReason(
+        () =>
+          x25519SharedSecret(
+            asEphemeralPrivateKey(pattern(32, 3)),
+            asEphemeralPublicKey(key(text))
+          ),
+        'non_canonical_public_key'
+      )
+    }
+    expect(isCanonicalX25519PublicKey(new Uint8Array(31))).toBe(false)
+    expectReason(
+      () => assertCanonicalX25519PublicKey(new Uint8Array(31)),
+      'bad_length'
+    )
+  })
+
+  it('agrees with a comparison of integers', () => {
+    const prime = (BigInt(1) << BigInt(255)) - BigInt(19)
+    for (let seed = 0; seed < 300; seed++) {
+      const bytes = pattern(32, seed)
+      // Push many samples near the prime, where the rule decides.
+      if (seed % 3 === 0) bytes.fill(0xff, 1, 31)
+      if (seed % 3 === 0) bytes[31] = seed % 2 ? 0x7f : 0xff
+      if (seed % 6 === 0) bytes[0] = 0xe0 + (seed % 32)
+      let value = BigInt(0)
+      for (let index = 31; index >= 0; index--) {
+        value = (value << BigInt(8)) | BigInt(bytes[index])
+      }
+      expect(isCanonicalX25519PublicKey(bytes)).toBe(value < prime)
+    }
+  })
+
+  it('a public key that the library makes is canonical', () => {
+    for (let seed = 0; seed < 50; seed++) {
+      expect(
+        isCanonicalX25519PublicKey(
+          x25519PublicKey(asEphemeralPrivateKey(pattern(32, seed)))
+        )
+      ).toBe(true)
+    }
+  })
+
+  it('the public key function does not change the private key (rule 3b)', () => {
+    const raw = asEphemeralPrivateKey(pattern(32, 4))
+    raw[0] |= 0x07
+    raw[31] |= 0x80
+    const before = raw.slice()
+    const publicKey = x25519PublicKey(raw)
+    expect(raw).toEqual(before)
+    // The function clamps inside: the clamped form gives the same key.
+    const clamped = before.slice()
+    clamped[0] &= 248
+    clamped[31] &= 127
+    clamped[31] |= 64
+    expect(x25519PublicKey(asEphemeralPrivateKey(clamped))).toEqual(publicKey)
+  })
+})
+
+describe('protocol_version', () => {
+  it('accepts version 1 and stops at each other value', () => {
+    expect(PROTOCOL_VERSION).toBe(1)
+    expect(() => assertSupportedProtocolVersion(1)).not.toThrow()
+    for (const version of [0, 2, '1', null, undefined, 1.5]) {
+      expectReason(
+        () => assertSupportedProtocolVersion(version),
+        'unknown_version'
+      )
+    }
+  })
+})
+
 describe('X25519 low-order points', () => {
   // The public keys that give zeros(32) for each private key.
   const lowOrder = [
@@ -330,9 +519,27 @@ describe('X25519 low-order points', () => {
     'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800',
     '5f9c95bca3508c24b1d0b1559c83ef5b04445cc4581c8e86d8224eddd09f1157',
     'ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+  ]
+  // Other encodings of 0 and 1. They are not canonical (section 4.4, rule
+  // 3a), and that rule comes first.
+  const nonCanonicalLowOrder = [
     'edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
     'eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f',
+    '0000000000000000000000000000000000000000000000000000000000000080',
+    '0100000000000000000000000000000000000000000000000000000000000080',
+    'e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b880',
   ]
+
+  it.each(nonCanonicalLowOrder)('rejects %s as not canonical', (point) => {
+    expectReason(
+      () =>
+        x25519SharedSecret(
+          asEphemeralPrivateKey(pattern(32, 3)),
+          asEphemeralPublicKey(hex(point))
+        ),
+      'non_canonical_public_key'
+    )
+  })
 
   it.each(lowOrder)('rejects %s', (point) => {
     expectReason(
@@ -417,7 +624,8 @@ describe('contexts', () => {
   it('has each context string once, all ASCII with the v1 prefix', () => {
     const values = Object.values(CONTEXTS)
     expect(new Set(values).size).toBe(values.length)
-    expect(values).toHaveLength(22)
+    expect(values).toHaveLength(23)
+    expect(values).toContain('flare e2ee v1 one-time nonce')
     for (const value of values) {
       expect(value).toMatch(/^flare e2ee v1 [a-z-]+( [a-z]+)*$/)
     }

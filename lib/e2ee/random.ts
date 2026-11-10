@@ -5,7 +5,7 @@ import {
   wrapRoot,
 } from './account'
 import { type ByteSource, buildHeader, encryptFile } from './file'
-import type { Argon2id, KdfParameters } from './kdf'
+import type { Argon2id } from './kdf'
 import {
   type FileMetadata,
   type FolderMetadata,
@@ -76,6 +76,7 @@ export const generateEphemeralPrivateKey = () =>
   randomBytes(32) as EphemeralPrivateKey
 export const generateLinkSecret = () => randomBytes(32) as LinkSecret
 export const generatePasswordSalt = () => randomBytes(32) as PasswordSalt
+/** 32 random bytes as they are. The key is never clamped before it is stored (section 4.4, rule 3b). */
 export const generateFolderPrivateKey = () =>
   randomBytes(32) as FolderPrivateKey
 
@@ -96,7 +97,6 @@ function withEphemeralKey<Result>(
 export function createRandomAccount(input: {
   readonly passphrase: string
   readonly argon2id: Argon2id
-  readonly kdfParameters?: KdfParameters
 }) {
   return createAccount({
     ...input,
@@ -114,6 +114,7 @@ export function wrapRootWithRandomNonce(input: {
   return wrapRoot({ ...input, nonce: generateSealNonce() })
 }
 
+/** Fails for an empty list: an account with no old key has no `sealed_keyring`. */
 export function sealKeyringWithRandomNonce(input: {
   readonly accountPrivateKey: AccountPrivateKey
   readonly accountPublicKey: AccountPublicKey

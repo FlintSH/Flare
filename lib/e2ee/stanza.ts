@@ -3,12 +3,12 @@ import { E2eeError } from './errors'
 import { deriveLinkSecretKey } from './file'
 import {
   type Argon2id,
-  type KdfParameters,
-  V1_KDF_PARAMETERS,
+  type Argon2idParameters,
   stretchSecretText,
-  stretchSecretTextForTestsOnly,
+  stretchSecretTextWithParametersForTestsOnly,
 } from './kdf'
 import {
+  assertCanonicalX25519PublicKey,
   concatBytes,
   constantTimeEqual,
   deriveKey,
@@ -18,7 +18,14 @@ import {
   x25519PublicKey,
   x25519SharedSecret,
 } from './primitives'
-import { SEAL_OVERHEAD, open, openExact, seal } from './seal'
+import {
+  SEAL_ONCE_OVERHEAD,
+  SEAL_OVERHEAD,
+  openExact,
+  openOnce,
+  seal,
+  sealOnce,
+} from './seal'
 import {
   type AccountPrivateKey,
   type AccountPublicKey,
@@ -49,13 +56,7 @@ import {
  * without the `record_version` byte (see `records.ts`).
  */
 
-const ZERO_NONCE_LENGTH = 24
 const PUBLIC_KEY_LENGTH = 32
-
-/** A stanza key encrypts one message only, thus its nonce is `zeros(24)`. */
-function zeroNonce(): SealNonce {
-  return new Uint8Array(ZERO_NONCE_LENGTH) as SealNonce
-}
 
 // --- Public-key wrap (section 8.4.1) ---
 
@@ -78,9 +79,13 @@ function deriveStanzaKey(
 }
 
 export interface PublicWrapInput {
-  /** An X25519 public key. */
+  /** An X25519 public key in its canonical form. */
   readonly recipientPublicKey: X25519PublicKey
-  /** `random(32)`. Use it for one recipient key only, then erase it. */
+  /**
+   * `random(32)`. Each stanza has its own: never use one ephemeral key pair
+   * for two stanzas, also not for two stanzas of one file. Erase it after
+   * the call.
+   */
   readonly ephemeralPrivateKey: EphemeralPrivateKey
   readonly context: string
   readonly associatedData: Uint8Array
@@ -89,9 +94,15 @@ export interface PublicWrapInput {
 
 /**
  * `public_wrap(recipient_public_key, context, associated_data, secret)`.
- * The output is `ephemeral_public_key || seal(stanza_key, zeros(24), associated_data, secret)`.
+ * The output is `ephemeral_public_key || seal_once(stanza_key, associated_data, secret)`.
+ * A `recipient_public_key` that is not canonical fails with
+ * `non_canonical_public_key`.
  */
 export function publicWrap(input: PublicWrapInput): Uint8Array {
+  assertCanonicalX25519PublicKey(
+    input.recipientPublicKey,
+    'recipient_public_key'
+  )
   const ephemeralPublicKey = x25519PublicKey(input.ephemeralPrivateKey)
   const stanzaKey = deriveStanzaKey(
     input.context,
@@ -100,12 +111,7 @@ export function publicWrap(input: PublicWrapInput): Uint8Array {
     ephemeralPublicKey,
     input.recipientPublicKey
   )
-  const sealed = seal(
-    stanzaKey,
-    zeroNonce(),
-    input.associatedData,
-    input.secret
-  )
+  const sealed = sealOnce(stanzaKey, input.associatedData, input.secret)
   wipe(stanzaKey)
   return concatBytes(ephemeralPublicKey, sealed)
 }
@@ -121,12 +127,15 @@ export interface PublicUnwrapInput {
 }
 
 /**
- * The reverse of `public_wrap`. `recipient_public_key` in the key derivation
- * comes from the private key, never from the server.
+ * `public_unwrap(recipient_private_key, context, associated_data, stanza)`.
+ * An `ephemeral_public_key` that is not canonical fails with
+ * `non_canonical_public_key` before any key agreement.
+ * `recipient_public_key` in the key derivation comes from the private key,
+ * never from the server.
  */
 export function publicUnwrap(input: PublicUnwrapInput): Uint8Array {
   const { stanza, secretLength } = input
-  const minimum = PUBLIC_KEY_LENGTH + SEAL_OVERHEAD
+  const minimum = PUBLIC_KEY_LENGTH + SEAL_ONCE_OVERHEAD
   if (stanza.length < minimum) {
     throw new E2eeError(
       'truncated',
@@ -142,6 +151,7 @@ export function publicUnwrap(input: PublicUnwrapInput): Uint8Array {
   const ephemeralPublicKey = asEphemeralPublicKey(
     stanza.subarray(0, PUBLIC_KEY_LENGTH)
   )
+  assertCanonicalX25519PublicKey(ephemeralPublicKey, 'ephemeral_public_key')
   const recipientPublicKey = x25519PublicKey(input.recipientPrivateKey)
   const stanzaKey = deriveStanzaKey(
     input.context,
@@ -151,7 +161,7 @@ export function publicUnwrap(input: PublicUnwrapInput): Uint8Array {
     recipientPublicKey
   )
   try {
-    return open(
+    return openOnce(
       stanzaKey,
       input.associatedData,
       stanza.subarray(PUBLIC_KEY_LENGTH)
@@ -163,7 +173,8 @@ export function publicUnwrap(input: PublicUnwrapInput): Uint8Array {
 
 // --- Account stanza (section 8.1) ---
 
-export const ACCOUNT_STANZA_LENGTH = PUBLIC_KEY_LENGTH + SEAL_OVERHEAD + 32
+/** `ephemeral_public_key || wrapped_file_key`: 32 + 64 = 96 bytes. */
+export const ACCOUNT_STANZA_LENGTH = PUBLIC_KEY_LENGTH + 32 + SEAL_ONCE_OVERHEAD
 
 /** The sender needs only `account_public_key`. Fails if the key has no X25519 form. */
 export function wrapAccountStanza(input: {
@@ -203,9 +214,13 @@ export function unwrapAccountStanza(input: {
 
 // --- Password stanza (section 8.2) ---
 
-const WRAPPED_KEY_LENGTH = SEAL_OVERHEAD + 32
-/** `password_salt || owner_public_key || wrapped_file_key || sealed_link_secret` */
-export const PASSWORD_STANZA_LENGTH = 32 + 32 + 2 * WRAPPED_KEY_LENGTH
+/** `seal_once` of a 32-byte key: 64 bytes. */
+const WRAPPED_FILE_KEY_LENGTH = 32 + SEAL_ONCE_OVERHEAD
+/** `seal` of a 32-byte secret with a random nonce: 88 bytes. */
+const SEALED_LINK_SECRET_LENGTH = 32 + SEAL_OVERHEAD
+/** `password_salt || owner_public_key || wrapped_file_key || sealed_link_secret`: 216 bytes. */
+export const PASSWORD_STANZA_LENGTH =
+  32 + 32 + WRAPPED_FILE_KEY_LENGTH + SEALED_LINK_SECRET_LENGTH
 
 export interface PasswordStanzaParts {
   readonly passwordSalt: PasswordSalt
@@ -224,12 +239,29 @@ export function parsePasswordStanza(stanza: Uint8Array): PasswordStanzaParts {
   return {
     passwordSalt: asPasswordSalt(stanza.subarray(0, 32)),
     ownerPublicKey: asAccountPublicKey(stanza.subarray(32, 64)),
-    wrappedFileKey: stanza.subarray(64, 64 + WRAPPED_KEY_LENGTH),
-    sealedLinkSecret: stanza.subarray(64 + WRAPPED_KEY_LENGTH),
+    wrappedFileKey: stanza.subarray(64, 64 + WRAPPED_FILE_KEY_LENGTH),
+    sealedLinkSecret: stanza.subarray(64 + WRAPPED_FILE_KEY_LENGTH),
   }
 }
 
-type Stretch = typeof stretchSecretText
+/** `Argon2id(password, password_salt)`: the production stretch, or the one of a test. */
+type Stretch = (
+  password: string,
+  passwordSalt: PasswordSalt,
+  argon2id: Argon2id
+) => Promise<Uint8Array>
+
+function stretchWithParametersForTestsOnly(
+  parameters: Argon2idParameters
+): Stretch {
+  return (password, passwordSalt, argon2id) =>
+    stretchSecretTextWithParametersForTestsOnly(
+      password,
+      passwordSalt,
+      parameters,
+      argon2id
+    )
+}
 
 async function derivePasswordKey(
   stretch: Stretch,
@@ -240,8 +272,7 @@ async function derivePasswordKey(
     readonly ownerPublicKey: AccountPublicKey
     readonly headerHash: HeaderHash
     readonly argon2id: Argon2id
-  },
-  kdfParameters: KdfParameters
+  }
 ): Promise<PasswordKey> {
   asLinkSecret(input.linkSecret)
   asAccountPublicKey(input.ownerPublicKey)
@@ -249,7 +280,6 @@ async function derivePasswordKey(
   const stretchedPassword = await stretch(
     input.password,
     asPasswordSalt(input.passwordSalt),
-    kdfParameters,
     input.argon2id
   )
   const material = concatBytes(
@@ -268,9 +298,9 @@ async function derivePasswordKey(
 
 export interface PasswordStanzaWrapInput {
   readonly password: string
-  /** `random(32)` */
+  /** `random(32)`. A new one for each stanza: `password_key` must encrypt one message only. */
   readonly passwordSalt: PasswordSalt
-  /** `random(32)`. The share link carries it. */
+  /** `random(32)`. A new one for each stanza. The share link carries it. */
   readonly linkSecret: LinkSecret
   /** The `account_public_key` of the owner at this time. */
   readonly ownerPublicKey: AccountPublicKey
@@ -283,18 +313,14 @@ export interface PasswordStanzaWrapInput {
 
 async function wrapPasswordStanzaWith(
   stretch: Stretch,
-  input: PasswordStanzaWrapInput,
-  kdfParameters: KdfParameters
+  input: PasswordStanzaWrapInput
 ): Promise<{ passwordKey: PasswordKey; stanza: Uint8Array }> {
   asFileKey(input.fileKey)
-  const passwordKey = await derivePasswordKey(stretch, input, kdfParameters)
-  const wrappedFileKey = seal(
-    passwordKey,
-    zeroNonce(),
-    input.headerHash,
-    input.fileKey
-  )
+  const passwordKey = await derivePasswordKey(stretch, input)
+  const wrappedFileKey = sealOnce(passwordKey, input.headerHash, input.fileKey)
   const linkSecretKey = deriveLinkSecretKey(input.fileKey)
+  // `link_secret_key` does not change when the owner changes the password,
+  // thus this box has a random nonce and is not a one-time box.
   const sealedLinkSecret = seal(
     linkSecretKey,
     input.linkSecretNonce,
@@ -314,17 +340,15 @@ async function wrapPasswordStanzaWith(
 }
 
 /**
- * The wrap procedure of section 8.2. The stanza does not record Argon2id
- * parameters, so this always uses the parameters of protocol version 1
- * (section 4.3).
+ * The wrap procedure of section 8.2, with the fixed Argon2id parameters of
+ * protocol version 1 (section 4.3).
  */
 export async function wrapPasswordStanza(
   input: PasswordStanzaWrapInput
 ): Promise<Uint8Array> {
   const { passwordKey, stanza } = await wrapPasswordStanzaWith(
     stretchSecretText,
-    input,
-    V1_KDF_PARAMETERS
+    input
   )
   wipe(passwordKey)
   return stanza
@@ -341,63 +365,62 @@ export interface PasswordStanzaUnwrapInput {
 
 async function unwrapPasswordStanzaWith(
   stretch: Stretch,
-  input: PasswordStanzaUnwrapInput,
-  kdfParameters: KdfParameters
+  input: PasswordStanzaUnwrapInput
 ): Promise<FileKey> {
   const parts = parsePasswordStanza(input.stanza)
-  const passwordKey = await derivePasswordKey(
-    stretch,
-    {
-      password: input.password,
-      passwordSalt: parts.passwordSalt,
-      linkSecret: input.linkSecret,
-      ownerPublicKey: parts.ownerPublicKey,
-      headerHash: input.headerHash,
-      argon2id: input.argon2id,
-    },
-    kdfParameters
-  )
+  const passwordKey = await derivePasswordKey(stretch, {
+    password: input.password,
+    passwordSalt: parts.passwordSalt,
+    linkSecret: input.linkSecret,
+    ownerPublicKey: parts.ownerPublicKey,
+    headerHash: input.headerHash,
+    argon2id: input.argon2id,
+  })
   try {
-    return open(passwordKey, input.headerHash, parts.wrappedFileKey) as FileKey
+    return openOnce(
+      passwordKey,
+      input.headerHash,
+      parts.wrappedFileKey
+    ) as FileKey
   } finally {
     wipe(passwordKey)
   }
 }
 
 /**
- * The unwrap procedure of section 8.2. A wrong password, a wrong link or a
- * stanza of a different file all give `tag_mismatch`.
+ * The unwrap procedure of section 8.2, with the fixed Argon2id parameters
+ * of protocol version 1. A wrong password, a wrong link or a stanza of a
+ * different file all give `tag_mismatch`.
  */
 export function unwrapPasswordStanza(
   input: PasswordStanzaUnwrapInput
 ): Promise<FileKey> {
-  return unwrapPasswordStanzaWith(stretchSecretText, input, V1_KDF_PARAMETERS)
+  return unwrapPasswordStanzaWith(stretchSecretText, input)
 }
 
 /**
- * TEST ONLY. The wrap with explicit Argon2id parameters, which can be below
- * the minimum. Returns `password_key` so a test vector can check it.
+ * TEST ONLY. The wrap with explicit Argon2id parameters, so that a test
+ * vector can be cheap. Returns `password_key` so a vector can check it.
+ * Application code must not call this.
  */
-export function wrapPasswordStanzaForTestsOnly(
+export function wrapPasswordStanzaWithParametersForTestsOnly(
   input: PasswordStanzaWrapInput,
-  kdfParameters: KdfParameters
+  parameters: Argon2idParameters
 ): Promise<{ passwordKey: PasswordKey; stanza: Uint8Array }> {
   return wrapPasswordStanzaWith(
-    stretchSecretTextForTestsOnly,
-    input,
-    kdfParameters
+    stretchWithParametersForTestsOnly(parameters),
+    input
   )
 }
 
-/** TEST ONLY. The unwrap with explicit Argon2id parameters. */
-export function unwrapPasswordStanzaForTestsOnly(
+/** TEST ONLY. The unwrap with explicit Argon2id parameters. Application code must not call this. */
+export function unwrapPasswordStanzaWithParametersForTestsOnly(
   input: PasswordStanzaUnwrapInput,
-  kdfParameters: KdfParameters
+  parameters: Argon2idParameters
 ): Promise<FileKey> {
   return unwrapPasswordStanzaWith(
-    stretchSecretTextForTestsOnly,
-    input,
-    kdfParameters
+    stretchWithParametersForTestsOnly(parameters),
+    input
   )
 }
 
@@ -427,7 +450,8 @@ export function openSealedLinkSecret(input: {
 
 // --- Folder stanzas (sections 8.4.2 and 8.4.3) ---
 
-const FOLDER_STANZA_LENGTH = PUBLIC_KEY_LENGTH + SEAL_OVERHEAD + 32
+/** Each folder stanza wraps 32 bytes: 96 bytes, as an account stanza. */
+const FOLDER_STANZA_LENGTH = PUBLIC_KEY_LENGTH + 32 + SEAL_ONCE_OVERHEAD
 
 /** `folder_file_stanza`, for a public file without a password in a folder. */
 export function wrapFolderFileStanza(input: {
@@ -492,7 +516,8 @@ export function unwrapFolderLinkSecretStanza(input: {
 /**
  * `parent_folder_stanza`: the private key of a folder, encrypted to the
  * public key of its parent. The associated data is the public key of the
- * child, which is calculated from its private key here.
+ * child, which is calculated from its private key here. The private key is
+ * wrapped as it is, without clamping (section 4.4, rule 3b).
  */
 export function wrapParentFolderStanza(input: {
   readonly parentFolderPublicKey: FolderPublicKey
@@ -511,14 +536,16 @@ export function wrapParentFolderStanza(input: {
 
 /**
  * Opens the private key of a folder below. `folderPublicKey` is the public
- * key of that folder as the server lists it. It is the associated data, and
- * the opened private key must give it, else `key_mismatch`.
+ * key of that folder as the server lists it. It must be canonical. It is
+ * the associated data, and the opened private key must give it, else
+ * `key_mismatch` (section 8.4.2).
  */
 export function unwrapParentFolderStanza(input: {
   readonly parentFolderPrivateKey: FolderPrivateKey
   readonly folderPublicKey: FolderPublicKey
   readonly stanza: Uint8Array
 }): FolderPrivateKey {
+  assertCanonicalX25519PublicKey(input.folderPublicKey, 'folder_public_key')
   if (input.stanza.length !== FOLDER_STANZA_LENGTH) {
     throw new E2eeError(
       'bad_length',

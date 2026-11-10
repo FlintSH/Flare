@@ -97,6 +97,7 @@ export type PasswordSalt = Bytes<'password_salt'>
 export const asPasswordSalt = fixedLength('password_salt', 32)
 export type PasswordKey = Bytes<'password_key'>
 export const asPasswordKey = fixedLength('password_key', 32)
+/** 32 random bytes as they are, never a clamped form (section 4.4, rule 3b). */
 export type FolderPrivateKey = Bytes<'folder_private_key'>
 export const asFolderPrivateKey = fixedLength('folder_private_key', 32)
 export type FolderPublicKey = Bytes<'folder_public_key'>
@@ -113,7 +114,7 @@ export const asTagKey = fixedLength('tag_key', 32)
 // Sealed box (section 4.2)
 export type SealNonce = Bytes<'seal_nonce'>
 export const asSealNonce = fixedLength('seal_nonce', 24)
-/** A seal key with no other role. For test vectors of `seal` itself. */
+/** A seal key with no other role. For tests of `seal` and `sealOnce` themselves. */
 export type GenericSealKey = Bytes<'seal_key'>
 export const asGenericSealKey = fixedLength('seal_key', 32)
 
@@ -135,6 +136,13 @@ export type SealKey =
   | FolderOwnerKey
   | TagKey
   | GenericSealKey
+
+/**
+ * The keys that `sealOnce` and `openOnce` accept (section 4.2.1). Each of
+ * them encrypts one message only: a `stanza_key` comes from a new ephemeral
+ * key pair, and a `password_key` from a new salt and a new `link_secret`.
+ */
+export type OneTimeSealKey = StanzaKey | PasswordKey | GenericSealKey
 
 export type X25519PrivateKey =
   ExchangePrivateKey | FolderPrivateKey | EphemeralPrivateKey

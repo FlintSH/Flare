@@ -24,10 +24,10 @@ export const E2EE_ERROR_REASONS = [
   'low_order_point',
   /** An Ed25519 public key does not decode, or has no X25519 form. */
   'invalid_public_key',
-  /** `kdf_parameters` are below the minimum of the protocol version. */
-  'weak_kdf_parameters',
-  /** `kdf_parameters` are not usable Argon2id parameters at all. */
-  'invalid_kdf_parameters',
+  /** An X25519 public key is not in its canonical form (section 4.4, rule 3a). */
+  'non_canonical_public_key',
+  /** A final chunk of length zero at a position other than chunk 0 (section 7.4, rule 8). */
+  'empty_final_chunk',
   /** The mnemonic is not 24 valid English BIP39 words with a correct checksum. */
   'invalid_mnemonic',
   /** A decrypted secret does not give the public key that the record names. */

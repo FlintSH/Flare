@@ -398,11 +398,11 @@ the same bytes.
    output has 32 bytes. Memory is in units of KiB: 64 MiB is `65536`.
 7. **Account identifier.** Normalize with Unicode NFKC. Remove the
    characters with the Unicode property White_Space at the start and the
-   end. Change to lower case with the default Unicode mapping, without a
+   end. This is not the same set as the `trim` function of JavaScript. Change to lower case with the default Unicode mapping, without a
    locale. Encode as UTF-8. Each place that uses the identifier uses this
    form: the signature of section 6.2 and the fake salt of section 6.1.
-8. **Signed request.** `method` is in upper case ASCII. A verifier rejects
-   each other form. `path` is the path and the query of the request line,
+8. **Signed request.** `method` is one or more of the letters `A` to `Z`. A
+   verifier rejects each other form. `path` is the path and the query of the request line,
    in the percent-encoded form that the client sends. The server must use
    the request line as it arrived, before a proxy or a base path changes it.
    `body` is the bytes of the request body. For a request without a body, use
@@ -418,7 +418,7 @@ the same bytes.
 11. **List of old private keys.** `old_private_keys` in `sealed_keyring` is
     the concatenation of the 32-byte seeds, newest first. An account with no
     old key has no `sealed_keyring`. A client must not store a sealed empty
-    list.
+    list. A reader rejects a sealed empty list.
 12. **`record_version`.** Each stanza and each sealed value that the server
     stores is `0x01 || record`. This includes `wrapped_root`,
     `sealed_keyring`, `sealed_metadata`, `sealed_ocr_text`,

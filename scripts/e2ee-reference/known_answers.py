@@ -251,6 +251,81 @@ def check_ed2curve() -> int:
     return count + 5
 
 
+def check_draft_18_rules() -> int:
+    """Rules of sections 4.2, 4.2.1 and 4.4 (3a, 3b, 7, 8, 10, 11) that have no published values.
+
+    Each check uses fixed values that a person can verify by hand.
+    """
+    count = 0
+    p = ref.FIELD_PRIME
+    key, data = bytes(range(32)), bytes(range(32, 64))
+
+    # 4.2.1: the nonce is the first 24 bytes of the derived key, and seal_once is seal without the nonce.
+    nonce = ref.blake3_derive_key("flare e2ee v1 one-time nonce", key)[:24]
+    _equal("one-time nonce", ref.one_time_nonce(key), nonce)
+    for message in (b"", b"x", bytes(100)):
+        box = ref.seal_once(key, data, message)
+        _equal("seal_once is seal without the nonce", nonce + box, ref.seal(key, nonce, data, message))
+        _equal("open_once", ref.open_once(key, data, box), message)
+        count += 2
+    _equal("seal_once of an empty message has 32 bytes", len(ref.seal_once(key, data, b"")).to_bytes(1, "big"), b"\x20")
+    _expect_reject("open_once, 31 bytes", ref.open_once, key, data, bytes(31))
+    _expect_reject("open, 55 bytes", ref.open_sealed, key, data, bytes(55))
+    count += 4
+
+    # 3a: canonical X25519 public keys. The limits are p - 1 (valid) and p (not valid).
+    for value in (0, 9, p - 1):
+        ref.check_canonical_x25519_public_key(value.to_bytes(32, "little"), "public key")
+        count += 1
+    for value in (p, p + 9, 2**255 - 1, 2**255, 2**255 + 9, 2**256 - 1):
+        _expect_reject(f"canonical form, {value:x}", ref.check_canonical_x25519_public_key, value.to_bytes(32, "little"), "public key")
+        count += 1
+    # The forms that are not canonical are the same point for X25519 itself, thus only the rule stops them.
+    scalar = h("a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4")
+    nine = ref.x25519_pure(scalar, (9).to_bytes(32, "little"))
+    _equal("X25519 reads p + 9 as 9, pure", ref.x25519_pure(scalar, (p + 9).to_bytes(32, "little")), nine)
+    _equal("X25519 reads 2^255 + 9 as 9, pure", ref.x25519_pure(scalar, (2**255 + 9).to_bytes(32, "little")), nine)
+    _equal("X25519 reads p + 9 as 9, library", ref.x25519(scalar, (p + 9).to_bytes(32, "little")), nine)
+    _equal("X25519 reads 2^255 + 9 as 9, library", ref.x25519(scalar, (2**255 + 9).to_bytes(32, "little")), nine)
+    count += 4
+
+    # 3b: a private key is used as it is. The clamped form gives the same public key.
+    raw = b"\xff" * 32
+    _equal("X25519 clamps, library", ref.x25519_public_key(raw), ref.x25519_public_key(ref.clamp_x25519(raw)))
+    _equal("X25519 clamps, pure", ref.x25519_pure(raw, ref.X25519_BASE_POINT), ref.x25519_public_key(raw))
+    count += 2
+
+    # 7: the 25 characters with White_Space, NFKC, lower case.
+    _equal("White_Space has 25 characters", str(len(set(ref.WHITE_SPACE))), "25")
+    for character in ref.WHITE_SPACE:
+        _equal(f"White_Space U+{ord(character):04X} is removed", ref.normalize_identifier(character + "a" + character), "a")
+        count += 1
+    for character in "\u001c\u001f\u200b\u2060\ufeff\u180e":  # not White_Space
+        kept = character + "a" + character
+        _equal(f"U+{ord(character):04X} stays", ref.normalize_identifier(kept), kept)
+        count += 1
+    _equal("identifier, NFKC and lower case", ref.normalize_identifier("\t\uff21lice@Example.COM\u00a0"), "alice@example.com")
+    _equal("identifier, bytes", ref.encode_identifier(" \u00c9milie "), b"\xc3\xa9milie")
+    _equal("identifier, decomposed", ref.encode_identifier("E\u0301milie"), b"\xc3\xa9milie")
+    _equal("identifier, inner space stays", ref.normalize_identifier(" A  b "), "a  b")
+    count += 5
+
+    # 8: the method.
+    for method in ("GET", "POST", "DELETE"):
+        _equal("method", ref.check_method(method), method.encode("ascii"))
+        count += 1
+    for method in ("", "get", "Get", "GET ", " GET", "G\u0415T", "GE-T", "GET1", "\uff27ET"):
+        _expect_reject(f"method {method!r}", ref.check_method, method)
+        count += 1
+
+    # 10: the reader of a mnemonic accepts upper case and more than one space.
+    _equal("mnemonic, upper case and two spaces", ref.entropy_from_mnemonic("  ABANDON " * 23 + "Art  "), bytes(32))
+    # 11: no sealed empty keyring.
+    seed = bytes(range(32))
+    _expect_reject("sealed empty keyring", ref.seal_keyring, seed, ref.ed25519_public_key(seed), bytes(24), [])
+    return count + 2
+
+
 def run_all() -> dict[str, int]:
     return {
         "BLAKE3 (reference test vectors)": check_blake3(),
@@ -260,6 +335,7 @@ def run_all() -> dict[str, int]:
         "Argon2id (reference implementation test.c)": check_argon2id(),
         "BIP39 (reference vectors)": check_bip39(),
         "ed2curve (libsodium cross-check)": check_ed2curve(),
+        "Rules of draft 18 (seal_once, canonical keys, identifier, method)": check_draft_18_rules(),
     }
 
 

@@ -1,17 +1,19 @@
 /**
- * TEST ONLY. Paths that skip a safety rule so that tests and test vectors
- * can be cheap or can fix an intermediate value:
+ * TEST ONLY. Paths that skip a rule of the protocol so that tests and test
+ * vectors can be cheap or can fix an intermediate value:
  *
- * - Argon2id with parameters below the minimum of section 4.3,
+ * - Argon2id with explicit parameters. Protocol version 1 has one fixed
+ *   parameter set (section 4.3), and the production functions take no
+ *   parameter argument.
  * - a chunk of any length with any `final_flag`.
  *
  * Application code must not import this module. `index.ts` does not export
  * these functions.
  */
-export { derivePassphraseKeysForTestsOnly } from './account'
+export { derivePassphraseKeysWithParametersForTestsOnly } from './account'
 export { encryptChunkUnchecked } from './file'
-export { stretchSecretTextForTestsOnly } from './kdf'
+export { stretchSecretTextWithParametersForTestsOnly } from './kdf'
 export {
-  unwrapPasswordStanzaForTestsOnly,
-  wrapPasswordStanzaForTestsOnly,
+  unwrapPasswordStanzaWithParametersForTestsOnly,
+  wrapPasswordStanzaWithParametersForTestsOnly,
 } from './stanza'

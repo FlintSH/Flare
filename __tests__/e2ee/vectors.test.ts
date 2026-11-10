@@ -8,6 +8,7 @@ import {
   deriveKeyringKey,
   derivePassphraseKeys,
   mnemonicFromRootEntropy,
+  normalizeIdentifier,
   openKeyring,
   rootEntropyFromMnemonic,
   sealKeyring,
@@ -17,8 +18,9 @@ import {
   verifySignInSignature,
   verifySignedRequest,
   wrapRoot,
-} from './account'
-import { nobleArgon2id } from './argon2-noble'
+} from '@/lib/e2ee/account'
+import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
+import { E2eeError, type E2eeErrorReason } from '@/lib/e2ee/errors'
 import {
   CHUNK_SIZE,
   buildHeader,
@@ -28,8 +30,8 @@ import {
   deriveFileKeys,
   encryptFile,
   parseHeader,
-} from './file'
-import { type KdfParameters, V1_KDF_PARAMETERS } from './kdf'
+} from '@/lib/e2ee/file'
+import { type Argon2idParameters, V1_ARGON2ID_PARAMETERS } from '@/lib/e2ee/kdf'
 import {
   blake3DeriveKey,
   blake3KeyedHash,
@@ -37,7 +39,7 @@ import {
   ed25519PublicKey,
   hexToBytes,
   utf8,
-} from './primitives'
+} from '@/lib/e2ee/primitives'
 import {
   decodeRecord,
   deriveFolderMetadataKey,
@@ -57,25 +59,29 @@ import {
   sealOcrText,
   sealTagMetadataBytes,
   sealThumbnail,
-} from './records'
-import { open, seal } from './seal'
+} from '@/lib/e2ee/records'
+import { open, seal } from '@/lib/e2ee/seal'
 import {
   openSealedLinkSecret,
+  publicUnwrap,
   publicWrap,
+  unwrapAccountStanza,
+  unwrapFolderFileStanza,
+  unwrapFolderLinkSecretStanza,
+  unwrapParentFolderStanza,
   unwrapPasswordStanza,
   wrapAccountStanza,
   wrapFolderFileStanza,
   wrapFolderLinkSecretStanza,
   wrapParentFolderStanza,
   wrapPasswordStanza,
-} from './stanza'
-import { collect, mod251 } from './test-support'
+} from '@/lib/e2ee/stanza'
 import {
-  derivePassphraseKeysForTestsOnly,
+  derivePassphraseKeysWithParametersForTestsOnly,
   encryptChunkUnchecked,
-  unwrapPasswordStanzaForTestsOnly,
-  wrapPasswordStanzaForTestsOnly,
-} from './testing'
+  unwrapPasswordStanzaWithParametersForTestsOnly,
+  wrapPasswordStanzaWithParametersForTestsOnly,
+} from '@/lib/e2ee/testing'
 import {
   asAccountPrivateKey,
   asAccountPublicKey,
@@ -94,21 +100,31 @@ import {
   asRootEntropy,
   asSealNonce,
   asWrapKey,
-} from './types'
+} from '@/lib/e2ee/types'
+
+import { collect, mod251 } from './test-support'
 
 /**
- * Checks every vector of `vectors/v1.json` against the library. The schema
- * is `vectors/SCHEMA.md`. A separate reference program makes the file from
- * the specification, so this test is skipped while the file does not exist.
+ * Checks every vector of `lib/e2ee/vectors/v1.json` against the library.
+ * The schema is `lib/e2ee/vectors/SCHEMA.md`. A separate reference program
+ * makes the file from the specification, so this test is skipped while the
+ * file does not exist.
+ *
+ * The test follows the schema, not one edition of the file. Where a vector
+ * and the library disagree, the library is not changed to agree: the
+ * disagreement is a finding about the specification or about one of the two
+ * programs.
  */
 
 const VECTORS_PATH = fileURLToPath(
-  new URL('./vectors/v1.json', import.meta.url)
+  new URL('../../lib/e2ee/vectors/v1.json', import.meta.url)
 )
 const ARGON2_TIMEOUT = 300_000
 
 type Fields = Record<string, unknown>
 type Output = Record<string, string | number>
+/** The `output` of a vector that the procedure must reject. */
+const REJECTED = { error: true }
 
 interface Vector {
   procedure: string
@@ -119,7 +135,17 @@ interface Vector {
 
 // --- Readers that follow the naming rules of the schema ---
 
+/**
+ * A key that ends with `_text` holds UTF-8 text. The schema names one
+ * exception: `sealed_ocr_text` is a sealed box in hexadecimal. (`ocr_text`,
+ * the other name in that rule, is text, as its suffix says.)
+ */
+function isTextKey(key: string): boolean {
+  return key.endsWith('_text') && key !== 'sealed_ocr_text'
+}
+
 function bytes(fields: Fields, key: string): Uint8Array {
+  if (isTextKey(key)) throw new Error(`"${key}" is a text key`)
   const value = fields[key]
   if (typeof value !== 'string') {
     throw new Error(`input "${key}" must be a hexadecimal string`)
@@ -128,7 +154,7 @@ function bytes(fields: Fields, key: string): Uint8Array {
 }
 
 function text(fields: Fields, key: string): string {
-  if (!key.endsWith('_text')) throw new Error(`"${key}" is not a text key`)
+  if (!isTextKey(key)) throw new Error(`"${key}" is not a text key`)
   const value = fields[key]
   if (typeof value !== 'string') throw new Error(`input "${key}" must be text`)
   return value
@@ -150,7 +176,7 @@ function boolean(fields: Fields, key: string): boolean {
   return value
 }
 
-function kdfParameters(fields: Fields): KdfParameters {
+function argon2idParameters(fields: Fields): Argon2idParameters {
   return {
     memoryKib: integer(fields, 'memory_kib'),
     passes: integer(fields, 'passes'),
@@ -158,12 +184,42 @@ function kdfParameters(fields: Fields): KdfParameters {
   }
 }
 
-function isRealKdf(parameters: KdfParameters): boolean {
+/**
+ * The specification fixes the parameters. A vector with other parameters is
+ * a fast vector and must use a path of the library that is for tests only.
+ */
+function isRealKdf(parameters: Argon2idParameters): boolean {
   return (
-    parameters.memoryKib === V1_KDF_PARAMETERS.memoryKib &&
-    parameters.passes === V1_KDF_PARAMETERS.passes &&
-    parameters.lanes === V1_KDF_PARAMETERS.lanes
+    parameters.memoryKib === V1_ARGON2ID_PARAMETERS.memoryKib &&
+    parameters.passes === V1_ARGON2ID_PARAMETERS.passes &&
+    parameters.lanes === V1_ARGON2ID_PARAMETERS.lanes
   )
+}
+
+function chunkContext(input: Fields) {
+  return contentContext(
+    asFileKey(bytes(input, 'file_key')),
+    buildHeader(asNoncePrefix(bytes(input, 'nonce_prefix')))
+  )
+}
+
+function passwordUnwrapInput(input: Fields, stanza: Uint8Array) {
+  return {
+    password: text(input, 'password_text'),
+    linkSecret: asLinkSecret(bytes(input, 'link_secret')),
+    headerHash: asHeaderHash(bytes(input, 'header_hash')),
+    stanza,
+    argon2id: nobleArgon2id,
+  }
+}
+
+/** `unwrap` with the fixed parameters through the production function, else through the test path. */
+function unwrapPasswordStanzaOfVector(input: Fields, stanza: Uint8Array) {
+  const parameters = argon2idParameters(input)
+  const unwrapInput = passwordUnwrapInput(input, stanza)
+  return isRealKdf(parameters)
+    ? unwrapPasswordStanza(unwrapInput)
+    : unwrapPasswordStanzaWithParametersForTestsOnly(unwrapInput, parameters)
 }
 
 const toHex = bytesToHex
@@ -223,16 +279,19 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
     },
 
     async passphrase_keys(input) {
-      const parameters = kdfParameters(input)
+      const parameters = argon2idParameters(input)
       const derivation = {
         passphrase: text(input, 'passphrase_text'),
         passphraseSalt: asPassphraseSalt(bytes(input, 'passphrase_salt')),
-        kdfParameters: parameters,
         argon2id: nobleArgon2id,
       }
-      const keys = await derivePassphraseKeysForTestsOnly(derivation)
+      const keys = await derivePassphraseKeysWithParametersForTestsOnly(
+        derivation,
+        parameters
+      )
       if (isRealKdf(parameters)) {
-        // The function that a client calls at sign-in gives the same keys.
+        // The function that a client calls at sign-in takes no parameters
+        // and gives the same keys.
         const production = await derivePassphraseKeys(derivation)
         expect(production.wrapKey).toEqual(keys.wrapKey)
         expect(production.authPrivateKey).toEqual(keys.authPrivateKey)
@@ -289,7 +348,10 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
           signature,
         })
       ).toBe(true)
-      return { signature: toHex(signature) }
+      return {
+        signature: toHex(signature),
+        identifier_normalized_text: normalizeIdentifier(identifier),
+      }
     },
 
     signed_request(input) {
@@ -306,6 +368,8 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
         ...request,
         accountPrivateKey,
       })
+      // The verifier accepts the method in upper case ASCII only. It does
+      // not convert a different form.
       expect(
         verifySignedRequest({
           ...request,
@@ -313,7 +377,7 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
             ed25519PublicKey<'account_public_key'>(accountPrivateKey),
           signature,
         })
-      ).toBe(true)
+      ).toBe(/^[A-Z]+$/.test(request.method))
       return {
         signed_message: toHex(signedMessage),
         signature: toHex(signature),
@@ -341,10 +405,7 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
     },
 
     file_chunk(input) {
-      const context = contentContext(
-        asFileKey(bytes(input, 'file_key')),
-        buildHeader(asNoncePrefix(bytes(input, 'nonce_prefix')))
-      )
+      const context = chunkContext(input)
       const chunkIndex = integer(input, 'chunk_index')
       const isFinal = boolean(input, 'is_final')
       const chunkPlaintext = bytes(input, 'chunk_plaintext')
@@ -356,8 +417,10 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
         isFinal,
         chunkPlaintext
       )
+      // Section 7.4, rules 6 and 8.
       const legalLength = isFinal
-        ? chunkPlaintext.length <= CHUNK_SIZE
+        ? chunkPlaintext.length <= CHUNK_SIZE &&
+          (chunkPlaintext.length > 0 || chunkIndex === 0)
         : chunkPlaintext.length === CHUNK_SIZE
       if (legalLength) {
         expect(decryptChunk(context, chunkIndex, isFinal, storedChunk)).toEqual(
@@ -471,7 +534,7 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
     },
 
     async password_stanza(input) {
-      const parameters = kdfParameters(input)
+      const parameters = argon2idParameters(input)
       const fileKey = asFileKey(bytes(input, 'file_key'))
       const headerHash = asHeaderHash(bytes(input, 'header_hash'))
       const linkSecret = asLinkSecret(bytes(input, 'link_secret'))
@@ -485,34 +548,21 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
         linkSecretNonce: asSealNonce(bytes(input, 'link_secret_nonce')),
         argon2id: nobleArgon2id,
       }
-      const unwrapInput = {
-        password: wrapInput.password,
-        linkSecret,
-        headerHash,
-        argon2id: nobleArgon2id,
-      }
-      const { passwordKey, stanza } = await wrapPasswordStanzaForTestsOnly(
-        wrapInput,
-        parameters
-      )
+      const { passwordKey, stanza } =
+        await wrapPasswordStanzaWithParametersForTestsOnly(
+          wrapInput,
+          parameters
+        )
       const passwordKeyHex = toHex(passwordKey)
       expect(openSealedLinkSecret({ fileKey, headerHash, stanza })).toEqual(
         linkSecret
       )
       if (isRealKdf(parameters)) {
-        // The functions that a client calls give and open the same stanza.
+        // The function that a client calls takes no parameters and gives
+        // the same stanza.
         expect(await wrapPasswordStanza(wrapInput)).toEqual(stanza)
-        expect(await unwrapPasswordStanza({ ...unwrapInput, stanza })).toEqual(
-          fileKey
-        )
-      } else {
-        expect(
-          await unwrapPasswordStanzaForTestsOnly(
-            { ...unwrapInput, stanza },
-            parameters
-          )
-        ).toEqual(fileKey)
       }
+      expect(await unwrapPasswordStanzaOfVector(input, stanza)).toEqual(fileKey)
       return { password_key: passwordKeyHex, stanza: toHex(stanza) }
     },
 
@@ -526,6 +576,11 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
       const list = input.old_private_keys
       if (!Array.isArray(list)) {
         throw new Error('input "old_private_keys" must be an array')
+      }
+      if (list.length === 0) {
+        throw new Error(
+          'the schema has no sealed_keyring vector with an empty list'
+        )
       }
       const oldPrivateKeys = list.map((entry: unknown) => {
         if (typeof entry !== 'string') {
@@ -590,9 +645,22 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
       const folderPublicKey = asFolderPublicKey(
         bytes(input, 'folder_public_key')
       )
-      const ephemeralPrivateKey = asEphemeralPrivateKey(
-        bytes(input, 'ephemeral_private_key')
-      )
+      // Each stanza has its own ephemeral key. The schema has no
+      // `ephemeral_private_key` for this procedure any more.
+      if (Object.hasOwn(input, 'ephemeral_private_key')) {
+        throw new Error(
+          'folder_stanzas must not have one "ephemeral_private_key" for three stanzas'
+        )
+      }
+      const ephemeralPrivateKeys = [
+        bytes(input, 'file_ephemeral_private_key'),
+        bytes(input, 'link_secret_ephemeral_private_key'),
+        bytes(input, 'parent_ephemeral_private_key'),
+      ].map(asEphemeralPrivateKey)
+      expect(
+        new Set(ephemeralPrivateKeys.map(toHex)).size,
+        'one ephemeral key pair for each stanza'
+      ).toBe(3)
       const headerHash = asHeaderHash(bytes(input, 'header_hash'))
       const childPrivateKey = asFolderPrivateKey(
         bytes(input, 'child_folder_private_key')
@@ -605,12 +673,11 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
       expect(toHex(folderPublicKeyOf(childPrivateKey))).toBe(
         toHex(childPublicKey)
       )
-      // The same ephemeral key serves all three stanzas in a vector.
       return {
         folder_file_stanza: toHex(
           wrapFolderFileStanza({
             folderPublicKey,
-            ephemeralPrivateKey,
+            ephemeralPrivateKey: ephemeralPrivateKeys[0],
             headerHash,
             fileKey: asFileKey(bytes(input, 'file_key')),
           })
@@ -618,7 +685,7 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
         folder_link_secret_stanza: toHex(
           wrapFolderLinkSecretStanza({
             folderPublicKey,
-            ephemeralPrivateKey,
+            ephemeralPrivateKey: ephemeralPrivateKeys[1],
             headerHash,
             linkSecret: asLinkSecret(bytes(input, 'link_secret')),
           })
@@ -626,7 +693,7 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
         parent_folder_stanza: toHex(
           wrapParentFolderStanza({
             parentFolderPublicKey: folderPublicKey,
-            ephemeralPrivateKey,
+            ephemeralPrivateKey: ephemeralPrivateKeys[2],
             folderPrivateKey: childPrivateKey,
           })
         ),
@@ -668,8 +735,248 @@ const PROCEDURES: Record<string, (input: Fields) => Output | Promise<Output>> =
     },
   }
 
+// --- Vectors that the library must reject ---
+//
+// The schema says: each procedure that wraps or opens a stanza has vectors
+// with the name `rejects ...` and the output `{ "error": true }`, and
+// `file_chunk` has `decrypt_rejects` vectors with a `stored_chunk`.
+//
+// Each function here reads the inputs first and returns the call that must
+// fail. An input that the test cannot read is thus an error of the test, not
+// a rejection.
+//
+// The schema does not say how a `rejects` vector names its inputs. This test
+// reads a vector with a `stanza` input as the open direction, with the
+// private key of the recipient under `recipient_private_key`,
+// `account_private_key` or `folder_private_key`, and each other vector as
+// the wrap direction with the inputs of the table. For `folder_stanzas`,
+// `stanza_kind_text` (`file`, `link_secret` or `parent`) selects the stanza.
+
+type Rejection = () => unknown
+
+function assertDirection(input: Fields, opens: boolean): void {
+  if (Object.hasOwn(input, 'direction_text')) {
+    expect(text(input, 'direction_text')).toBe(opens ? 'unwrap' : 'wrap')
+  }
+}
+
+const REJECT_PROCEDURES: Record<string, (input: Fields) => Rejection> = {
+  file_chunk(input) {
+    const context = chunkContext(input)
+    const chunkIndex = integer(input, 'chunk_index')
+    const isFinal = boolean(input, 'is_final')
+    const storedChunk = bytes(input, 'stored_chunk')
+    return () => decryptChunk(context, chunkIndex, isFinal, storedChunk)
+  },
+
+  public_wrap(input) {
+    const opens = Object.hasOwn(input, 'stanza')
+    assertDirection(input, opens)
+    const context = text(input, 'context_text')
+    const associatedData = bytes(input, 'associated_data')
+    if (opens) {
+      const recipientPrivateKey = asFolderPrivateKey(
+        bytes(input, 'recipient_private_key')
+      )
+      const stanza = bytes(input, 'stanza')
+      return () =>
+        publicUnwrap({ recipientPrivateKey, context, associatedData, stanza })
+    }
+    // No branded constructor here: the key under test can be any 32 bytes.
+    const recipientPublicKey = asFolderPublicKey(
+      bytes(input, 'recipient_public_key')
+    )
+    const ephemeralPrivateKey = asEphemeralPrivateKey(
+      bytes(input, 'ephemeral_private_key')
+    )
+    const secret = bytes(input, 'secret')
+    return () =>
+      publicWrap({
+        recipientPublicKey,
+        ephemeralPrivateKey,
+        context,
+        associatedData,
+        secret,
+      })
+  },
+
+  account_stanza(input) {
+    const opens = Object.hasOwn(input, 'stanza')
+    assertDirection(input, opens)
+    const headerHash = asHeaderHash(bytes(input, 'header_hash'))
+    if (opens) {
+      const accountPrivateKey = asAccountPrivateKey(
+        bytes(input, 'account_private_key')
+      )
+      const stanza = bytes(input, 'stanza')
+      return () =>
+        unwrapAccountStanza({ accountPrivateKey, headerHash, stanza })
+    }
+    const accountPublicKey = asAccountPublicKey(
+      bytes(input, 'account_public_key')
+    )
+    const ephemeralPrivateKey = asEphemeralPrivateKey(
+      bytes(input, 'ephemeral_private_key')
+    )
+    const fileKey = asFileKey(bytes(input, 'file_key'))
+    return () =>
+      wrapAccountStanza({
+        accountPublicKey,
+        ephemeralPrivateKey,
+        headerHash,
+        fileKey,
+      })
+  },
+
+  password_stanza(input) {
+    // A password stanza has no public key that the wrap can reject.
+    assertDirection(input, true)
+    const stanza = bytes(input, 'stanza')
+    // Read each input now, so that only the unwrap can fail later.
+    argon2idParameters(input)
+    passwordUnwrapInput(input, stanza)
+    return () => unwrapPasswordStanzaOfVector(input, stanza)
+  },
+
+  folder_stanzas(input) {
+    const opens = Object.hasOwn(input, 'stanza')
+    assertDirection(input, opens)
+    const kind = text(input, 'stanza_kind_text')
+    if (!['file', 'link_secret', 'parent'].includes(kind)) {
+      throw new Error(`Unknown stanza_kind_text "${kind}"`)
+    }
+    if (opens) {
+      const folderPrivateKey = asFolderPrivateKey(
+        bytes(input, 'folder_private_key')
+      )
+      const stanza = bytes(input, 'stanza')
+      if (kind === 'parent') {
+        const folderPublicKey = asFolderPublicKey(
+          bytes(input, 'child_folder_public_key')
+        )
+        return () =>
+          unwrapParentFolderStanza({
+            parentFolderPrivateKey: folderPrivateKey,
+            folderPublicKey,
+            stanza,
+          })
+      }
+      const headerHash = asHeaderHash(bytes(input, 'header_hash'))
+      return kind === 'file'
+        ? () => unwrapFolderFileStanza({ folderPrivateKey, headerHash, stanza })
+        : () =>
+            unwrapFolderLinkSecretStanza({
+              folderPrivateKey,
+              headerHash,
+              stanza,
+            })
+    }
+    const folderPublicKey = asFolderPublicKey(bytes(input, 'folder_public_key'))
+    if (kind === 'parent') {
+      const ephemeralPrivateKey = asEphemeralPrivateKey(
+        bytes(input, 'parent_ephemeral_private_key')
+      )
+      const folderPrivateKey = asFolderPrivateKey(
+        bytes(input, 'child_folder_private_key')
+      )
+      return () =>
+        wrapParentFolderStanza({
+          parentFolderPublicKey: folderPublicKey,
+          ephemeralPrivateKey,
+          folderPrivateKey,
+        })
+    }
+    const headerHash = asHeaderHash(bytes(input, 'header_hash'))
+    if (kind === 'file') {
+      const ephemeralPrivateKey = asEphemeralPrivateKey(
+        bytes(input, 'file_ephemeral_private_key')
+      )
+      const fileKey = asFileKey(bytes(input, 'file_key'))
+      return () =>
+        wrapFolderFileStanza({
+          folderPublicKey,
+          ephemeralPrivateKey,
+          headerHash,
+          fileKey,
+        })
+    }
+    const ephemeralPrivateKey = asEphemeralPrivateKey(
+      bytes(input, 'link_secret_ephemeral_private_key')
+    )
+    const linkSecret = asLinkSecret(bytes(input, 'link_secret'))
+    return () =>
+      wrapFolderLinkSecretStanza({
+        folderPublicKey,
+        ephemeralPrivateKey,
+        headerHash,
+        linkSecret,
+      })
+  },
+}
+
+/**
+ * The reasons that count as a rejection by the protocol. A failure with a
+ * different reason, for example `invalid_encoding`, means that the vector
+ * did not reach the rule that it is for.
+ */
+const STANZA_REJECT_REASONS: E2eeErrorReason[] = [
+  'tag_mismatch',
+  'non_canonical_public_key',
+  'invalid_public_key',
+  'low_order_point',
+  'key_mismatch',
+]
+const REJECT_REASONS: Record<string, E2eeErrorReason[]> = {
+  file_chunk: ['tag_mismatch', 'bad_length', 'empty_final_chunk', 'truncated'],
+  public_wrap: STANZA_REJECT_REASONS,
+  account_stanza: STANZA_REJECT_REASONS,
+  password_stanza: STANZA_REJECT_REASONS,
+  folder_stanzas: STANZA_REJECT_REASONS,
+}
+
+function isRejectVector(vector: Vector): boolean {
+  return (
+    typeof vector.output === 'object' &&
+    vector.output !== null &&
+    vector.output.error === true
+  )
+}
+
+async function expectRejection(vector: Vector): Promise<void> {
+  // Exact form: no other output key next to "error".
+  expect(vector.output).toEqual(REJECTED)
+  if (!Object.hasOwn(REJECT_PROCEDURES, vector.procedure)) {
+    throw new Error(
+      `The schema has no vector with "error" for "${vector.procedure}"`
+    )
+  }
+  const rejection = REJECT_PROCEDURES[vector.procedure](vector.input)
+  let result: unknown
+  let thrown: unknown
+  try {
+    result = await rejection()
+  } catch (error) {
+    thrown = error
+  }
+  if (thrown === undefined) {
+    const shown = result instanceof Uint8Array ? toHex(result) : String(result)
+    throw new Error(`The library did not reject the input. It gave ${shown}`)
+  }
+  expect(thrown).toBeInstanceOf(E2eeError)
+  expect(REJECT_REASONS[vector.procedure]).toContain(
+    (thrown as E2eeError).reason
+  )
+}
+
 /** Procedures that run Argon2id. Each needs one vector with the real parameters. */
 const ARGON2_PROCEDURES = ['passphrase_keys', 'password_stanza']
+/** Procedures that wrap or open a stanza. Each needs `rejects ...` vectors. */
+const STANZA_PROCEDURES = [
+  'public_wrap',
+  'account_stanza',
+  'password_stanza',
+  'folder_stanzas',
+]
 const FILE_LENGTHS = [0, 1, 65535, 65536, 65537, 131072, 200000]
 
 describe('test vectors of protocol version 1', () => {
@@ -703,9 +1010,28 @@ describe('test vectors of protocol version 1', () => {
     expect(unknown).toEqual([])
   })
 
+  it('names each vector with "error" as the schema says, and no other vector', () => {
+    for (const vector of vectors) {
+      const prefix =
+        vector.procedure === 'file_chunk' ? 'decrypt_rejects' : 'rejects '
+      expect
+        .soft(
+          vector.name.startsWith(prefix),
+          `${vector.procedure}: "${vector.name}" starts with "${prefix}"`
+        )
+        .toBe(isRejectVector(vector))
+    }
+  })
+
   it('has enough vectors for each procedure', () => {
     const count = (procedure: string) =>
-      vectors.filter((vector) => vector.procedure === procedure)
+      vectors.filter(
+        (vector) => vector.procedure === procedure && !isRejectVector(vector)
+      )
+    const rejects = (procedure: string) =>
+      vectors.filter(
+        (vector) => vector.procedure === procedure && isRejectVector(vector)
+      )
     for (const procedure of Object.keys(PROCEDURES)) {
       expect
         .soft(count(procedure).length, `vectors of ${procedure}`)
@@ -729,6 +1055,31 @@ describe('test vectors of protocol version 1', () => {
     for (const length of FILE_LENGTHS) {
       expect.soft(lengths, 'plaintext_length of file vectors').toContain(length)
     }
+    for (const procedure of STANZA_PROCEDURES) {
+      expect
+        .soft(rejects(procedure).length, `"rejects" vectors of ${procedure}`)
+        .toBeGreaterThanOrEqual(1)
+    }
+    // A zero-length final chunk after a full chunk: the stored chunk is a
+    // tag only, it is final, and it is not chunk 0.
+    const emptyFinal = rejects('file_chunk').filter(
+      (vector) =>
+        vector.input.is_final === true &&
+        vector.input.chunk_index !== 0 &&
+        typeof vector.input.stored_chunk === 'string' &&
+        vector.input.stored_chunk.length === 64
+    )
+    expect
+      .soft(emptyFinal.length, 'decrypt_rejects of a zero-length final chunk')
+      .toBeGreaterThanOrEqual(1)
+    expect.soft(rejects('file'), '"error" vectors of file').toEqual([])
+    const emptyKeyrings = vectors.filter(
+      (vector) =>
+        vector.procedure === 'sealed_keyring' &&
+        Array.isArray(vector.input.old_private_keys) &&
+        vector.input.old_private_keys.length === 0
+    )
+    expect.soft(emptyKeyrings, 'sealed_keyring with an empty list').toEqual([])
   })
 
   it.each(vectors.map((vector, index) => ({ index, vector })))(
@@ -736,6 +1087,10 @@ describe('test vectors of protocol version 1', () => {
     async ({ vector }) => {
       if (!Object.hasOwn(PROCEDURES, vector.procedure)) {
         throw new Error(`Unknown procedure "${vector.procedure}"`)
+      }
+      if (isRejectVector(vector)) {
+        await expectRejection(vector)
+        return
       }
       const actual = await PROCEDURES[vector.procedure](vector.input)
       // Exact equality: a missing or an extra output key fails too.

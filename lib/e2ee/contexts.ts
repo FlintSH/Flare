@@ -1,3 +1,5 @@
+import { E2eeError } from './errors'
+
 /**
  * Every context string of protocol version 1, exactly as the specification
  * writes it. No other file may contain a context string literal.
@@ -11,6 +13,8 @@ export const CONTEXTS = {
   sealCipher: 'flare e2ee v1 seal cipher',
   /** Section 4.2 */
   sealMac: 'flare e2ee v1 seal mac',
+  /** Section 4.2.1 */
+  oneTimeNonce: 'flare e2ee v1 one-time nonce',
   /** Section 5.1 */
   accountSeed: 'flare e2ee v1 account seed',
   /** Section 5.1 */
@@ -58,3 +62,20 @@ export type Context = (typeof CONTEXTS)[ContextName]
 
 /** The protocol version that this library writes (section 1.5). */
 export const PROTOCOL_VERSION = 1
+
+/**
+ * Section 1.5.2, rule 3, for the `protocol_version` that the server returns
+ * with the salt (section 6.1) or that an account record carries. A version
+ * that this client does not know stops with `unknown_version`. The client
+ * must tell the user to update, and must not try a different version.
+ */
+export function assertSupportedProtocolVersion(
+  protocolVersion: unknown
+): asserts protocolVersion is typeof PROTOCOL_VERSION {
+  if (protocolVersion !== PROTOCOL_VERSION) {
+    throw new E2eeError(
+      'unknown_version',
+      'Unknown protocol_version. Update the client.'
+    )
+  }
+}

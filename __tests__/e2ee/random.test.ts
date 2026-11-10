@@ -5,9 +5,9 @@ import {
   openKeyring,
   rootEntropyFromMnemonic,
   unlockAccount,
-} from './account'
-import { contentContext, decryptFile, headerHash } from './file'
-import { bytesToHex } from './primitives'
+} from '@/lib/e2ee/account'
+import { contentContext, decryptFile, headerHash } from '@/lib/e2ee/file'
+import { bytesToHex } from '@/lib/e2ee/primitives'
 import {
   createRandomAccount,
   createRandomFile,
@@ -26,7 +26,7 @@ import {
   wrapFolderLinkSecretStanzaWithRandomKey,
   wrapRandomPasswordStanza,
   wrapRootWithRandomNonce,
-} from './random'
+} from '@/lib/e2ee/random'
 import {
   openFileMetadata,
   openFolderMetadata,
@@ -34,7 +34,7 @@ import {
   openOcrText,
   openTagMetadata,
   openThumbnail,
-} from './records'
+} from '@/lib/e2ee/records'
 import {
   openSealedLinkSecret,
   unwrapAccountStanza,
@@ -42,9 +42,10 @@ import {
   unwrapFolderLinkSecretStanza,
   unwrapParentFolderStanza,
   unwrapPasswordStanza,
-} from './stanza'
+} from '@/lib/e2ee/stanza'
+import { asWrapKey } from '@/lib/e2ee/types'
+
 import { collect, fakeArgon2id, mod251, pattern } from './test-support'
-import { asWrapKey } from './types'
 
 describe('random wrappers', () => {
   it('draws the requested number of bytes, also above 65536', () => {
@@ -68,7 +69,6 @@ describe('random wrappers', () => {
     const passphraseKeys = await derivePassphraseKeys({
       passphrase: 'correct horse battery staple',
       passphraseSalt: record.passphraseSalt,
-      kdfParameters: record.kdfParameters,
       argon2id,
     })
     const unlockInput = {

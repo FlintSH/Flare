@@ -7,7 +7,9 @@ import {
   deriveKeyringKey,
   derivePassphraseKeys,
   encodeIdentifier,
+  isSignedRequestMethod,
   mnemonicFromRootEntropy,
+  normalizeIdentifier,
   openKeyring,
   passphraseKeysFromRoot,
   rootEntropyFromMnemonic,
@@ -21,14 +23,10 @@ import {
   verifySignInSignature,
   verifySignedRequest,
   wrapRoot,
-} from './account'
-import { nobleArgon2id } from './argon2-noble'
-import { CONTEXTS } from './contexts'
-import {
-  V1_KDF_PARAMETERS,
-  assertKdfParametersMeetMinimum,
-  encodeSecretText,
-} from './kdf'
+} from '@/lib/e2ee/account'
+import { nobleArgon2id } from '@/lib/e2ee/argon2-noble'
+import { CONTEXTS } from '@/lib/e2ee/contexts'
+import { V1_ARGON2ID_PARAMETERS, encodeSecretText } from '@/lib/e2ee/kdf'
 import {
   asciiBytes,
   blake3DeriveKey,
@@ -38,17 +36,9 @@ import {
   ed25519PublicKey,
   utf8,
   x25519PublicKey,
-} from './primitives'
-import { seal } from './seal'
-import {
-  FAST_KDF,
-  expectReason,
-  expectReasonAsync,
-  fakeArgon2id,
-  flipBit,
-  pattern,
-} from './test-support'
-import { derivePassphraseKeysForTestsOnly } from './testing'
+} from '@/lib/e2ee/primitives'
+import { seal } from '@/lib/e2ee/seal'
+import { derivePassphraseKeysWithParametersForTestsOnly } from '@/lib/e2ee/testing'
 import {
   asAccountPrivateKey,
   asAccountPublicKey,
@@ -58,7 +48,16 @@ import {
   asRootEntropy,
   asSealNonce,
   asWrapKey,
-} from './types'
+} from '@/lib/e2ee/types'
+
+import {
+  FAST_KDF,
+  expectReason,
+  expectReasonAsync,
+  fakeArgon2id,
+  flipBit,
+  pattern,
+} from './test-support'
 
 const rootEntropy = asRootEntropy(pattern(32, 11))
 const salt = asPassphraseSalt(pattern(32, 12))
@@ -139,31 +138,32 @@ describe('passphrase keys and the Argon2id minimum', () => {
     expect(encodeSecretText('  two  spaces ')).toEqual(utf8('  two  spaces '))
   })
 
-  it('the sign-in function rejects weak parameters before any work', async () => {
-    const weak = [
-      FAST_KDF,
-      { memoryKib: 65535, passes: 3, lanes: 4 },
-      { memoryKib: 65536, passes: 2, lanes: 4 },
-      { memoryKib: 65536, passes: 3, lanes: 3 },
-      { memoryKib: 2097152, passes: 1, lanes: 4 },
-    ]
-    for (const kdfParameters of weak) {
-      const { argon2id, calls } = fakeArgon2id()
-      await expectReasonAsync(
-        () =>
-          derivePassphraseKeys({
-            passphrase: 'correct horse battery staple',
-            passphraseSalt: salt,
-            kdfParameters,
-            argon2id,
-          }),
-        'weak_kdf_parameters'
-      )
-      expect(calls).toHaveLength(0)
+  it('the sign-in function has no parameter argument and always asks for the fixed parameters', async () => {
+    const { argon2id, calls } = fakeArgon2id()
+    const input = {
+      passphrase: 'correct horse battery staple',
+      passphraseSalt: salt,
+      argon2id,
+      // A value that a server could try to supply. The function has no such
+      // field, so it has no effect.
+      kdfParameters: FAST_KDF,
+      memoryKib: 8,
+      passes: 1,
+      lanes: 1,
     }
+    const keys = await derivePassphraseKeys(input)
+    expect(calls).toEqual([{ memoryKib: 65536, passes: 3, lanes: 4 }])
+    expect(V1_ARGON2ID_PARAMETERS).toEqual({
+      memoryKib: 65536,
+      passes: 3,
+      lanes: 4,
+    })
+    expect(Object.isFrozen(V1_ARGON2ID_PARAMETERS)).toBe(true)
+    expect(keys.wrapKey).toHaveLength(32)
+    expect(derivePassphraseKeys).toHaveLength(1)
   })
 
-  it('rejects values that are not Argon2id parameters', async () => {
+  it('the test-only path rejects values that are not Argon2id parameters', async () => {
     const invalid = [
       { memoryKib: 0, passes: 3, lanes: 4 },
       { memoryKib: 65536.5, passes: 3, lanes: 4 },
@@ -174,38 +174,17 @@ describe('passphrase keys and the Argon2id minimum', () => {
       { memoryKib: 16, passes: 3, lanes: 4 },
       { memoryKib: '65536', passes: 3, lanes: 4 } as unknown as typeof FAST_KDF,
     ]
-    for (const kdfParameters of invalid) {
-      expectReason(
-        () => assertKdfParametersMeetMinimum(kdfParameters),
-        'invalid_kdf_parameters'
-      )
+    for (const parameters of invalid) {
+      const { argon2id, calls } = fakeArgon2id()
       await expectReasonAsync(
         () =>
-          derivePassphraseKeysForTestsOnly({
-            passphrase: 'x',
-            passphraseSalt: salt,
-            kdfParameters,
-            argon2id: fakeArgon2id().argon2id,
-          }),
-        'invalid_kdf_parameters'
+          derivePassphraseKeysWithParametersForTestsOnly(
+            { passphrase: 'x', passphraseSalt: salt, argon2id },
+            parameters
+          ),
+        'invalid_argument'
       )
-    }
-  })
-
-  it('accepts the minimum and stronger parameters, and passes them on', async () => {
-    for (const kdfParameters of [
-      V1_KDF_PARAMETERS,
-      { memoryKib: 131072, passes: 4, lanes: 8 },
-    ]) {
-      const { argon2id, calls } = fakeArgon2id()
-      const keys = await derivePassphraseKeys({
-        passphrase: 'correct horse battery staple',
-        passphraseSalt: salt,
-        kdfParameters,
-        argon2id,
-      })
-      expect(calls).toEqual([kdfParameters])
-      expect(keys.wrapKey).toHaveLength(32)
+      expect(calls).toHaveLength(0)
     }
   })
 
@@ -213,25 +192,42 @@ describe('passphrase keys and the Argon2id minimum', () => {
     const input = {
       passphrase: 'correct horse battery staple',
       passphraseSalt: salt,
-      kdfParameters: FAST_KDF,
       argon2id: nobleArgon2id,
     }
-    const keys = await derivePassphraseKeysForTestsOnly(input)
-    const again = await derivePassphraseKeysForTestsOnly(input)
+    const keys = await derivePassphraseKeysWithParametersForTestsOnly(
+      input,
+      FAST_KDF
+    )
+    const again = await derivePassphraseKeysWithParametersForTestsOnly(
+      input,
+      FAST_KDF
+    )
     expect(keys).toEqual(again)
     expect(keys.wrapKey).toEqual(
       blake3DeriveKey(CONTEXTS.wrap, keys.passphraseRoot)
     )
-    const other = await derivePassphraseKeysForTestsOnly({
-      ...input,
-      passphrase: 'correct horse battery stapler',
-    })
+    const other = await derivePassphraseKeysWithParametersForTestsOnly(
+      { ...input, passphrase: 'correct horse battery stapler' },
+      FAST_KDF
+    )
     expect(other.passphraseRoot).not.toEqual(keys.passphraseRoot)
-    const otherSalt = await derivePassphraseKeysForTestsOnly({
-      ...input,
-      passphraseSalt: asPassphraseSalt(flipBit(salt, 0)),
-    })
+    const otherSalt = await derivePassphraseKeysWithParametersForTestsOnly(
+      { ...input, passphraseSalt: asPassphraseSalt(flipBit(salt, 0)) },
+      FAST_KDF
+    )
     expect(otherSalt.passphraseRoot).not.toEqual(keys.passphraseRoot)
+  })
+
+  it('the test-only path with the fixed parameters gives the keys of the sign-in function', async () => {
+    const { argon2id } = fakeArgon2id()
+    const input = { passphrase: 'p', passphraseSalt: salt, argon2id }
+    const production = await derivePassphraseKeys(input)
+    const test = await derivePassphraseKeysWithParametersForTestsOnly(
+      input,
+      V1_ARGON2ID_PARAMETERS
+    )
+    expect(test.wrapKey).toEqual(production.wrapKey)
+    expect(test.authPrivateKey).toEqual(production.authPrivateKey)
   })
 
   it('rejects an Argon2id implementation that returns a wrong length', async () => {
@@ -240,7 +236,6 @@ describe('passphrase keys and the Argon2id minimum', () => {
         derivePassphraseKeys({
           passphrase: 'x',
           passphraseSalt: salt,
-          kdfParameters: V1_KDF_PARAMETERS,
           argon2id: () => new Uint8Array(16),
         }),
       'bad_length'
@@ -367,14 +362,86 @@ describe('sign-in signature', () => {
     ).toBe(true)
   })
 
-  it('removes outer spaces and changes the identifier to lower case', () => {
+  it('normalizes the identifier: NFKC, outer White_Space, lower case, UTF-8', () => {
+    expect(normalizeIdentifier('  User@Example.COM ')).toBe('user@example.com')
     expect(encodeIdentifier('  User@Example.COM ')).toEqual(
       utf8('user@example.com')
     )
-    expect(encodeIdentifier('a b')).toEqual(utf8('a b'))
-    expect(encodeIdentifier('Éric')).toEqual(utf8('éric'))
-    // Only U+0020 is a space here. A tab stays.
-    expect(encodeIdentifier('\tuser ')).toEqual(utf8('\tuser'))
+    // Inner white space stays.
+    expect(normalizeIdentifier('a b')).toBe('a b')
+    expect(normalizeIdentifier('Éric')).toBe('éric')
+    // NFKC: a decomposed letter, a full-width form and a ligature.
+    expect(normalizeIdentifier('E\u0301ric')).toBe('\u00e9ric')
+    expect(encodeIdentifier('E\u0301ric')).toEqual(utf8('\u00e9ric'))
+    expect(normalizeIdentifier('\uff35\uff53\uff45\uff52')).toBe('user')
+    expect(normalizeIdentifier('\ufb01sh')).toBe('fish')
+    // Each character with the property White_Space, not U+0020 only.
+    const whiteSpace = [
+      '\t',
+      '\n',
+      '\u000b',
+      '\u000c',
+      '\r',
+      ' ',
+      '\u0085',
+      '\u00a0',
+      '\u1680',
+      '\u2000',
+      '\u200a',
+      '\u2028',
+      '\u2029',
+      '\u202f',
+      '\u205f',
+      '\u3000',
+    ]
+    for (const space of whiteSpace) {
+      expect(normalizeIdentifier(`${space}${space}User${space}`)).toBe('user')
+      expect(normalizeIdentifier(`a${space}b`)).toHaveLength(3)
+    }
+    // Not White_Space: the zero width space and the byte order mark stay.
+    expect(normalizeIdentifier('\u200buser\ufeff')).toBe('\u200buser\ufeff')
+    // The default mapping, without a locale: I gives i, also for Turkish.
+    expect(normalizeIdentifier('TITLE')).toBe('title')
+    expect(normalizeIdentifier('\u0130')).toBe('i\u0307')
+    expect(normalizeIdentifier('STRASSE')).toBe('strasse')
+    expect(normalizeIdentifier('\u03a3')).toBe('\u03c3')
+    expect(normalizeIdentifier('')).toBe('')
+    expect(normalizeIdentifier(' \t ')).toBe('')
+    // The function gives the same result when it runs again.
+    for (const text of ['  User ', 'E\u0301ric', '\u0130', '\ufb01sh']) {
+      const once = normalizeIdentifier(text)
+      expect(normalizeIdentifier(once)).toBe(once)
+    }
+  })
+
+  it('signs the normalized identifier', () => {
+    const keys = passphraseKeysFromRoot(asPassphraseRoot(pattern(32, 21)))
+    const signature = signInSignature({
+      authPrivateKey: keys.authPrivateKey,
+      challenge,
+      identifier: 'user@example.com',
+    })
+    for (const identifier of [
+      ' User@Example.com\n',
+      '\u00a0USER@EXAMPLE.COM\u3000',
+      '\uff55ser@example.com',
+    ]) {
+      expect(
+        signInSignature({
+          authPrivateKey: keys.authPrivateKey,
+          challenge,
+          identifier,
+        })
+      ).toEqual(signature)
+      expect(
+        verifySignInSignature({
+          authPublicKey: keys.authPublicKey,
+          challenge,
+          identifier,
+          signature,
+        })
+      ).toBe(true)
+    }
   })
 
   it('does not verify for a different challenge, identifier, key or signature', () => {
@@ -436,15 +503,12 @@ describe('signed request', () => {
     expect(message).toHaveLength(21 + 32 + 32 + 32)
   })
 
-  it('uses upper case for the method and the empty hash for no body', () => {
+  it('uses the empty hash for no body', () => {
     const upper = signedRequestMessage({
       challenge,
       method: 'DELETE',
       path: '/',
     })
-    expect(
-      signedRequestMessage({ challenge, method: 'delete', path: '/' })
-    ).toEqual(upper)
     expect(
       signedRequestMessage({
         challenge,
@@ -456,14 +520,84 @@ describe('signed request', () => {
     expect(bytesToHex(upper.subarray(85))).toBe(
       bytesToHex(blake3Hash(new Uint8Array(0)))
     )
-    expectReason(
-      () => signedRequestMessage({ challenge, method: 'PÖST', path: '/' }),
-      'invalid_argument'
-    )
-    expectReason(
-      () => signedRequestMessage({ challenge, method: '', path: '/' }),
-      'invalid_argument'
-    )
+  })
+
+  const NOT_UPPER_CASE_ASCII = [
+    'delete',
+    'Delete',
+    'DELETe',
+    'PÖST',
+    'POS\u0422',
+    'ſ',
+    'ß',
+    'ﬁ',
+    'DELETE ',
+    ' DELETE',
+    'DE LETE',
+    'DELETE\n',
+    'GET1',
+    'M-SEARCH',
+    '',
+  ]
+
+  it('the message rejects a method that is not upper case ASCII', () => {
+    expect(isSignedRequestMethod('DELETE')).toBe(true)
+    for (const method of NOT_UPPER_CASE_ASCII) {
+      expect(isSignedRequestMethod(method)).toBe(false)
+      expectReason(
+        () => signedRequestMessage({ challenge, method, path: '/' }),
+        'invalid_argument'
+      )
+    }
+  })
+
+  it('the verifier rejects a method that is not upper case ASCII and does not convert it', () => {
+    const request = { challenge, method: 'DELETE', path: '/api/keys' }
+    const { signature } = signRequest({
+      ...request,
+      accountPrivateKey: accountKeys.accountPrivateKey,
+    })
+    const base = {
+      ...request,
+      accountPublicKey: accountKeys.accountPublicKey,
+      signature,
+    }
+    expect(verifySignedRequest(base)).toBe(true)
+    for (const method of ['delete', 'Delete', 'DELETe', 'DELETE ', '']) {
+      expect(verifySignedRequest({ ...base, method })).toBe(false)
+    }
+  })
+
+  it('the signer changes ASCII letters to upper case and nothing else', () => {
+    const upper = signRequest({
+      challenge,
+      method: 'DELETE',
+      path: '/',
+      accountPrivateKey: accountKeys.accountPrivateKey,
+    })
+    for (const method of ['delete', 'Delete', 'dELETE']) {
+      const signed = signRequest({
+        challenge,
+        method,
+        path: '/',
+        accountPrivateKey: accountKeys.accountPrivateKey,
+      })
+      expect(signed.signedMessage).toEqual(upper.signedMessage)
+      expect(signed.signature).toEqual(upper.signature)
+    }
+    // Unicode upper case would give ASCII for these: SS, S, FI.
+    for (const method of ['ß', 'ſ', 'ﬁ', 'pöst', 'get ', '']) {
+      expectReason(
+        () =>
+          signRequest({
+            challenge,
+            method,
+            path: '/',
+            accountPrivateKey: accountKeys.accountPrivateKey,
+          }),
+        'invalid_argument'
+      )
+    }
   })
 
   it('verifies, and fails for each changed part', () => {
@@ -533,10 +667,29 @@ describe('keyring', () => {
     expect(openKeyring({ ...base, sealedKeyring })).toEqual(oldKeys)
   })
 
-  it.each([0, 1])('round-trips %i old keys', (count) => {
-    const list = oldKeys.slice(0, count)
+  it('round-trips one old key', () => {
+    const list = oldKeys.slice(0, 1)
     const sealedKeyring = sealKeyring({ ...base, nonce, oldPrivateKeys: list })
+    expect(sealedKeyring).toHaveLength(24 + 32 + 32)
     expect(openKeyring({ ...base, sealedKeyring })).toEqual(list)
+  })
+
+  it('does not seal an empty list', () => {
+    expectReason(
+      () => sealKeyring({ ...base, nonce, oldPrivateKeys: [] }),
+      'invalid_argument'
+    )
+  })
+
+  it('rejects an authentic sealed empty list', () => {
+    const sealedKeyring = seal(
+      deriveKeyringKey(current.accountPrivateKey),
+      nonce,
+      current.accountPublicKey,
+      new Uint8Array(0)
+    )
+    expect(sealedKeyring).toHaveLength(56)
+    expectReason(() => openKeyring({ ...base, sealedKeyring }), 'bad_length')
   })
 
   it('rejects a changed keyring, a wrong key and a wrong public key', () => {
@@ -596,9 +749,16 @@ describe('account creation', () => {
       wrapNonce: nonce,
       argon2id,
     })
-    expect(calls).toEqual([V1_KDF_PARAMETERS])
+    expect(calls).toEqual([V1_ARGON2ID_PARAMETERS])
     expect(record.protocolVersion).toBe(1)
-    expect(record.kdfParameters).toEqual(V1_KDF_PARAMETERS)
+    // Section 5.3: the account record does not store Argon2id parameters.
+    expect(Object.keys(record).sort()).toEqual([
+      'accountPublicKey',
+      'authPublicKey',
+      'passphraseSalt',
+      'protocolVersion',
+      'wrappedRoot',
+    ])
     expect(record.wrappedRoot).toHaveLength(88)
     expect(rootEntropyFromMnemonic(mnemonic)).toEqual(rootEntropy)
 
@@ -606,7 +766,6 @@ describe('account creation', () => {
     const passphraseKeys = await derivePassphraseKeys({
       passphrase: 'correct horse battery staple',
       passphraseSalt: record.passphraseSalt,
-      kdfParameters: record.kdfParameters,
       argon2id,
     })
     expect(passphraseKeys.authPublicKey).toEqual(record.authPublicKey)
@@ -635,7 +794,6 @@ describe('account creation', () => {
     const wrong = await derivePassphraseKeys({
       passphrase: 'Correct horse battery staple',
       passphraseSalt: record.passphraseSalt,
-      kdfParameters: record.kdfParameters,
       argon2id,
     })
     expectReason(
@@ -646,21 +804,6 @@ describe('account creation', () => {
           wrappedRoot: record.wrappedRoot,
         }),
       'tag_mismatch'
-    )
-  })
-
-  it('refuses to create an account with weak parameters', async () => {
-    await expectReasonAsync(
-      () =>
-        createAccount({
-          rootEntropy,
-          passphrase: 'x',
-          passphraseSalt: salt,
-          wrapNonce: nonce,
-          argon2id: fakeArgon2id().argon2id,
-          kdfParameters: FAST_KDF,
-        }),
-      'weak_kdf_parameters'
     )
   })
 })
