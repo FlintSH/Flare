@@ -259,7 +259,7 @@ const filtered = computed(() =>
       <a
         v-for="item in filtered"
         :key="item[1]"
-        :href="withBase(item[3] + '.html')"
+        :href="withBase(item[3].replace(/(#.*)?$/, '.html$1'))"
         class="feature-card"
         ><span class="eyebrow">{{ item[0] }}</span>
         <h3>{{ item[1] }} <span aria-hidden="true">↗</span></h3>
