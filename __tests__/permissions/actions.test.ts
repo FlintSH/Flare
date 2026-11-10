@@ -106,7 +106,9 @@ describe('action permissions', () => {
       BATCH_ACTIONS.some((action) =>
         fileActionAllowed(role(...permissions), action)
       )
-    expect(canSelect('files.read', 'files.update', 'files.share')).toBe(false)
+    // Whoever sees their files can ask the server to encrypt the plain ones.
+    expect(canSelect('files.read', 'files.update', 'files.share')).toBe(true)
+    expect(canSelect('files.update', 'files.share')).toBe(false)
     expect(canSelect('files.read', 'files.upload')).toBe(true)
     expect(canSelect('files.update', 'folders.manage')).toBe(true)
     expect(canSelect('files.update', 'tags.manage')).toBe(true)

@@ -81,3 +81,8 @@ export async function tryLockAuditRetention(tx: RowTx): Promise<boolean> {
   `
   return Boolean(row?.locked)
 }
+
+/** Claims on the queue that encrypts existing files (docs/e2ee-spec.md, section 14.2). */
+export async function lockFileEncryptionClaims(tx: Tx) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347215)`
+}

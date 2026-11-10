@@ -673,6 +673,43 @@ A shared folder page gets its list from the server render of `/s/folders/{token}
 
 The server cannot refuse a duplicate sealed name or apply a sealed rule. The browser does both.
 
+### Encrypt existing files on the server
+
+Files from before end-to-end encryption are plain. The server has their content, so it can encrypt them to the owner's account key; no client downloads anything. Only a **browser session of the owner** starts this. A named token, the legacy upload token and a moderator's session are refused: the request records a decision about that person's links and passwords.
+
+**`GET /api/files/existing`** answers the state of your account:
+
+```json
+{
+  "data": {
+    "hasKeys": true,
+    "choice": "private",
+    "choiceAt": "2026-11-14T09:30:00.000Z",
+    "plain": { "private": 0, "public": 3, "password": 1, "total": 4 },
+    "libraryReady": true,
+    "jobs": {
+      "waiting": 0,
+      "running": 0,
+      "failed": 1,
+      "encrypted": 212,
+      "skipped": 0
+    },
+    "failed": [
+      { "fileId": "cmf0…", "name": "scan.pdf", "code": "source_missing" }
+    ],
+    "passwordPending": 0
+  }
+}
+```
+
+`plain` counts the files that are still plain: `password` is every file with a server-side password, `public` and `private` are the rest by visibility. `choice` is `null` until you answered. `libraryReady` is `false` while a folder has no key pair or a tag has no sealed record; the server starts no file of the account until your browser converted them. `jobs` counts the queue rows of the last 7 days. A `failed` entry is a file that is still plain, which is why the server can name it; `code` is one of `source_missing`, `storage_read_failed`, `storage_write_failed`, `verification_failed`, `account_keys_missing`, `interrupted` and `internal_error`. `passwordPending` counts encrypted files that lost a server-side password and are private until you [set a password again](#set-or-remove-a-password).
+
+**`PUT /api/files/existing`** takes exactly `{ "choice": "none" | "private" | "all" }`, records it, and answers the same state. `private` queues each private file without a password, and such a job skips a file that you made public or protected in the meantime. `all` queues every plain file. A new answer replaces the jobs that have not started, so `none` empties the queue; a file that is being encrypted at that moment is finished. An account without keys gets `409` with `code: "account_keys_missing"`.
+
+**`POST /api/files/existing/encrypt`** takes exactly `{ "fileIds": ["…"] }` with 1 to 500 IDs and answers `{ "data": { "queued": 2 } }`. It queues your plain files among them, also ones that failed before. Other IDs are left out without an error.
+
+What changes for a file when its job finishes: `encrypted` becomes `true`, `name` becomes empty, `mimeType` becomes `application/octet-stream`, `urlPath` becomes `/{urlId}/e_…`, and `size` grows by 26 bytes plus 32 bytes per 64 KiB. Its ID, tags, folder, visibility, expiry, counters and upload time stay. The old address answers `404`. A file that had a server-side password becomes `PRIVATE` with `passwordPending: true` in the [file list](#list-and-search-files); storing a password stanza restores the visibility it had. Integrations that stored a file's URL must read it again, and a `file.ready` receiver gets no new event for a converted file.
+
 ### Work that waits for the owner's browser
 
 **`GET /api/files/pending`** answers `{ "total": 12, "files": [...] }`. An encrypted entry has `id`, `urlPath`, `size`, the three flags, `encryption` with the account stanza, and `sealedOcrText` if text is stored. A plain entry has `id`, `name`, `mimeType`, `ocrText`, `ocrProcessed` and `rulesPending`.

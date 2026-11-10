@@ -50,6 +50,7 @@ import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
+import { requestFileEncryption } from '@/lib/files/existing-client'
 import { fileUrls } from '@/lib/files/urls'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import {
@@ -217,6 +218,11 @@ function FileLibrary({ scope }: { scope: string }) {
       if (action === 'editTags') setTaggingFiles(fresh)
       if (action === 'move') setMovingFiles(fresh)
       if (action === 'createArchive') setCreatingArchive(fresh)
+      if (action === 'encrypt' && !requestFileEncryption(fresh))
+        toast({
+          title: 'Nothing to encrypt',
+          description: 'The selected files are encrypted already.',
+        })
     } catch (error) {
       if (signal.aborted) return
       toast({

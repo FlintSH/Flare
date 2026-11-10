@@ -61,6 +61,8 @@ vi.mock('@/lib/users/create-account', () => ({
 }))
 
 const initial: User = {
+  existingFilesChoice: null,
+  existingFilesChoiceAt: null,
   uploadTokenHash: null,
   uploadTokenUsedAt: null,
   passkeyRequired: false,

@@ -8,6 +8,7 @@ import {
   Link as LinkIcon,
   type LucideIcon,
   ScanText,
+  ShieldCheck,
   Tag,
   Timer,
   Trash2,
@@ -74,6 +75,15 @@ export const FILE_ACTIONS = {
       label: (name) => `Password protection for ${name}`,
     },
   },
+  // A plain file from before encryption, or from a tool that cannot
+  // encrypt: the server encrypts it for its owner (docs/e2ee-spec.md,
+  // section 14.2).
+  encrypt: {
+    icon: ShieldCheck,
+    needs: 'viewFiles',
+    menu: 'Encrypt',
+    batch: 'Encrypt',
+  },
   expiration: {
     icon: Timer,
     needs: 'manageExpiration',
@@ -128,7 +138,15 @@ export const CARD_BUTTONS = [
 /** The card menu's groups, in order. */
 export const CARD_MENU = [
   ['browseArchive', 'open', 'copyLink', 'download'],
-  ['editTags', 'move', 'visibility', 'password', 'expiration', 'ocr'],
+  [
+    'editTags',
+    'move',
+    'visibility',
+    'password',
+    'encrypt',
+    'expiration',
+    'ocr',
+  ],
   ['delete'],
 ] as const satisfies readonly (readonly FileActionId[])[]
 
@@ -137,5 +155,6 @@ export const BATCH_ACTIONS = [
   'createArchive',
   'move',
   'editTags',
+  'encrypt',
 ] as const satisfies readonly FileActionId[]
 export type BatchAction = (typeof BATCH_ACTIONS)[number]

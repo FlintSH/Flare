@@ -2,6 +2,7 @@ import { GlobalDropZone } from '@/components/dashboard/global-drop-zone'
 import { DashboardNav } from '@/components/dashboard/nav'
 import { UploadProgress } from '@/components/dashboard/upload-progress'
 import { UserNav } from '@/components/dashboard/user-nav'
+import { ExistingFiles } from '@/components/encryption/existing-files'
 import { UnlockBanner } from '@/components/encryption/unlock-dialog'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
@@ -56,6 +57,7 @@ export function DashboardWrapper({
       >
         <div className="mx-auto max-w-7xl px-4 py-6">
           <UnlockBanner />
+          <ExistingFiles />
           {children}
         </div>
       </main>

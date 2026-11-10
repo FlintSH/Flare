@@ -8,6 +8,7 @@ import { ProfileClientProps } from '@/types/components/profile'
 import { Database, Plug, Upload, UserPlus, UserRound } from 'lucide-react'
 
 import { PersonalAppearanceSettings } from '@/components/customization/personal-appearance-settings'
+import { ExistingFilesSettings } from '@/components/encryption/existing-files'
 import { IntegrationsPanel } from '@/components/integrations/integrations-panel'
 import { InviteManager } from '@/components/invites/invite-manager'
 import {
@@ -263,6 +264,7 @@ export function ProfileClient({
               />
             </CardContent>
           </Card>
+          <ExistingFilesSettings />
           {allows(sessionUser, 'exportAccount') && (
             <Card>
               <CardHeader>

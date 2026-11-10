@@ -129,7 +129,7 @@ describe('OCR audit lifecycle', () => {
         /private provider|private\/storage|recognized text/
       )
       expect(mocks.update).toHaveBeenLastCalledWith({
-        where: { id: 'file-1' },
+        where: { id: 'file-1', encrypted: false },
         data: { isOcrProcessed: true, ocrText: null, ocrConfidence: null },
       })
       expect(mocks.applyPendingOcrTags).not.toHaveBeenCalled()

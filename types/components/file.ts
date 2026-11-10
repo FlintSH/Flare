@@ -33,4 +33,9 @@ export interface FileType {
   /** Work that waits for the owner's browser (section 9.7). */
   thumbnailPending?: boolean
   ocrPending?: boolean
+  /**
+   * The server encrypted this file, which had a server-side password. It is
+   * private until its owner sets a password again or shares it (section 14.2).
+   */
+  passwordPending?: boolean
 }

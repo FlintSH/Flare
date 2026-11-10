@@ -58,6 +58,11 @@ model User {
   uploadTokenHash             String?               @unique
   /// When an upload last used that token, to the hour.
   uploadTokenUsedAt           DateTime?
+  /// Which files from before end-to-end encryption the server encrypts for
+  /// this account: `none`, `private` or `all`. Null until the account
+  /// answered the question (docs/e2ee-spec.md, section 14.2).
+  existingFilesChoice         String?
+  existingFilesChoiceAt       DateTime?
   randomizeFileUrls           Boolean               @default(false)
   files                       File[]
   vaultFolders                VaultFolder[]
@@ -295,6 +300,11 @@ model File {
   pendingAttempts        Int             @default(0)
   unreadable             Boolean         @default(false)
   syncSeq                Int             @default(autoincrement())
+  // Set when the server encrypted a file that had a server-side password
+  // (section 14.2): the visibility that the file had. The server cannot make
+  // a password stanza, so such a file is private until its owner stores a
+  // password stanza or sets its visibility.
+  passwordPendingFrom    FileVisibility?
   sealedData             FileSealedData?
   user                   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   tags                   VaultFileTag[]
@@ -315,6 +325,39 @@ model FileSealedData {
   sealedOcrText   Bytes?
   sealedThumbnail Bytes?
   file            File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+}
+
+// One plain file that the server encrypts for its owner (docs/e2ee-spec.md,
+// section 14.2). The row is also the journal of the ciphertext object that
+// the running attempt writes: `ciphertextPath` is recorded before the first
+// byte reaches storage, so a later attempt can remove what a stopped one
+// left. It has no foreign keys on purpose: that record must survive the
+// deletion of the file or of the account. `errorCode` is one of a fixed list
+// of codes. No column holds a file name.
+model FileEncryptionJob {
+  id               String    @id @default(cuid())
+  userId           String
+  fileId           String    @unique
+  // pending, processing, failed or done.
+  status           String    @default("pending")
+  // Only while the file is private and has no server-side password.
+  onlyIfPrivate    Boolean   @default(false)
+  attempts         Int       @default(0)
+  availableAt      DateTime  @default(now())
+  leaseId          String?
+  leaseUntil       DateTime?
+  ciphertextPath   String?
+  ciphertextTarget Json?
+  errorCode        String?
+  // For a finished job: encrypted, skipped or gone.
+  result           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  finishedAt       DateTime?
+
+  @@index([status, availableAt])
+  @@index([userId, status, availableAt])
+  @@index([leaseUntil])
 }
 
 // Independent of retired Folder tables: folders organize existing files without

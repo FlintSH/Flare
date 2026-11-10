@@ -146,7 +146,7 @@ describe('tags after OCR', () => {
         confidence: 95,
       })
       expect(mocks.file.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 'file' },
+        where: { id: 'file', encrypted: false, path: 'image.png' },
         data: {
           ocrText: 'Receipt 123',
           ocrConfidence: 95,
@@ -175,7 +175,7 @@ describe('tags after OCR', () => {
       select: { id: true },
     })
     expect(mocks.file.update).toHaveBeenNthCalledWith(1, {
-      where: { id: 'file' },
+      where: { id: 'file', encrypted: false, path: 'image.png' },
       data: {
         ocrText: 'Receipt 123',
         ocrConfidence: 95,
