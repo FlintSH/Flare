@@ -477,6 +477,29 @@ It simulates one thing: a script client's upload is an ordinary browser upload w
 
 The database-backed unit suites of these features read `FLARE_LIBRARY_DATABASE_URL`, a disposable database named `flare_library_test_local` or `flare_library_test_ci`.
 
+### Existing files browser checks
+
+`scripts/e2ee/verify-migration.cjs` drives the migration of an account from before encryption in headless Chromium against a production build. Its seed writes an account with a password, a plain folder, a plain tag and six plain files (private, public, with a server-side password, in a folder with a tag, an image with text, a paste and a video) straight into the database and into local storage. The run signs in with the password, sets up keys, checks the one-time question with its table and its default, lets the server encrypt the private files, and checks storage, the database, the library, thumbnails and search. It then encrypts everything from **Profile → Your data** and checks that the old public link answers "not found", that a new link from the library opens signed out, that the password file is private until a password is set again, and the **Encrypt** action in a file's menu and in the selection bar.
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_migration_local'
+export NEXTAUTH_URL='http://localhost:3097'
+export NEXTAUTH_SECRET='public-disposable-e2ee-migration-demo-secret-2026'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3097 > /tmp/flare-migration.log 2>&1
+```
+
+In another terminal with the same `DATABASE_URL`, in the same checkout, run:
+
+```sh
+FLARE_E2EE_MIGRATION_LOG=/tmp/flare-migration.log node scripts/e2ee/verify-migration.cjs
+```
+
+The application must run in the checkout that the script runs in: the seed writes the plain files under `uploads/`, where local storage reads them. At the end the script opens every account stanza with independent code to learn each `file_key` that the server made, and fails if a key is in any request, any answer or the application log, or if the name of an encrypted file is in an answer after the encryption or in the log or the database. `FLARE_E2EE_MIGRATION_ORIGIN` names another origin, and `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT` and `FLARE_E2EE_THEME` work as for the other suites.
+
+The database-backed unit suite of the server job reads `FLARE_EXISTING_FILES_DATABASE_URL`, a disposable database named `flare_existing_files_test_local` or `flare_existing_files_test_ci`. It covers the file format with the browser's own open functions, a stop at each step of an attempt, two workers, a deletion and an edit during the job, a key rotation during the job, quota, folders and tags that are not converted, and the three routes.
+
 ### Encrypted file browser checks
 
 `scripts/e2ee/verify-files.cjs` drives [encrypted files](/guide/encryption) in headless Chromium against a production build: upload, library, download, share pages, passwords, pastes, link previews, hostile content, the moderator view, short links and the page script policy. It seeds two accounts with keys into a disposable database named exactly `flare_e2ee_files_local` and removes them at the next run.

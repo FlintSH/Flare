@@ -8,6 +8,13 @@ import { AlertCircle, Loader2, ShieldCheck, X } from 'lucide-react'
 import { useAccountKeys } from '@/components/providers/account-keys-provider'
 import { Button } from '@/components/ui/button'
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -138,10 +145,17 @@ const OPTIONS: {
   {
     value: 'all',
     label: 'All files',
-    hint: (plain) =>
-      plain.public + plain.password > 0
-        ? `${files(plain.public)} get a new link and ${files(plain.password)} need a new password.`
-        : 'Every file from before encryption.',
+    hint: (plain) => {
+      const changes = [
+        plain.public > 0 &&
+          `${files(plain.public)} ${plain.public === 1 ? 'gets' : 'get'} a new link`,
+        plain.password > 0 &&
+          `${files(plain.password)} ${plain.password === 1 ? 'needs' : 'need'} a new password`,
+      ].filter(Boolean)
+      return changes.length
+        ? `${changes.join(' and ')}.`
+        : 'Every file from before encryption.'
+    },
   },
   {
     value: 'none',
@@ -629,13 +643,10 @@ export function ExistingFilesSettings() {
           ? 'You chose to keep them plain.'
           : 'You have not decided yet.'
   return (
-    <div
-      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/60 p-4"
-      data-existing-files-settings=""
-    >
-      <div className="min-w-0 flex-1 basis-64 space-y-1">
-        <p className="text-sm font-medium">Files from before encryption</p>
-        <p className="text-sm text-muted-foreground">
+    <Card data-existing-files-settings="">
+      <CardHeader>
+        <CardTitle>Files from before encryption</CardTitle>
+        <CardDescription>
           {status.plain.total > 0
             ? `${files(status.plain.total)} ${status.plain.total === 1 ? 'is' : 'are'} stored readable: ${status.plain.private.toLocaleString()} private, ${status.plain.public.toLocaleString()} public, ${status.plain.password.toLocaleString()} with a password. ${chosen}`
             : 'Every file in your library is encrypted.'}
@@ -644,18 +655,23 @@ export function ExistingFilesSettings() {
             ` ${files(status.jobs.failed)} could not be encrypted.`}
           {status.passwordPending > 0 &&
             ` ${files(status.passwordPending)} lost ${status.passwordPending === 1 ? 'its' : 'their'} password and ${status.passwordPending === 1 ? 'is' : 'are'} private until you set one again.`}
-        </p>
-      </div>
+        </CardDescription>
+      </CardHeader>
       {(status.plain.total > 0 || status.jobs.failed > 0) && (
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={openExistingFilesChoice}
-        >
-          {status.jobs.failed > 0 ? 'Review' : 'Choose'}
-        </Button>
+        <CardContent>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={openExistingFilesChoice}
+          >
+            {status.jobs.failed > 0
+              ? 'Review'
+              : status.choice
+                ? 'Change what is encrypted'
+                : 'Choose what to encrypt'}
+          </Button>
+        </CardContent>
       )}
-    </div>
+    </Card>
   )
 }

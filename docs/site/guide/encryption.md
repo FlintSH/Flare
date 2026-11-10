@@ -180,7 +180,7 @@ After you have set up your keys, a line above your library says how many files a
 
 A small status at the edge of the page shows **Encrypting existing files** with a count while the server works. If your folders or tags still have to be converted, it says **Preparing folders and tags** first: your browser does that part, so keep Flare open with your keys unlocked until the count starts. The server then continues even if you close the tab. Images get their thumbnails from the server during this work; image text and tag rules are finished by your browser afterwards, like for any [file that arrived without them](#what-your-browser-does-instead).
 
-You can change your answer at any time under **Profile → Your data → Files from before encryption**. Choosing **None** later stops what has not started. It does not turn encrypted files back into plain files; nothing can.
+You can change your answer at any time under **Profile → Your data → Files from before encryption**, with **Change what is encrypted**. Choosing **None** later stops what has not started. It does not turn encrypted files back into plain files; nothing can.
 
 ### Encrypt single files
 
