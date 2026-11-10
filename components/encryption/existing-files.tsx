@@ -282,7 +282,7 @@ function ChoiceDialog({
           <DialogDescription>
             {status.plain.total > 0
               ? `${files(status.plain.total)} in your library ${status.plain.total === 1 ? 'is' : 'are'} from before encryption and stored readable. The server can encrypt ${status.plain.total === 1 ? 'it' : 'them'} for you without a download. After that, only your keys open ${status.plain.total === 1 ? 'it' : 'them'}.`
-              : 'Every file in your library is encrypted.'}
+              : 'No plain file from before encryption is left.'}
           </DialogDescription>
         </DialogHeader>
         {active > 0 && (
@@ -670,7 +670,9 @@ export function ExistingFilesSettings() {
         <CardDescription>
           {status.plain.total > 0
             ? `${files(status.plain.total)} ${status.plain.total === 1 ? 'is' : 'are'} stored readable: ${status.plain.private.toLocaleString()} private, ${status.plain.public.toLocaleString()} public, ${status.plain.password.toLocaleString()} with a password. ${chosen}`
-            : 'Every file in your library is encrypted.'}
+            : 'No plain file from before encryption is left.'}
+          {status.plainLater > 0 &&
+            ` ${files(status.plainLater)} uploaded as plain since then ${status.plainLater === 1 ? 'stays' : 'stay'} plain. Choose Encrypt in the library to change that.`}
           {active > 0 && ` The server is encrypting ${files(active)} now.`}
           {status.jobs.failed > 0 &&
             ` ${files(status.jobs.failed)} could not be encrypted.`}
