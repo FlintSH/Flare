@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 12. Not implemented. Not reviewed.            |
+| Status  | Draft 13. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -1283,7 +1283,7 @@ step 5.
 
 ### 10.3 Share link
 
-**AGREED** for the structure. The address of the file is **PROPOSED**.
+**AGREED**
 
 **The file name is not in the address.** Today the address of a file is
 `/{user}/{file name}`, for example `/birb/holiday-photo.png`. The server
@@ -1483,7 +1483,7 @@ is possible but is not part of this document.
 
 ### 12.7 Webhook `file.ready`
 
-**PROPOSED**
+**AGREED**
 
 Flare sends this event to the receiver of a user when a file is ready. Today
 the event contains: the identifier, the file name, the MIME type, the size,
@@ -1516,7 +1516,7 @@ it.
 4. **AGREED.** A moderator permission must not give access to encrypted
    content. A moderator sees the visible metadata of section 9.2 and can
    delete a file. The project owner accepted this.
-5. **PROPOSED.** The server must store a hash of each upload token only
+5. **AGREED.** The server must store a hash of each upload token only
    (section 14.4).
 
 ### 13.1 The "Custom head" setting
@@ -1549,6 +1549,24 @@ variable. A person who can change the environment can change the code too,
 thus this adds no new risk of that type. But each permitted origin can read
 keys. The documentation would have to say this.
 
+**Objection (birb):** in most instances the administrator is the person who
+operates the server. That person can change the code. For that person the
+restriction prevents nothing.
+
+**Where the restriction does have an effect:**
+
+- an administrator account in the application that a different person
+  controls, for example after a stolen session. That person has no access to
+  the server, but can change this setting.
+- a person who can write to the database and cannot change the code.
+
+**Conflict with requirement 1.** Requirement 1 is agreed. A
+Content-Security-Policy that blocks inline scripts and scripts from other
+origins stops the scripts of this setting, if the setting accepts them or
+not. Thus the two decisions are one decision: either the policy is strict
+and scripts in this setting do not operate, or the setting keeps scripts and
+the policy has an exception for them.
+
 ## 14. Migration of an existing instance
 
 ### 14.1 Existing accounts
@@ -1571,7 +1589,7 @@ trust the past of the server selects a new passphrase.
 
 ### 14.2 Existing files
 
-**PROPOSED**
+**AGREED**
 
 **Idea:** the encryption of a file to a public key needs no secret (section
 3.3, limit 2). The server has the plaintext of each existing file. Thus the
@@ -1593,11 +1611,16 @@ For each file, the server:
 Before the server starts, the browser of the owner makes the key pairs of
 the folders and the encrypted tag records. These need the owner.
 
+**When:** after the account has keys (section 14.1), the application asks
+the user one time. The user selects which existing files the server
+encrypts: none, the private files, or all files. The table shows the result
+for each type of file and the default selection.
+
 **Which files:**
 
 | File                        | Action                                                                                                                                                       |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Private                     | The server encrypts it automatically. No link exists that can break.                                                                                         |
+| Private                     | The default is to encrypt. No link exists that can break.                                                                                                    |
 | Public                      | Stays plain. The owner can request encryption. The old link then stops, and the owner gets a new link.                                                       |
 | With a server-side password | Stays plain. The server has only a hash of the password, thus it cannot make a password stanza. The owner can request encryption and set the password again. |
 
@@ -1619,7 +1642,7 @@ An account that never signs in again has no keys. Its files stay plain.
 
 ### 14.4 Upload tokens and old configurations of screenshot tools
 
-**PROPOSED**
+**AGREED**
 
 Today each account has one upload token. The database stores it as plain
 text. An endpoint returns it. Each screenshot tool configuration contains
@@ -1634,54 +1657,40 @@ Proposal:
 3. A new configuration contains a new token, the `account_public_key`, and
    the upload profile (section 11.2).
 
-An old configuration cannot encrypt. Two behaviours are possible:
-
-- **Reject.** The server rejects its uploads. Each screenshot tool stops at
-  the upgrade until the user installs a new configuration.
-- **Accept as plain, with a warning.** The server accepts its uploads as
-  plain files. The application shows a warning until the user installs a new
-  configuration.
-
-The second behaviour keeps the tools of each user in operation after the
-upgrade. The first behaviour agrees with "encrypted by default". The authors
-must decide.
+An old configuration cannot encrypt. The server accepts its uploads as
+plain files. The application shows a warning until the user installs a new
+configuration. The screenshot tools of each user thus continue to operate
+after the upgrade.
 
 ## 15. Open questions
 
-1. **Custom head.** Section 13.1. The project owner must decide.
-2. **Webhook version 2.** Section 12.7.
-3. **Old screenshot tool configurations.** Reject, or accept as plain with a
-   warning? Section 14.4.
-4. **Existing public files.** Is the table of section 14.2 correct?
-5. **Address of a file.** Section 10.3. Can a name pattern make `file_id`?
-6. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
+1. **Custom head and the Content-Security-Policy.** Section 13.1. The
+   project owner must decide.
+2. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
    necessary.
-7. **Program for script clients.** Language, platforms and how users get it
+3. **Program for script clients.** Language, platforms and how users get it
    (section 10.4).
-8. **Public upload links.** This feature is not merged. It must use the
+4. **Public upload links.** This feature is not merged. It must use the
    upload procedure of section 10.2.
 
-Closed in this draft: the two keys of `seal` stay. No size padding. 24-word
-mnemonic. Minimum strength score 3. Recovery rotates the keys. No automatic
-rotation. No new encryption of old files after a rotation. The metadata
-split of section 9. Client-side archives, export, thumbnails, video.
-Pastes are files. Short links stay as they are. Moderators cannot read
-encrypted content.
+All other questions of the earlier drafts are closed. The change log shows
+when.
 
 ## 16. Change log
 
-| Draft | Date       | Change                                                                                                                                                                                        |
-| ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | 2026-11-10 | First draft.                                                                                                                                                                                  |
-| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.                                                       |
-| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                                                           |
-| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password.                                            |
-| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                      |
-| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                   |
-| 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back. |
-| 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                      |
-| 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                    |
-| 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                   |
-| 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                             |
-| 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                        |
-| 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                        |
+| Draft | Date       | Change                                                                                                                                                                                                            |
+| ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | 2026-11-10 | First draft.                                                                                                                                                                                                      |
+| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.                                                                           |
+| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                                                                               |
+| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password.                                                                |
+| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                                          |
+| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                                       |
+| 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back.                     |
+| 7     | 2026-11-10 | Folders: a key pair for each folder, stanzas from a folder to its files and to the folders below it, shared folder links that include the folders below.                                                          |
+| 8     | 2026-11-10 | Folder decisions closed. Clear statement of what stop sharing does not do.                                                                                                                                        |
+| 9     | 2026-11-10 | Plain uploads in upload profiles. Generic link preview for encrypted files.                                                                                                                                       |
+| 10    | 2026-11-10 | Tags, text from images, work that waits for the browser of the owner, and search.                                                                                                                                 |
+| 11    | 2026-11-10 | Only the upload request and the owner can store image text. Search uses an encrypted local cache in OPFS and plaintext in memory only.                                                                            |
+| 12    | 2026-11-10 | Decisions on the open questions. Argon2id parameters from RFC 9106. New sections for features that use file content and for migration.                                                                            |
+| 13    | 2026-11-10 | Closed: file address, webhook version 2, token hashes, old tool configurations upload as plain, existing files after a prompt. Custom head stays open with the objection and the conflict with the script policy. |
