@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 5. Not implemented. Not reviewed.             |
+| Status  | Draft 6. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -105,32 +105,34 @@ All context strings are ASCII. A context string does not have a terminator.
 
 ### 2.3 Names of values
 
-| Name                    | Size     | Meaning                                                          |
-| ----------------------- | -------- | ---------------------------------------------------------------- |
-| `root_entropy`          | 32 bytes | Root secret of the account. The mnemonic encodes it.             |
-| `account_seed`          | 32 bytes | Seed of the account key pair.                                    |
-| `account_private_key`   | 32 bytes | Ed25519 private key of the account.                              |
-| `account_public_key`    | 32 bytes | Ed25519 public key of the account.                               |
-| `exchange_private_key`  | 32 bytes | X25519 form of `account_private_key`.                            |
-| `exchange_public_key`   | 32 bytes | X25519 form of `account_public_key`.                             |
-| `passphrase_salt`       | 32 bytes | Random input to Argon2id. Not secret.                            |
-| `passphrase_root`       | 32 bytes | Output of Argon2id.                                              |
-| `auth_seed`             | 32 bytes | Seed of the sign-in key pair.                                    |
-| `auth_private_key`      | 32 bytes | Ed25519 key that proves the passphrase. Never leaves the client. |
-| `auth_public_key`       | 32 bytes | Its public key. The server stores it.                            |
-| `wrap_key`              | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client.       |
-| `wrapped_root`          | 88 bytes | `root_entropy` encrypted with `wrap_key`.                        |
-| `file_key`              | 32 bytes | Random key of one file.                                          |
-| `content_cipher_key`    | 32 bytes | Encrypts the chunks of a file.                                   |
-| `content_mac_key`       | 32 bytes | Authenticates the chunks of a file.                              |
-| `metadata_key`          | 32 bytes | Encrypts the name and the type of a file.                        |
-| `header_hash`           | 32 bytes | BLAKE3 hash of the file header.                                  |
-| `ephemeral_private_key` | 32 bytes | X25519 private key that the sender uses for one stanza.          |
-| `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                        |
-| `shared_secret`         | 32 bytes | Output of X25519.                                                |
-| `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.                  |
-| `link_secret`           | 32 bytes | Random secret in the share link of a file with a password.       |
-| `password_key`          | 32 bytes | Key that encrypts `file_key` in a password stanza.               |
+| Name                    | Size     | Meaning                                                               |
+| ----------------------- | -------- | --------------------------------------------------------------------- |
+| `root_entropy`          | 32 bytes | Root secret of the account. The mnemonic encodes it.                  |
+| `account_seed`          | 32 bytes | Seed of the account key pair.                                         |
+| `account_private_key`   | 32 bytes | Ed25519 private key of the account.                                   |
+| `account_public_key`    | 32 bytes | Ed25519 public key of the account.                                    |
+| `exchange_private_key`  | 32 bytes | X25519 form of `account_private_key`.                                 |
+| `exchange_public_key`   | 32 bytes | X25519 form of `account_public_key`.                                  |
+| `passphrase_salt`       | 32 bytes | Random input to Argon2id. Not secret.                                 |
+| `passphrase_root`       | 32 bytes | Output of Argon2id.                                                   |
+| `auth_seed`             | 32 bytes | Seed of the sign-in key pair.                                         |
+| `auth_private_key`      | 32 bytes | Ed25519 key that proves the passphrase. Never leaves the client.      |
+| `auth_public_key`       | 32 bytes | Its public key. The server stores it.                                 |
+| `wrap_key`              | 32 bytes | Key that encrypts `root_entropy`. Never leaves the client.            |
+| `wrapped_root`          | 88 bytes | `root_entropy` encrypted with `wrap_key`.                             |
+| `file_key`              | 32 bytes | Random key of one file.                                               |
+| `content_cipher_key`    | 32 bytes | Encrypts the chunks of a file.                                        |
+| `content_mac_key`       | 32 bytes | Authenticates the chunks of a file.                                   |
+| `metadata_key`          | 32 bytes | Encrypts the name and the type of a file.                             |
+| `header_hash`           | 32 bytes | BLAKE3 hash of the file header.                                       |
+| `ephemeral_private_key` | 32 bytes | X25519 private key that the sender uses for one stanza.               |
+| `ephemeral_public_key`  | 32 bytes | Its public key. It is part of the stanza.                             |
+| `shared_secret`         | 32 bytes | Output of X25519.                                                     |
+| `stanza_key`            | 32 bytes | Key that encrypts one `file_key` in one stanza.                       |
+| `link_secret`           | 32 bytes | Random secret in the share link of a file with a password.            |
+| `password_key`          | 32 bytes | Key that encrypts `file_key` in a password stanza.                    |
+| `keyring_key`           | 32 bytes | Key that encrypts the list of old account private keys.               |
+| `sealed_keyring`        | variable | The encrypted list of old account private keys. The server stores it. |
 
 ## 3. Threat model
 
@@ -321,12 +323,13 @@ boundary.
 
 ### 5.3 Data that the server stores for each account
 
-| Field                | Content                                                        | Readable by the server |
-| -------------------- | -------------------------------------------------------------- | ---------------------- |
-| `account_public_key` | Account public key                                             | Yes                    |
-| `passphrase_salt`    | `random(32)`                                                   | Yes                    |
-| `auth_public_key`    | Public key of the sign-in key pair                             | Yes                    |
-| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)` | No                     |
+| Field                | Content                                                                               | Readable by the server |
+| -------------------- | ------------------------------------------------------------------------------------- | ---------------------- |
+| `account_public_key` | Account public key                                                                    | Yes                    |
+| `passphrase_salt`    | `random(32)`                                                                          | Yes                    |
+| `auth_public_key`    | Public key of the sign-in key pair                                                    | Yes                    |
+| `wrapped_root`       | `seal(wrap_key, random(24), account_public_key, root_entropy)`                        | No                     |
+| `sealed_keyring`     | Old account private keys, encrypted (section 8.3.3). Empty before the first rotation. | No                     |
 
 A person who copies the database gets `wrapped_root` and `auth_public_key`.
 That person cannot sign in. That person can test passphrases offline
@@ -412,7 +415,7 @@ session thus cannot start offline guesses.
 ### 6.4 Key storage in the browser
 
 - The client keeps `account_private_key` in IndexedDB for the life of the
-  session.
+  session. It keeps the old private keys of the keyring in the same way.
 - The client deletes it on sign-out and when the session expires.
 - The client must not store the passphrase, `passphrase_root`, `wrap_key` or
   `root_entropy`.
@@ -464,7 +467,7 @@ Results for the user:
 
 - Each passphrase change gives a new mnemonic. The user must save it.
 - Each passphrase change cancels the bearer tokens. The user installs a new
-  configuration for each script client (section 8.3.5).
+  configuration for each script client (section 8.3.6).
 
 ### 6.8 Recovery
 
@@ -613,32 +616,46 @@ Wrap:
 
 1. `password_salt = random(32)`
 2. `link_secret = random(32)`
-3. `stretched_password = Argon2id(password, password_salt)`
-4. `password_key = blake3_derive_key("flare e2ee v1 password stanza", stretched_password || link_secret || account_public_key || header_hash)`
-5. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
-6. The stanza is `password_salt || wrapped_file_key`.
-7. The share link carries `link_secret` (section 10.3).
+3. `owner_public_key` = the `account_public_key` of the owner at this time.
+4. `stretched_password = Argon2id(password, password_salt)`
+5. `password_key = blake3_derive_key("flare e2ee v1 password stanza", stretched_password || link_secret || owner_public_key || header_hash)`
+6. `wrapped_file_key = seal(password_key, zeros(24), header_hash, file_key)`
+7. `link_secret_key = blake3_derive_key("flare e2ee v1 link secret copy", file_key)`
+8. `sealed_link_secret = seal(link_secret_key, zeros(24), header_hash, link_secret)`
+9. The stanza is `password_salt || owner_public_key || wrapped_file_key || sealed_link_secret`.
+10. The share link carries `link_secret` (section 10.3).
 
 Unwrap:
 
 1. The client reads `link_secret` from the link.
-2. The recipient types the password.
-3. The client calculates `password_key` as in steps 3 and 4 of the wrap
+2. The client reads `password_salt` and `owner_public_key` from the stanza.
+3. The recipient types the password.
+4. The client calculates `password_key` as in steps 4 and 5 of the wrap
    procedure.
-4. `file_key = open(password_key, header_hash, wrapped_file_key)`
+5. `file_key = open(password_key, header_hash, wrapped_file_key)`
 
 Properties:
 
 - A person who has the link and not the password cannot read the file.
 - A person who has the password and not the link cannot read the file.
 - The server has neither, and cannot test passwords offline.
-- `account_public_key` and `header_hash` in the derivation bind the stanza
-  to one owner and one file. A stanza does not open in a different account
-  or with a different file. This is a binding to the context. It does not
-  prove who made the stanza (section 3.3, limit 2).
+- `owner_public_key` and `header_hash` in the derivation bind the stanza to
+  one owner key and one file. A stanza does not open with a different file.
+  This is a binding to the context. It does not prove who made the stanza
+  (section 3.3, limit 2).
 
 The owner reads the file through the account stanza. The owner does not need
 the password.
+
+**Reason for `sealed_link_secret`:** the owner has `file_key`, thus the owner
+can open `sealed_link_secret` and show the share link again. Without it, the
+owner could not get the link back after the upload.
+
+**Key rotation and password stanzas:** a rotation does not change a password
+stanza. The owner does not have the password, thus the owner cannot make the
+stanza again. The stanza records `owner_public_key`, thus it continues to
+open after the account key changes. The share link and the password stay
+valid.
 
 ### 8.3 Key rotation
 
@@ -675,6 +692,13 @@ No operation changes the passphrase without a rotation.
 
 #### 8.3.3 Rotation procedure
 
+**Goal:** the time of a rotation must not depend on the number of files. An
+account can have tens of thousands of files.
+
+**Idea:** the rotation keeps the old account private keys in an encrypted
+list, the `sealed_keyring`. The old stanzas stay valid. A later task moves
+the stanzas to the new key (section 8.3.4).
+
 1. The client asks for the passphrase and gets the old `root_entropy` and
    the old `account_private_key` (section 6.2). In recovery, the mnemonic
    gives them (section 6.8).
@@ -683,46 +707,71 @@ No operation changes the passphrase without a rotation.
 3. The client makes a new `root_entropy`, a new account key pair, a new
    `passphrase_salt`, a new `auth_public_key`, a new `wrap_key` and a new
    `wrapped_root` (section 5.4).
-4. For each file: the client opens the account stanza with the old key and
-   makes a new account stanza for the new public key (section 8.1).
-5. The client sends the new account data and the new stanzas in a request
+4. `keyring_key = blake3_derive_key("flare e2ee v1 keyring", new root_entropy)`
+5. `sealed_keyring = seal(keyring_key, random(24), new account_public_key, old_private_keys)`.
+   `old_private_keys` is the list of all old account private keys that still
+   have stanzas. It includes the keys of the old keyring.
+6. The client sends the new account data and `sealed_keyring` in a request
    that is signed with the old account key (section 6.6).
-6. The server replaces the account data and each stanza. The server deletes
-   the old stanzas and the old `wrapped_root`.
-7. The server cancels all other sessions and all bearer tokens of the
+7. The server replaces the account data. The server deletes the old
+   `wrapped_root` and the old `sealed_keyring`.
+8. The server cancels all other sessions and all bearer tokens of the
    account.
-8. The client shows the new mnemonic. The user must save it. The old
+9. The client shows the new mnemonic. The user must save it. The old
    mnemonic does not open the account after this step.
-9. The client deletes the old keys.
 
-The file content does not change. The cost for each file is two X25519
-operations and about 100 bytes.
+The server returns `sealed_keyring` together with `wrapped_root` at sign-in.
+The client opens it and keeps the old private keys with the current one
+(section 6.4).
 
-The procedure can stop and continue. Each account stanza records the
-`account_public_key` that it is for. A stanza for the old key shows that the
-file is not done. The server keeps the old `wrapped_root` until all stanzas
-are done.
+The work of a rotation is constant. It does not depend on the number of
+files. From step 7, each new upload uses the new public key.
 
-#### 8.3.4 What rotation gives and does not give
+#### 8.3.4 Stanza migration
 
-| Attacker has before the rotation                | Result after the rotation                             |
-| ----------------------------------------------- | ----------------------------------------------------- |
-| The passphrase only                             | Reads nothing.                                        |
-| The old keys, and not a copy of the old stanzas | Reads nothing. The old stanzas are deleted.           |
-| The old keys and a copy of the old stanzas      | Reads the old files. Does not read new files.         |
-| A share link                                    | Reads that file. Rotation does not change `file_key`. |
+After a rotation, the old stanzas are still for the old keys. A person who
+has an old key and gets a later copy of the database could read those files.
+The migration removes this risk. It is a background task of the client.
 
-To protect an old file from the third attacker, the client must encrypt the
-file again with a new `file_key`. This breaks the share links of that file.
-This document does not specify it. See section 13.
+Each account stanza records the `account_public_key` that it is for.
 
-#### 8.3.5 Script clients after a rotation
+1. The client requests a batch of account stanzas that are for an old key.
+2. For each stanza: the client opens it with the old key and makes a new
+   account stanza for the current public key (section 8.1).
+3. The client sends the batch. The server replaces the old stanzas.
+4. The client does steps 1 to 3 again until no stanza is for the old key.
+5. The client makes a new `sealed_keyring` without that old key and sends it.
+   The client must have `root_entropy` for this step. Thus it occurs at the
+   next sign-in.
+
+The migration can stop at any time and continue in a later session. The file
+content does not change. The cost for each file is two X25519 operations and
+about 100 bytes.
+
+The migration does not touch password stanzas (section 8.2).
+
+#### 8.3.5 What rotation gives and does not give
+
+| Attacker has before the rotation                          | Result                                                |
+| --------------------------------------------------------- | ----------------------------------------------------- |
+| The passphrase only                                       | Reads nothing.                                        |
+| The old keys                                              | Does not read files that come after the rotation.     |
+| The old keys, and a copy of the database after migration  | Reads nothing. The old stanzas are deleted.           |
+| The old keys, and a copy of the database before migration | Reads the old files that are not migrated.            |
+| The old keys and a copy of the old stanzas                | Reads the old files. Does not read new files.         |
+| A share link                                              | Reads that file. Rotation does not change `file_key`. |
+
+To protect an old file from an attacker who has its old stanza, the client
+must encrypt the file again with a new `file_key`. This breaks the share
+links of that file. This document does not specify it. See section 13.
+
+#### 8.3.6 Script clients after a rotation
 
 A script client has the old `account_public_key` in its configuration
 (section 10.2). After a rotation:
 
 - The server rejects an upload with a stanza for the old key.
-- The server cancels the bearer token (step 7 of section 8.3.3).
+- The server cancels the bearer token (step 8 of section 8.3.3).
 - The user installs a new configuration for each script client.
 
 A rotation is a rare operation after a compromise. Thus a new configuration
@@ -908,11 +957,12 @@ file with a link preview cannot be encrypted.
 
 ## 14. Change log
 
-| Draft | Date       | Change                                                                                                                                             |
-| ----- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0     | 2026-11-10 | First draft.                                                                                                                                       |
-| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.            |
-| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                |
-| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password. |
-| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                           |
-| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                        |
+| Draft | Date       | Change                                                                                                                                                                                        |
+| ----- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | 2026-11-10 | First draft.                                                                                                                                                                                  |
+| 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.                                                       |
+| 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                                                           |
+| 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password.                                            |
+| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                                                                      |
+| 5     | 2026-11-10 | A passphrase change and recovery are always a key rotation.                                                                                                                                   |
+| 6     | 2026-11-10 | Rotation is constant time with a keyring of old keys and a background stanza migration. Password stanzas record the owner key and survive a rotation. The owner can get a password link back. |
