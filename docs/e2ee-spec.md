@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 16. Not implemented. Not reviewed.            |
+| Status  | Draft 17. Not implemented. Not reviewed.            |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -78,7 +78,7 @@ This document does not use single-letter names.
 
 ### 1.5 Protocol versions
 
-**PROPOSED**
+**AGREED**
 
 **Goal:** the project can change a primitive, a parameter or a format later.
 Old files must stay readable. A client must never guess which rules apply.
@@ -339,6 +339,53 @@ A browser without threads calculates the 4 lanes one after the other. The
 result is the same. The time is longer. The implementation must measure the
 time on a slow phone before the release. If the time is not acceptable, the
 authors must change this section, not the implementation only.
+
+### 4.4 Encodings
+
+**PROPOSED**. These rules remove each ambiguity that an implementation
+would otherwise decide by itself. Two implementations that obey them give
+the same bytes.
+
+1. **Ed25519 private key.** `account_private_key` is the 32-byte seed of
+   RFC 8032. It is the same value as `account_seed`. `auth_private_key` is
+   the same value as `auth_seed`. Each derivation from a private key uses
+   these 32 bytes.
+2. **`ed2curve_private`.** Calculate SHA-512 of the seed. Take the first 32
+   bytes. Clamp them as RFC 7748 specifies for X25519.
+3. **`ed2curve_public`.** Decode the Edwards point with the coordinate `y`.
+   The X25519 public key is `u = (1 + y) / (1 - y)` in the field, as 32
+   bytes little-endian. If the point does not decode, or `y = 1`, fail.
+4. **XChaCha20.** The block counter starts at `0`.
+5. **Passphrase and file password.** Normalize the text with Unicode NFKC.
+   Encode it as UTF-8. Do not remove spaces.
+6. **Argon2id.** Version `0x13`. No secret value. No associated data. The
+   output has 32 bytes. Memory is in units of KiB: 64 MiB is `65536`.
+7. **Account identifier in a signature.** Remove spaces at the start and the
+   end. Change to lower case. Encode as UTF-8.
+8. **Signed request.** `method` is in upper case ASCII. `path` is the path
+   and the query of the request as the client sends them, in UTF-8. `body`
+   is the bytes of the request body. For a request without a body, use
+   `blake3_hash` of the empty byte string.
+9. **JSON records.** `file_metadata`, `folder_metadata` and `tag_metadata`
+   are UTF-8 JSON. The reader accepts each valid JSON object. The writer
+   does not have to use a canonical form, because the reader never compares
+   the bytes.
+10. **Mnemonic.** BIP39 with the English word list. 32 bytes of entropy give
+    24 words.
+11. **List of old private keys.** `old_private_keys` in `sealed_keyring` is
+    the concatenation of the 32-byte seeds, newest first.
+12. **`record_version`.** A stored stanza or sealed record is
+    `0x01 || record`. The byte is not an input of `seal` or of
+    `public_wrap`.
+13. **Text form.** Where a value is in JSON or in a URL, it is base64url
+    without padding. Test vectors use lower case hexadecimal.
+
+### 4.5 Test vectors
+
+The file `lib/e2ee/vectors/v1.json` contains test vectors for each
+procedure of this document. Each vector gives each random input, thus the
+output is fixed. A separate reference program made the vectors from this
+document. Each implementation must give the same outputs.
 
 ## 5. Account keys
 
@@ -1866,3 +1913,4 @@ when.
 | 14    | 2026-11-10 | Review of the full document. Corrections: random nonce for `sealed_link_secret`; the folder key copy of the owner uses a secret key; a rotation needs a proof of the passphrase; a signed request cannot create a session; the script policy permits inline scripts with a nonce; the server stores the full header. New: reset without the mnemonic, limit 8, three open questions. Stale text removed. |
 | 15    | 2026-11-10 | The file name moves out of the header into a separate sealed record. The header has 26 bytes. No sign-in with the account key. The "Custom head" setting continues to operate with scripts, as an accepted limit. Reset without the mnemonic is agreed.                                                                                                                                                  |
 | 16    | 2026-11-10 | Protocol versions: where the version is recorded, rules for a client, rules for a new version. The account record stores its Argon2id parameters.                                                                                                                                                                                                                                                        |
+| 17    | 2026-11-10 | Protocol versions agreed. Exact encodings for each value. Test vectors.                                                                                                                                                                                                                                                                                                                                  |
