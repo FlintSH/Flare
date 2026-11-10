@@ -111,6 +111,10 @@ A PDF opens in your browser's own PDF viewer inside the page. In Chrome, Edge an
 
 Anyone can make a file that opens with your account key, so Flare treats decrypted content as untrusted. HTML, SVG and other files that could run script are never opened as a page: HTML is shown as source text, an SVG is drawn as a picture, and anything Flare does not recognize is offered as a download. A local address answers only with the exact types of images, video, audio and PDF, or as a download, and every answer tells the browser not to guess a type and to run nothing.
 
+### Archives
+
+An encrypted ZIP, TAR, TAR.GZ or GZIP file can be browsed, extracted and created like a plain one. Your browser does the work that the server does for plain archives. [Archives that are encrypted files](./archives#archives-that-are-encrypted-files) lists what is different.
+
 ## What does not work yet
 
 These features read file content on the server, so they do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.
@@ -119,7 +123,6 @@ These features read file content on the server, so they do not work for encrypte
 - **Text from images (OCR)** and searching inside images.
 - **Search and the file type filter.** They do not find encrypted files, because the server cannot read names or types.
 - **Automatic tag rules** that match filenames or image text.
-- **Archive tools:** browsing, extracting and creating archives.
 - **Shared folder links.** An encrypted file in a shared folder is not listed on the folder's public page.
 - **Uploads from screenshot tools and API tokens.** They are plain.
 

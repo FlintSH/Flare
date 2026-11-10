@@ -95,10 +95,11 @@ describe('the type a local address answers with', () => {
       expect(localContentType('frame', type)).toBeNull()
   })
 
-  it('forces the generic type for a download and for data, whatever is claimed', () => {
-    for (const mode of ['download', 'data'] as const)
-      for (const type of ['text/html', 'image/svg+xml', 'application/pdf', 7])
-        expect(localContentType(mode, type)).toBe('application/octet-stream')
+  it('forces the generic type for a download, whatever is claimed', () => {
+    for (const type of ['text/html', 'image/svg+xml', 'application/pdf', 7])
+      expect(localContentType('download', type)).toBe(
+        'application/octet-stream'
+      )
   })
 
   it('agrees with the renderer list: each type a renderer plays has an address', () => {
@@ -161,38 +162,6 @@ describe('which request may get a resource', () => {
       expect(
         requestAllowed(media, { mode: 'cors', destination, clientId: owner })
       ).toBe(false)
-  })
-
-  it('gives data only to a fetch of the page that registered it', () => {
-    const data = { mode: 'data', clientId: owner } as const
-    expect(
-      requestAllowed(data, {
-        mode: 'same-origin',
-        destination: '',
-        clientId: owner,
-      })
-    ).toBe(true)
-    expect(
-      requestAllowed(data, {
-        mode: 'same-origin',
-        destination: '',
-        clientId: 'x',
-      })
-    ).toBe(false)
-    expect(
-      requestAllowed(data, {
-        mode: 'navigate',
-        destination: 'document',
-        clientId: '',
-      })
-    ).toBe(false)
-    expect(
-      requestAllowed(data, {
-        mode: 'no-cors',
-        destination: 'script',
-        clientId: owner,
-      })
-    ).toBe(false)
   })
 
   it('gives a download and a frame only to a navigation', () => {

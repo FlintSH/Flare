@@ -46,6 +46,9 @@ const { blake3 } = require('@noble/hashes/blake3.js')
 const { sha512 } = require('@noble/hashes/sha2.js')
 const { x25519 } = require('@noble/curves/ed25519.js')
 const { xchacha20 } = require('@noble/ciphers/chacha.js')
+const archiver = require('archiver')
+const tarStream = require('tar-stream')
+const yauzl = require('yauzl')
 const shared = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 45000 })
 
@@ -1649,6 +1652,437 @@ async function testTruncated(browser, alex) {
   )
 }
 
+// ---------------------------------------------------------------- archives
+
+/** The files inside every archive fixture. Their names and texts are plaintext too. */
+const ARCHIVE_ENTRIES = [
+  {
+    name: 'photos/harbor-inside-private.png',
+    buffer: pngFixture(marker('zipimage')),
+  },
+  {
+    name: 'notes/readme-inside-private.txt',
+    buffer: Buffer.from(`${marker('ziptext')}\nInside the archive.\n`),
+  },
+  { name: 'web/landing-inside-private.html', buffer: Buffer.from(HOSTILE_HTML) },
+  { name: 'web/diagram-inside-private.svg', buffer: Buffer.from(HOSTILE_SVG) },
+  { name: 'data/blob-inside-private.bin', buffer: randomBytes(300 * 1024) },
+]
+for (const entry of ARCHIVE_ENTRIES) {
+  extraPlaintext.set(entry.name, 'the name of an archive entry')
+  extraPlaintext.set(
+    entry.name.split('/').at(-1),
+    'the name of an archive entry'
+  )
+}
+extraPlaintext.set(marker('zipimage'), 'plaintext of an archive entry')
+extraPlaintext.set(marker('ziptext'), 'plaintext of an archive entry')
+
+async function zipOf(entries, options = {}) {
+  const archive = archiver('zip', options)
+  const chunks = []
+  const collecting = (async () => {
+    for await (const chunk of archive) chunks.push(Buffer.from(chunk))
+  })()
+  for (const entry of entries)
+    archive.append(entry.buffer, { name: entry.name, store: entry.store })
+  await archive.finalize()
+  await collecting
+  return Buffer.concat(chunks)
+}
+
+async function tarOf(entries) {
+  const pack = tarStream.pack()
+  const chunks = []
+  const consuming = (async () => {
+    for await (const chunk of pack) chunks.push(Buffer.from(chunk))
+  })()
+  for (const entry of entries) pack.entry({ name: entry.name }, entry.buffer)
+  pack.finalize()
+  await consuming
+  return Buffer.concat(chunks)
+}
+
+/** A ZIP whose names real writers refuse to make, with more entries than may be extracted. */
+function hostileZip() {
+  const items = [
+    { name: '../../outside-private.txt', data: Buffer.from('x') },
+    { name: '/absolute-private.txt', data: Buffer.from('x') },
+    { name: 'ok/plain-private.txt', data: Buffer.from('fine') },
+    ...Array.from({ length: 1005 }, (_, index) => ({
+      name: `many/entry-${index}.txt`,
+      data: Buffer.from('x'),
+    })),
+  ]
+  const contents = []
+  const directory = []
+  let offset = 0
+  for (const item of items) {
+    const name = Buffer.from(item.name)
+    const local = Buffer.alloc(30)
+    local.writeUInt32LE(0x04034b50)
+    local.writeUInt16LE(20, 4)
+    local.writeUInt16LE(0x0800, 6)
+    local.writeUInt32LE(zlib.crc32(item.data), 14)
+    local.writeUInt32LE(item.data.length, 18)
+    local.writeUInt32LE(item.data.length, 22)
+    local.writeUInt16LE(name.length, 26)
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50)
+    central.writeUInt16LE(0x314, 4)
+    local.copy(central, 6, 4, 28)
+    central.writeUInt32LE((0o100644 * 65536) >>> 0, 38)
+    central.writeUInt32LE(offset, 42)
+    contents.push(local, name, item.data)
+    directory.push(central, name)
+    offset += 30 + name.length + item.data.length
+  }
+  const central = Buffer.concat(directory)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50)
+  end.writeUInt16LE(items.length, 8)
+  end.writeUInt16LE(items.length, 10)
+  end.writeUInt32LE(central.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...contents, central, end])
+}
+
+/** The entries of a ZIP, read with yauzl: `{ name: Buffer }`. */
+function unzip(buffer) {
+  return new Promise((resolve, reject) => {
+    yauzl.fromBuffer(buffer, { lazyEntries: true }, (error, zip) => {
+      if (error) return reject(error)
+      const files = {}
+      zip.on('error', reject)
+      zip.on('end', () => resolve(files))
+      zip.on('entry', (entry) => {
+        zip.openReadStream(entry, (failure, stream) => {
+          if (failure) return reject(failure)
+          const chunks = []
+          stream.on('data', (chunk) => chunks.push(chunk))
+          stream.on('end', () => {
+            files[entry.fileName] = Buffer.concat(chunks)
+            zip.readEntry()
+          })
+        })
+      })
+      zip.readEntry()
+    })
+  })
+}
+
+async function openEntry(scope, path) {
+  const name = path.split('/').at(-1)
+  for (const folder of path.split('/').slice(0, -1))
+    await scope
+      .getByRole('button', { name: new RegExp(`^Open folder .*${folder}$`) })
+      .click()
+  await scope.getByRole('button', { name: `Preview ${path}`, exact: true }).click()
+  const preview = scope.getByRole('region', { name: 'Entry preview' })
+  await expect(preview.getByRole('heading', { name })).toBeVisible()
+  return preview
+}
+
+async function backToRoot(scope) {
+  await scope.getByRole('button', { name: 'Archive root', exact: true }).click()
+}
+
+/** Checks the listing and the previews of the common entries in an archive browser. */
+async function browseEntries(page, scope, { image = true } = {}) {
+  const text = await openEntry(scope, 'notes/readme-inside-private.txt')
+  await expect(text.getByLabel('Entry text')).toContainText(marker('ziptext'))
+  await backToRoot(scope)
+  if (image) {
+    const picture = await openEntry(scope, 'photos/harbor-inside-private.png')
+    const img = picture.getByRole('img')
+    await expect
+      .poll(() => img.evaluate((element) => element.naturalWidth), {
+        timeout: 30000,
+      })
+      .toBe(96)
+    await localSource(img)
+    await backToRoot(scope)
+  }
+  // HTML and SVG entries are text. Nothing in them runs.
+  for (const path of [
+    'web/landing-inside-private.html',
+    'web/diagram-inside-private.svg',
+  ]) {
+    const hostile = await openEntry(scope, path)
+    await expect(hostile.getByLabel('Entry text')).toContainText(
+      '__flarePwned'
+    )
+    await backToRoot(scope)
+  }
+  await page.waitForTimeout(300)
+  assert.equal(await page.evaluate(() => window.__flarePwned), undefined)
+  assert.equal(await scope.locator('iframe, object, embed').count(), 0)
+}
+
+async function testArchives(browser, alex, keys) {
+  const { page } = alex
+  const zip = {
+    name: 'project-bundle-private.zip',
+    mimeType: 'application/zip',
+    buffer: await zipOf(ARCHIVE_ENTRIES),
+    marker: marker('ziptext'),
+  }
+  const tar = {
+    name: 'project-bundle-private.tar',
+    mimeType: 'application/x-tar',
+    buffer: await tarOf(ARCHIVE_ENTRIES),
+    marker: marker('ziptext'),
+  }
+  const tgz = {
+    name: 'project-bundle-private.tar.gz',
+    mimeType: 'application/gzip',
+    buffer: zlib.gzipSync(await tarOf(ARCHIVE_ENTRIES)),
+    marker: marker('ziptext'),
+  }
+  const gz = {
+    name: 'readme-inside-private.txt.gz',
+    mimeType: 'application/gzip',
+    buffer: zlib.gzipSync(ARCHIVE_ENTRIES[1].buffer),
+    marker: marker('ziptext'),
+  }
+  const hostile = {
+    name: 'hostile-names-private.zip',
+    mimeType: 'application/zip',
+    buffer: hostileZip(),
+    marker: marker('hostilezip'),
+  }
+  for (const name of ['outside-private.txt', 'absolute-private.txt', 'plain-private.txt'])
+    extraPlaintext.set(name, 'the name of an archive entry')
+  Object.assign(fixtures, { zip, tar, tgz, gz, hostileArchive: hostile })
+  Object.assign(
+    uploaded,
+    await uploadEncrypted(page, [zip, tar, tgz, gz, hostile])
+  )
+  const before = requests.length
+
+  // --- The owner browses the ZIP from the library.
+  const menu = await openCardMenu(page, zip.name)
+  await menu.getByRole('menuitem', { name: 'Browse archive' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Browse archive' })
+  await expect(dialog.getByText(zip.name)).toBeVisible()
+  await expect(dialog.getByText(/ZIP · 5 files · 4 folders/)).toBeVisible({
+    timeout: 30000,
+  })
+  await shot(page, 'archive-browser')
+  await browseEntries(page, dialog)
+  const preview = await openEntry(dialog, 'photos/harbor-inside-private.png')
+  await expect(preview.getByRole('img')).toBeVisible()
+  await shot(page, 'archive-entry-image')
+  // One entry saved on its own.
+  await backToRoot(dialog)
+  const blob = await openEntry(dialog, 'data/blob-inside-private.bin')
+  const [entryDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    blob.getByRole('button', { name: 'Download entry' }).click(),
+  ])
+  assert.equal(entryDownload.suggestedFilename(), 'blob-inside-private.bin')
+  assert.equal(
+    sha256(await readFile(await entryDownload.path())),
+    sha256(ARCHIVE_ENTRIES[4].buffer)
+  )
+  localTokens.add(entryDownload.url().split(LOCAL_PREFIX)[1])
+  // The list was read from a part of the ciphertext.
+  const zipRow = await rowOf(uploaded[zip.name])
+  const listed = ciphertextRequests(zipRow, before)
+  assert.ok(listed.length >= 2)
+  assert.ok(listed.every((request) => request.asked !== null))
+
+  // --- Extract all: every entry becomes a new encrypted file.
+  const filesBefore = await prisma.file.count({
+    where: { userId: accounts.alex.id },
+  })
+  await backToRoot(dialog)
+  await dialog.getByRole('button', { name: 'Extract all' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Extract archive' })
+  ).toBeVisible()
+  await shot(page, 'archive-extract-form')
+  await page.getByRole('button', { name: 'Extract files' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Archive extracted' })
+  ).toBeVisible({ timeout: 120000 })
+  await shot(page, 'archive-extracted')
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  const extracted = await prisma.file.findMany({
+    where: { userId: accounts.alex.id },
+    orderBy: [{ uploadedAt: 'desc' }, { id: 'desc' }],
+    take: (await prisma.file.count({ where: { userId: accounts.alex.id } })) -
+      filesBefore,
+  })
+  assert.equal(extracted.length, ARCHIVE_ENTRIES.length)
+  const made = new Map()
+  for (const row of extracted) {
+    assert.equal(row.encrypted, true)
+    assert.equal(row.name, '')
+    assert.equal(row.visibility, 'PRIVATE')
+    const fileKey = fileKeyOf(row, keys.accountPrivateKey)
+    made.set(metadataOf(row, fileKey).name, await plaintextOf(row, fileKey))
+  }
+  for (const entry of ARCHIVE_ENTRIES) {
+    const name = entry.name.split('/').join(' - ')
+    extraPlaintext.set(name, 'the name of an extracted file')
+    assert.ok(made.has(name), `No extracted file is named ${name}`)
+    assert.ok(made.get(name).equals(entry.buffer), `${name} differs`)
+  }
+  results.push(
+    `The owner browses an encrypted ZIP from the library: "Browse archive" lists 5 files in 4 folders after ${listed.length} range requests for parts of the ciphertext, a text entry and an image entry open (the image from a local address), HTML and SVG entries are shown as source text and run nothing, and "Download entry" saves one entry byte for byte. "Extract all" makes ${extracted.length} new private encrypted files whose decrypted names carry their path ("photos - harbor-inside-private.png") and whose decrypted bytes equal the entries`
+  )
+
+  // --- Create an archive from two encrypted files and one plain file.
+  await page.goto(`${origin}/dashboard`)
+  await page.getByRole('button', { name: 'Select files', exact: true }).click()
+  for (const name of [fixtures.text.name, fixtures.image.name, PLAIN.name])
+    await page.getByLabel(`Select ${name}`, { exact: true }).check()
+  await page.getByRole('button', { name: 'Create archive', exact: true }).click()
+  const create = page.getByRole('dialog', { name: 'Create archive' })
+  await create.getByLabel('Archive name').fill('handover-private.zip')
+  extraPlaintext.set('handover-private', 'the name of a created archive')
+  await shot(page, 'archive-create-form')
+  await create.getByRole('button', { name: 'Create archive' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Archive created' })
+  ).toBeVisible({ timeout: 120000 })
+  await shot(page, 'archive-created')
+  const createdRow = await prisma.file.findFirstOrThrow({
+    where: { userId: accounts.alex.id },
+    orderBy: [{ uploadedAt: 'desc' }, { id: 'desc' }],
+  })
+  assert.equal(createdRow.encrypted, true)
+  const createdKey = fileKeyOf(createdRow, keys.accountPrivateKey)
+  assert.deepEqual(metadataOf(createdRow, createdKey), {
+    name: 'handover-private.zip',
+    type: 'application/zip',
+  })
+  const members = await unzip(await plaintextOf(createdRow, createdKey))
+  assert.deepEqual(Object.keys(members).sort(), [
+    fixtures.text.name,
+    fixtures.image.name,
+    PLAIN.name,
+  ].sort())
+  assert.ok(members[fixtures.text.name].equals(fixtures.text.buffer))
+  assert.ok(members[fixtures.image.name].equals(fixtures.image.buffer))
+  assert.ok(members[PLAIN.name].equals(PLAIN.buffer))
+  // The new archive opens in the browser straight away.
+  await page.getByRole('button', { name: 'Open archive' }).click()
+  const fresh = page.getByRole('dialog', { name: 'Browse archive' })
+  await expect(fresh.getByText(/ZIP · 3 files/)).toBeVisible({ timeout: 30000 })
+  await page.keyboard.press('Escape')
+  results.push(
+    'An archive is created in the browser from two encrypted files and one plain file: the result is a new encrypted file named handover-private.zip in sealed metadata; decrypted with independent code and read with yauzl it holds the three files byte for byte, and "Open archive" lists it'
+  )
+
+  // --- TAR.GZ: browse and extract as the owner.
+  const tgzMenu = await openCardMenu(page, tgz.name)
+  await tgzMenu.getByRole('menuitem', { name: 'Browse archive' }).click()
+  const tgzDialog = page.getByRole('dialog', { name: 'Browse archive' })
+  await expect(tgzDialog.getByText(/TAR\.GZ · 5 files/)).toBeVisible({
+    timeout: 30000,
+  })
+  await browseEntries(page, tgzDialog)
+  const countBefore = await prisma.file.count({
+    where: { userId: accounts.alex.id },
+  })
+  await tgzDialog.getByRole('button', { name: 'Extract all' }).click()
+  await page.getByRole('button', { name: 'Extract files' }).click()
+  await expect(
+    page.getByRole('heading', { name: 'Archive extracted' })
+  ).toBeVisible({ timeout: 120000 })
+  await page.getByRole('button', { name: 'Done', exact: true }).click()
+  assert.equal(
+    (await prisma.file.count({ where: { userId: accounts.alex.id } })) -
+      countBefore,
+    ARCHIVE_ENTRIES.length
+  )
+
+  // --- A hostile archive: listed with its problems, and not extracted.
+  const hostileMenu = await openCardMenu(page, hostile.name)
+  await hostileMenu.getByRole('menuitem', { name: 'Browse archive' }).click()
+  const hostileDialog = page.getByRole('dialog', { name: 'Browse archive' })
+  await expect(hostileDialog.getByText(/ZIP · 1,008 files/)).toBeVisible({
+    timeout: 30000,
+  })
+  await expect(
+    hostileDialog.getByRole('button', { name: 'Extract all' })
+  ).toBeDisabled()
+  await expect(
+    hostileDialog.getByText(/Extract all isn’t available because/)
+  ).toBeVisible()
+  // The entry that tries to leave the archive is listed and cannot be opened.
+  await hostileDialog.getByLabel('Search archive').fill('outside-private')
+  await hostileDialog
+    .getByRole('button', { name: /outside-private\.txt \(unavailable\)/ })
+    .click()
+  await expect(
+    hostileDialog.getByText('This entry’s path is unsafe, so Flare won’t open it.')
+  ).toBeVisible()
+  await expect(
+    hostileDialog.getByRole('button', { name: 'Download entry' })
+  ).toHaveCount(0)
+  await shot(page, 'archive-hostile')
+  const filesNow = await prisma.file.count({
+    where: { userId: accounts.alex.id },
+  })
+  await page.keyboard.press('Escape')
+  assert.equal(
+    await prisma.file.count({ where: { userId: accounts.alex.id } }),
+    filesNow
+  )
+  results.push(
+    'A hostile encrypted ZIP (entries named ../../outside-private.txt and /absolute-private.txt, and 1,008 entries) is listed, its unsafe entries are marked and cannot be opened or saved, "Extract all" is disabled with its reason, and no file was made from it'
+  )
+
+  // --- A signed-out visitor browses each format on its share page.
+  const visitor = await context(browser)
+  const archiveCalls = requests.length
+  for (const [fixture, label, image] of [
+    [zip, /ZIP · 5 files/, true],
+    [tar, /TAR · 5 files/, true],
+    [tgz, /TAR\.GZ · 5 files/, true],
+  ]) {
+    await visitor.page.goto(uploaded[fixture.name])
+    await expectShareState(visitor.page, 'open')
+    const section = visitor.page.locator('[data-encrypted-archive]')
+    await expect(section.getByText(label)).toBeVisible({ timeout: 30000 })
+    await browseEntries(visitor.page, section, { image })
+    if (fixture === zip) await shot(visitor.page, 'archive-share-page')
+    // A visitor is not offered extraction.
+    await expect(
+      section.getByRole('button', { name: 'Extract all' })
+    ).toHaveCount(0)
+  }
+  await visitor.page.goto(uploaded[gz.name])
+  await expectShareState(visitor.page, 'open')
+  const single = visitor.page.locator('[data-encrypted-archive]')
+  await expect(single.getByText(/GZIP · 1 file/)).toBeVisible({ timeout: 30000 })
+  await single
+    .getByRole('button', { name: 'Preview readme-inside-private.txt' })
+    .click()
+  await expect(single.getByLabel('Entry text')).toContainText(marker('ziptext'))
+  assert.deepEqual(await violations(visitor.page), [])
+  // The server's archive routes were never asked: it could not answer, and
+  // no unlock cookie exists for an encrypted file.
+  assert.ok(
+    !requests
+      .slice(archiveCalls)
+      .some((request) => /\/archive(\/|$|\?)/.test(request.target)),
+    'A visitor asked the server for an archive listing or entry'
+  )
+  const cookies = await visitor.ctx.cookies()
+  assert.ok(
+    !cookies.some((cookie) => /archive/i.test(cookie.name)),
+    'The visitor got an archive unlock cookie'
+  )
+  await visitor.ctx.close()
+  results.push(
+    'A signed-out visitor browses encrypted archives on their share pages with the key of the link: ZIP, TAR and TAR.GZ list 5 files and open a text entry and an image entry, HTML and SVG entries are source text, a GZIP lists its one file and opens it, no extraction is offered, the server got no archive request and set no unlock cookie'
+  )
+}
+
 // ---------------------------------------------------------------- run
 
 const scenarios = []
@@ -1679,6 +2113,7 @@ async function main() {
     scenario('download', () => testDownload(browser, alex))
     scenario('pdf', () => testPdf(browser))
     scenario('truncated', () => testTruncated(browser, alex))
+    scenario('archives', () => testArchives(browser, alex, keys))
     for (const { name, run } of scenarios)
       if (!only.length || only.includes(name)) await run()
 

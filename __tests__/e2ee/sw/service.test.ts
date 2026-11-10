@@ -653,6 +653,90 @@ describe('keys', () => {
   })
 })
 
+describe('entries of an archive', () => {
+  it('serve a part of the file, and share the proof of its length', async () => {
+    const { plaintext, server, service, resource } = await setup(
+      30 * CHUNK_SIZE
+    )
+    const base = resource()
+    if (base.source.kind !== 'file') throw new Error()
+    const member = (token: string, offset: number, length: number) =>
+      service.register(
+        {
+          ...base,
+          token,
+          contentType: 'image/png',
+          source: {
+            ...base.source,
+            fileKey: fileKey.slice(),
+            member: { kind: 'stored', offset, length },
+          },
+        },
+        PAGE,
+        null
+      )
+    const first = 'F'.repeat(43)
+    const second = 'S'.repeat(43)
+    member(first, 5 * CHUNK_SIZE + 10, 1000)
+    member(second, 20 * CHUNK_SIZE, 70_000)
+    const one = await service.handle(
+      request(first, { destination: 'image' }),
+      PAGE
+    )!
+    expect(one.status).toBe(200)
+    expect(one.headers.get('content-length')).toBe('1000')
+    expectSameBytes(
+      await body(one),
+      plaintext.subarray(5 * CHUNK_SIZE + 10, 5 * CHUNK_SIZE + 1010)
+    )
+    const two = await service.handle(
+      request(second, { destination: 'image', range: 'bytes=65000-69999' }),
+      PAGE
+    )!
+    expect(two.status).toBe(206)
+    expect(two.headers.get('content-range')).toBe('bytes 65000-69999/70000')
+    expectSameBytes(
+      await body(two),
+      plaintext.subarray(20 * CHUNK_SIZE + 65000, 20 * CHUNK_SIZE + 70000)
+    )
+    // One request proved the end of the file for both addresses.
+    const tail = server.requests.filter((entry) =>
+      entry.range?.endsWith(`-${26 + 30 * STORED_CHUNK_SIZE - 1}`)
+    )
+    expect(tail).toHaveLength(1)
+    // Releasing one address keeps the file open for the other.
+    service.release([first], PAGE)
+    expect(
+      (await service.handle(request(second, { destination: 'image' }), PAGE)!)
+        .status
+    ).toBe(200)
+  })
+
+  it('refuses an entry that reaches outside the file', async () => {
+    const { service, notices, resource } = await setup(CHUNK_SIZE)
+    const base = resource()
+    if (base.source.kind !== 'file') throw new Error()
+    service.register(
+      {
+        ...base,
+        contentType: 'image/png',
+        source: {
+          ...base.source,
+          member: { kind: 'stored', offset: CHUNK_SIZE - 10, length: 100 },
+        },
+      },
+      PAGE,
+      null
+    )
+    const response = await service.handle(
+      request(TOKEN, { destination: 'image' }),
+      PAGE
+    )!
+    expect(response.status).toBe(502)
+    expect(notices.at(-1)?.message).toMatchObject({ reason: 'integrity' })
+  })
+})
+
 describe('a download that the page feeds', () => {
   it('pulls one piece at a time and ends when the page ends it', async () => {
     const { service, notices } = await setup(10)

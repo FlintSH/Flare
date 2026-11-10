@@ -7,7 +7,11 @@ import {
   type ArchiveOutputFormat,
 } from '@/lib/archives/shared'
 import { readAnswer, refusal, sendRequest } from '@/lib/client/request'
+import type { EncryptedRecordsWire } from '@/lib/e2ee/client/files'
+import { decryptionProblem } from '@/lib/files/encrypted-client'
 import { fileKind } from '@/lib/files/file-kind'
+
+import type { EncryptedArchiveHandle } from './encrypted-archive-handle'
 
 /** What an archive request that gives no reason fails with. */
 export const ARCHIVE_REQUEST_FAILED =
@@ -83,17 +87,30 @@ export interface ArchiveFileRef {
   mimeType?: string
   urlPath?: string
   folderId?: string | null
+  /** A file the browser encrypted: the archive tools then run in the browser. */
+  encrypted?: boolean
+  encryption?: EncryptedRecordsWire | null
+  /** The stored size in megabytes, as the library lists it. */
+  size?: number
 }
 
 export type ArchiveSource =
-  { kind: 'owner' } | { kind: 'share'; password?: string }
+  | { kind: 'owner' }
+  | { kind: 'share'; password?: string }
+  /**
+   * An encrypted archive, read in this browser. The server has only
+   * ciphertext, so no request names an entry (docs/e2ee-spec.md, 12.3).
+   */
+  | { kind: 'encrypted'; archive: EncryptedArchiveHandle; owner: boolean }
 
-export const OWNER_ARCHIVE_SOURCE: ArchiveSource = { kind: 'owner' }
+export const OWNER_ARCHIVE_SOURCE = {
+  kind: 'owner',
+} as const satisfies ArchiveSource
 
 /** Shared passwords travel in the body, never in a URL. */
 export function archiveListingRequest(
   id: string,
-  source: ArchiveSource,
+  source: Exclude<ArchiveSource, { kind: 'encrypted' }>,
   options: { progress?: boolean; after?: number } = {}
 ): {
   url: string
@@ -122,7 +139,7 @@ export function archiveListingRequest(
  */
 export function archiveEntryHref(
   id: string,
-  source: ArchiveSource,
+  source: Exclude<ArchiveSource, { kind: 'encrypted' }>,
   position: number,
   options: { inline?: boolean } = {}
 ) {
@@ -244,7 +261,19 @@ export function archivePreviewKind(
 }
 
 export function archiveErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : ARCHIVE_REQUEST_FAILED
+  if (!(error instanceof Error)) return ARCHIVE_REQUEST_FAILED
+  // Failures of an encrypted archive that is read in this browser.
+  if (error.name === 'E2eeError' || error.name === 'CiphertextRefused')
+    return decryptionProblem(error)
+  if (error.name === 'SourceError') {
+    const { failure } = error as Error & { failure?: string }
+    return failure === 'refused'
+      ? 'The server did not send this file. It may have been deleted or made private.'
+      : failure === 'changed'
+        ? 'This file did not pass its integrity check. It was changed or cut after it was encrypted, so Flare will not show or save it.'
+        : 'The file could not be loaded. Check your connection and try again.'
+  }
+  return error.message || ARCHIVE_REQUEST_FAILED
 }
 
 function sleep(ms: number, signal?: AbortSignal) {
@@ -275,7 +304,7 @@ export type ArchiveLoadUpdate =
  */
 export async function loadArchiveListing(
   id: string,
-  source: ArchiveSource,
+  source: Exclude<ArchiveSource, { kind: 'encrypted' }>,
   options: {
     signal: AbortSignal
     onUpdate: (update: ArchiveLoadUpdate) => void

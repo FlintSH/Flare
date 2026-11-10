@@ -10,7 +10,7 @@ import {
 import { DamagedEntry, type PlainView, plainView } from '../client/plain-view'
 import { isE2eeError } from '../errors'
 import { parseHeader } from '../file'
-import { wipe } from '../primitives'
+import { constantTimeEqual, wipe } from '../primitives'
 import {
   type LocalFailure,
   type LocalMember,
@@ -68,6 +68,20 @@ interface Opened {
   readonly view: PlainView
 }
 
+/**
+ * One file that addresses read from. Several addresses of one file, such as
+ * the entries of an archive, share its keys and the proof of its length.
+ */
+interface SharedFile {
+  readonly url: string
+  readonly fileKey: Uint8Array
+  readonly header: Uint8Array
+  readonly storedLength?: number
+  addresses: number
+  source: Promise<EncryptedSource> | null
+  closed: boolean
+}
+
 interface Held {
   readonly token: string
   readonly mode: LocalMode
@@ -77,21 +91,20 @@ interface Held {
   readonly countDownload: boolean
   /** A file source. Opened at the first request, then kept. */
   readonly file: {
-    readonly url: string
-    readonly fileKey: Uint8Array
-    readonly header: Uint8Array
-    readonly storedLength?: number
+    readonly shared: SharedFile
     readonly member?: LocalMember
-    opened: Promise<Opened> | null
   } | null
   /** A feed source. */
   readonly port: ServicePort | null
   /** A download and a feed answer one request. */
   used: boolean
-  forgotten: boolean
 }
 
-const MODES: readonly LocalMode[] = ['media', 'frame', 'download', 'data']
+function sameBytes(left: Uint8Array, right: Uint8Array) {
+  return left.length === right.length && constantTimeEqual(left, right)
+}
+
+const MODES: readonly LocalMode[] = ['media', 'frame', 'download']
 const DEFAULT_WAIT_MS = 5000
 /**
  * A range that starts deeper than this in compressed data is answered with
@@ -117,51 +130,82 @@ export function createLocalAddressService(environment: ServiceEnvironment) {
   const held = new Map<string, Held>()
   const waiting = new Map<string, Set<(resource: Held | null) => void>>()
 
+  const files: SharedFile[] = []
+
+  /** The shared file of a registration: an open one with the same key, or a new one. */
+  function share(file: {
+    url: string
+    fileKey: Uint8Array
+    header: Uint8Array
+    storedLength?: number
+  }): SharedFile {
+    let shared = files.find(
+      (known) =>
+        known.url === file.url &&
+        known.storedLength === file.storedLength &&
+        sameBytes(known.header, file.header) &&
+        sameBytes(known.fileKey, file.fileKey)
+    )
+    if (!shared) {
+      shared = {
+        url: file.url,
+        fileKey: file.fileKey.slice(),
+        header: file.header.slice(),
+        storedLength: file.storedLength,
+        addresses: 0,
+        source: null,
+        closed: false,
+      }
+      files.push(shared)
+    }
+    shared.addresses++
+    return shared
+  }
+
   function forget(token: string) {
     const resource = held.get(token)
     if (!resource) return
     held.delete(token)
-    resource.forgotten = true
     resource.port?.close?.()
-    if (!resource.file) return
-    wipe(resource.file.fileKey)
-    void resource.file.opened?.then(
-      ({ source }) => source.close(),
+    const shared = resource.file?.shared
+    if (!shared || --shared.addresses > 0) return
+    // The last address of the file: its keys go, and a transfer that still
+    // reads from it stops.
+    shared.closed = true
+    files.splice(files.indexOf(shared), 1)
+    wipe(shared.fileKey)
+    void shared.source?.then(
+      (source) => source.close(),
       () => undefined
     )
   }
 
   /** Opens the source of a file resource once: its length, then its keys. */
-  function open(resource: Held): Promise<Opened> {
-    const file = resource.file!
-    file.opened ??= (async () => {
+  async function open(resource: Held): Promise<Opened> {
+    const { shared, member } = resource.file!
+    shared.source ??= (async () => {
       const storedLength =
-        file.storedLength ??
+        shared.storedLength ??
         (await probeStoredLength({
-          url: file.url,
-          header: file.header,
+          url: shared.url,
+          header: shared.header,
           fetch: environment.fetch,
         }))
-      if (resource.forgotten) throw new Error('The address was released')
-      const source = openEncryptedSource({
-        url: file.url,
-        fileKey: file.fileKey,
-        header: file.header,
+      if (shared.closed) throw new Error('The address was released')
+      return openEncryptedSource({
+        url: shared.url,
+        fileKey: shared.fileKey,
+        header: shared.header,
         storedLength,
         fetch: environment.fetch,
       })
-      try {
-        return { source, view: plainView(source, file.member) }
-      } catch (error) {
-        source.close()
-        throw error
-      }
     })().catch((error: unknown) => {
       // A request that failed can be made again.
-      file.opened = null
+      shared.source = null
       throw error
     })
-    return file.opened
+    const source = await shared.source
+    return { source, view: plainView(source, member) }
   }
 
   /** Reads a registration. Throws with a reason that names no secret. */
@@ -195,7 +239,6 @@ export function createLocalAddressService(environment: ServiceEnvironment) {
       clientId,
       countDownload: resource.countDownload === true,
       used: false,
-      forgotten: false,
     }
     if (source.kind === 'feed') {
       if (mode !== 'download' || !port)
@@ -233,15 +276,17 @@ export function createLocalAddressService(environment: ServiceEnvironment) {
       throw new Error('Not a valid length')
     // Refuses a header of a version or chunk size this worker does not know.
     parseHeader(source.header)
+    // The values of an entry are checked against the file when it opens.
     return {
       ...common,
       file: {
-        url: url.pathname,
-        fileKey: source.fileKey.slice(),
-        header: source.header.slice(),
-        storedLength: source.storedLength,
+        shared: share({
+          url: url.pathname,
+          fileKey: source.fileKey,
+          header: source.header,
+          storedLength: source.storedLength,
+        }),
         member: source.member,
-        opened: null,
       },
       port: null,
     }

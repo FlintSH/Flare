@@ -39,6 +39,7 @@ import {
   detectArchiveFormat,
 } from '@/lib/archives/shared'
 import { retryable, sendRequest } from '@/lib/client/request'
+import { decryptionProblem } from '@/lib/files/encrypted-client'
 import { fileIdUrls } from '@/lib/files/urls'
 import { cn, formatBytes } from '@/lib/utils'
 
@@ -154,6 +155,10 @@ export function ArchiveBrowserContent({
   const previewRef = useRef<HTMLDivElement>(null)
   const sourceKind = source.kind
   const password = source.kind === 'share' ? source.password : undefined
+  // An encrypted archive is read in this browser, from its ciphertext.
+  const encrypted = source.kind === 'encrypted' ? source.archive : null
+  const [downloading, setDownloading] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
 
   useEffect(() => {
     if (unsupported) return
@@ -162,21 +167,35 @@ export function ArchiveBrowserContent({
     setSelected(null)
     setDirectory('')
     setSearch('')
-    loadArchiveListing(
-      file.id,
-      sourceKind === 'share'
-        ? { kind: 'share', password }
-        : OWNER_ARCHIVE_SOURCE,
-      {
-        signal: controller.signal,
-        onUpdate: (update) =>
-          setState(
-            update.status === 'busy'
-              ? { status: 'busy' }
-              : { status: 'indexing', update }
-          ),
-      }
-    )
+    const loading = encrypted
+      ? encrypted.load({
+          signal: controller.signal,
+          onUpdate: (progress) =>
+            setState({
+              status: 'indexing',
+              update: {
+                status: 'indexing',
+                entries: progress.entries,
+                progress,
+              },
+            }),
+        })
+      : loadArchiveListing(
+          file.id,
+          sourceKind === 'share'
+            ? { kind: 'share', password }
+            : OWNER_ARCHIVE_SOURCE,
+          {
+            signal: controller.signal,
+            onUpdate: (update) =>
+              setState(
+                update.status === 'busy'
+                  ? { status: 'busy' }
+                  : { status: 'indexing', update }
+              ),
+          }
+        )
+    loading
       .then((listing) => {
         if (!controller.signal.aborted) setState({ status: 'ready', listing })
       })
@@ -190,7 +209,7 @@ export function ArchiveBrowserContent({
         })
       })
     return () => controller.abort()
-  }, [file.id, sourceKind, password, attempt, unsupported])
+  }, [file.id, sourceKind, password, attempt, unsupported, encrypted])
 
   const listed = state.status === 'ready' ? state.listing.entries.length : null
   useEffect(() => {
@@ -294,6 +313,8 @@ export function ArchiveBrowserContent({
     focusRow(next)
   }
 
+  const canExtract =
+    source.kind === 'owner' || (source.kind === 'encrypted' && source.owner)
   const listing = state.status === 'ready' ? state.listing : null
   const indexing = state.status === 'indexing' ? state.update.progress : null
   const notice = listing && truncationNotice(listing)
@@ -322,9 +343,11 @@ export function ArchiveBrowserContent({
                 ? `Reading ${indexing.format.toUpperCase()}… ${count(indexing.entriesFound, 'entry').replace('entrys', 'entries')} found`
                 : state.status === 'busy'
                   ? 'Flare is busy reading other archives. Trying again shortly…'
-                  : source.kind === 'share'
-                    ? 'Loading file and folder details.'
-                    : 'Preview entries without adding them to your account.'}
+                  : source.kind === 'encrypted'
+                    ? 'Decrypting the file list in your browser.'
+                    : source.kind === 'share'
+                      ? 'Loading file and folder details.'
+                      : 'Preview entries without adding them to your account.'}
           </p>
           {/* Wider screens explain this in the empty preview panel. */}
           {listing && (
@@ -342,7 +365,31 @@ export function ArchiveBrowserContent({
               </a>
             </Button>
           )}
-          {source.kind === 'owner' && onExtract && (
+          {encrypted && source.kind === 'encrypted' && source.owner && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={downloading}
+              onClick={() => {
+                setDownloading(true)
+                setDownloadError('')
+                encrypted
+                  .downloadArchive()
+                  .catch((cause: unknown) =>
+                    setDownloadError(decryptionProblem(cause))
+                  )
+                  .finally(() => setDownloading(false))
+              }}
+            >
+              {downloading ? (
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowDownToLine className="h-4 w-4" aria-hidden="true" />
+              )}
+              Download archive
+            </Button>
+          )}
+          {canExtract && onExtract && (
             <Button
               size="sm"
               disabled={
@@ -356,14 +403,16 @@ export function ArchiveBrowserContent({
           )}
         </div>
       </div>
-      {source.kind === 'owner' &&
-        onExtract &&
-        listing &&
-        !listing.extraction.available && (
-          <p className="-mt-3 text-xs leading-relaxed text-muted-foreground">
-            {listing.extraction.reason}
-          </p>
-        )}
+      {downloadError && (
+        <p role="alert" className="-mt-3 text-xs text-destructive">
+          {downloadError}
+        </p>
+      )}
+      {canExtract && onExtract && listing && !listing.extraction.available && (
+        <p className="-mt-3 text-xs leading-relaxed text-muted-foreground">
+          {listing.extraction.reason}
+        </p>
+      )}
       {state.status === 'error' ? (
         <Alert variant="destructive">
           <AlertTriangle aria-hidden="true" />
@@ -375,6 +424,8 @@ export function ArchiveBrowserContent({
               Flare can browse ZIP, TAR, TAR.GZ (TGZ), and GZIP archives. If
               this file was cut off during upload, upload it again. Otherwise,
               download it to open it on your device.
+              {encrypted &&
+                ' An encrypted archive is read in your browser, which opens GZIP data with one part and ZIP file lists up to 16 MB.'}
             </p>
             {state.retryable && (
               <Button
@@ -586,17 +637,23 @@ export function ArchiveBrowserContent({
                   file={file}
                   source={source}
                   entry={selectedEntry}
-                  onExpandImage={() => {
-                    const index = images.findIndex(
-                      (image) => image.path === selectedEntry.path
-                    )
-                    // A search or folder change can hide the selected image.
-                    setGallery(
-                      index >= 0
-                        ? { images, index }
-                        : { images: [selectedEntry], index: 0 }
-                    )
-                  }}
+                  onExpandImage={
+                    // Without a service worker each image is a Blob that is
+                    // made when it is opened, so there is no gallery.
+                    encrypted && !encrypted.streams
+                      ? undefined
+                      : () => {
+                          const index = images.findIndex(
+                            (image) => image.path === selectedEntry.path
+                          )
+                          // A search or folder change can hide the selected image.
+                          setGallery(
+                            index >= 0
+                              ? { images, index }
+                              : { images: [selectedEntry], index: 0 }
+                          )
+                        }
+                  }
                 />
               ) : (
                 <PreviewPlaceholder
@@ -616,10 +673,20 @@ export function ArchiveBrowserContent({
             id: `${image.position}`,
             name: archiveEntryName(image.path),
             subtitle: image.path,
-            src: archiveEntryHref(file.id, source, image.position, {
-              inline: true,
-            }),
-            downloadUrl: archiveEntryHref(file.id, source, image.position),
+            ...(source.kind === 'encrypted'
+              ? // A local address of the service worker. An entry is saved
+                // from its preview panel.
+                { src: source.archive.mediaUrl(image.position) ?? '' }
+              : {
+                  src: archiveEntryHref(file.id, source, image.position, {
+                    inline: true,
+                  }),
+                  downloadUrl: archiveEntryHref(
+                    file.id,
+                    source,
+                    image.position
+                  ),
+                }),
           }))}
           index={gallery.index}
           onIndexChange={(index) => {

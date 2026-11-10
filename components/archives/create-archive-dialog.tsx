@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState, useSyncExternalStore } from 'react'
 
 import Link from 'next/link'
 
@@ -14,6 +14,7 @@ import {
   Lock,
 } from 'lucide-react'
 
+import { useAccountKeyState } from '@/components/providers/account-keys-provider'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -26,6 +27,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Progress } from '@/components/ui/progress'
 import {
   Select,
   SelectContent,
@@ -35,13 +37,26 @@ import {
 } from '@/components/ui/select'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
+import { createInWorker } from '@/lib/archives/client/archive-worker'
+import { canWriteTarGz } from '@/lib/archives/client/archive-writer'
+import type { JobProgress, JobSource } from '@/lib/archives/client/jobs'
 import { ARCHIVE_LIMITS, type ArchiveOutputFormat } from '@/lib/archives/shared'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import {
+  openedFile,
+  openedFileState,
+  openedFiles,
+} from '@/lib/e2ee/client/opened-files'
+import { base64urlDecode } from '@/lib/e2ee/primitives'
+import { safeFileName } from '@/lib/files/safe-render'
+import { fileUrls } from '@/lib/files/urls'
 import { UNFILED, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes, formatFileSize } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
+import { mbToBytes } from '@/lib/utils/size'
 
+import { openOwnedFile } from '@/hooks/use-encrypted-file'
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -98,6 +113,43 @@ export function CreateArchiveDialog({
     totalBytes: number
   } | null>(null)
   const { totalBytes, overLimit } = archiveSelectionSize(files)
+  // A selection with an encrypted file is archived in this browser: the
+  // server cannot read such a file, and the new archive is encrypted too
+  // (docs/e2ee-spec.md, section 12.3).
+  const inBrowser = files.some((file) => file.encrypted)
+  const keys = useAccountKeyState()
+  const accountKeys = keys.status === 'unlocked' ? keys.keys : null
+  const snapshot = useSyncExternalStore(
+    openedFiles.subscribe,
+    openedFiles.version,
+    openedFiles.version
+  )
+  const [progress, setProgress] = useState<JobProgress | null>(null)
+  // The decrypted name of each encrypted file, once its stanza is open.
+  const names = new Map(
+    files.map((file) => [
+      file.id,
+      file.encrypted
+        ? (() => {
+            const { opened } = openedFileState(file.id, snapshot)
+            return opened ? safeFileName(opened.name) : null
+          })()
+        : file.name,
+    ])
+  )
+  const unopened = files.filter(
+    (file) => file.encrypted && names.get(file.id) === null
+  )
+  const unopenedIds = unopened.map((file) => file.id).join(',')
+  useEffect(() => {
+    if (!accountKeys) return
+    // Files that no card on screen has opened yet.
+    for (const file of unopened)
+      if (file.encryption)
+        void openOwnedFile(file.id, file.encryption, accountKeys)
+    // The list is the same while its IDs are.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unopenedIds, accountKeys])
   const destinationUnavailable =
     !!folderId &&
     (!canUseFolders ||
@@ -121,20 +173,74 @@ export function CreateArchiveDialog({
     setBusy(true)
     setError('')
     try {
-      const next = await apiRequest<{
-        file: ArchiveFileRef
-        totalBytes: number
-      }>('/api/files/archive', {
-        body: {
-          fileIds: files.map((file) => file.id),
-          name: archiveOutputName(name, format),
-          format,
-          folderId,
-          ...archiveProfileRequest(profileId, profileSnapshot),
-        },
-        signal,
-        fallback: ARCHIVE_REQUEST_FAILED,
-      })
+      let next: { file: ArchiveFileRef; totalBytes: number }
+      if (inBrowser) {
+        if (!accountKeys)
+          throw new Error('Unlock your encryption keys, then try again.')
+        setProgress(null)
+        const sources: JobSource[] = files.map((file) => {
+          const url = fileUrls(file).content
+          const size = Math.round(mbToBytes(file.size))
+          if (!file.encrypted)
+            return { encrypted: false, url, name: file.name, size }
+          const opened = openedFile(file.id)
+          if (!opened || !file.encryption)
+            throw new Error(
+              'One of the selected files could not be opened with your keys. Close this dialog and try again.'
+            )
+          return {
+            encrypted: true,
+            url,
+            fileKey: opened.fileKey,
+            header: base64urlDecode(file.encryption.header),
+            storedLength: size,
+            name: opened.name,
+            type: opened.type,
+          }
+        })
+        const created = await createInWorker(
+          {
+            sources,
+            output: { name: archiveOutputName(name, format), format },
+            // Private and without expiration unless a profile says otherwise.
+            target: profileId
+              ? { folderId, profileId }
+              : {
+                  folderId,
+                  profileId: null,
+                  visibility: 'PRIVATE',
+                  expiresAt: null,
+                },
+            accountPublicKey: accountKeys.accountPublicKey,
+          },
+          { signal, onProgress: setProgress }
+        )
+        next = {
+          file: {
+            id: created.id,
+            name: created.name,
+            urlPath: created.urlPath,
+            folderId,
+            encrypted: true,
+            encryption: { ...created.records, passwordStanza: null },
+          },
+          totalBytes: created.totalBytes,
+        }
+      } else
+        next = await apiRequest<{
+          file: ArchiveFileRef
+          totalBytes: number
+        }>('/api/files/archive', {
+          body: {
+            fileIds: files.map((file) => file.id),
+            name: archiveOutputName(name, format),
+            format,
+            folderId,
+            ...archiveProfileRequest(profileId, profileSnapshot),
+          },
+          signal,
+          fallback: ARCHIVE_REQUEST_FAILED,
+        })
       if (signal.aborted) return
       void changed()
       setResult(next)
@@ -187,7 +293,8 @@ export function CreateArchiveDialog({
                 {profileId
                   ? ' using your selected upload profile'
                   : ' as a private file'}
-                . Your original files are unchanged.
+                {inBrowser ? ', encrypted in this browser' : ''}. Your original
+                files are unchanged.
               </DialogDescription>
             </DialogHeader>
             <DialogFooter>
@@ -247,7 +354,9 @@ export function CreateArchiveDialog({
                         key={file.id}
                         className="flex items-start justify-between gap-3"
                       >
-                        <span className="min-w-0 break-words">{file.name}</span>
+                        <span className="min-w-0 break-words">
+                          {names.get(file.id) ?? 'Encrypted file'}
+                        </span>
                         <span className="shrink-0 text-xs text-muted-foreground">
                           {formatFileSize(file.size)}
                         </span>
@@ -282,7 +391,12 @@ export function CreateArchiveDialog({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="zip">ZIP</SelectItem>
-                        <SelectItem value="tar.gz">TAR.GZ</SelectItem>
+                        <SelectItem
+                          value="tar.gz"
+                          disabled={inBrowser && !canWriteTarGz()}
+                        >
+                          TAR.GZ
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -311,8 +425,11 @@ export function CreateArchiveDialog({
                 <Alert variant="info" role="status">
                   <Lock aria-hidden="true" />
                   <AlertDescription>
-                    Your archive uses the settings shown above. Original files
-                    stay unchanged. No file password is inherited.
+                    {inBrowser
+                      ? 'This browser decrypts the selected files, builds the archive and uploads it encrypted, so large files take time and bandwidth. The archive'
+                      : 'Your archive'}{' '}
+                    uses the settings shown above. Original files stay
+                    unchanged. No file password is inherited.
                   </AlertDescription>
                 </Alert>
               </div>
@@ -332,11 +449,31 @@ export function CreateArchiveDialog({
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
-                  {busy && (
+                  {busy && !inBrowser && (
                     <p role="status" className="text-sm text-muted-foreground">
                       Creating archive… This can take up to two minutes. Keep
                       this dialog open.
                     </p>
+                  )}
+                  {busy && inBrowser && (
+                    <div role="status" className="space-y-2">
+                      <Progress
+                        value={
+                          progress?.bytesTotal
+                            ? (progress.bytesDone / progress.bytesTotal) * 100
+                            : 0
+                        }
+                        aria-label="Archive creation progress"
+                        className="h-1.5"
+                      />
+                      <p className="break-words text-sm text-muted-foreground">
+                        {progress && progress.bytesDone < progress.bytesTotal
+                          ? `Adding file ${Math.min(progress.filesDone + 1, progress.filesTotal)} of ${progress.filesTotal}. Keep this dialog open.`
+                          : progress
+                            ? 'Encrypting and uploading the archive… Keep this dialog open.'
+                            : 'Reading the selected files… Keep this dialog open.'}
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
@@ -360,6 +497,7 @@ export function CreateArchiveDialog({
                     !name.trim() ||
                     !files.length ||
                     overLimit ||
+                    (inBrowser && (!accountKeys || unopened.length > 0)) ||
                     destinationUnavailable
                   }
                 >

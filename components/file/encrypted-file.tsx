@@ -15,6 +15,8 @@ import {
   ShieldCheck,
 } from 'lucide-react'
 
+import { isArchiveCandidate } from '@/components/archives/archive-utils'
+import { EncryptedArchiveViewer } from '@/components/archives/encrypted-archive-viewer'
 import { DERIVING_FILE_KEY } from '@/components/encryption/file-password'
 import { UnlockDialog } from '@/components/encryption/unlock-dialog'
 import { setEncryptedFileTitle } from '@/components/file/encrypted-title'
@@ -63,6 +65,7 @@ import {
   INLINE_PREVIEW_MAX_BYTES,
   type SafeRendering,
   canPreviewSandboxedPdf,
+  normalizedType,
   safeFileName,
   safeRendering,
 } from '@/lib/files/safe-render'
@@ -619,6 +622,7 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
     )
 
   const view = preview.status === 'ready' ? preview.view : null
+  const isArchive = isArchiveCandidate(name, normalizedType(opened.type))
   const buttonClassName = 'h-9 w-full sm:h-8 sm:w-auto'
   const showCopyText = view?.renderer === 'text'
   return (
@@ -682,7 +686,20 @@ export function EncryptedFile({ file }: { file: EncryptedSharedFile }) {
             />
           </div>
         )}
-        {preview.status === 'download-only' && (
+        {preview.status === 'download-only' && isArchive && (
+          // The visitor's browser lists the archive and opens entries with
+          // the key of the link (docs/e2ee-spec.md, section 12.3).
+          <EncryptedArchiveViewer
+            file={{
+              id: file.id,
+              urlPath: file.urlPath,
+              header: records.header,
+              sizeBytes: file.sizeBytes,
+            }}
+            opened={opened}
+          />
+        )}
+        {preview.status === 'download-only' && !isArchive && (
           <div className="w-full px-6">
             <PreviewPlaceholder
               icon={FileDown}

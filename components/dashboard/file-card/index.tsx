@@ -25,6 +25,7 @@ import {
   Timer,
 } from 'lucide-react'
 
+import { isArchiveCandidate } from '@/components/archives/archive-utils'
 import {
   CARD_BUTTONS,
   CARD_MENU,
@@ -128,10 +129,18 @@ export function FileCard(props: FileCardProps) {
         name: safeFileName(opened.name),
         mimeType: normalizedType(opened.type) || 'application/octet-stream',
       }}
-      // Thumbnails, the image gallery and archive tools read file content
-      // on the server, which holds only ciphertext.
+      // Thumbnails and the image gallery read file content on the server,
+      // which holds only ciphertext. An archive is read in this browser
+      // (docs/e2ee-spec.md, section 12.3), so the decrypted name decides.
       onPreview={undefined}
-      onBrowseArchive={undefined}
+      onBrowseArchive={
+        isArchiveCandidate(
+          safeFileName(opened.name),
+          normalizedType(opened.type)
+        )
+          ? props.onBrowseArchive
+          : undefined
+      }
     />
   )
 }

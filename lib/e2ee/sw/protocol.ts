@@ -23,9 +23,9 @@ import {
  *   sandbox policy, so the document has an opaque origin.
  * - `download`: saved to disk. Always `application/octet-stream` and
  *   `Content-Disposition: attachment`. One use.
- * - `data`: read by script of the page that registered it (a text preview
- *   of an archive entry). Always `application/octet-stream`. A navigation
- *   is refused.
+ *
+ * No mode gives the bytes to script of a page: script that needs plaintext
+ * decrypts it in the page.
  *
  * Every answer has `X-Content-Type-Options: nosniff` and
  * `Content-Security-Policy: sandbox; default-src 'none'`.
@@ -37,23 +37,31 @@ export const LOCAL_ADDRESS_PREFIX = '/_flare/local/'
 /** 32 random bytes as base64url. */
 const TOKEN = /^[A-Za-z0-9_-]{43}$/
 
-export type LocalMode = 'media' | 'frame' | 'download' | 'data'
+export type LocalMode = 'media' | 'frame' | 'download'
 
 /** A part of the plaintext of a file: one entry of an archive. */
 export type LocalMember =
-  /** Bytes as they are: a TAR entry or a stored ZIP entry. */
+  /** Bytes as they are: a TAR entry. */
   | {
       readonly kind: 'stored'
       readonly offset: number
       readonly length: number
     }
-  /** A deflated ZIP entry. `length` is the size after inflation. */
+  /**
+   * A ZIP entry, by the offset of its local header. Its data starts after
+   * that header, whose length the reader finds when it opens the entry.
+   */
   | {
-      readonly kind: 'deflate'
-      readonly offset: number
+      readonly kind: 'zip'
+      readonly headerOffset: number
+      /** 0: stored. 8: deflated. */
+      readonly method: number
       readonly compressedLength: number
+      /** The size after inflation. */
       readonly length: number
       readonly crc32?: number
+      /** Where entry data ends in the archive: the start of its directory. */
+      readonly dataEnd: number
     }
   /** Bytes of the stream that gzip decoding of the whole file gives. */
   | { readonly kind: 'gzip'; readonly offset: number; readonly length: number }
@@ -148,7 +156,7 @@ export function localContentType(
   mode: LocalMode,
   claimed: unknown
 ): string | null {
-  if (mode === 'download' || mode === 'data') return DOWNLOAD_BLOB_TYPE
+  if (mode === 'download') return DOWNLOAD_BLOB_TYPE
   if (typeof claimed !== 'string') return null
   if (mode === 'frame') return claimed === LOCAL_FRAME_TYPE ? claimed : null
   return LOCAL_MEDIA_TYPES.has(claimed) ? claimed : null
@@ -183,12 +191,6 @@ export function requestAllowed(
         !navigation &&
         request.clientId === resource.clientId &&
         MEDIA_DESTINATIONS.has(request.destination)
-      )
-    case 'data':
-      return (
-        !navigation &&
-        request.clientId === resource.clientId &&
-        request.destination === ''
       )
     case 'frame':
       return navigation && request.destination === 'iframe'
@@ -238,7 +240,7 @@ export function localAnswer(input: {
 }): LocalAnswer {
   const type = localContentType(input.mode, input.contentType)
   if (!type) throw new Error('This type has no local address')
-  const attachment = input.mode === 'download' || input.mode === 'data'
+  const attachment = input.mode === 'download'
   const headers: Record<string, string> = {
     ...guardHeaders(),
     'Content-Type': type,
