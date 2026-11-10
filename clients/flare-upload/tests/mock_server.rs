@@ -255,6 +255,7 @@ fn config_json(origin: &str, account: &TestAccount, extra: Value) -> Vec<u8> {
 
 #[derive(Default)]
 struct FakeSystem {
+    default_config: Option<PathBuf>,
     env: HashMap<String, String>,
     copied: Vec<String>,
     opened: Vec<String>,
@@ -285,7 +286,7 @@ impl System for FakeSystem {
     }
 
     fn default_config_path(&self) -> Option<PathBuf> {
-        None
+        self.default_config.clone()
     }
 }
 
@@ -1212,6 +1213,53 @@ fn the_token_can_come_from_the_environment_or_a_file() {
     );
 }
 
+#[test]
+fn the_default_configuration_and_a_named_one() {
+    let server = accepting_server();
+    let account = TestAccount::new();
+    let directory = TestDirectory::new("named");
+    let file = directory.write(SECRET_NAME, &png_like(100));
+    let default = directory.write(
+        "config.json",
+        &config_json(&server.origin, &account, json!({})),
+    );
+    directory.write(
+        "work.json",
+        &config_json(
+            &server.origin,
+            &account,
+            json!({ "profile_id": "profile_work" }),
+        ),
+    );
+    let mut system = FakeSystem {
+        default_config: Some(default),
+        ..FakeSystem::default()
+    };
+    let outcome = run_cli(&[file.to_str().unwrap()], &mut system);
+    assert_eq!(outcome.code, 0, "{}", outcome.stderr);
+    let outcome = run_cli(&["--use", "work", file.to_str().unwrap()], &mut system);
+    assert_eq!(outcome.code, 0, "{}", outcome.stderr);
+    let uploads = server.uploads();
+    assert_eq!(uploads[0].headers["x-upload-profile"], PROFILE_ID);
+    assert_eq!(uploads[1].headers["x-upload-profile"], "profile_work");
+    let outcome = run_cli(&["--use", "missing", file.to_str().unwrap()], &mut system);
+    assert_eq!(outcome.code, 2);
+}
+
+/// A command for the built program with none of the environment of the
+/// test, so no token and no configuration of the machine reaches it.
+/// Windows needs its system directory to open a socket.
+fn program() -> std::process::Command {
+    let mut command = std::process::Command::new(env!("CARGO_BIN_EXE_flare-upload"));
+    command.env_clear();
+    for name in ["SystemRoot", "SYSTEMROOT", "windir", "TEMP", "TMP"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
+    command
+}
+
 /// The built program, as a screenshot tool starts it.
 #[test]
 fn the_binary_prints_the_link_and_nothing_else() {
@@ -1224,8 +1272,7 @@ fn the_binary_prints_the_link_and_nothing_else() {
         "config.json",
         &config_json(&server.origin, &account, json!({})),
     );
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_flare-upload"))
-        .env_clear()
+    let output = program()
         .env("FLARE_UPLOAD_CONFIG", &config)
         .arg(&file)
         .output()
@@ -1266,8 +1313,7 @@ fn the_binary_prints_the_link_and_nothing_else() {
     assert!(String::from_utf8_lossy(&self_test.stdout).ends_with("self-test passed\n"));
 
     // A failure exits with its code and prints no link.
-    let refused = std::process::Command::new(env!("CARGO_BIN_EXE_flare-upload"))
-        .env_clear()
+    let refused = program()
         .env("FLARE_UPLOAD_CONFIG", &config)
         .arg(directory.0.join("no-such-file.png"))
         .output()

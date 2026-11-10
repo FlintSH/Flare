@@ -45,6 +45,7 @@ Options:
   -c, --config <path>      Configuration file from Flare (Profile, Upload tools).
                            Default: the flare-upload directory of your user
                            configuration, file config.json
+      --use <name>         The configuration <name>.json in that directory
       --origin <url>       Server address, in place of the one in the file
       --token-file <path>  Read the token from this file, in place of the one
                            in the configuration
@@ -133,6 +134,8 @@ impl System for Machine {
 pub struct Arguments {
     pub files: Vec<PathBuf>,
     pub config: Option<PathBuf>,
+    /// The configuration `<name>.json` in the default directory.
+    pub use_name: Option<String>,
     pub origin: Option<String>,
     pub token_file: Option<PathBuf>,
     pub mode: Option<String>,
@@ -148,7 +151,7 @@ pub struct Arguments {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
-    Upload(Arguments),
+    Upload(Box<Arguments>),
     SelfTest,
     Help,
     Version,
@@ -178,6 +181,7 @@ pub fn parse_arguments(arguments: Vec<OsString>) -> Result<Command, String> {
             Short('V') | Long("version") => return Ok(Command::Version),
             Long("self-test") => self_test = true,
             Short('c') | Long("config") => parsed.config = Some(value(&mut parser, "--config")?.into()),
+            Long("use") => parsed.use_name = Some(text(value(&mut parser, "--use")?, "--use")?),
             Long("origin") => parsed.origin = Some(text(value(&mut parser, "--origin")?, "--origin")?),
             Long("token-file") => parsed.token_file = Some(value(&mut parser, "--token-file")?.into()),
             Long("mode") => parsed.mode = Some(text(value(&mut parser, "--mode")?, "--mode")?),
@@ -209,10 +213,24 @@ pub fn parse_arguments(arguments: Vec<OsString>) -> Result<Command, String> {
     if parsed.files.is_empty() {
         return Err("no file given. Usage: flare-upload [options] <file>...".into());
     }
+    if let Some(name) = &parsed.use_name {
+        if parsed.config.is_some() {
+            return Err("--use and --config cannot be combined".into());
+        }
+        // A name, not a path: it selects a file in one directory.
+        let valid = !name.is_empty()
+            && name.len() <= 64
+            && name
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_');
+        if !valid {
+            return Err("--use takes the name of a configuration: letters, digits, - and _".into());
+        }
+    }
     if parsed.name.is_some() && parsed.files.len() != 1 {
         return Err("--name works with one file".into());
     }
-    Ok(Command::Upload(parsed))
+    Ok(Command::Upload(Box::new(parsed)))
 }
 
 /// The file name that the owner sees: the last part of the path.
@@ -275,16 +293,20 @@ fn load_config(
     system: &dyn System,
 ) -> Result<(Config, PathBuf), ConfigError> {
     let env = |name: &str| system.env(name).filter(|value| !value.is_empty());
-    let path = arguments
-        .config
-        .clone()
-        .or_else(|| env(ENV_CONFIG).map(PathBuf::from))
-        .or_else(|| system.default_config_path())
-        .ok_or_else(|| {
-            ConfigError::Invalid(
-                "cannot find the user configuration directory. Pass --config".into(),
-            )
-        })?;
+    let no_directory = || {
+        ConfigError::Invalid("cannot find the user configuration directory. Pass --config".into())
+    };
+    let path = match (&arguments.config, &arguments.use_name) {
+        (Some(path), _) => path.clone(),
+        (None, Some(name)) => system
+            .default_config_path()
+            .ok_or_else(no_directory)?
+            .with_file_name(format!("{name}.json")),
+        (None, None) => env(ENV_CONFIG)
+            .map(PathBuf::from)
+            .or_else(|| system.default_config_path())
+            .ok_or_else(no_directory)?,
+    };
     let token =
         match &arguments.token_file {
             Some(token_file) => Some(std::fs::read_to_string(token_file).map_err(|error| {
@@ -503,7 +525,7 @@ pub fn run(
             EXIT_OK
         }
         Ok(Command::SelfTest) => run_self_test_command(out, err),
-        Ok(Command::Upload(arguments)) => run_upload(arguments, system, out, err),
+        Ok(Command::Upload(arguments)) => run_upload(*arguments, system, out, err),
         Err(message) => {
             let _ = writeln!(err, "flare-upload: {message}");
             let _ = writeln!(err, "Try: flare-upload --help");
@@ -556,6 +578,17 @@ mod tests {
             panic!("not an upload")
         };
         assert_eq!(arguments.files, [PathBuf::from("--odd-name.png")]);
+    }
+
+    #[test]
+    fn a_named_configuration() {
+        let Command::Upload(arguments) = parse(&["--use", "work", "a.png"]).unwrap() else {
+            panic!("not an upload")
+        };
+        assert_eq!(arguments.use_name.as_deref(), Some("work"));
+        assert!(parse(&["--use", "../other", "a.png"]).is_err());
+        assert!(parse(&["--use", "work.json", "a.png"]).is_err());
+        assert!(parse(&["--use", "work", "--config", "x.json", "a.png"]).is_err());
     }
 
     #[test]

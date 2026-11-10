@@ -28,7 +28,8 @@ use crate::stanza::{account_stanza, folder_file_stanza, folder_link_secret_stanz
 use crate::PROTOCOL_VERSION;
 
 /// A plaintext of at most this size goes in one request. A larger one uses
-/// the chunked route. The single-request route of Flare reads at most 10 MB.
+/// the chunked route, so a proxy with a small request limit still takes it
+/// and a failed connection costs one part.
 pub const SINGLE_REQUEST_MAX_BYTES: u64 = 8 * 1024 * 1024;
 /// One part of a chunked upload: 80 stored chunks, a little over the 5 MiB
 /// that S3 needs for each part except the last.
