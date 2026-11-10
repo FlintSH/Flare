@@ -4,6 +4,7 @@
 | ------- | --------------------------------------------------- |
 | Status  | Draft 1. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
+| Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
 | Applies | Flare, branch `feat/e2ee`, based on `main` b03f841e |
 
