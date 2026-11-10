@@ -115,6 +115,12 @@ const features = [
     '/guide/account',
   ],
   [
+    'Share',
+    'Encrypted files',
+    'Browser uploads are encrypted on your device by default. The server stores ciphertext, the share link carries the key, and a password is part of the key.',
+    '/guide/encryption',
+  ],
+  [
     'Personalize',
     'Passphrase & recovery phrase',
     'Sign in with a passphrase that never leaves your browser, keep a 24-word recovery phrase, and unlock your encryption keys on each device.',

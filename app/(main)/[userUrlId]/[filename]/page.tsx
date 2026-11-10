@@ -14,6 +14,8 @@ import {
 } from '@/components/auth/file-password-form'
 import { PublicState } from '@/components/auth/public-state'
 import { ShareLayout } from '@/components/customization/share-layout'
+import { EncryptedFile } from '@/components/file/encrypted-file'
+import { EncryptedFileTitle } from '@/components/file/encrypted-title'
 import { ProtectedFile } from '@/components/file/protected-file'
 import { Footer } from '@/components/layout/footer'
 
@@ -25,11 +27,18 @@ import {
   showsShareFooter,
 } from '@/lib/customization/sharing'
 import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
+import {
+  ENCRYPTED_FILE_LABEL,
+  auditFileName,
+  encryptedRecordSelect,
+  encryptedRecordsWire,
+} from '@/lib/files/encrypted'
 import { fileKind } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
+import { mbToBytes } from '@/lib/utils/size'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,8 +64,12 @@ const sharedFileFields = {
   userId: true,
   uploadOptions: true,
   folderId: true,
+  ...encryptedRecordSelect,
   user: { select: { name: true, image: true } },
 } satisfies Prisma.FileSelect
+
+/** The fixed text of every encrypted file's link preview (docs/e2ee-spec.md, section 11.3). */
+const ENCRYPTED_PREVIEW_DESCRIPTION = 'Open the link to view this file.'
 
 // The metadata and the page read the file once per request.
 const findSharedFile = cache((userUrlId: string, filename: string) =>
@@ -83,6 +96,36 @@ export async function generateMetadata({
     return {
       title: `Protected file - ${appearance.brand.name}`,
       description: 'This file is protected.',
+    }
+  }
+
+  const host = headersList.get('host') || 'localhost:3000'
+  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
+  const baseUrl = `${protocol}://${host}`
+
+  // The server has no name, no type and no readable content for an
+  // encrypted file, and a crawler never has the key. The preview is the
+  // same for every encrypted file: the instance, two fixed lines and the
+  // instance's own image. It names no address of the file's bytes.
+  if (file.encrypted) {
+    const title = ENCRYPTED_FILE_LABEL
+    return {
+      title: `${title} - ${appearance.brand.name}`,
+      description: ENCRYPTED_PREVIEW_DESCRIPTION,
+      metadataBase: new URL(baseUrl),
+      robots: { index: false, follow: false },
+      openGraph: {
+        siteName: appearance.brand.name,
+        title,
+        description: ENCRYPTED_PREVIEW_DESCRIPTION,
+        type: 'website',
+        images: [{ url: `${baseUrl}/icon.svg`, alt: appearance.brand.name }],
+      },
+      twitter: {
+        card: 'summary',
+        title,
+        description: ENCRYPTED_PREVIEW_DESCRIPTION,
+      },
     }
   }
 
@@ -114,9 +157,6 @@ export async function generateMetadata({
     isMedia: isMediaFile,
   })
 
-  const host = headersList.get('host') || 'localhost:3000'
-  const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http'
-  const baseUrl = `${protocol}://${host}`
   const rawUrl = fileUrls(file, { origin: baseUrl }).raw
 
   let videoUrl = rawUrl
@@ -201,7 +241,7 @@ export default async function FilePage({
     actorName: session?.user?.name || 'Anonymous',
     targetType: 'file',
     targetId: file.id,
-    targetName: file.name,
+    targetName: auditFileName(file),
     route: '/[userUrlId]/[filename]',
     method: 'GET',
     details: access.allowed ? {} : { reason: access.reason },
@@ -229,6 +269,47 @@ export default async function FilePage({
   // Only a visitor who may see the file adds a view; refusals never count.
   await countView(file.id)
 
+  const backLink = await sharedFolderBackLink(
+    file,
+    (await headers()).get('referer')
+  )
+
+  if (file.encrypted) {
+    const isOwner = session?.user?.id === file.userId
+    // Checked above: `records` is null only for a plain file.
+    const records = encryptedRecordsWire(file, { forOwner: isOwner })!
+    return (
+      <ShareLayout
+        appearance={appearance}
+        style={resolveShareStyle(
+          file.uploadOptions,
+          appearance.sharing.defaultStyle
+        )}
+        filename={<EncryptedFileTitle fallback={ENCRYPTED_FILE_LABEL} />}
+        size={formatFileSize(file.size)}
+        uploader={{
+          name: file.user?.name || 'Anonymous',
+          image: file.user?.image || undefined,
+        }}
+        isMedia={false}
+        showFooter={showFooter}
+        backLink={backLink}
+      >
+        <EncryptedFile
+          file={{
+            id: file.id,
+            urlPath: file.urlPath,
+            sizeBytes: Math.round(mbToBytes(file.size)),
+            records,
+            isOwner,
+            isModerator: !isOwner && access.canModerate,
+            showFilename: appearance.sharing.showFilename,
+          }}
+        />
+      </ShareLayout>
+    )
+  }
+
   // From the real name, which the page may hide.
   const type = fileKind(file)
   const isMediaFile = ['image', 'video', 'pdf'].includes(type.kind)
@@ -243,11 +324,6 @@ export default async function FilePage({
     mimeType: file.mimeType,
     ...type,
   }
-
-  const backLink = await sharedFolderBackLink(
-    file,
-    (await headers()).get('referer')
-  )
 
   return (
     <ShareLayout

@@ -8,6 +8,16 @@ import { readConfig } from '@/lib/config'
 import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import {
+  ENCRYPTED_FILE_NAME,
+  ENCRYPTED_FILE_TYPE,
+  type EncryptedRecords,
+  EncryptedUploadError,
+  assertEncryptedBody,
+  assertStanzaForAccount,
+  auditFileName,
+  startsWithEncryptedMagic,
+} from '@/lib/files/encrypted'
+import {
   fileExpiry,
   queueFileExpiration,
   storedExpiry,
@@ -64,6 +74,11 @@ type UploadInput = {
   options: ResolvedUploadOptions
   passwordHash?: string | null
   isPaste?: boolean
+  /**
+   * The records of an encrypted upload. With them the stored bytes are
+   * ciphertext: the name is empty and the type is the generic one.
+   */
+  encrypted?: EncryptedRecords | null
   signal?: AbortSignal
   /** Publish in the caller's transaction; the caller enqueues processing after it commits. */
   transaction?: Prisma.TransactionClient
@@ -92,7 +107,29 @@ export async function prepareUpload(
     )
     for await (const chunk of head) chunks.push(Buffer.from(chunk))
   }
-  const type = await validateFileType(Buffer.concat(chunks), mimeType)
+  const head = Buffer.concat(chunks)
+  if (input.encrypted) {
+    // The server cannot read the content, so it does not look for a type.
+    // It checks only what is public (docs/e2ee-spec.md, section 11.2).
+    if (
+      input.displayName !== ENCRYPTED_FILE_NAME ||
+      mimeType !== ENCRYPTED_FILE_TYPE
+    )
+      throw new EncryptedUploadError(
+        'An encrypted upload must not carry a file name or a file type.'
+      )
+    if (options.password)
+      throw new EncryptedUploadError(
+        'An encrypted file takes a password stanza, not a server password.'
+      )
+    assertEncryptedBody(head, size, input.encrypted)
+    return { ...input, passwordHash: null, [validatedUpload]: true }
+  }
+  if (startsWithEncryptedMagic(head))
+    throw new UploadError(
+      'These bytes are an encrypted Flare file. Send them as an encrypted upload.'
+    )
+  const type = await validateFileType(head, mimeType)
   if (!type.valid)
     throw new UploadError(
       `File type mismatch: detected ${type.detectedType}, claimed ${mimeType}`
@@ -166,6 +203,10 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           () => new UploadError('The token upload profile was removed.', 403)
         )
     }
+    if (input.encrypted)
+      // Under the user lock, so a key rotation cannot pass between this
+      // check and the file's publication.
+      assertStanzaForAccount(input.encrypted, fresh.accountPublicKey)
     assertFits(uploadCapacity(config, access, fresh.storageUsed), size)
     const sizeMB = bytesToMB(size)
     if (expiry && expiry.expiresAt <= new Date())
@@ -177,6 +218,9 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     const name = basename(input.urlPath)
     let urlPath = `/${fresh.urlId}/${name}`
     if (await tx.file.findUnique({ where: { urlPath } })) {
+      // A random identifier that is taken is not given a suffix.
+      if (input.encrypted)
+        throw new UploadError('Could not publish the upload. Try again.', 409)
       const extension = extname(name)
       urlPath = `/${fresh.urlId}/${name.slice(0, name.length - extension.length)}-${randomUUID().slice(0, 12)}${extension}`
     }
@@ -205,10 +249,19 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           ...persistedOptions,
           ...storedExpiry(expiry),
         } as Prisma.InputJsonValue,
+        ...(input.encrypted && {
+          encrypted: true,
+          header: input.encrypted.header,
+          sealedMetadata: input.encrypted.sealedMetadata,
+          accountStanza: input.encrypted.accountStanza,
+          stanzaAccountPublicKey: input.encrypted.stanzaAccountPublicKey,
+          passwordStanza: input.encrypted.passwordStanza,
+        }),
       },
     })
     await applyProfileTags(tx, file, options.tagIds ?? [])
-    await applyAutomaticTags(file.id, 'filename', tx)
+    // A name rule needs the name, which only a client has (section 9.3).
+    if (!file.encrypted) await applyAutomaticTags(file.id, 'filename', tx)
     await tx.user.update({
       where: { id: user.id },
       data: { storageUsed: { increment: sizeMB } },
@@ -220,7 +273,11 @@ export async function publishPreparedUpload(input: PreparedUpload) {
   const result = input.transaction
     ? await persist(input.transaction)
     : await prisma.$transaction(persist)
-  setAuditTarget({ type: 'file', id: result.file.id, name: result.file.name })
+  setAuditTarget({
+    type: 'file',
+    id: result.file.id,
+    name: auditFileName(result.file),
+  })
   if (result.created && !input.transaction) enqueueUploadProcessing(result.file)
   return result.file
 }
@@ -234,8 +291,10 @@ export function enqueueUploadProcessing(file: {
   id: string
   path: string
   mimeType: string
+  encrypted?: boolean
 }) {
-  if (file.mimeType.startsWith('image/')) {
+  // The server cannot read an encrypted image, so it has no text to find.
+  if (!file.encrypted && file.mimeType.startsWith('image/')) {
     void ocrQueue
       .add({ filePath: file.path, fileId: file.id })
       .catch((error) =>

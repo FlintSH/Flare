@@ -87,7 +87,8 @@ export function ShareLayout({
 }: {
   appearance: AppearanceDocument
   style: ShareStyle
-  filename: string
+  /** The file's name, or a node that shows it once the browser decrypted it. */
+  filename: ReactNode
   size: string
   uploader: { name: string; image?: string }
   isMedia: boolean

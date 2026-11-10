@@ -23,6 +23,11 @@ import {
   retryAfterMinutes,
 } from './access'
 import { contentDisposition } from './content-disposition'
+import {
+  ENCRYPTED_FILE_TYPE,
+  ENCRYPTED_PART_NAME,
+  auditFileName,
+} from './encrypted'
 
 const logger = loggers.files
 
@@ -104,6 +109,7 @@ const deliveredFields = {
   password: true,
   path: true,
   mimeType: true,
+  encrypted: true,
 } satisfies Prisma.FileSelect
 
 export type DeliveredFile = Found<typeof deliveredFields>
@@ -224,7 +230,7 @@ export async function authorizeFile<S extends Prisma.FileSelect = object>(
   if (!found) return answer.missing()
   // TypeScript can't see the selected fields through the generic payload.
   const file = found as typeof found & DeliveredFile
-  setAuditTarget({ type: 'file', id: file.id, name: file.name })
+  setAuditTarget({ type: 'file', id: file.id, name: auditFileName(file) })
   const access = await checkFileAccess(file, session, password, {
     requester: clientIp(request.headers),
   })
@@ -300,8 +306,21 @@ export type Delivery = {
 export async function serveFile(
   request: Request,
   file: DeliveredFile,
-  delivery: Delivery
+  requested: Delivery
 ): Promise<Response> {
+  // The stored bytes of an encrypted file are ciphertext. Whatever the route
+  // asked for, they leave as a generic attachment in a sandbox, from this
+  // server and never from a signed storage address: a browser must not
+  // show them, and the client that decrypts them reads byte ranges here
+  // (docs/e2ee-spec.md, sections 7.5 and 11.3).
+  const delivery: Delivery = file.encrypted
+    ? {
+        ...requested,
+        disposition: 'attachment',
+        sandbox: true,
+        signedRedirect: false,
+      }
+    : requested
   const cache =
     file.visibility === 'PRIVATE' || file.password
       ? 'private, no-store'
@@ -317,7 +336,9 @@ export async function serveFile(
   }
   // The header keeps a `..` in a name, as archive members need, but stored
   // files have always been sent without one.
-  const name = sanitizeDisplayName(file.name)
+  const name = file.encrypted
+    ? ENCRYPTED_PART_NAME
+    : sanitizeDisplayName(file.name)
   try {
     if (delivery.signedRedirect) {
       const url = await storage.getDownloadUrl(file.path, name)
@@ -328,7 +349,7 @@ export async function serveFile(
         })
     }
     const contentHeaders = {
-      'Content-Type': file.mimeType,
+      'Content-Type': file.encrypted ? ENCRYPTED_FILE_TYPE : file.mimeType,
       ...(delivery.disposition && {
         'Content-Disposition': contentDisposition(name, delivery.disposition),
       }),

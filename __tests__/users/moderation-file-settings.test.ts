@@ -47,6 +47,7 @@ const file: AccountFile = {
   uploadedAt: '2026-11-06T00:00:00.000Z',
   urlPath: '/abcde/notes.txt',
   isPaste: false,
+  encrypted: false,
 }
 const protectedFile: AccountFile = { ...file, visibility: 'PROTECTED' }
 const strict = fileSettingsSchema.strict()

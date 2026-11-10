@@ -19,7 +19,10 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 4. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
 5. Keep visibility from the profile or explicitly choose **Public** or **Private**.
 6. Add a password if you want recipients of a public paste to unlock it.
-7. Choose **Create paste**.
+7. Keep **Encryption** on **Encrypted**, or choose **Plain** if the paste's link must show its text in previews on other sites.
+8. Choose **Create paste**.
+
+A paste is a file, so it is encrypted in your browser by default like any upload: the server stores neither its text nor its filename, and the share link carries the key after `#`. Your keys must be unlocked. See [Encrypted and plain files](./encryption). An encrypted paste is limited to 10 MB.
 
 Whitespace-only content cannot be submitted. While the request is running, the controls are disabled to avoid duplicate submissions.
 

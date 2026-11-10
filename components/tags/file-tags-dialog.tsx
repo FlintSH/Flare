@@ -17,6 +17,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { apiRequest } from '@/lib/client/request'
+import { displayFileName } from '@/lib/files/display-name'
 import { nameKey, normalizeName } from '@/lib/library/names'
 import { TAG_NAME_MAX_LENGTH } from '@/lib/tags/schema'
 import type { TagView } from '@/lib/tags/schema'
@@ -129,7 +130,7 @@ export function FileTagsDialog({
               <>
                 Add or remove tags for{' '}
                 <span className="font-medium text-foreground">
-                  {files[0].name}
+                  {displayFileName(files[0])}
                 </span>
                 .
               </>

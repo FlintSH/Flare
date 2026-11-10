@@ -7,6 +7,7 @@ import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 
 import { prisma } from '@/lib/database/prisma'
+import { base64urlEncode } from '@/lib/e2ee/primitives'
 import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { HttpError } from '@/lib/http/errors'
 import { loggers } from '@/lib/logger'
@@ -34,6 +35,13 @@ const exportSelect = {
       ocrText: true,
       isPaste: true,
       path: true,
+      urlPath: true,
+      encrypted: true,
+      header: true,
+      sealedMetadata: true,
+      accountStanza: true,
+      stanzaAccountPublicKey: true,
+      passwordStanza: true,
     },
     // The oldest copy of a repeated name keeps the plain entry name.
     orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
@@ -49,6 +57,44 @@ const exportSelect = {
 } satisfies Prisma.UserSelect
 
 type ExportedAccount = Prisma.UserGetPayload<{ select: typeof exportSelect }>
+
+const text = (bytes: Uint8Array | null) =>
+  bytes ? base64urlEncode(bytes) : null
+
+/**
+ * `user-data.json`. A plain file is listed as before. An encrypted file has
+ * no name and no type; it is listed with its address and the records that
+ * open its ciphertext with the account key (docs/e2ee-spec.md, section 9.1).
+ */
+function exportedRecord(account: ExportedAccount) {
+  return {
+    ...account,
+    files: account.files.map(
+      ({
+        urlPath,
+        encrypted,
+        header,
+        sealedMetadata,
+        accountStanza,
+        stanzaAccountPublicKey,
+        passwordStanza,
+        ...file
+      }) =>
+        encrypted
+          ? {
+              ...file,
+              urlPath,
+              encrypted,
+              header: text(header),
+              sealedMetadata: text(sealedMetadata),
+              accountStanza: text(accountStanza),
+              stanzaAccountPublicKey: text(stanzaAccountPublicKey),
+              passwordStanza: text(passwordStanza),
+            }
+          : file
+    ),
+  }
+}
 
 // Local uploads predate the storage provider's path checks, so keep the
 // original lookup: an absolute path first, then the app's uploads directory.
@@ -146,7 +192,7 @@ function exportArchive(
   if (signal.aborted) settle()
   else signal.addEventListener('abort', () => settle(), { once: true })
 
-  archive.append(JSON.stringify(account, null, 2), {
+  archive.append(JSON.stringify(exportedRecord(account), null, 2), {
     name: 'user-data.json',
   })
 

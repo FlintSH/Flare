@@ -438,6 +438,15 @@ function FileLibrary({ scope }: { scope: string }) {
             </Button>
           </div>
         )}
+        {(filters.search || filters.types.length > 0) && (
+          <p
+            className="mt-2 text-pretty text-xs text-muted-foreground"
+            data-encrypted-search-note=""
+          >
+            Search and the file type filter do not find encrypted files yet. The
+            server cannot read their names or types.
+          </p>
+        )}
         <FolderBrowser
           folders={folders}
           value={filters.folder ?? null}
@@ -489,13 +498,26 @@ function FileLibrary({ scope }: { scope: string }) {
             {BATCH_ACTIONS.map((action) => {
               if (!fileActionAllowed(user, action)) return null
               const { icon: Icon, batch } = FILE_ACTIONS[action]
+              // The server builds archives, and it cannot read an
+              // encrypted file.
+              const blocked =
+                action === 'createArchive' &&
+                selectedFiles.some((file) => file.encrypted)
               return (
                 <Button
                   key={action}
                   size="sm"
                   variant="outline"
                   disabled={
-                    !selectedIds.length || isLoading || selection.loading
+                    !selectedIds.length ||
+                    isLoading ||
+                    selection.loading ||
+                    blocked
+                  }
+                  title={
+                    blocked
+                      ? 'Encrypted files cannot be added to an archive yet'
+                      : undefined
                   }
                   onClick={() => void openSelection(action)}
                 >

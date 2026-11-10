@@ -1,6 +1,7 @@
 import type { File, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { encryptedRecordsWire } from '@/lib/files/encrypted'
 import type { FileExpiry } from '@/lib/files/expiry'
 import {
   type FileSort,
@@ -20,6 +21,12 @@ export const fileListSelect = {
   views: true,
   downloads: true,
   folderId: true,
+  encrypted: true,
+  header: true,
+  sealedMetadata: true,
+  accountStanza: true,
+  stanzaAccountPublicKey: true,
+  passwordStanza: true,
   user: { select: { urlId: true } },
   tags: {
     where: { excluded: false },
@@ -36,14 +43,35 @@ export function fileListItem(
   {
     password,
     tags,
+    encrypted,
+    header,
+    sealedMetadata,
+    accountStanza,
+    stanzaAccountPublicKey,
+    passwordStanza,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
   expiry: FileExpiry | null
 ) {
+  // The list is the owner's, so it carries the account stanza. The client
+  // opens the name and the type; this row has neither.
+  const records = encryptedRecordsWire(
+    {
+      encrypted,
+      header,
+      sealedMetadata,
+      accountStanza,
+      stanzaAccountPublicKey,
+      passwordStanza,
+    },
+    { forOwner: true }
+  )
   return {
     ...file,
+    encrypted,
+    ...(records && { encryption: records }),
     tags: tags.map(({ tag }) => tag),
-    hasPassword: Boolean(password),
+    hasPassword: Boolean(password) || Boolean(passwordStanza),
     expiresAt: expiry?.expiresAt ?? null,
     expiryAction: expiry?.action ?? null,
   }

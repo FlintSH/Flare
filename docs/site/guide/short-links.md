@@ -30,6 +30,14 @@ If two links created at the same moment draw the same code, Flare gives the seco
 
 <Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created short link with copy and open controls" caption="Copy the new link directly, or open it to check the destination." />
 
+## Links to encrypted files cannot be shortened
+
+The link of an [encrypted file](./encryption#a-link-is-the-key) carries the file's key after `#`. A short link stores its target on the server as plain text, so shortening such a link would hand the key to the server. The form refuses it before sending anything and says why:
+
+> This link has an encryption key after #. A short link is stored on the server, so shortening it would give the server the key. Share the full link instead.
+
+A short link to the address without the part after `#` would work as a redirect, but the page it reaches cannot open the file. Share the full link.
+
 ## Manage existing links
 
 The table shows each link's original destination, short link, clicks, creation date, and available actions. Newer links appear first. On phones, the destination takes the row's full width; the short link, clicks, and creation date sit under it, with the copy and delete actions beside them. On medium-width screens, only the creation date moves under the destination.

@@ -15,6 +15,13 @@ import type { AuthenticatedUser } from '@/lib/auth/api-auth'
 import { getConfig, readConfig } from '@/lib/config'
 import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import {
+  ENCRYPTED_FILE_TYPE,
+  type EncryptedRecordsWire,
+  EncryptedUploadError,
+  encryptedDestination,
+  parseEncryptedRecords,
+} from '@/lib/files/encrypted'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { parseInput, readJson } from '@/lib/http/request'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
@@ -28,6 +35,11 @@ import type { StorageTarget } from '@/lib/storage/targets'
 
 import { assertFits, uploadCapacity } from './capacity'
 import { uploadDisplayName } from './display-name'
+import {
+  assertEncryptedUploader,
+  isEncryptedInit,
+  parseEncryptedInit,
+} from './encrypted'
 import {
   cleanupUncommittedUpload,
   enqueueUploadProcessing,
@@ -82,6 +94,8 @@ export interface UploadMetadata {
   options?: ResolvedUploadOptions
   storageFingerprint?: string
   storageTarget?: StorageTarget
+  /** The records of an encrypted upload, base64url. None of them is secret. */
+  encrypted?: EncryptedRecordsWire
 }
 
 /** A multipart ID belongs to the backend that started it, so a storage change ends the upload. */
@@ -163,19 +177,39 @@ const initSchema = requestFields({
   size: z.number().int().positive(),
 })
 
+async function readInit(req: Request, user: AuthenticatedUser) {
+  const body = await readJson(req)
+  if (!isEncryptedInit(body)) {
+    const {
+      filename: requestedName,
+      mimeType,
+      size,
+      ...bodyOptions
+    } = parseInput(initSchema, body)
+    // A path in `filename` names the file, never a storage location.
+    const filename = uploadDisplayName(requestedName)
+    if (!filename) throw new UploadError('Invalid filename.')
+    return { filename, mimeType, size, bodyOptions, encrypted: null }
+  }
+  assertEncryptedUploader(user)
+  const { size, encrypted, bodyOptions } = parseEncryptedInit(body)
+  return {
+    filename: null,
+    mimeType: ENCRYPTED_FILE_TYPE,
+    size,
+    bodyOptions,
+    encrypted,
+  }
+}
+
 export async function initializeChunkUpload(
   req: Request,
   user: AuthenticatedUser
 ) {
-  const {
-    filename: requestedName,
-    mimeType,
-    size,
-    ...bodyOptions
-  } = await readJson(req, initSchema)
-  // A path in `filename` names the file, never a storage location.
-  const filename = uploadDisplayName(requestedName)
-  if (!filename) throw new UploadError('Invalid filename.')
+  const { filename, mimeType, size, bodyOptions, encrypted } = await readInit(
+    req,
+    user
+  )
   const selection = requestUploadOptions(req)
   if (
     selection.profileId !== undefined &&
@@ -194,7 +228,10 @@ export async function initializeChunkUpload(
     ...selection,
   })
   assertFits(uploadCapacity(await getConfig(), user, user.storageUsed), size)
-  const destination = await prepareUploadDestination(user, filename, options)
+  const destination =
+    filename === null
+      ? encryptedDestination(user, randomUUID())
+      : await prepareUploadDestination(user, filename, options)
   const storage = await getStorageProvider()
   const s3UploadId = await storage.initializeMultipartUpload(
     destination.filePath,
@@ -217,6 +254,7 @@ export async function initializeChunkUpload(
     options: { ...options, password: null },
     storageFingerprint: await fingerprint(),
     storageTarget: captureStorageTarget(storage),
+    ...(encrypted && { encrypted }),
   })
   return { uploadId, fileKey: destination.filePath }
 }
@@ -270,6 +308,10 @@ export async function completeChunkUpload(
       visibility: metadata.visibility,
       password: metadata.password,
     }))
+  if (metadata.encrypted && overrides.password !== undefined)
+    throw new EncryptedUploadError(
+      'An encrypted file takes a password stanza, not a server password.'
+    )
   const options = applyUploadOverrides(user, initial, overrides)
   // Resolve the provider before entering the lock: its lazy initialization reads
   // configuration through the global client, which may have only one connection.
@@ -303,6 +345,9 @@ export async function completeChunkUpload(
         options,
         passwordHash:
           overrides.password !== undefined ? undefined : metadata.passwordHash,
+        encrypted: metadata.encrypted
+          ? parseEncryptedRecords(metadata.encrypted)
+          : null,
       })
       return { file, created: true }
     })

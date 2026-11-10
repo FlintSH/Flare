@@ -30,6 +30,27 @@ export function TextContent({
   language: Language
 }) {
   const preview = usePreviewText(url, failedContent)
+
+  if (preview.status === 'failed') return <ErrorState error={preview.message} />
+  if (preview.status === 'loading') {
+    return <LoadingState message="Loading file content…" />
+  }
+  return <TextView name={name} text={preview.text} language={language} />
+}
+
+/**
+ * Text the page already holds, shown as text. Whatever it contains, markup
+ * included, it is never parsed as a page.
+ */
+export function TextView({
+  name,
+  text,
+  language,
+}: {
+  name: string
+  text: string
+  language: Language
+}) {
   const { resolvedTheme } = useTheme()
   const dark = resolvedTheme !== 'light'
   const extensions = useMemo(
@@ -41,12 +62,7 @@ export function TextContent({
     [language, dark]
   )
 
-  if (preview.status === 'failed') return <ErrorState error={preview.message} />
-  if (preview.status === 'loading') {
-    return <LoadingState message="Loading file content…" />
-  }
-
-  if (!preview.text)
+  if (!text)
     return (
       <div className="w-full px-6">
         <PreviewPlaceholder icon={FileText} title="This file is empty" />
@@ -61,7 +77,7 @@ export function TextContent({
       aria-label={`${name} preview`}
     >
       <CodeMirror
-        value={preview.text}
+        value={text}
         extensions={extensions}
         editable={false}
         readOnly

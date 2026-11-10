@@ -17,7 +17,9 @@ export async function getSharedFolder(token: string, page = 1) {
     select: {
       name: true,
       files: {
-        where: { visibility: 'PUBLIC' },
+        // An encrypted file needs its key, which a folder link does not
+        // carry until folder stanzas exist (docs/e2ee-spec.md, section 8.4).
+        where: { visibility: 'PUBLIC', encrypted: false },
         orderBy: [{ uploadedAt: 'desc' }, { id: 'asc' }],
         skip: (currentPage - 1) * SHARED_FOLDER_PAGE_SIZE,
         take: SHARED_FOLDER_PAGE_SIZE,
@@ -30,7 +32,11 @@ export async function getSharedFolder(token: string, page = 1) {
           password: true,
         },
       },
-      _count: { select: { files: { where: { visibility: 'PUBLIC' } } } },
+      _count: {
+        select: {
+          files: { where: { visibility: 'PUBLIC', encrypted: false } },
+        },
+      },
     },
   })
   if (!folder) return null

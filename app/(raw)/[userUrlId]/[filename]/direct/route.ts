@@ -20,6 +20,8 @@ export const GET = api(
     })
     if (grant instanceof Response) return grant
     const { file, password } = grant
+    // No address plays an encrypted file, and none may point at storage.
+    if (file.encrypted) return new Response(null, { status: 404 })
 
     if (!file.mimeType.startsWith('video/')) {
       return new Response(null, {

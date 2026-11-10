@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 20. Phases 1 and 2 implemented. Not reviewed. |
+| Status  | Draft 21. Phases 1 to 3 implemented. Not reviewed.  |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -917,6 +917,11 @@ Properties:
 The owner reads the file through the account stanza. The owner does not need
 the password.
 
+A password does not change `file_key`. If the owner adds a password after
+a link without a password was given to a person, that person still has
+`file_key` and can read the file. The application must tell the owner this.
+To stop that person, the owner must delete the file and upload it again.
+
 The owner can change the password. The client then makes a new
 `link_secret` and a new stanza, and the old link stops. `link_secret_key`
 does not change, thus `sealed_link_secret` must have a random nonce. A zero
@@ -1613,6 +1618,11 @@ thus it cannot be in the address. `file_id` replaces it.
 default. A name pattern of an upload profile can make it, if the pattern
 does not use the original file name.
 
+The server makes a random `file_id` as `e_` and then
+`base64url(random(16))`: 24 characters. The address of a plain file never
+has this form. Thus a proxy can identify the address of an encrypted file
+without a query to the database (section 11.3).
+
 A plain file keeps its address with the file name, as today.
 
 A file without a password:
@@ -1838,6 +1848,10 @@ the event needs version 2:
 A receiver that needs the name must have `file_key`. The server cannot give
 it.
 
+A receiver cannot select a version. The server sends version 2 for each
+file, also for a plain file. A delivery that was in the queue before the
+upgrade keeps its version 1 content.
+
 ## 13. Requirements for the server and the application
 
 1. **AGREED.** The application must send a Content-Security-Policy that
@@ -1845,7 +1859,11 @@ it.
    The framework of Flare puts inline scripts in each page. Thus the policy
    must permit an inline script only if it has the random nonce of that
    response. It must block each other inline script. The scripts of the
-   "Custom head" setting get the nonce (section 13.1).
+   "Custom head" setting get the nonce (section 13.1). The policy has
+   `'strict-dynamic'`, which is the method that the framework documents: a
+   script that operates with the nonce can add other scripts. The policy
+   blocks a script that an attacker adds as markup. It does not limit a
+   script that operates already.
 2. **AGREED.** The "Custom head" setting continues to operate as today,
    with scripts (section 13.1).
 3. **AGREED.** The server must not write a file key or a share link fragment
@@ -2040,3 +2058,4 @@ when.
 | 18    | 2026-11-11 | Results of the first implementation. `seal_once` for stanzas: the nonce comes from the key and is not stored. Argon2id parameters are fixed for a protocol version; the account record does not store them. One valid encrypted form for each file. Canonical X25519 public keys. Exact identifier form, also for the fake salt. Each stored record has the version byte. No sealed empty keyring.       |
 | 19    | 2026-11-11 | Sign-in has two requests: one for the session, one for the key material. Unlock is one procedure for each sign-in method, with its own context string.                                                                                                                                                                                                                                                   |
 | 20    | 2026-11-11 | Results of the server implementation of accounts. A rotation ends each session. The client adds the version byte. Existing accounts get keys in a session of the last 5 minutes, without the old password. Accounts that an administrator creates. A proxy must not change the path of a signed request.                                                                                                 |
+| 21    | 2026-11-10 | Results of the implementation of encrypted files. The form of a random `file_id`. A password that the owner adds later does not stop a person who has `file_key`. The script policy has `'strict-dynamic'`. The server sends webhook version 2 for each file.                                                                                                                                            |

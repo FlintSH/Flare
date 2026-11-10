@@ -19,6 +19,7 @@ import type { AccountKeys } from '@/lib/e2ee/account'
 import { unlockWithPassphrase } from '@/lib/e2ee/client/api'
 import { browserKeyStore } from '@/lib/e2ee/client/browser-store'
 import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
+import { forgetOpenedFiles } from '@/lib/e2ee/client/opened-files'
 import {
   type AccountKeyEvent,
   type AccountKeyState,
@@ -140,6 +141,13 @@ export function AccountKeysProvider({
     void resolve(status === 'authenticated' ? userId : null)
   }, [status, userId, resolve])
 
+  // The file keys this page opened are useless and unwanted without the
+  // account keys: erase them when the browser locks or the session ends.
+  useEffect(() => {
+    if (state.status === 'locked' || state.status === 'signed-out')
+      forgetOpenedFiles()
+  }, [state.status])
+
   const adopt = useCallback(
     async (opened: OpenedKeys) => {
       // The session can be seconds old: read it, do not trust the last render.
@@ -205,4 +213,13 @@ export function useAccountKeys(): AccountKeysContext {
   if (!context)
     throw new Error('useAccountKeys must be used inside AccountKeysProvider')
   return context
+}
+
+/**
+ * The state of the account keys, or `loading` where no provider is mounted.
+ * For components that also render outside the application shell and only
+ * read the state: a plain file needs no key at all.
+ */
+export function useAccountKeyState(): AccountKeyState {
+  return useContext(Context)?.state ?? INITIAL_ACCOUNT_KEY_STATE
 }

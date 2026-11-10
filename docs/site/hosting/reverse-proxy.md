@@ -152,7 +152,40 @@ Flare sends these headers on every response. Pass them through unchanged rather 
 | `Strict-Transport-Security`  | `max-age=63072000; includeSubDomains; preload` |
 | `Cross-Origin-Opener-Policy` | `same-origin`                                  |
 
-Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Flare doesn't send a site-wide `Content-Security-Policy`. Adding one at the proxy can break pages that rely on inline scripts and styles, including the theme and administrator custom head HTML, and a proxy policy that replaces the file routes' header would remove their sandbox.
+Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Every page also sends a `Content-Security-Policy` with a per-response nonce, described next.
+
+### Content-Security-Policy
+
+Flare's browser code holds encryption keys, so every HTML page sends a policy that lets script come only from the application:
+
+```text
+default-src 'self';
+script-src 'self' 'nonce-<random>' 'strict-dynamic' 'wasm-unsafe-eval';
+style-src 'self' 'unsafe-inline' https: http:;
+img-src 'self' data: blob: https: http:;
+media-src 'self' blob: https: http:;
+font-src 'self' data: https: http:;
+connect-src 'self' https: http: ws: wss:;
+frame-src 'self' blob:;
+worker-src 'self' blob:;
+object-src 'none';
+base-uri 'self';
+frame-ancestors 'self'
+```
+
+- The nonce is new for every response. A script runs only if it carries it: Flare's own scripts, and each script of the administrator's [Custom HTML](/admin/appearance#custom-css-and-head-html). An injected inline script or inline event handler does not run.
+- `'wasm-unsafe-eval'` lets the browser compile the Argon2id module that stretches passphrases. It does not allow `eval` of text.
+- `blob:` and `data:` are where the page puts decrypted images, media and documents.
+- Images, media, fonts, styles and connections to other sites stay allowed, because storage, CDNs and Custom HTML use them and none of them can run script.
+
+What this means for a proxy:
+
+- **Do not cache HTML pages.** A cached page would repeat one nonce for many visitors. Flare's pages are rendered per request; keep any proxy cache to `/_next/static/` and file content.
+- **Do not rewrite page bodies** to inject scripts, such as a proxy-level analytics snippet or a "rocket loader" that rewrites script tags. The injected script has no nonce and is blocked. Put scripts in Custom HTML instead.
+- **Do not add a second `Content-Security-Policy`** at the proxy. Browsers enforce every policy they receive, so a proxy policy can only remove permissions, and one without the nonce blocks all of Flare's scripts. If your proxy sets one by default, turn that off for Flare. Do not replace the header on file content routes either: those send `sandbox`.
+- The API routes under `/api/` send no page policy. File content routes keep `Content-Security-Policy: sandbox`.
+
+Flare reads no policy from the environment and has no setting for it in this release.
 
 `Cross-Origin-Opener-Policy: same-origin` means a Flare page and a page on another site never get a window reference to each other, even when one opens the other. Links between them still work. Builds before this header was added let a page that opened Flare in a new tab keep a reference to it, though Flare's own outgoing links already used `noopener`.
 

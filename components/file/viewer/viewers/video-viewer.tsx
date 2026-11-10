@@ -16,7 +16,6 @@ export function VideoViewer({
   lookupUrl: string
 }) {
   const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
-  const [failedUrl, setFailedUrl] = useState<string>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -47,7 +46,20 @@ export function VideoViewer({
     return <LoadingState message="Loading video…" />
   }
 
-  if (failedUrl === direct.url) {
+  return <VideoPlayer file={file} src={direct.url} />
+}
+
+/** A video at an address the page already has. */
+export function VideoPlayer({
+  file,
+  src,
+}: {
+  file: { name: string; mimeType: string }
+  src: string
+}) {
+  const [failedUrl, setFailedUrl] = useState<string>()
+
+  if (failedUrl === src) {
     return <ErrorState error="This video couldn’t be played in your browser." />
   }
 
@@ -56,17 +68,17 @@ export function VideoViewer({
     // the card's full width.
     <div className="w-[56rem] min-w-0 max-w-full border-y border-border/60 bg-muted/60 dark:bg-muted/30">
       <video
-        src={direct.url}
+        src={src}
         controls
         aria-label={`${file.name} video player`}
-        onError={() => setFailedUrl(direct.url)}
+        onError={() => setFailedUrl(src)}
         className="block max-h-[60vh] w-full object-contain focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
         muted={false}
         playsInline
       >
-        <source src={direct.url} type={file.mimeType} />
+        <source src={src} type={file.mimeType} />
         Your browser does not support the video tag.
       </video>
     </div>

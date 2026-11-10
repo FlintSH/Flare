@@ -14,10 +14,22 @@ export function exportEntryNamer() {
   // than one per earlier copy. `used` still catches a literal file named
   // like a numbered copy.
   const nextCopy = new Map<string, number>()
-  return (file: { name: string; uploadedAt: Date }) => {
+  return (file: {
+    name: string
+    uploadedAt: Date
+    encrypted?: boolean
+    urlPath?: string
+  }) => {
     const folder = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
+    // The server has no name for an encrypted file. Its entry is the
+    // ciphertext, named by the public file identifier.
+    const encryptedName =
+      file.encrypted && file.urlPath
+        ? `${file.urlPath.split('/').at(-1)}.flare-encrypted`
+        : null
     // Older chunked uploads could save a path as the name; keep its last part.
-    const name = sanitizeDisplayName(uploadDisplayName(file.name) ?? '')
+    const name =
+      encryptedName ?? sanitizeDisplayName(uploadDisplayName(file.name) ?? '')
     const dot = name.lastIndexOf('.')
     const stem = dot > 0 ? name.slice(0, dot) : name
     const extension = dot > 0 ? name.slice(dot) : ''

@@ -455,6 +455,80 @@ Malformed or oversized selections return **400**. Missing authentication or a na
 
 The [audit log](/admin/audit) records a request-level `http.get` outcome with the verified account when authentication succeeds. It does not include the queried file IDs or returned tag names. An unavailable-file `404` is recorded as a failure; the response and audit summary do not distinguish a missing file from another account’s file.
 
+## Encrypted files
+
+**Uploads made with a token are plain files and are unchanged.** `POST /api/files` and the chunked routes behave exactly as before for a named token or the account upload token: the request, the response, the stored bytes and the file's address. Screenshot tool configurations need no change.
+
+Files uploaded in the browser are [encrypted on the device](/guide/encryption) by default. The server then stores ciphertext and has no name and no type. This affects what a token integration reads:
+
+- **`GET /api/files` lists them with `encrypted: true`**, `name: ""`, `mimeType: "application/octet-stream"`, a `urlPath` that ends in a random file ID such as `/abc123/e_3kGq0v8mJtYw2nHc5sLp7A`, and `size` as the ciphertext size. Each such row also has an `encryption` object of base64url records. A plain file has `encrypted: false` and no `encryption` object.
+- **`search`, `types` and `sortBy=name` cannot match encrypted files.** The server cannot read their names or types. Filter on `encrypted` in your own code if you need only plain files.
+- **`hasPassword` is `true`** for an encrypted file with a password stanza, as for a plain file with a server password.
+- **The bytes are ciphertext.** `/api/files/{path}` and `/api/files/{id}/download` send them as `application/octet-stream` attachments, with byte ranges, and never redirect to signed storage. `/raw` and `/direct` answer `404`, thumbnails and OCR answer `400`, and a `password` query value is ignored.
+- **Webhooks** send `data.name` and `data.mimeType` as `null` for them. See [version 2](./webhooks#version-2).
+
+Nothing a token can call returns a key, because the server has none. An integration cannot decrypt an encrypted file without the owner's account key or the file's share link.
+
+### What the browser sends
+
+These contracts belong to the dashboard and need a **browser session**. A request with any token that asks for an encrypted upload answers `403`. They are documented so operators and reviewers can see what crosses the wire; a script client is a later release.
+
+The body of an encrypted upload is the encrypted file itself: a 26-byte header (`FLAREE2E`, a format version, a chunk size, a random nonce prefix) followed by 64 KiB chunks, each with a 32-byte tag. Four records travel with it, each base64url:
+
+| Field                    | Content                                                                |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `header`                 | The same 26 bytes that start the body.                                 |
+| `sealedMetadata`         | The file's name and type, sealed with a key derived from the file key. |
+| `accountStanza`          | The file key, wrapped for the account public key.                      |
+| `stanzaAccountPublicKey` | The account public key the stanza is for.                              |
+| `passwordStanza`         | Optional. The file key wrapped for a password and a link secret.       |
+
+- **One request:** `POST /api/files` with the header `X-Flare-Encrypted: true`. The multipart file part must be named `encrypted` with the type `application/octet-stream`; the records and the usual options (`visibility`, `expiresAt`, `expiryAction`, `tagIds`) are form fields. Any other field, such as `name` or `password`, is refused with `400`.
+- **In parts:** `POST /api/files/chunks` with `encrypted: true`, `size` (the ciphertext size), the records and the usual options. `filename`, `mimeType` and `password` are refused. Parts and completion are the same routes as for a plain upload.
+
+Before it publishes the file, the server checks what it can: that the stored bytes start with `header`, that the header has the right magic value, version and chunk size, that the stored size is a length an encrypted file can have, that each record has a possible length and version, and that `stanzaAccountPublicKey` is the uploader's current account public key. A failure answers `400`, or `409` for a key that is no longer current, and the stored bytes are removed. The server cannot check that the records open: it has no key.
+
+It does not sniff a type, run filename tag rules, or queue text recognition for these files. Quota counts the ciphertext.
+
+The answer has no name and no type:
+
+```json
+{
+  "encrypted": true,
+  "id": "cm_example",
+  "url": "https://flare.example.com/abc123/e_3kGq0v8mJtYw2nHc5sLp7A",
+  "pageUrl": "https://flare.example.com/abc123/e_3kGq0v8mJtYw2nHc5sLp7A",
+  "size": 204890
+}
+```
+
+The browser appends the key after `#` to make the share link. The server never sees that part.
+
+### Read the records of one file
+
+**`GET /api/files/{id}/encryption`** · Browser session or anonymous, under the file's [access rules](./endpoint-inventory#file-content-and-access-checks)
+
+```json
+{
+  "id": "cm_example",
+  "urlPath": "/abc123/e_3kGq0v8mJtYw2nHc5sLp7A",
+  "sizeBytes": 204890,
+  "header": "RkxBUkVFMkUBEA...",
+  "sealedMetadata": "AQ...",
+  "passwordStanza": null
+}
+```
+
+Anyone who may fetch the ciphertext may read these: a visitor of a public file, the owner, an account with `content.read`. The owner's answer also has `accountStanza` and `stanzaAccountPublicKey`. A private file answers `404` to everyone else, and a plain file answers `400`. None of the records is a key, and none opens without one.
+
+### Set or remove a password
+
+**`PATCH /api/files/{id}`** with `{ "passwordStanza": "<base64url>" }` stores a new password stanza for an encrypted file, and `{ "passwordStanza": null }` removes it. Only the owner's session may send it; `content.update` is not enough, because only the owner's browser can make the stanza. `password` is refused for an encrypted file, and `passwordStanza` for a plain one.
+
+### Read a byte range
+
+The stored chunk `n` starts at byte `26 + n × 65568` of the ciphertext and holds 65536 bytes of content and a 32-byte tag; the last chunk is shorter. To read plaintext bytes, a client requests the chunks that contain them with one `Range` header and checks each tag before it uses a byte. A range proves nothing about the end of the file unless it includes the last chunk.
+
 ## Chunked uploads
 
 Chunked uploads let a client transfer parts before finalizing one file. Both local and S3 storage support Flare's authenticated part-upload route. S3 can additionally provide direct presigned part URLs.

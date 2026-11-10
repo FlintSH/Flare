@@ -140,6 +140,8 @@ describe('webhook delivery contract', () => {
         uploadedAt: new Date(),
         visibility: 'PUBLIC',
         password: null,
+        encrypted: false,
+        passwordStanza: null,
       })
     ).resolves.toBeUndefined()
     expect(createMany).not.toHaveBeenCalled()
@@ -154,6 +156,8 @@ describe('webhook delivery contract', () => {
         uploadedAt: new Date(),
         visibility: 'PUBLIC',
         password: null,
+        encrypted: false,
+        passwordStanza: null,
       })
     ).resolves.toBeUndefined()
     expect(createMany).not.toHaveBeenCalled()
@@ -182,13 +186,14 @@ describe('webhook delivery contract', () => {
   it('builds test events from the file-ready contract', () => {
     const event = testEventPayload()
     expect(event).toEqual({
-      version: 1,
+      version: 2,
       id: expect.stringMatching(/^test:[0-9a-f-]{36}$/),
       type: 'file.ready',
       test: true,
       occurredAt: expect.any(String),
       data: {
         id: 'example-file',
+        encrypted: false,
         name: 'example.png',
         mimeType: 'image/png',
         sizeBytes: 1024,
@@ -308,17 +313,20 @@ describe('webhook delivery contract', () => {
       uploadedAt: new Date(0),
       visibility: 'PRIVATE' as const,
       password: 'password-hash',
+      encrypted: false,
+      passwordStanza: null,
       ocrText: 'private text',
       path: '/private',
       urlPath: '?signature=secret',
     }
     expect(fileReadyPayload(file)).toEqual({
-      version: 1,
+      version: 2,
       id: 'file.ready:file',
       type: 'file.ready',
       occurredAt: new Date(0).toISOString(),
       data: {
         id: 'file',
+        encrypted: false,
         name: 'photo.png',
         mimeType: 'image/png',
         sizeBytes: 1048576,
@@ -326,5 +334,35 @@ describe('webhook delivery contract', () => {
         passwordProtected: true,
       },
     })
+  })
+  it('sends no name and no type for an encrypted file', () => {
+    const event = fileReadyPayload({
+      id: 'file',
+      // What the database holds for an encrypted file.
+      name: '',
+      mimeType: 'application/octet-stream',
+      size: 1,
+      uploadedAt: new Date(0),
+      visibility: 'PUBLIC',
+      password: null,
+      encrypted: true,
+      passwordStanza: new Uint8Array(217),
+    })
+    expect(event).toEqual({
+      version: 2,
+      id: 'file.ready:file',
+      type: 'file.ready',
+      occurredAt: new Date(0).toISOString(),
+      data: {
+        id: 'file',
+        encrypted: true,
+        name: null,
+        mimeType: null,
+        sizeBytes: 1048576,
+        visibility: 'PUBLIC',
+        passwordProtected: true,
+      },
+    })
+    expect(JSON.stringify(event)).not.toContain('octet-stream')
   })
 })

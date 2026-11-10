@@ -7,6 +7,15 @@ import Link from 'next/link'
 import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 
 import {
+  EncryptionChoice,
+  type EncryptionMode,
+} from '@/components/encryption/encryption-choice'
+import {
+  DERIVING_FILE_KEY,
+  FilePasswordStrength,
+  useFilePasswordStrength,
+} from '@/components/encryption/file-password'
+import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
@@ -30,6 +39,7 @@ import { uploadPaste } from '@/lib/uploads/client'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
+import { useUploadEncryption } from '@/hooks/use-upload-queue'
 
 export function PasteForm() {
   const [content, setContent] = useState('')
@@ -40,6 +50,15 @@ export function PasteForm() {
     undefined
   )
   const [password, setPassword] = useState('')
+  const [encryption, setEncryption] = useState<EncryptionMode>('encrypted')
+  const encrypted = encryption === 'encrypted'
+  const keys = useUploadEncryption()
+  const passwordStrength = useFilePasswordStrength(password, encrypted)
+  const passwordProblem = encrypted
+    ? passwordStrength.problem
+    : password
+      ? filePasswordHint(password)
+      : null
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState<{
@@ -57,7 +76,11 @@ export function PasteForm() {
       setError('Add some text or code before creating your paste.')
       return
     }
-    if (password && filePasswordHint(password)) return
+    if (passwordProblem) return
+    if (encrypted && !keys.encryptFor) {
+      setError('Unlock your encryption keys to create an encrypted paste.')
+      return
+    }
     setIsSubmitting(true)
     setError('')
 
@@ -73,6 +96,7 @@ export function PasteForm() {
             ? visibility
             : undefined,
         password,
+        encryptFor: encrypted ? keys.encryptFor : undefined,
       })
       const url = paste.pageUrl || paste.url
       setCreated({
@@ -254,11 +278,35 @@ export function PasteForm() {
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             disabled={isSubmitting}
-            {...filePasswordFieldProps('paste-password-hint', password)}
+            {...(encrypted
+              ? {
+                  'aria-invalid': Boolean(
+                    password && passwordStrength.strength?.acceptable === false
+                  ),
+                  'aria-describedby': 'paste-password-hint',
+                }
+              : filePasswordFieldProps('paste-password-hint', password))}
           />
-          <FilePasswordHint id="paste-password-hint" password={password} />
+          {encrypted ? (
+            <FilePasswordStrength
+              id="paste-password-hint"
+              password={password}
+              strength={passwordStrength.strength}
+              failed={passwordStrength.failed}
+              empty="With a password, the link alone does not open the paste. Flare never receives the password."
+            />
+          ) : (
+            <FilePasswordHint id="paste-password-hint" password={password} />
+          )}
         </div>
       )}
+      <EncryptionChoice
+        value={encryption}
+        onChange={setEncryption}
+        disabled={isSubmitting}
+        locked={keys.locked}
+        noun="paste"
+      />
       {error && (
         <Alert id="paste-error" variant="destructive">
           <AlertCircle aria-hidden="true" />
@@ -271,11 +319,16 @@ export function PasteForm() {
         disabled={
           isSubmitting ||
           !content.trim() ||
-          Boolean(password && filePasswordHint(password))
+          Boolean(passwordProblem) ||
+          (encrypted && !keys.encryptFor)
         }
       >
         {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        {isSubmitting ? 'Creating paste…' : 'Create paste'}
+        {isSubmitting
+          ? encrypted && password
+            ? DERIVING_FILE_KEY
+            : 'Creating paste…'
+          : 'Create paste'}
       </Button>
     </form>
   )

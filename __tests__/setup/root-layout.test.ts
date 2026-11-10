@@ -11,6 +11,9 @@ const { mocks, passThrough, nothing } = vi.hoisted(() => ({
   nothing: () => null,
 }))
 
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'dGVzdC1ub25jZS0xMjM0NTY=' }),
+}))
 vi.mock('next/font/local', () => ({
   default: () => ({ variable: 'inter-variable', className: 'inter' }),
 }))

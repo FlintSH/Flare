@@ -83,6 +83,7 @@ export default defineConfig({
         ['File library & timeline', '/guide/library'],
         ['Archives', '/guide/archives'],
         ['Sharing & privacy', '/guide/sharing'],
+        ['Encrypted and plain files', '/guide/encryption'],
         ['Folders', '/guide/folders'],
         ['Tags & OCR', '/guide/tags'],
         ['Pastes & code', '/guide/pastes'],

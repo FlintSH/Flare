@@ -11,6 +11,23 @@ Use **Upload** when you want to review settings before sending files. For quick 
 
 <Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area and sharing options" caption="The upload page brings file selection and sharing choices into one flow." />
 
+## Encrypted by default
+
+Files you upload in the browser are encrypted on your device before they are sent. The **Encryption** choice in the form has two options:
+
+- **Encrypted** is the default. The server stores ciphertext and cannot read the file, its name or its type. Its link shows a generic preview on other sites.
+- **Plain (can show a link preview)** stores the file as it is. The server and its administrators can read it, and its link can show the content in a chat or social preview.
+
+The choice applies to every file in the batch. [Encrypted and plain files](./encryption) explains what the server still sees and what does not work yet for encrypted files.
+
+Encrypting needs your keys. If the form says your encryption keys are locked, choose **Unlock** and enter your [passphrase](./passphrase). Until then **Upload** stays disabled for an encrypted batch. Files dropped elsewhere in Flare are encrypted too; with locked keys the drop is refused with a message and nothing is sent.
+
+Large files are encrypted and sent in parts of about 5 MB, so the browser never holds the whole file in memory. While a batch is being sent, **Cancel upload** stops it. Files already finished stay in your library; the file in progress is not stored.
+
+<Screenshot src="/screenshots/encryption/upload-progress.webp" alt="The upload form while an 11 MB file is encrypted and sent, with a progress bar and a Cancel upload button" caption="An encrypted upload reports progress like any other and can be cancelled." />
+
+After an encrypted upload, the links under **Upload complete** carry the file's key after `#`. Copy them from there or later from the library. A link Flare's server builds, such as the one in an audit record, cannot open the file.
+
 ## Upload from your browser
 
 1. Open **Upload**.
@@ -32,19 +49,19 @@ Anyone who can access a supported archive's [share page](./archives#browse-an-ar
 
 ## Choose your upload settings
 
-| Setting                 | What it does                                                                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                                    |
-| **Save to**             | Puts the file in one of your folders (`folders.manage`). A public file directly in a shared folder also appears on that folder's share page.  |
-| **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                            |
-| **Password protection** | Requires recipients of a public file to enter the password before opening it. Eligible owners and accounts with `content.read` retain access. |
-| **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                               |
+| Setting                 | What it does                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                                                                                                                                                                                                                                                              |
+| **Save to**             | Puts the file in one of your folders (`folders.manage`). A public file directly in a shared folder also appears on that folder's share page.                                                                                                                                                                                                                            |
+| **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                                                                                                                                                                                                                                                      |
+| **Password protection** | Requires recipients of a public file to enter the password before opening it. For a plain file the server checks it, and eligible owners and accounts with `content.read` retain access. For an encrypted file the password is part of the key: it must pass a strength check in your browser, the server never receives it, and only you can open the file without it. |
+| **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                                                                                                                                                                                                                                                         |
 
 Without `folders.manage`, the upload page doesn't show **Save to** and uploads are unfiled, including when a link opens **Upload** with a folder selected. Earlier builds showed **Save to** to these roles anyway, and the server refused the upload with "Your role cannot organize uploads into folders."
 
 Choosing **From upload profile** also includes the account defaults that the profile inherits. If you have not configured a default profile, account and instance settings supply the starting values. See [upload profiles](./upload-profiles) for the exact order.
 
-Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. Flare accepts file passwords up to 72 bytes; accented characters and emoji can use more than one byte each.
+Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. For plain files Flare accepts file passwords up to 72 bytes; accented characters and emoji can use more than one byte each. An encrypted file's password has no such limit, but a short or common one is refused by the strength meter under the field.
 
 ## Set an expiration
 
@@ -75,7 +92,7 @@ Each drop is its own batch, sent one file at a time. If a file fails, the files 
 
 The completion section gives each successful upload an open action and **Copy link**. With multiple results, **Copy all links** copies one share-page URL per line. You can also find every completed file in **Files**.
 
-These controls always copy the plain share-page URL. They do not include a password or grant access to a private file. If the browser refuses clipboard access, select the displayed link and copy it manually.
+For a plain file these controls copy the share-page URL. For an encrypted file they copy the URL with the file's key after `#`, or with `#p.` and a link secret when you set a password. They never include a password and do not grant access to a private file. If the browser refuses clipboard access, select the displayed link and copy it manually.
 
 The link ends in a URL-friendly version of the filename: `My Report.PDF` is shared as `my-report.pdf`, and the file keeps its original name everywhere else in Flare. Uploading another file with a name you've already used gives the new file its own link with a short random suffix, such as `my-report-3f9c2a71-b04.pdf`; the earlier link doesn't change. A filename with no A to Z letters or digits, such as `日本語.png`, gets a short random link name instead. Choose random names in an [upload profile](./upload-profiles) if you'd rather not show filenames in links at all. The [file API guide](/api/files#upload-one-file) lists the exact rules.
 

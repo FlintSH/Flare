@@ -14,6 +14,7 @@ import {
   deriveKey,
   ed2curvePrivate,
   ed2curvePublic,
+  isAllZero,
   wipe,
   x25519PublicKey,
   x25519SharedSecret,
@@ -209,6 +210,61 @@ export function unwrapAccountStanza(input: {
     }) as FileKey
   } finally {
     wipe(exchangePrivateKey)
+  }
+}
+
+/**
+ * The unwrap procedure of section 8.1 for a caller that did step 2, the
+ * X25519 operation, with a different implementation: the function of the
+ * browser (section 9.8.3). The result is the same as `unwrapAccountStanza`.
+ *
+ * `sharedSecret` is `X25519(exchange_private_key, ephemeral_public_key)`,
+ * where `ephemeral_public_key` is the first 32 bytes of the stanza.
+ * `exchangePublicKey` must come from the private key of the caller, never
+ * from the server. This function still does every check of the procedure:
+ * the length, the canonical form of `ephemeral_public_key`, and a
+ * `shared_secret` that is not all zero.
+ */
+export function unwrapAccountStanzaWithSharedSecret(input: {
+  readonly sharedSecret: Uint8Array
+  readonly exchangePublicKey: X25519PublicKey
+  readonly headerHash: HeaderHash
+  readonly stanza: Uint8Array
+}): FileKey {
+  const { stanza, sharedSecret } = input
+  if (stanza.length !== ACCOUNT_STANZA_LENGTH) {
+    throw new E2eeError(
+      'bad_length',
+      `An account stanza has ${ACCOUNT_STANZA_LENGTH} bytes, got ${stanza.length}`
+    )
+  }
+  if (sharedSecret.length !== 32) {
+    throw new E2eeError('bad_length', 'shared_secret must have 32 bytes')
+  }
+  const ephemeralPublicKey = stanza.subarray(0, PUBLIC_KEY_LENGTH)
+  assertCanonicalX25519PublicKey(ephemeralPublicKey, 'ephemeral_public_key')
+  assertCanonicalX25519PublicKey(input.exchangePublicKey, 'exchange_public_key')
+  if (isAllZero(sharedSecret)) {
+    throw new E2eeError(
+      'low_order_point',
+      'The X25519 shared secret is all zero'
+    )
+  }
+  const material = concatBytes(
+    sharedSecret,
+    ephemeralPublicKey,
+    input.exchangePublicKey
+  )
+  const stanzaKey = deriveKey<'stanza_key'>(CONTEXTS.accountStanza, material)
+  wipe(material)
+  try {
+    return openOnce(
+      stanzaKey,
+      asHeaderHash(input.headerHash),
+      stanza.subarray(PUBLIC_KEY_LENGTH)
+    ) as FileKey
+  } finally {
+    wipe(stanzaKey)
   }
 }
 

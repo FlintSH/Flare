@@ -1,6 +1,18 @@
 import { LoadingState } from '../components/loading-state'
 
-export function PdfViewer({ name, src }: { name: string; src?: string }) {
+export function PdfViewer({
+  name,
+  src,
+  sandboxed = false,
+}: {
+  name: string
+  src?: string
+  /**
+   * For a document Flare cannot vouch for, such as a decrypted file: the
+   * frame gets an opaque origin and runs no script, whatever the bytes are.
+   */
+  sandboxed?: boolean
+}) {
   if (!src) return <LoadingState message="Loading document…" />
 
   return (
@@ -12,6 +24,7 @@ export function PdfViewer({ name, src }: { name: string; src?: string }) {
         src={`${src}#navpanes=0&view=FitH`}
         className="block h-[70vh] min-h-80 w-full"
         title={`${name} document preview`}
+        {...(sandboxed && { sandbox: '', referrerPolicy: 'no-referrer' })}
       />
     </div>
   )

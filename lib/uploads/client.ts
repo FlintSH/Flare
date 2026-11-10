@@ -1,4 +1,19 @@
-import { type UploadResponse, parseUploadResponse } from './response'
+import { workerArgon2id } from '@/lib/e2ee/client/argon2-worker'
+import { encryptInWorker } from '@/lib/e2ee/client/file-worker'
+import {
+  type NewEncryptedFile,
+  newEncryptedFile,
+  newPasswordStanza,
+} from '@/lib/e2ee/client/files'
+import { rememberOpenedFile } from '@/lib/e2ee/client/opened-files'
+import { storedLengthOf } from '@/lib/e2ee/file'
+import { type ShareSecret, shareLink } from '@/lib/e2ee/link'
+
+import {
+  type UploadResponse,
+  parseEncryptedUploadResponse,
+  parseUploadResponse,
+} from './response'
 
 export type { UploadResponse }
 
@@ -25,6 +40,14 @@ export type UploadOptions = {
   /** Omitted: the profile's expiration. Null: no expiration. */
   expiresAt?: Date | null
   expiryAction?: 'DELETE' | 'SET_PRIVATE'
+  /**
+   * Encrypt in this browser for this account public key before sending
+   * (docs/e2ee-spec.md, section 10.1). Omitted: a plain upload, which the
+   * server can read and show in a link preview (section 11).
+   */
+  encryptFor?: Uint8Array
+  /** Stops the upload. The promise rejects with an `AbortError`. */
+  signal?: AbortSignal
 }
 
 /** Bytes of the file sent so far. */
@@ -61,10 +84,17 @@ function send(
   url: string,
   body: XMLHttpRequestBodyInit,
   headers: Record<string, string>,
-  onProgress?: Progress
+  onProgress?: Progress,
+  signal?: AbortSignal
 ) {
   return new Promise<Reply>((resolve, reject) => {
     const request = new XMLHttpRequest()
+    const cancelled = () => new DOMException('Upload cancelled', 'AbortError')
+    if (signal?.aborted) {
+      reject(cancelled())
+      return
+    }
+    signal?.addEventListener('abort', () => request.abort(), { once: true })
     if (onProgress)
       request.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) onProgress(event.loaded)
@@ -77,7 +107,9 @@ function send(
       })
     )
     request.addEventListener('error', () => reject(new Error(NETWORK_ERROR)))
-    request.addEventListener('abort', () => reject(new Error(NETWORK_ERROR)))
+    request.addEventListener('abort', () =>
+      reject(signal?.aborted ? cancelled() : new Error(NETWORK_ERROR))
+    )
     request.open(method, url)
     for (const [name, value] of Object.entries(headers))
       request.setRequestHeader(name, value)
@@ -129,7 +161,8 @@ async function uploadWhole(
     '/api/files',
     multipartBody(file, options),
     selectionHeaders(options),
-    onProgress
+    onProgress,
+    options.signal
   )
   if (!succeeded(reply))
     throw failure(reply, `Upload failed: ${reply.statusText}`)
@@ -156,7 +189,9 @@ async function startChunkedUpload(file: File, options: UploadOptions) {
           : (options.expiresAt?.toISOString() ?? null),
       expiryAction: options.expiryAction,
     }),
-    JSON_HEADERS
+    JSON_HEADERS,
+    undefined,
+    options.signal
   )
   if (!succeeded(reply)) throw failure(reply, 'Failed to initialize upload')
   const session = field(reply.body, 'data')
@@ -190,7 +225,8 @@ async function uploadInParts(
       `/api/files/chunks/${uploadId}/part/${part}`,
       chunk,
       {},
-      (bytes) => report(part, bytes)
+      (bytes) => report(part, bytes),
+      options.signal
     )
     if (!succeeded(reply))
       throw failure(reply, `Upload failed: ${reply.statusText}`)
@@ -215,10 +251,235 @@ async function uploadInParts(
     JSON.stringify({
       parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
     }),
-    JSON_HEADERS
+    JSON_HEADERS,
+    undefined,
+    options.signal
   )
   if (!succeeded(reply)) throw failure(reply, 'Failed to complete upload')
   return parseUploadResponse(reply.body)
+}
+
+// --- Encrypted uploads (docs/e2ee-spec.md, section 10.1) ---
+
+/**
+ * The size of one encrypted part: 80 stored chunks, a little over the 5 MiB
+ * that S3 needs for every part but the last.
+ */
+const ENCRYPTED_PART_BYTES = 80 * 65568
+const ENCRYPTED_HEADERS = { 'X-Flare-Encrypted': 'true' }
+/** The file part carries this name and type. The real ones are sealed. */
+const ENCRYPTED_PART_NAME = 'encrypted'
+const ENCRYPTED_PART_TYPE = 'application/octet-stream'
+
+/** The options the server reads, which are the same for a plain upload. */
+function visibleOptions(options: UploadOptions) {
+  return {
+    visibility: options.visibility,
+    expiresAt:
+      options.expiresAt === undefined
+        ? undefined
+        : (options.expiresAt?.toISOString() ?? null),
+    expiryAction: options.expiryAction,
+  }
+}
+
+/**
+ * Steps 1, 2, 4 and 6 of section 10.1: the key, the header, the sealed name
+ * and type, the account stanza and, with a password, the password stanza.
+ * The password goes through Argon2id in a worker and never leaves the
+ * browser.
+ */
+async function prepareEncryptedUpload(
+  file: File,
+  options: UploadOptions & { encryptFor: Uint8Array }
+) {
+  const created = newEncryptedFile({
+    name: file.name,
+    type: file.type || ENCRYPTED_PART_TYPE,
+    accountPublicKey: options.encryptFor,
+  })
+  let secret: ShareSecret = { kind: 'file_key', fileKey: created.fileKey }
+  let passwordStanza: string | undefined
+  if (options.password) {
+    const stanza = await newPasswordStanza({
+      opened: created,
+      password: options.password,
+      ownerPublicKey: options.encryptFor,
+      argon2id: workerArgon2id,
+    })
+    passwordStanza = stanza.passwordStanza
+    secret = stanza.secret
+  }
+  options.signal?.throwIfAborted()
+  return {
+    created,
+    secret,
+    records: { ...created.records, ...(passwordStanza && { passwordStanza }) },
+  }
+}
+
+/** The link is made here: the server never has the part after `#` (section 10.3). */
+function encryptedUploadResult(
+  body: unknown,
+  file: File,
+  created: NewEncryptedFile,
+  secret: ShareSecret
+): UploadResponse {
+  const uploaded = parseEncryptedUploadResponse(body)
+  const link = shareLink(uploaded.pageUrl, secret)
+  rememberOpenedFile(uploaded.id, {
+    fileKey: created.fileKey,
+    headerHash: created.headerHash,
+    name: file.name,
+    type: file.type || ENCRYPTED_PART_TYPE,
+  })
+  return {
+    url: link,
+    pageUrl: link,
+    copyText: link,
+    name: file.name,
+    size: file.size,
+    type: file.type || ENCRYPTED_PART_TYPE,
+    encrypted: true,
+  }
+}
+
+async function uploadEncrypted(
+  file: File,
+  options: UploadOptions & { encryptFor: Uint8Array },
+  onProgress?: Progress,
+  extraHeaders: Record<string, string> = {}
+): Promise<UploadResponse> {
+  const { created, secret, records } = await prepareEncryptedUpload(
+    file,
+    options
+  )
+  const storedLength = storedLengthOf(file.size)
+  // Progress is reported in bytes of the file, as for a plain upload.
+  const report = (sent: number) =>
+    onProgress?.(
+      Math.min(file.size, Math.floor((sent / storedLength) * file.size))
+    )
+  const job = encryptInWorker({
+    file,
+    fileKey: created.fileKey,
+    noncePrefix: created.noncePrefix,
+    partBytes: ENCRYPTED_PART_BYTES,
+    signal: options.signal,
+  })
+  try {
+    if (file.size <= WHOLE_FILE_MAX_BYTES) {
+      const parts: Uint8Array<ArrayBuffer>[] = []
+      for (;;) {
+        const part = await job.nextPart()
+        if (part.bytes.length) parts.push(part.bytes as Uint8Array<ArrayBuffer>)
+        if (part.last) break
+      }
+      const body = new FormData()
+      // Fields first, so a reader that stops at the file has them.
+      for (const [name, value] of Object.entries({
+        ...records,
+        ...visibleOptions(options),
+      }))
+        if (value !== undefined) body.append(name, value ?? '')
+      body.append(
+        'file',
+        new Blob(parts, { type: ENCRYPTED_PART_TYPE }),
+        ENCRYPTED_PART_NAME
+      )
+      const reply = await send(
+        'POST',
+        '/api/files',
+        body,
+        { ...ENCRYPTED_HEADERS, ...extraHeaders, ...selectionHeaders(options) },
+        report,
+        options.signal
+      )
+      if (!succeeded(reply))
+        throw failure(reply, `Upload failed: ${reply.statusText}`)
+      onProgress?.(file.size)
+      return encryptedUploadResult(reply.body, file, created, secret)
+    }
+
+    const started = await send(
+      'POST',
+      '/api/files/chunks',
+      JSON.stringify({
+        encrypted: true,
+        size: storedLength,
+        ...records,
+        profileId: options.profileId,
+        folderId: options.folderId ?? null,
+        ...visibleOptions(options),
+      }),
+      JSON_HEADERS,
+      undefined,
+      options.signal
+    )
+    if (!succeeded(started))
+      throw failure(started, 'Failed to initialize upload')
+    const session = field(started.body, 'data')
+    const id = field(session, 'uploadId')
+    if (typeof id !== 'string' || !id)
+      throw new Error('Failed to initialize upload')
+    const uploadId = encodeURIComponent(id)
+    const sent = new Map<number, number>()
+    const reportPart = (part: number, bytes: number) => {
+      sent.set(part, bytes)
+      let total = 0
+      for (const value of sent.values()) total += value
+      report(total)
+    }
+    const parts: { ETag: string; PartNumber: number }[] = []
+    const sendPart = async (number: number, bytes: Uint8Array<ArrayBuffer>) => {
+      const reply = await send(
+        'PUT',
+        `/api/files/chunks/${uploadId}/part/${number}`,
+        new Blob([bytes], { type: ENCRYPTED_PART_TYPE }),
+        {},
+        (loaded) => reportPart(number, loaded),
+        options.signal
+      )
+      if (!succeeded(reply))
+        throw failure(reply, `Upload failed: ${reply.statusText}`)
+      reportPart(number, bytes.length)
+      const etag = field(field(reply.body, 'data'), 'etag')
+      if (typeof etag !== 'string') throw new Error('Failed to parse response')
+      parts.push({ ETag: etag, PartNumber: number })
+    }
+    // Encrypts as many parts as are sent at once, then waits for them: the
+    // browser never holds more ciphertext than that.
+    let number = 0
+    let last = false
+    while (!last) {
+      const batch: Promise<void>[] = []
+      while (!last && batch.length < PARTS_AT_ONCE) {
+        const part = await job.nextPart()
+        last = part.last
+        if (part.bytes.length)
+          batch.push(sendPart(++number, part.bytes as Uint8Array<ArrayBuffer>))
+      }
+      const failed = (await Promise.allSettled(batch)).find(
+        (result) => result.status === 'rejected'
+      )
+      if (failed) throw failed.reason
+    }
+    const reply = await send(
+      'POST',
+      `/api/files/chunks/${uploadId}/complete`,
+      JSON.stringify({
+        parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
+      }),
+      JSON_HEADERS,
+      undefined,
+      options.signal
+    )
+    if (!succeeded(reply)) throw failure(reply, 'Failed to complete upload')
+    onProgress?.(file.size)
+    return encryptedUploadResult(reply.body, file, created, secret)
+  } finally {
+    job.stop()
+  }
 }
 
 export function uploadFile(
@@ -226,6 +487,12 @@ export function uploadFile(
   options: UploadOptions,
   onProgress?: Progress
 ): Promise<UploadResponse> {
+  if (options.encryptFor)
+    return uploadEncrypted(
+      file,
+      { ...options, encryptFor: options.encryptFor },
+      onProgress
+    )
   return file.size > WHOLE_FILE_MAX_BYTES
     ? uploadInParts(file, options, onProgress)
     : uploadWhole(file, options, onProgress)
@@ -234,8 +501,22 @@ export function uploadFile(
 /** Always one request, which the server checks for `pastes.create`. */
 export async function uploadPaste(
   file: File,
-  options: Pick<UploadOptions, 'profileId' | 'visibility' | 'password'>
+  options: Pick<
+    UploadOptions,
+    'profileId' | 'visibility' | 'password' | 'encryptFor'
+  >
 ): Promise<UploadResponse> {
+  // A paste is a file, encrypted like any other (section 12.5).
+  if (options.encryptFor) {
+    if (file.size > WHOLE_FILE_MAX_BYTES)
+      throw new Error('This paste is too large. Upload it as a file instead.')
+    return uploadEncrypted(
+      file,
+      { ...options, encryptFor: options.encryptFor },
+      undefined,
+      { 'X-Flare-Paste': 'true' }
+    )
+  }
   const reply = await send('POST', '/api/files', multipartBody(file, options), {
     'X-Flare-Paste': 'true',
     ...selectionHeaders(options),

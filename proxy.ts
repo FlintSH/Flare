@@ -10,6 +10,12 @@ import {
 import { checkAuthentication } from './lib/middleware/auth-checker'
 import { handleBotRequest } from './lib/middleware/bot-handler'
 import { PUBLIC_PATHS, isFileUrlPath } from './lib/middleware/constants'
+import {
+  CSP_HEADER,
+  NONCE_HEADER,
+  contentSecurityPolicy,
+  newNonce,
+} from './lib/security/csp'
 import { isSetupPath } from './lib/setup/navigation'
 
 export async function proxy(request: NextRequest) {
@@ -25,14 +31,32 @@ export async function proxy(request: NextRequest) {
     requestedRecovery,
     Boolean(recoveryToken)
   )
-  const next = () =>
-    NextResponse.next({ request: { headers: forwardedHeaders } })
+  // File bytes and the video lookup are not pages: their routes send their
+  // own headers, a sandbox policy among them.
   if (
     (request.nextUrl.pathname.endsWith('/raw') ||
       request.nextUrl.pathname.endsWith('/direct')) &&
     isFileUrlPath(request.nextUrl.pathname)
   ) {
-    return next()
+    return NextResponse.next({ request: { headers: forwardedHeaders } })
+  }
+
+  // Every page gets a script policy with a nonce of its own
+  // (docs/e2ee-spec.md, section 13). Next.js reads the nonce from the
+  // request's policy header and puts it on the scripts it renders; the
+  // layout reads `x-nonce` for the scripts Flare adds itself.
+  const nonce = newNonce()
+  const policy = contentSecurityPolicy(nonce, {
+    development: process.env.NODE_ENV === 'development',
+  })
+  forwardedHeaders.set(NONCE_HEADER, nonce)
+  forwardedHeaders.set(CSP_HEADER, policy)
+  const next = () => {
+    const response = NextResponse.next({
+      request: { headers: forwardedHeaders },
+    })
+    response.headers.set(CSP_HEADER, policy)
+    return response
   }
 
   if (request.nextUrl.pathname.startsWith('/u/')) {

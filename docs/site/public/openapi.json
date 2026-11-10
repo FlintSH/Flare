@@ -4,7 +4,7 @@
     "title": "Flare named-token API",
     "version": "1.0.0",
     "summary": "Account-scoped file uploads, file metadata, short links, and outbound file-ready events.",
-    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 1. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths. Personal session history/revocation and instance audit queries also require a browser session; audit reads require audit.read. These routes never accept named tokens or the legacy upload credential. See the x-flare-browser-session-api extension and handbook api/activity. Revoking browser sessions does not revoke API credentials. Audit recording adds no webhook event type. Owner-library archive browsing, extraction, and creation require an owner browser session. Separate share-page listing and entry routes follow file visibility/password rules, allowing anonymous reads of unprotected public archives. The listing route and entry form submissions are POSTs that accept a file password only in the request body; entry GET and HEAD requests rely on a short-lived, path-scoped unlock cookie issued after a password check, never on a password in the URL. They do not provide extraction. Shared archive body validation and file authorization complete before archive-processing capacity is reserved; body reading has a separate five-second deadline and 16 KiB limit. All archive routes reject Authorization headers, are documented at api/archives, and are excluded from named-token paths and scopes. GET /api/files/tags reads current tag membership for dashboard selections; it accepts an account browser session or legacy upload credential, not named tokens, and is documented at api/files#read-current-tags-for-a-selection rather than in paths. Invite links (create, list, revoke, and the Everyone invite switch) are browser-session-only, require invites.create, invites.manage, or settings permissions, and are documented at api/invites rather than in paths. POST /api/auth/register accepts an optional invite token that permits account creation while registration is closed; it is not a named-token operation. Invite changes add no webhook event type.",
+    "description": "Documents the current unversioned routes in Flare, not an /api/v1 prefix. Replace the server URL with your own instance. Only named-token-supported endpoints appear under paths; browser-session/admin routes are documented separately. Bearer tokens use application scopes, not OAuth. Upload sizes are bytes; list-file sizes are MiB. Some responses intentionally omit success or data wrappers. The info version versions this document; webhook payload version is independently 2. Uploads made with a token are plain files and are unchanged by end-to-end encryption; encrypted uploads are made by the browser application with a session and are documented in the handbook at api/files#encrypted-files. Every operation requires both its token scope and the owner’s current role permission (x-flare-permissions), rechecked on each request. Role/user administration and authenticator/passkey management remain browser-session-only. Two-factor authentication and passkeys protect interactive sign-in. The optional account passkey requirement blocks password and SSO sign-in and has separate emergency recovery codes; its management and recovery flow are also browser-only. Dedicated recovery identifies the current email case-insensitively, requires an unambiguous account match, and rejects conflicting legacy addresses without consuming a code. API tokens remain independent credentials with the same scopes, limits, and verification requirements. Browser security routes are documented in the handbook at api/security, not in paths. Personal session history/revocation and instance audit queries also require a browser session; audit reads require audit.read. These routes never accept named tokens or the legacy upload credential. See the x-flare-browser-session-api extension and handbook api/activity. Revoking browser sessions does not revoke API credentials. Audit recording adds no webhook event type. Owner-library archive browsing, extraction, and creation require an owner browser session. Separate share-page listing and entry routes follow file visibility/password rules, allowing anonymous reads of unprotected public archives. The listing route and entry form submissions are POSTs that accept a file password only in the request body; entry GET and HEAD requests rely on a short-lived, path-scoped unlock cookie issued after a password check, never on a password in the URL. They do not provide extraction. Shared archive body validation and file authorization complete before archive-processing capacity is reserved; body reading has a separate five-second deadline and 16 KiB limit. All archive routes reject Authorization headers, are documented at api/archives, and are excluded from named-token paths and scopes. GET /api/files/tags reads current tag membership for dashboard selections; it accepts an account browser session or legacy upload credential, not named tokens, and is documented at api/files#read-current-tags-for-a-selection rather than in paths. Invite links (create, list, revoke, and the Everyone invite switch) are browser-session-only, require invites.create, invites.manage, or settings permissions, and are documented at api/invites rather than in paths. POST /api/auth/register accepts an optional invite token that permits account creation while registration is closed; it is not a named-token operation. Invite changes add no webhook event type.",
     "license": {
       "name": "MIT",
       "url": "https://github.com/FlintSH/Flare/blob/main/LICENSE"
@@ -34,7 +34,7 @@
         "operationId": "listFiles",
         "summary": "List and search your files",
         "tags": ["Files"],
-        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits.",
+        "description": "Requires the files:read scope. Pagination is offset-based except for image-anchor requests. File sizes in this response are MiB, not bytes. Results include only this account and use Cache-Control: private, no-store. The token owner must currently have files.read; role revocation applies on the next request. The optional snapshot upload-time ceiling supports bounded timeline windows; it does not freeze deletions or edits. Files that a browser encrypted are listed with encrypted: true, an empty name and the type application/octet-stream; search, types and the name sort cannot match them, because the server cannot read their names or types.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:read",
         "responses": {
@@ -60,6 +60,8 @@
                       "user": { "urlId": "abc123" },
                       "tags": [],
                       "hasPassword": false,
+                      "encrypted": false,
+                      "encrypted": false,
                       "expiresAt": null,
                       "expiryAction": null
                     }
@@ -2024,12 +2026,18 @@
         "type": "object",
         "properties": {
           "id": { "type": "string" },
-          "name": { "type": "string" },
+          "name": {
+            "type": "string",
+            "description": "The file name. An empty string for an encrypted file."
+          },
           "urlPath": {
             "type": "string",
-            "description": "Relative URL path based on the account URL ID."
+            "description": "Relative URL path based on the account URL ID. An encrypted file's path ends in a random file ID, not a name."
           },
-          "mimeType": { "type": "string" },
+          "mimeType": {
+            "type": "string",
+            "description": "The stored type. application/octet-stream for an encrypted file, whatever it holds."
+          },
           "size": {
             "type": "number",
             "minimum": 0,
@@ -2060,7 +2068,41 @@
               "required": ["id", "name"]
             }
           },
-          "hasPassword": { "type": "boolean" },
+          "hasPassword": {
+            "type": "boolean",
+            "description": "True for a plain file with a server-checked password, and for an encrypted file with a password stanza."
+          },
+          "encrypted": {
+            "type": "boolean",
+            "description": "True when a browser encrypted the file before upload. The server then has no name and no type for it: name is an empty string and mimeType is application/octet-stream. Uploads made with a token are plain files, so this is false for them."
+          },
+          "encryption": {
+            "type": "object",
+            "description": "Present only when encrypted is true. Records that the owner's client opens with the account key. Each is base64url and none is a key. See the Files guide.",
+            "properties": {
+              "header": {
+                "type": "string",
+                "description": "The 26-byte header of the encrypted file."
+              },
+              "sealedMetadata": {
+                "type": "string",
+                "description": "The sealed name and type."
+              },
+              "accountStanza": {
+                "type": ["string", "null"],
+                "description": "The file key, wrapped for the owner's account public key."
+              },
+              "stanzaAccountPublicKey": {
+                "type": ["string", "null"],
+                "description": "The account public key that accountStanza is for."
+              },
+              "passwordStanza": {
+                "type": ["string", "null"],
+                "description": "The file key wrapped for a password and a link secret, or null."
+              }
+            },
+            "required": ["header", "sealedMetadata", "passwordStanza"]
+          },
           "expiresAt": {
             "type": ["string", "null"],
             "format": "date-time",
@@ -2086,6 +2128,7 @@
           "user",
           "tags",
           "hasPassword",
+          "encrypted",
           "expiresAt",
           "expiryAction"
         ],
@@ -2212,12 +2255,13 @@
       },
       "FileReadyEvent": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Flare file.ready event v1",
+        "title": "Flare file.ready event v2",
+        "description": "Version 2, which Flare sends for every file. A delivery queued before an upgrade keeps the version 1 payload it was queued with, which has no data.encrypted and always has a name and a type. The downloadable JSON Schema describes both versions.",
         "type": "object",
         "additionalProperties": false,
         "required": ["version", "id", "type", "occurredAt", "data"],
         "properties": {
-          "version": { "const": 1 },
+          "version": { "const": 2 },
           "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
           "type": { "const": "file.ready" },
           "occurredAt": { "type": "string", "format": "date-time" },
@@ -2227,6 +2271,7 @@
             "additionalProperties": false,
             "required": [
               "id",
+              "encrypted",
               "name",
               "mimeType",
               "sizeBytes",
@@ -2235,9 +2280,20 @@
             ],
             "properties": {
               "id": { "type": "string", "minLength": 1 },
-              "name": { "type": "string" },
-              "mimeType": { "type": "string" },
-              "sizeBytes": { "type": "integer", "minimum": 0 },
+              "encrypted": { "type": "boolean" },
+              "name": {
+                "type": ["string", "null"],
+                "description": "Null for an encrypted file: the server does not have it."
+              },
+              "mimeType": {
+                "type": ["string", "null"],
+                "description": "Null for an encrypted file."
+              },
+              "sizeBytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "For an encrypted file, the size of the ciphertext."
+              },
               "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
               "passwordProtected": { "type": "boolean" }
             }

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import { useQueryClient } from '@tanstack/react-query'
 
+import { useAccountKeyState } from '@/components/providers/account-keys-provider'
 import { ToastAction } from '@/components/ui/toast'
 
 import { libraryChanged } from '@/lib/library/changes'
@@ -35,6 +36,31 @@ export function notifyUploadInProgress() {
   toast({
     title: 'An upload is already in progress',
     description: 'Wait for it to finish, then drop these files again.',
+  })
+}
+
+/**
+ * The account public key that browser uploads are encrypted for
+ * (docs/e2ee-spec.md, section 10.1). It comes from the unlocked keys of
+ * this browser, never from a server answer alone. While the keys are locked
+ * an encrypted upload cannot start.
+ */
+export function useUploadEncryption() {
+  const state = useAccountKeyState()
+  return {
+    locked: state.status === 'locked',
+    loading: state.status === 'loading',
+    encryptFor:
+      state.status === 'unlocked' ? state.keys.accountPublicKey : undefined,
+  }
+}
+
+function notifyKeysLocked() {
+  toast({
+    title: 'Unlock your encryption keys first',
+    description:
+      'Files are encrypted in this browser before they are sent. Unlock with your passphrase, then upload again.',
+    variant: 'destructive',
   })
 }
 
@@ -89,6 +115,7 @@ function notifyUploaded(files: readonly UploadResponse[]) {
  * in `UploadProgress`.
  */
 export function useUploadQueue() {
+  const encryption = useUploadEncryption()
   const [queue] = useState(() => createUploadQueue())
   const { files, uploading } = useSyncExternalStore(
     queue.subscribe,
@@ -109,6 +136,13 @@ export function useUploadQueue() {
       router.refresh()
     }
     if (!batch.failure) notifyUploaded(batch.uploaded)
+    else if (batch.failure.cancelled)
+      toast({
+        title: 'Upload cancelled',
+        description: batch.uploaded.length
+          ? `${batch.uploaded.length} ${batch.uploaded.length === 1 ? 'file was' : 'files were'} already uploaded.`
+          : 'Nothing was uploaded.',
+      })
     else {
       const { message, remaining } = batch.failure
       toast({
@@ -130,16 +164,32 @@ export function useUploadQueue() {
     return batch
   }
 
+  /** The options with the account key to encrypt for, or null when the keys are locked. */
+  const prepared = (
+    options: UploadOptions,
+    plain: boolean | undefined
+  ): UploadOptions | null => {
+    if (plain) return options
+    if (!encryption.encryptFor) {
+      notifyKeysLocked()
+      return null
+    }
+    return { ...options, encryptFor: encryption.encryptFor }
+  }
+
   const uploadFiles = async (
     batch: readonly File[],
-    options: UploadOptions
+    options: UploadOptions,
+    { plain }: { plain?: boolean } = {}
   ): Promise<UploadBatch | null> => {
     if (queue.getState().uploading) {
       notifyUploadInProgress()
       return null
     }
-    return settle(await queue.uploadFiles(batch, options), (remaining) => {
-      void uploadFiles(remaining, options)
+    const ready = prepared(options, plain)
+    if (!ready) return null
+    return settle(await queue.uploadFiles(batch, ready), (remaining) => {
+      void uploadFiles(remaining, options, { plain })
     })
   }
 
@@ -151,9 +201,19 @@ export function useUploadQueue() {
       queue.add(selected, maxSize),
     remove: queue.remove,
     clear: queue.clear,
-    /** Sends the queued files; the ones that weren't sent stay queued. */
-    upload: async (options: UploadOptions) =>
-      settle(await queue.upload(options)),
+    /**
+     * Sends the queued files; the ones that weren't sent stay queued. Files
+     * are encrypted in this browser unless `plain` is set.
+     */
+    upload: async (
+      options: UploadOptions,
+      { plain }: { plain?: boolean } = {}
+    ) => {
+      const ready = prepared(options, plain)
+      return ready ? settle(await queue.upload(ready)) : null
+    },
+    /** Stops the upload in progress. */
+    cancel: queue.cancel,
     /** Sends these files as one batch; a failure offers Retry instead of queueing them. */
     uploadFiles,
   }

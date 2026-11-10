@@ -17,7 +17,10 @@ import {
   KeyRound,
   Loader2,
   Lock,
+  LockKeyhole,
   MoreHorizontal,
+  ShieldCheck,
+  ShieldOff,
   Tag,
   Timer,
 } from 'lucide-react'
@@ -29,6 +32,8 @@ import {
   type FileActionId,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
+import { EncryptedFilePasswordDialog } from '@/components/encryption/file-password-dialog'
+import { UnlockDialog } from '@/components/encryption/unlock-dialog'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
@@ -55,11 +60,20 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { type OpenedFile, shareSecretOf } from '@/lib/e2ee/client/files'
+import { shareLink } from '@/lib/e2ee/link'
+import {
+  decryptionProblem,
+  fetchDecrypted,
+  saveDecrypted,
+} from '@/lib/files/encrypted-client'
 import { filePasswordHint } from '@/lib/files/password-policy'
+import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
+import { useEncryptedFile } from '@/hooks/use-encrypted-file'
 import { useOcr } from '@/hooks/use-ocr'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useRequestLifetime } from '@/hooks/use-request-lifetime'
@@ -93,10 +107,133 @@ interface FileCardProps {
 }
 
 /**
- * One file in the library. It shows the file it is given; each action ends
- * by asking the library to reload, which brings the changed file.
+ * One file in the library. A plain file shows as the server sent it. An
+ * encrypted file shows its name and type once this browser opened them with
+ * the account key (docs/e2ee-spec.md, section 9.3), and a locked placeholder
+ * until then.
  */
-export function FileCard({
+export function FileCard(props: FileCardProps) {
+  const encryption = useEncryptedFile(props.file)
+  if (!encryption) return <OpenFileCard {...props} />
+  if (encryption.status !== 'open')
+    return <LockedFileCard {...props} state={encryption.status} />
+  const { opened } = encryption
+  return (
+    <OpenFileCard
+      {...props}
+      opened={opened}
+      file={{
+        ...props.file,
+        // Decrypted text is not trusted: it is cleaned before it is shown.
+        name: safeFileName(opened.name),
+        mimeType: normalizedType(opened.type) || 'application/octet-stream',
+      }}
+      // Thumbnails, the image gallery and archive tools read file content
+      // on the server, which holds only ciphertext.
+      onPreview={undefined}
+      onBrowseArchive={undefined}
+    />
+  )
+}
+
+/**
+ * An encrypted file this browser cannot open yet. It keeps the size of a
+ * card, so the grid does not move when the keys unlock.
+ */
+function LockedFileCard({
+  file,
+  state,
+  selected,
+  onSelect,
+}: FileCardProps & { state: 'locked' | 'opening' | 'failed' }) {
+  const [unlocking, setUnlocking] = useState(false)
+  return (
+    <Card
+      data-encrypted-file={state}
+      className={cn(
+        'relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-card/80 shadow-sm backdrop-blur-xl',
+        selected && 'border-primary'
+      )}
+    >
+      <div className="relative flex aspect-square flex-col items-center justify-center gap-3 bg-muted/50 px-4 text-center">
+        {state === 'opening' ? (
+          <Loader2
+            className="h-8 w-8 animate-spin text-muted-foreground"
+            aria-hidden="true"
+          />
+        ) : (
+          <LockKeyhole
+            className="h-10 w-10 text-muted-foreground"
+            aria-hidden="true"
+          />
+        )}
+        <p className="text-pretty text-xs leading-relaxed text-muted-foreground">
+          {state === 'locked'
+            ? 'Unlock your keys to see this file.'
+            : state === 'opening'
+              ? 'Decrypting…'
+              : 'Your keys do not open this file.'}
+        </p>
+        {state === 'locked' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-background"
+            onClick={() => setUnlocking(true)}
+          >
+            Unlock
+          </Button>
+        )}
+        {onSelect && (
+          <label className="absolute left-2 top-2 z-10 flex cursor-pointer items-center rounded-lg border border-border/50 bg-background/95 p-2 shadow-sm">
+            <input
+              type="checkbox"
+              checked={!!selected}
+              onChange={onSelect}
+              aria-label="Select encrypted file"
+              className="h-4 w-4 cursor-pointer accent-primary"
+            />
+          </label>
+        )}
+        <div className="pointer-events-none absolute inset-x-2 bottom-2 flex items-end justify-between gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1">
+            <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+            Encrypted
+          </span>
+          <span
+            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1"
+            title={format(new Date(file.uploadedAt), 'PPP p')}
+          >
+            <Clock className="h-3 w-3" aria-hidden="true" />
+            {getRelativeTime(new Date(file.uploadedAt))}
+          </span>
+        </div>
+      </div>
+      <div className="border-t border-border/40 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-sm font-medium text-muted-foreground">
+            Encrypted file
+          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {formatFileSize(file.size)}
+          </span>
+        </div>
+        <div className="mt-1 flex h-5 items-center text-xs text-muted-foreground">
+          {file.visibility === 'PUBLIC' ? 'Public' : 'Private'}
+        </div>
+      </div>
+      <UnlockDialog open={unlocking} onOpenChange={setUnlocking} />
+    </Card>
+  )
+}
+
+/**
+ * A file the browser can show. It shows the file it is given; each action
+ * ends by asking the library to reload, which brings the changed file.
+ * `opened` is set for an encrypted file: its actions then run in this
+ * browser, with the file's key.
+ */
+function OpenFileCard({
   file,
   onDelete,
   onUpdate,
@@ -109,7 +246,8 @@ export function FileCard({
   onFolderSelect,
   selected,
   onSelect,
-}: FileCardProps) {
+  opened,
+}: FileCardProps & { opened?: OpenedFile }) {
   const { user } = usePermissions()
   const { toast } = useToast()
   const lifetime = useRequestLifetime()
@@ -128,6 +266,7 @@ export function FileCard({
   const ocr = useOcr(urls.ocr)
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const handlePasswordDialogOpenChange = (open: boolean) => {
     if (mutation === 'password') return
@@ -139,13 +278,25 @@ export function FileCard({
     const { signal } = lifetime.current
     if (signal.aborted) return
     try {
+      const page = fileUrls(file, { origin: window.location.origin }).page
       await navigator.clipboard.writeText(
-        fileUrls(file, { origin: window.location.origin }).page
+        // The key goes after `#`, which browsers do not send to a server
+        // (docs/e2ee-spec.md, section 10.3).
+        opened
+          ? shareLink(
+              page,
+              shareSecretOf(opened, file.encryption?.passwordStanza)
+            )
+          : page
       )
       if (signal.aborted) return
       toast({
         title: 'Link copied',
-        description: 'Your file is ready to share.',
+        description: opened
+          ? file.hasPassword
+            ? 'The link opens the file together with its password.'
+            : 'The link holds the key. Anyone who has it can open the file.'
+          : 'Your file is ready to share.',
       })
     } catch {
       if (signal.aborted) return
@@ -154,6 +305,28 @@ export function FileCard({
         description: 'Open the file and copy its address from your browser.',
         variant: 'destructive',
       })
+    }
+  }
+
+  const handleDownload = async () => {
+    const { signal } = lifetime.current
+    if (!opened || downloading || signal.aborted) return
+    setDownloading(true)
+    try {
+      // Saved only after every chunk and the end of the file verified.
+      saveDecrypted(
+        await fetchDecrypted(file, opened, { download: true, signal }),
+        opened.name
+      )
+    } catch (error) {
+      if (signal.aborted) return
+      toast({
+        title: 'Couldn’t download this file',
+        description: decryptionProblem(error),
+        variant: 'destructive',
+      })
+    } finally {
+      if (!signal.aborted) setDownloading(false)
     }
   }
 
@@ -291,7 +464,8 @@ export function FileCard({
     }
   }
 
-  const isImage = file.mimeType.startsWith('image/')
+  // An encrypted image has no thumbnail and no server-side text yet.
+  const isImage = !opened && file.mimeType.startsWith('image/')
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const tags = file.tags ?? []
@@ -308,7 +482,9 @@ export function FileCard({
     ...(browseArchive && { browseArchive: { run: browseArchive } }),
     open: { href: urls.page },
     copyLink: { run: () => void handleCopyLink() },
-    download: { href: urls.download, download: file.name },
+    download: opened
+      ? { run: () => void handleDownload(), disabled: downloading }
+      : { href: urls.download, download: file.name },
     ...(onEditTags && { editTags: { run: onEditTags } }),
     ...(onMove && { move: { run: onMove } }),
     visibility: {
@@ -548,6 +724,24 @@ export function FileCard({
               <VisibilityIcon className="h-3 w-3" />
             )}
             {file.hasPassword ? 'Protected' : visibilityLabel}
+            <span
+              className="ml-0.5 inline-flex items-center border-l border-border/60 pl-1.5"
+              title={
+                opened
+                  ? 'Encrypted: the server cannot read this file'
+                  : 'Plain: stored without encryption'
+              }
+              data-file-encryption={opened ? 'encrypted' : 'plain'}
+            >
+              {opened ? (
+                <ShieldCheck className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <ShieldOff className="h-3 w-3" aria-hidden="true" />
+              )}
+              <span className="sr-only">
+                {opened ? 'Encrypted' : 'Plain file'}
+              </span>
+            </span>
           </span>
           <span
             className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm"
@@ -571,6 +765,15 @@ export function FileCard({
               })}
             </span>
           </button>
+        )}
+        {downloading && (
+          <div
+            role="status"
+            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
+          >
+            <Loader2 className="h-7 w-7 animate-spin text-primary" />
+            <span className="text-sm font-medium">Decrypting…</span>
+          </div>
         )}
         {ocr.loading && (
           <div
@@ -665,8 +868,17 @@ export function FileCard({
         </div>
       </div>
 
+      {opened && (
+        <EncryptedFilePasswordDialog
+          file={file}
+          opened={opened}
+          open={isPasswordDialogOpen}
+          onOpenChange={setIsPasswordDialogOpen}
+          onUpdated={onUpdate}
+        />
+      )}
       <Dialog
-        open={isPasswordDialogOpen}
+        open={!opened && isPasswordDialogOpen}
         onOpenChange={handlePasswordDialogOpenChange}
       >
         <DialogContent className="rounded-2xl sm:max-w-md">

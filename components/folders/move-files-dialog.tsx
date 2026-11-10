@@ -22,6 +22,7 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { apiRequest } from '@/lib/client/request'
+import { displayFileName } from '@/lib/files/display-name'
 import { folderPath } from '@/lib/folders/navigation'
 import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
 import { cn } from '@/lib/utils'
@@ -144,7 +145,7 @@ export function MoveFilesDialog({
               <>
                 Choose a folder for{' '}
                 <span className="font-medium text-foreground">
-                  {files[0].name}
+                  {displayFileName(files[0])}
                 </span>
                 .
               </>

@@ -97,7 +97,9 @@ export async function queueFileExpiration(
       payload: {
         fileId: file.id,
         userId: file.userId,
-        fileName: file.name,
+        // No name for an encrypted file: the event carries the identifier
+        // only (docs/e2ee-spec.md, section 9.3).
+        ...(file.name && { fileName: file.name }),
         expiresAt: expiry.expiresAt.toISOString(),
         action: expiry.action,
       },
@@ -108,7 +110,7 @@ export async function queueFileExpiration(
     category: 'files',
     targetType: 'file',
     targetId: file.id,
-    targetName: file.name,
+    targetName: file.name || undefined,
     details: {
       ownerId: file.userId,
       expiresAt: expiry.expiresAt,
@@ -220,7 +222,7 @@ export async function cancelFileExpiration(
         category: 'files',
         targetType: 'file',
         targetId: file.id,
-        targetName: file.name,
+        targetName: file.name || undefined,
         details: {
           ownerId: file.userId,
           count,
@@ -317,7 +319,7 @@ export async function applyFileExpiration(
           actorName: 'System',
           targetType: 'file',
           targetId: file.id,
-          targetName: file.name,
+          targetName: file.name || undefined,
           details: {
             ownerId: file.userId,
             eventId: current.id,

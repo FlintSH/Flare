@@ -19,6 +19,23 @@ Every card has the same layout and height, whether or not a file has tags or a f
 
 A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
+## Encrypted files in the library
+
+The server sends the library no names for encrypted files. Your browser opens each name and type with your account key, so an encrypted file looks like any other once your keys are unlocked. A small shield on each card says which kind it is: a checked shield for **Encrypted**, a crossed shield for **Plain**.
+
+<Screenshot src="/screenshots/encryption/library-encrypted.webp" alt="File library with five encrypted files showing their names, file-type icons and a shield mark" caption="With your keys unlocked, encrypted files show their real names." />
+
+When your keys are locked in this browser, for example after signing in with a passkey or single sign-on, each encrypted file is a placeholder that says **Unlock your keys to see this file**. Choose **Unlock** on a card or in the notice at the top and enter your [passphrase](./passphrase).
+
+<Screenshot src="/screenshots/encryption/library-locked.webp" alt="File library with locked keys: each encrypted file is a placeholder with a lock, its size and an Unlock button" caption="Locked keys leave a placeholder with the size and date, which the server does know." />
+
+For an encrypted file in this release:
+
+- **Copy link**, **Download file**, **Change visibility**, **Manage expiration**, **Move to folder**, **Edit tags**, the password dialog and **Delete file** work. Download decrypts in your browser and saves the file only after it passed its integrity check.
+- The card shows a file-type icon, not a thumbnail, and opens the share page instead of the image viewer.
+- **Extract text (OCR)** and **Browse archive** are not offered, and **Create archive** is disabled while the selection includes an encrypted file.
+- **Search** and the **File type** filter do not find encrypted files. The server searches names and types, and it has neither. The library says so while a search is active.
+
 ## Scroll through your library
 
 Scroll normally with your mouse, trackpad, or touch screen. More files load as you reach them, without a **Next page** button. You can browse every matching file without changing pages.

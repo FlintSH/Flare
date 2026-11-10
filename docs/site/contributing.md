@@ -452,6 +452,35 @@ pnpm exec vitest run __tests__/e2ee/client
 
 They check Argon2id through WebAssembly against the real-parameter vector and the other passphrase vectors of `lib/e2ee/vectors/v1.json` and against the pure JavaScript implementation, the state machine of the key store, the signed request against the server's verifier, rotation and recovery material, and the strength check.
 
+### Encrypted file browser checks
+
+`scripts/e2ee/verify-files.cjs` drives [encrypted files](/guide/encryption) in headless Chromium against a production build: upload, library, download, share pages, passwords, pastes, link previews, hostile content, the moderator view, short links and the page script policy. It seeds two accounts with keys into a disposable database named exactly `flare_e2ee_files_local` and removes them at the next run.
+
+The browser does not talk to the application directly. The script starts a small recording proxy on port 3094 and forwards to the application on port 3093, so `NEXTAUTH_URL` names the proxy:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_files_local'
+export NEXTAUTH_URL='http://localhost:3094'
+export NEXTAUTH_SECRET='public-disposable-e2ee-files-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3093
+```
+
+In another terminal, with the same `DATABASE_URL` and the documentation dependencies installed for Playwright:
+
+```sh
+node scripts/e2ee/verify-files.cjs
+```
+
+`FLARE_E2EE_FILES_ORIGIN` and `FLARE_E2EE_FILES_UPSTREAM` select other loopback addresses. The run uploads real files through the real forms, an 11 MiB file among them, and reads the application's own `uploads/` directory to check what was stored. Nothing is stubbed.
+
+The proxy keeps the request target, headers and body of every request as they arrived. At the end the script opens each file's records with independent code (`@noble/*`, not the application bundle), derives every key the browser made, and fails if any request holds a file key, a key derived from one, a link secret, the account private key, the passphrase, a file password, a link fragment, plaintext of an encrypted file, or its file name. It also fails if any request target contains `#`. The same search must find the one plain upload's name and bytes, which proves that it can find something.
+
+What the run cannot show: the PDF preview in a sandboxed frame, because Chromium does not open PDFs there and offers the download; the video scenario needs an `ffmpeg` with `libvpx` to make its fixture (`FLARE_FFMPEG` names one) and is reported as skipped without it; and it does not test S3 storage.
+
+`FLARE_E2EE_SCREENSHOTS` names a directory for captures, `FLARE_E2EE_VIEWPORT=mobile` and `FLARE_E2EE_THEME=light` choose the variant, and `FLARE_E2EE_DEBUG` names a directory for a picture of each page when a run fails. Handbook images in `docs/images/encryption/` come from the desktop dark captures; inspect each before replacing a source image. Every secret in the script is a public fixture.
+
 ### How the browser suites sign in
 
 Every browser suite under `scripts/` signs in the way a person does: the address, **Continue**, then the passphrase. `scripts/shared/passphrase-accounts.cjs` holds what they share.

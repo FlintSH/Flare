@@ -107,6 +107,7 @@ export {
   publicUnwrap,
   publicWrap,
   unwrapAccountStanza,
+  unwrapAccountStanzaWithSharedSecret,
   unwrapFolderFileStanza,
   unwrapFolderLinkSecretStanza,
   unwrapParentFolderStanza,
@@ -118,4 +119,5 @@ export {
   wrapPasswordStanza,
 } from './stanza'
 export * from './records'
+export * from './link'
 export * from './random'

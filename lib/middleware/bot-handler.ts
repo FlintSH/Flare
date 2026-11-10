@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+import { isEncryptedFilePath } from '@/lib/files/encrypted-id'
+
 import { VIDEO_EXTENSIONS, isFileUrlPath } from './constants'
 
 export function isBotRequest(userAgent: string): boolean {
@@ -20,6 +22,11 @@ export function handleBotRequest(request: NextRequest): NextResponse | null {
   if (!isBotRequest(userAgent) || !isFileUrlPath(request.nextUrl.pathname)) {
     return null
   }
+
+  // An encrypted file has no content a crawler can read: `/raw` answers 404
+  // for it. The crawler gets the share page, whose metadata is the generic
+  // preview (docs/e2ee-spec.md, section 11.3).
+  if (isEncryptedFilePath(request.nextUrl.pathname)) return NextResponse.next()
 
   const fileExt = request.nextUrl.pathname.split('.').pop()?.toLowerCase()
   const isVideo = fileExt && VIDEO_EXTENSIONS.includes(fileExt)

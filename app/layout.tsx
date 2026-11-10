@@ -2,6 +2,7 @@ import { cache } from 'react'
 
 import type { Metadata } from 'next'
 import localFont from 'next/font/local'
+import { headers } from 'next/headers'
 
 import { AppearanceProvider } from '@/components/customization/appearance-provider'
 import { CustomHead } from '@/components/layout/custom-head'
@@ -20,6 +21,7 @@ import { getConfigOrDefaults } from '@/lib/config'
 import { faviconUrl } from '@/lib/customization/favicon'
 import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
+import { NONCE_HEADER } from '@/lib/security/csp'
 import { pageSetupStatus } from '@/lib/setup/status'
 
 import './globals.css'
@@ -116,6 +118,10 @@ export default async function RootLayout({
   const hasCustomFont =
     !recovery && config.settings.advanced.customCSS.includes('font-family')
 
+  // The script policy of this response (lib/security/csp.ts) runs only
+  // scripts with this nonce. The scripts Flare writes itself get it here.
+  const nonce = (await headers()).get(NONCE_HEADER) ?? undefined
+
   // Inter is defined on <html>, where the studio's Typeface reads --font-inter.
   return (
     <html lang="en" className={inter.variable} suppressHydrationWarning>
@@ -124,6 +130,7 @@ export default async function RootLayout({
         {recordMeticulous && (
           // eslint-disable-next-line @next/next/no-sync-scripts
           <script
+            nonce={nonce}
             data-recording-token={
               process.env.NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN
             }
@@ -132,6 +139,16 @@ export default async function RootLayout({
             src="https://snippet.meticulous.ai/v1/meticulous.js"
           />
         )}
+        {/* Zod tests once whether it may compile validators with `Function`.
+            The script policy forbids that, and the refused test would be
+            reported as a violation on every page. This tells Zod, before
+            any bundle runs, not to try in the browser. */}
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{
+            __html: 'globalThis.__zod_globalConfig={jitless:true}',
+          }}
+        />
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <ThemeInitializer recovery={recovery} />
@@ -149,6 +166,7 @@ export default async function RootLayout({
           }
           enableSystem
           disableTransitionOnChange
+          nonce={nonce}
         >
           <QueryProvider>
             <AuthProvider session={session}>

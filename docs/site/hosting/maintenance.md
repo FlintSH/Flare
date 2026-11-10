@@ -165,7 +165,7 @@ Migration `20261110000000_e2ee_account_keys` adds six nullable columns to `User`
 - The recovery phrase is the only way back in with their encrypted files if they forget it. They should store it offline.
 - Screenshot tools and API tokens keep working through the upgrade. A later passphrase change cancels them.
 
-[Passphrase and recovery phrase](/guide/passphrase) is the page for users. Files are not encrypted by this release; the keys are in place for the release that does.
+[Passphrase and recovery phrase](/guide/passphrase) is the page for users. The account keys are what [encrypted files](#encrypted-files-migration) are encrypted to.
 
 **Set up encryption needs a sign-in from the last five minutes**, measured by the server's clock. Keep the clocks of every replica synchronized, as for the other [recent sign-in checks](/admin/users#account-sign-in-security).
 
@@ -176,6 +176,23 @@ The sealed values and public keys are part of the database, so database backups 
 Fake salts for unknown sign-in addresses come from `NEXTAUTH_SECRET`. Changing that secret changes them, which lets an observer who recorded earlier answers tell which addresses have no account. It affects nothing else here: no account key depends on `NEXTAUTH_SECRET`.
 
 Keep the reverse proxy [passing request paths through unchanged](/hosting/reverse-proxy#pass-request-paths-through-unchanged); passphrase changes depend on it.
+
+### Encrypted files migration
+
+Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `encrypted` (false for every existing file), the 26-byte file `header`, `sealedMetadata`, `accountStanza`, `stanzaAccountPublicKey`, and `passwordStanza`. A check constraint requires an encrypted row to have its records, an empty `name`, the type `application/octet-stream`, no password hash and no OCR text, and a plain row to have none of the records. The migration only adds columns: it does not touch existing files, their addresses, or their stored objects, and it needs no downtime beyond the usual `migrate deploy`.
+
+**What changes for people.** Uploads made in the browser are encrypted by default from this release on. Existing files stay plain. Each person needs their [account keys](#account-key-migration) set up and unlocked to upload. Uploads from screenshot tools, the account upload token and API tokens stay plain and need no change. [Encrypted and plain files](/guide/encryption) is the page for users, including what does not work yet for encrypted files.
+
+**What changes for you.**
+
+- **Storage holds ciphertext for encrypted files.** The object key is `uploads/{urlId}/{uuid}/{fileId}`, with a random file ID and no filename. A stored object starts with the 8 bytes `FLAREE2E`. You cannot inspect, scan, deduplicate or thumbnail these objects, and neither can antivirus or DLP tooling that reads the bucket.
+- **Back up the database and the storage together.** An encrypted object is useless without its `File` row, which holds the sealed name and the stanza that carries its key, and without the owner's account record. A storage-only restore yields unnamed ciphertext. Restore both from the same point in time.
+- **You cannot recover an encrypted file for a user.** If they lose their passphrase and their recovery phrase, their encrypted files are unreadable for everyone. Plain files are unaffected.
+- **Webhooks send version 2 of `file.ready`** for every file. See the [webhook change](/api/webhooks#version-2). Deliveries queued before the upgrade keep the version 1 payload they were queued with.
+- **A page script policy is now sent.** Review your proxy against [Content-Security-Policy](/hosting/reverse-proxy#content-security-policy): a proxy that caches HTML, injects scripts, or adds its own policy needs changing.
+- **Quotas count ciphertext**, which is the file size plus 26 bytes and 32 bytes per 64 KiB: about 0.05% more.
+
+Rolling back to a build before this migration leaves encrypted rows that the older build would serve as nameless binary files. Delete or keep them knowingly; do not roll back the migration itself while such rows exist.
 
 ### Invite links migration
 
