@@ -529,7 +529,7 @@ Recovery sets a new passphrase, thus recovery is a key rotation too.
 
 ### 6.9 Reset without the mnemonic
 
-**PROPOSED**
+**AGREED**
 
 This procedure is for a user who lost the passphrase and the mnemonic. It
 is also the only thing that a reset by email or by an administrator can do.
@@ -1778,9 +1778,7 @@ after the upgrade.
    Reason: the browser stores the account private key. A person who steals
    it could sign in without the passphrase and without the second factor.
    No client in this document needs that sign-in. The authors must confirm.
-6. **Reset without the mnemonic.** Section 6.9 is new. The authors must
-   confirm it.
-7. **File name in the header.** The name is in the header, and
+6. **File name in the header.** The name is in the header, and
    `header_hash` is in each chunk tag and in each stanza. Thus a new name
    would need a new tag for each chunk and a new stanza for each recipient.
    Flare cannot rename a file today, thus this is not a defect now. If a
