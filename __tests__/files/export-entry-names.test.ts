@@ -10,6 +10,27 @@ function nameAll(names: string[], date = '2026-10-01') {
 }
 
 describe('data export entry names', () => {
+  it('names the ciphertext of an encrypted file by its identifier, with no character that could leave the folder', () => {
+    const next = exportEntryNamer()
+    const entry = (urlPath: string) =>
+      next({
+        name: '',
+        uploadedAt: day('2026-10-01'),
+        encrypted: true,
+        urlPath,
+      })
+    expect(entry('/alex/e_AAAAAAAAAAAAAAAAAAAAAA')).toBe(
+      'files/2026-10-01/e_AAAAAAAAAAAAAAAAAAAAAA.flare-encrypted'
+    )
+    // An identifier from a server that lies cannot name another directory.
+    expect(entry('/alex/..\\..\\..\\x')).toBe(
+      'files/2026-10-01/x.flare-encrypted'
+    )
+    expect(entry('/alex/\u202e..')).toBe(
+      'files/2026-10-01/file.flare-encrypted'
+    )
+  })
+
   it('numbers repeated names per day, ignoring case', () => {
     const next = exportEntryNamer()
     expect(

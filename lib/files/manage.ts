@@ -112,6 +112,15 @@ export async function updateFileSettings(
   const data: Prisma.FileUpdateInput = {}
   if (visibility) data.visibility = visibility
   if (current.encrypted) {
+    // A moderator can restrict an encrypted file and cannot publish it. The
+    // owner's browser gives a public file in a folder to everyone who has
+    // the folder link (docs/e2ee-spec.md, sections 8.4.3 and 9.4.7), so the
+    // choice to publish is the owner's only (section 13, requirement 4).
+    if (authority.as === 'moderator' && visibility === 'PUBLIC')
+      throw new HttpError(
+        403,
+        'Only the owner can make an encrypted file public.'
+      )
     // The server checks no password for an encrypted file. Its password is
     // a stanza that only the owner's client can make.
     if (password !== undefined)

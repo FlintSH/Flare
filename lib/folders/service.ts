@@ -421,6 +421,13 @@ export async function storeFolderKeys(userId: string, input: FolderKeysInput) {
         data: { folderStanza: null, folderStanzaPublicKey: null },
       })
     }
+    // The plain names of these folders leave the audit records that were
+    // written while the server had them (section 9.4.1).
+    if (ids.length)
+      await tx.$executeRaw`
+        UPDATE "AuditEvent" SET "targetName" = NULL,
+          details = details #- '{before,name}' #- '{after,name}'
+        WHERE "targetType" = 'folder' AND "targetId" = ANY(${ids})`
     for (const entry of input.parentStanzas) {
       const folder = await tx.vaultFolder.findFirst({
         where: { id: entry.id, userId },

@@ -98,6 +98,19 @@ describe('password of an encrypted file (section 8.2)', () => {
     })
   })
 
+  it('lets a moderator restrict an encrypted file and never publish it', async () => {
+    mocks.file.findUnique.mockResolvedValue(row(true))
+    await expect(
+      updateFileSettings(moderator, 'file-one', { visibility: 'PUBLIC' })
+    ).rejects.toMatchObject({ status: 403 })
+    expect(mocks.file.update).not.toHaveBeenCalled()
+    // The owner publishes it, and a moderator publishes a plain file.
+    await updateFileSettings(owner, 'file-one', { visibility: 'PUBLIC' })
+    mocks.file.findUnique.mockResolvedValue(row(false))
+    await updateFileSettings(moderator, 'file-one', { visibility: 'PUBLIC' })
+    expect(mocks.file.update).toHaveBeenCalledTimes(2)
+  })
+
   it('refuses a stanza of the wrong length or version, and one for a plain file', async () => {
     mocks.file.findUnique.mockResolvedValue(row(true))
     const short = base64urlEncode(stanza.subarray(0, 216))

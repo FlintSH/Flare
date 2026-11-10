@@ -118,8 +118,17 @@ export async function replaceAccountStanzas(
       )
     let replaced = 0
     for (const stanza of input.stanzas) {
+      // Only a stanza of an older key is replaced. A stanza that is for
+      // the current key already opens the file: a request that replaces it
+      // could only destroy the file key.
       const changed = await tx.file.updateMany({
-        where: { id: stanza.id, userId, encrypted: true, unreadable: false },
+        where: {
+          id: stanza.id,
+          userId,
+          encrypted: true,
+          unreadable: false,
+          NOT: { stanzaAccountPublicKey: sentKey },
+        },
         data: {
           accountStanza: stanza.accountStanza,
           stanzaAccountPublicKey: sentKey,

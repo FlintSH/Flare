@@ -24,6 +24,12 @@ import { fileListItem, fileListSelect } from './gallery-navigation'
 
 export const SYNC_PAGE_SIZE = 200
 export const SYNC_PAGE_MAX = 500
+/**
+ * The most sealed image text in one answer. One record can hold 256 KiB of
+ * it, so a page of the most rows could be more than 100 MiB. A page ends
+ * when the text of its rows passes this number. It always has one row.
+ */
+export const SYNC_PAGE_BYTES = 8 * 1024 * 1024
 export const SYNC_INDEX_PAGE_SIZE = 5000
 
 const syncSelect = {
@@ -69,21 +75,45 @@ async function syncState(userId: string): Promise<SyncState> {
 export async function syncEncryptedFiles(
   userId: string,
   since: number,
-  limit = SYNC_PAGE_SIZE
+  limit = SYNC_PAGE_SIZE,
+  maxBytes = SYNC_PAGE_BYTES
 ) {
   const take = Math.min(Math.max(1, limit), SYNC_PAGE_MAX)
   // The state first: a change that commits after it shows as a difference,
   // and the client asks again.
   const state = await syncState(userId)
+  // The sizes first, without the text: the page is cut before the server
+  // reads more sealed text than one answer may hold.
+  const sizes = await prisma.$queryRaw<{ syncSeq: number; bytes: number }[]>`
+    SELECT f."syncSeq", COALESCE(octet_length(d."sealedOcrText"), 0)::int AS bytes
+    FROM "File" f
+    LEFT JOIN "FileSealedData" d ON d."fileId" = f."id"
+    WHERE f."userId" = ${userId} AND f."encrypted" AND NOT f."unreadable"
+      AND f."syncSeq" > ${since}
+    ORDER BY f."syncSeq" ASC
+    LIMIT ${take + 1}`
+  let kept = 0
+  let bytes = 0
+  while (kept < Math.min(sizes.length, take)) {
+    bytes += sizes[kept].bytes
+    if (kept > 0 && bytes > maxBytes) break
+    kept++
+  }
+  if (!kept) return { records: [], more: false, state }
+  // A row that changed since the first read has a later `syncSeq` now. It
+  // is left out here and comes with a later page, so the last `seq` of
+  // this page stays a correct place to go on from.
   const rows = await prisma.file.findMany({
-    where: { ...readable(userId), syncSeq: { gt: since } },
+    where: {
+      ...readable(userId),
+      syncSeq: { gt: since, lte: sizes[kept - 1].syncSeq },
+    },
     orderBy: { syncSeq: 'asc' },
-    take: take + 1,
     select: syncSelect,
   })
   return {
-    records: await records(rows.slice(0, take)),
-    more: rows.length > take,
+    records: await records(rows),
+    more: sizes.length > kept,
     state,
   }
 }

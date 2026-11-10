@@ -33,9 +33,16 @@ export function exportEntryNamer() {
     const folder = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
     // The server has no name for an encrypted file. Its entry is the
     // ciphertext, named by the public file identifier.
+    // The identifier comes from the server, so only the characters of a
+    // file identifier stay: a ZIP entry must not name another directory.
     const encryptedName =
       file.encrypted && file.urlPath
-        ? `${file.urlPath.split('/').at(-1)}.flare-encrypted`
+        ? `${
+            (file.urlPath.split('/').at(-1) ?? '').replace(
+              /[^A-Za-z0-9_-]/g,
+              ''
+            ) || 'file'
+          }.flare-encrypted`
         : null
     // Older chunked uploads could save a path as the name; keep its last part.
     const name =

@@ -694,7 +694,7 @@ A sealed record for a plain file answers `400`, and for an unreadable file `409`
 
 **`GET /api/files/sync`** has three forms:
 
-- `?since={n}&limit={1-500}` answers `{ "records": [...], "more": false, "state": { "count": 812, "sum": "9914573" } }`. Each record is the row of `GET /api/files` for one encrypted file, with `seq` and `sealedOcrText`. Records come in the order of `seq`, a number that moves whenever a listed value of the file, its tags or its image text changes. Views and downloads do not move it.
+- `?since={n}&limit={1-500}` answers `{ "records": [...], "more": false, "state": { "count": 812, "sum": "9914573" } }`. Each record is the row of `GET /api/files` for one encrypted file, with `seq` and `sealedOcrText`. Records come in the order of `seq`, a number that moves whenever a listed value of the file, its tags or its image text changes. Views and downloads do not move it. A page also ends when its `sealedOcrText` values pass 8 MiB together, so it can hold fewer records than `limit`: go on from the last `seq` while `more` is true.
 - `?ids=a,b,c`, up to 100, answers the records of those files.
 - `?index=1&after={id}` answers `{ "entries": [["id", 41], …], "more": false }`, 5,000 per page.
 
@@ -706,7 +706,7 @@ A sealed record for a plain file answers `400`, and for an unreadable file `409`
 
 `POST /api/auth/e2ee/rotation` and `POST /api/auth/e2ee/recovery` take two more fields, described in [account keys](./account-keys): `folders`, a new `sealedFolderPrivateKey` for each folder that has keys, and `tags`, a new `sealedTagMetadata` for each sealed tag. A request that does not cover exactly those folders and tags answers `409` with `"code": "library_records_incomplete"`, and nothing is changed.
 
-After a rotation **`GET /api/files/stanzas`** answers `{ "stanzas": [{ "id", "header", "sealedMetadata", "accountStanza", "stanzaAccountPublicKey" }], "remaining": 3400, "oldKeys": ["…"] }` and **`PUT /api/files/stanzas`** takes `{ "stanzaAccountPublicKey", "stanzas": [{ "id", "accountStanza" }] }`, up to 100. When `oldKeys` no longer names an old key, the browser stores a keyring without it through `PUT /api/auth/e2ee/keyring`.
+After a rotation **`GET /api/files/stanzas`** answers `{ "stanzas": [{ "id", "header", "sealedMetadata", "accountStanza", "stanzaAccountPublicKey" }], "remaining": 3400, "oldKeys": ["…"] }` and **`PUT /api/files/stanzas`** takes `{ "stanzaAccountPublicKey", "stanzas": [{ "id", "accountStanza" }] }`, up to 100. It replaces only a stanza that is still for an old key: a stanza for the current key stays as it is, and `replaced` in the answer counts what changed. When `oldKeys` no longer names an old key, the browser stores a keyring without it through `PUT /api/auth/e2ee/keyring`.
 
 `POST /api/auth/e2ee/reset` sets `unreadable` on every encrypted file of the account, clears their flags and folder stanzas, and turns each folder with keys and each sealed tag back into a plain one named `Folder` or `Tag` with the last six characters of its ID, without a share link.
 

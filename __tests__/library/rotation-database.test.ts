@@ -294,6 +294,30 @@ describe.skipIf(!databaseUrl)(
         })
         expect(opened.name).toBe(name)
       }
+      // A stanza for the current key is not replaced: a request that sends
+      // another one could only destroy the file key.
+      const untouched = await prisma.file.findUniqueOrThrow({
+        where: { id: first.id },
+      })
+      const other = new Uint8Array(97).fill(7)
+      other[0] = 1
+      expect(
+        await migration.replaceAccountStanzas(
+          owner,
+          migration.accountStanzasSchema.parse({
+            stanzaAccountPublicKey: base64urlEncode(
+              next.accountKeys.accountPublicKey
+            ),
+            stanzas: [{ id: first.id, accountStanza: base64urlEncode(other) }],
+          })
+        )
+      ).toEqual({ replaced: 0 })
+      expect(
+        Buffer.from(
+          (await prisma.file.findUniqueOrThrow({ where: { id: first.id } }))
+            .accountStanza!
+        )
+      ).toEqual(Buffer.from(untouched.accountStanza!))
       // The stanza that no key opens stays, and its key stays in a keyring.
       expect(await migration.oldAccountStanzas(owner)).toMatchObject({
         remaining: 1,

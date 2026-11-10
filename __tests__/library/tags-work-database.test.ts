@@ -252,8 +252,39 @@ describe.skipIf(!databaseUrl)(
       await prisma.vaultFileTag.create({
         data: { fileId: file.id, tagId: plain.id },
       })
+      // Audit records from the time when the server had the name.
+      await prisma.auditEvent.createMany({
+        data: [
+          {
+            action: 'tag.create',
+            category: 'tags',
+            outcome: 'success',
+            targetType: 'tag',
+            targetId: plain.id,
+            targetName: 'Receipts',
+            details: { after: { id: plain.id, name: 'Receipts' } },
+          },
+          {
+            action: 'file_tag.create',
+            category: 'tags',
+            outcome: 'success',
+            targetType: 'file_tag',
+            targetId: file.id,
+            details: {
+              tagName: 'Receipts',
+              after: { fileId: file.id, tagId: plain.id, excluded: false },
+            },
+          },
+        ],
+      })
       expect(await sealPlainTags(tagsApi(), stored())).toBe(1)
       expect(await sealPlainTags(tagsApi(), stored())).toBe(0)
+      // The name left those records too, and the records stay.
+      const audited = await prisma.auditEvent.findMany({
+        where: { category: 'tags', targetId: { in: [plain.id, file.id] } },
+      })
+      expect(audited).toHaveLength(2)
+      expect(JSON.stringify(audited)).not.toContain('Receipts')
       const row = await prisma.vaultTag.findUniqueOrThrow({
         where: { id: plain.id },
       })
@@ -521,6 +552,44 @@ describe.skipIf(!databaseUrl)(
       expect(
         await prisma.fileSealedData.findUnique({ where: { fileId: file.id } })
       ).not.toBeNull()
+    })
+
+    it('ends a sync page at a size of sealed text, with one row at least', async () => {
+      const files = []
+      for (let index = 0; index < 3; index++) {
+        const file = await insertEncryptedFile(
+          prisma,
+          owner,
+          encryptedFile(keys)
+        )
+        await records.recordFileWork(
+          owner,
+          file.id,
+          records.fileWorkSchema.parse({
+            sealedOcrText: sealedOcrTextRecord(encryptedFile(keys), 'text'),
+          })
+        )
+        files.push(file)
+      }
+      const stored = await prisma.fileSealedData.findMany({
+        where: { fileId: { in: files.map((file) => file.id) } },
+      })
+      const one = stored[0].sealedOcrText!.length
+      // Room for two texts: the third file comes with the next page.
+      const page = await sync.syncEncryptedFiles(owner, 0, 10, one * 2)
+      expect(page.records.map((record) => record.id)).toEqual(
+        files.slice(0, 2).map((file) => file.id)
+      )
+      expect(page.more).toBe(true)
+      // Room for less than one text: one row all the same.
+      const next = await sync.syncEncryptedFiles(
+        owner,
+        page.records[1].seq,
+        10,
+        1
+      )
+      expect(next.records.map((record) => record.id)).toEqual([files[2].id])
+      expect(next.more).toBe(false)
     })
 
     it('syncs encrypted records by a cursor and shows every difference in its state', async () => {

@@ -9,7 +9,7 @@ Browsing folders uses `files.read`; creating and organizing them requires `folde
 
 Folders give a project or collection its own place while **All files** keeps your entire library available. Each file belongs to one folder or is unfiled. [Tags](./tags) work across folders when a file belongs to several topics.
 
-Folder and file organization changes leave IDs in the [instance audit log](/admin/audit), visible to people with `audit.read` even when the folder is not shared. The log has no folder names once your folders have keys.
+Folder and file organization changes leave IDs in the [instance audit log](/admin/audit), visible to people with `audit.read` even when the folder is not shared. The log has no folder names once your folders have keys: when your browser encrypts the name of a folder from before encryption, Flare also removes that name from the audit records it wrote earlier. Database backups made before that still hold it.
 
 Everyone initially includes folder permissions; an administrator can restrict them through roles. Creating a folder does not change file links, storage paths, visibility, or passwords.
 

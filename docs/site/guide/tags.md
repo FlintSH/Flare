@@ -18,7 +18,7 @@ Your browser seals each tag's name and rule with a key from your account key. Th
 - **Your keys must be unlocked to create or edit tags and to see their names.** While they are locked, tags show as **Encrypted tag**. Filtering by a tag still works, because the filter uses the tag's ID.
 - **Tags you had before this release are converted the first time you unlock.** Your browser seals each name and rule and the server deletes the plain ones. Tags keep their IDs, so files, upload profiles and bookmarked filters keep working.
 - **Your browser refuses a second tag with the same name.** The server cannot compare sealed names. Two browsers saving the same name at the same moment can both succeed; delete one of the tags.
-- People with `audit.read` see tag IDs and change metadata in the [instance audit log](/admin/audit), not names.
+- People with `audit.read` see tag IDs and change metadata in the [instance audit log](/admin/audit), not names. When your browser encrypts a tag from before encryption, Flare also removes its name from the audit records it wrote earlier. Database backups made before that still hold it.
 - An API request cannot create or change a tag for an account that has keys. See the [API reference](../api/files#tags-with-keys).
 
 <Screenshot src="/screenshots/timeline/library-desktop.webp" alt="The continuous file library with tags shown beneath individual file previews" caption="Labels add context to your library without changing where a file lives." />

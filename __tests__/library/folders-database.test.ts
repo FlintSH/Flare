@@ -541,6 +541,18 @@ describe.skipIf(!databaseUrl)('folder keys and stanzas (PostgreSQL)', () => {
     const file = await insertEncryptedFile(prisma, owner, encryptedFile(keys), {
       folderId: legacyChild.id,
     })
+    // An audit record from the time when the server had the name.
+    const audited = await prisma.auditEvent.create({
+      data: {
+        action: 'folder.create',
+        category: 'folders',
+        outcome: 'success',
+        targetType: 'folder',
+        targetId: legacy.id,
+        targetName: 'Receipts',
+        details: { after: { id: legacy.id, name: 'Receipts' } },
+      },
+    })
     expect(await repair()).toEqual({
       folderKeys: 2,
       parentStanzas: 1,
@@ -548,6 +560,12 @@ describe.skipIf(!databaseUrl)('folder keys and stanzas (PostgreSQL)', () => {
     })
     const rows = await prisma.vaultFolder.findMany({ where: { userId: owner } })
     expect(rows.map((row) => row.name)).toEqual(['', ''])
+    // The name left that record too, and the record stays.
+    const scrubbed = await prisma.auditEvent.findUniqueOrThrow({
+      where: { id: audited.id },
+    })
+    expect(scrubbed.targetName).toBeNull()
+    expect(scrubbed.details).toEqual({ after: { id: legacy.id } })
     let views = await service.listFolders(owner)
     expect(
       ownedFolderViews(views, stored())

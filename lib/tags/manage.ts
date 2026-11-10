@@ -136,6 +136,27 @@ export async function sealTags(userId: string, input: SealTagsInput) {
       })
       sealed += changed.count
     }
+    // The plain names of these tags leave the audit records that were
+    // written while the server had them: the events of each tag, and the
+    // events of its files, which name the tag (section 9.5).
+    const ids = input.tags.map((entry) => entry.id)
+    const owned = (
+      await tx.vaultTag.findMany({
+        where: { userId, id: { in: ids }, sealedTagMetadata: { not: null } },
+        select: { id: true },
+      })
+    ).map((tag) => tag.id)
+    if (sealed && owned.length) {
+      await tx.$executeRaw`
+        UPDATE "AuditEvent" SET "targetName" = NULL,
+          details = details #- '{before,name}' #- '{after,name}'
+        WHERE "targetType" = 'tag' AND "targetId" = ANY(${owned})`
+      await tx.$executeRaw`
+        UPDATE "AuditEvent" SET details = details - 'tagName'
+        WHERE "targetType" = 'file_tag' AND details ? 'tagName'
+          AND (details->'after'->>'tagId' = ANY(${owned})
+            OR details->'before'->>'tagId' = ANY(${owned}))`
+    }
     return { sealed }
   })
 }

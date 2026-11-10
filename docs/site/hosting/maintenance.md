@@ -185,7 +185,9 @@ Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `enc
 
 ### Encrypted library migration
 
-Migration `20261112000000_e2ee_library` adds what the library features of encrypted files store. It only adds columns, two triggers and one table, and touches no existing row.
+Migration `20261112000000_e2ee_library` adds what the library features of encrypted files store: columns, two triggers and one table. It changes no value of an existing row, but the new `syncSeq` column gets a number for every file, so PostgreSQL rewrites the `File` table and holds it locked while it does. The check constraints of this migration and of the one before it read the whole table under the same lock. On a large instance plan a short maintenance window for `migrate deploy`.
+
+Stop every process of the old release before you migrate. The [upload token migration](#upload-token-migration) removes a column that the old release reads on every request, so an old process that still runs after it fails to sign anyone in. A rolling deployment across these migrations is not possible.
 
 | Table            | Added                                                                                                                                                                                                |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
