@@ -126,7 +126,7 @@ These features read file content on the server, so they do not work for encrypte
 - **Shared folder links.** An encrypted file in a shared folder is not listed on the folder's public page.
 - **Uploads from screenshot tools and API tokens.** They are plain.
 
-Your [data export](./account) contains encrypted files as ciphertext, named by their file ID, with the records that open them listed in `user-data.json`.
+Your [data export](./account#an-account-with-encrypted-files) contains encrypted files decrypted, under their real names: your browser builds it, because the server cannot. With your keys locked you can still take the server's export, which holds each encrypted file as ciphertext named by its file ID.
 
 ## What encryption does not protect against
 

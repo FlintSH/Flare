@@ -1664,7 +1664,10 @@ const ARCHIVE_ENTRIES = [
     name: 'notes/readme-inside-private.txt',
     buffer: Buffer.from(`${marker('ziptext')}\nInside the archive.\n`),
   },
-  { name: 'web/landing-inside-private.html', buffer: Buffer.from(HOSTILE_HTML) },
+  {
+    name: 'web/landing-inside-private.html',
+    buffer: Buffer.from(HOSTILE_HTML),
+  },
   { name: 'web/diagram-inside-private.svg', buffer: Buffer.from(HOSTILE_SVG) },
   { name: 'data/blob-inside-private.bin', buffer: randomBytes(300 * 1024) },
 ]
@@ -1777,7 +1780,9 @@ async function openEntry(scope, path) {
     await scope
       .getByRole('button', { name: new RegExp(`^Open folder .*${folder}$`) })
       .click()
-  await scope.getByRole('button', { name: `Preview ${path}`, exact: true }).click()
+  await scope
+    .getByRole('button', { name: `Preview ${path}`, exact: true })
+    .click()
   const preview = scope.getByRole('region', { name: 'Entry preview' })
   await expect(preview.getByRole('heading', { name })).toBeVisible()
   return preview
@@ -1809,9 +1814,7 @@ async function browseEntries(page, scope, { image = true } = {}) {
     'web/diagram-inside-private.svg',
   ]) {
     const hostile = await openEntry(scope, path)
-    await expect(hostile.getByLabel('Entry text')).toContainText(
-      '__flarePwned'
-    )
+    await expect(hostile.getByLabel('Entry text')).toContainText('__flarePwned')
     await backToRoot(scope)
   }
   await page.waitForTimeout(300)
@@ -1851,7 +1854,11 @@ async function testArchives(browser, alex, keys) {
     buffer: hostileZip(),
     marker: marker('hostilezip'),
   }
-  for (const name of ['outside-private.txt', 'absolute-private.txt', 'plain-private.txt'])
+  for (const name of [
+    'outside-private.txt',
+    'absolute-private.txt',
+    'plain-private.txt',
+  ])
     extraPlaintext.set(name, 'the name of an archive entry')
   Object.assign(fixtures, { zip, tar, tgz, gz, hostileArchive: hostile })
   Object.assign(
@@ -1911,7 +1918,8 @@ async function testArchives(browser, alex, keys) {
   const extracted = await prisma.file.findMany({
     where: { userId: accounts.alex.id },
     orderBy: [{ uploadedAt: 'desc' }, { id: 'desc' }],
-    take: (await prisma.file.count({ where: { userId: accounts.alex.id } })) -
+    take:
+      (await prisma.file.count({ where: { userId: accounts.alex.id } })) -
       filesBefore,
   })
   assert.equal(extracted.length, ARCHIVE_ENTRIES.length)
@@ -1938,7 +1946,9 @@ async function testArchives(browser, alex, keys) {
   await page.getByRole('button', { name: 'Select files', exact: true }).click()
   for (const name of [fixtures.text.name, fixtures.image.name, PLAIN.name])
     await page.getByLabel(`Select ${name}`, { exact: true }).check()
-  await page.getByRole('button', { name: 'Create archive', exact: true }).click()
+  await page
+    .getByRole('button', { name: 'Create archive', exact: true })
+    .click()
   const create = page.getByRole('dialog', { name: 'Create archive' })
   await create.getByLabel('Archive name').fill('handover-private.zip')
   extraPlaintext.set('handover-private', 'the name of a created archive')
@@ -1959,11 +1969,10 @@ async function testArchives(browser, alex, keys) {
     type: 'application/zip',
   })
   const members = await unzip(await plaintextOf(createdRow, createdKey))
-  assert.deepEqual(Object.keys(members).sort(), [
-    fixtures.text.name,
-    fixtures.image.name,
-    PLAIN.name,
-  ].sort())
+  assert.deepEqual(
+    Object.keys(members).sort(),
+    [fixtures.text.name, fixtures.image.name, PLAIN.name].sort()
+  )
   assert.ok(members[fixtures.text.name].equals(fixtures.text.buffer))
   assert.ok(members[fixtures.image.name].equals(fixtures.image.buffer))
   assert.ok(members[PLAIN.name].equals(PLAIN.buffer))
@@ -2018,7 +2027,9 @@ async function testArchives(browser, alex, keys) {
     .getByRole('button', { name: /outside-private\.txt \(unavailable\)/ })
     .click()
   await expect(
-    hostileDialog.getByText('This entry’s path is unsafe, so Flare won’t open it.')
+    hostileDialog.getByText(
+      'This entry’s path is unsafe, so Flare won’t open it.'
+    )
   ).toBeVisible()
   await expect(
     hostileDialog.getByRole('button', { name: 'Download entry' })
@@ -2058,7 +2069,9 @@ async function testArchives(browser, alex, keys) {
   await visitor.page.goto(uploaded[gz.name])
   await expectShareState(visitor.page, 'open')
   const single = visitor.page.locator('[data-encrypted-archive]')
-  await expect(single.getByText(/GZIP · 1 file/)).toBeVisible({ timeout: 30000 })
+  await expect(single.getByText(/GZIP · 1 file/)).toBeVisible({
+    timeout: 30000,
+  })
   await single
     .getByRole('button', { name: 'Preview readme-inside-private.txt' })
     .click()
@@ -2080,6 +2093,249 @@ async function testArchives(browser, alex, keys) {
   await visitor.ctx.close()
   results.push(
     'A signed-out visitor browses encrypted archives on their share pages with the key of the link: ZIP, TAR and TAR.GZ list 5 files and open a text entry and an image entry, HTML and SVG entries are source text, a GZIP lists its one file and opens it, no extraction is offered, the server got no archive request and set no unlock cookie'
+  )
+}
+
+// ---------------------------------------------------------------- export
+
+/** Every encrypted file of the account as `{ name: plaintext }`, with independent code. */
+async function decryptedLibrary(keys) {
+  const rows = await prisma.file.findMany({
+    where: { userId: accounts.alex.id },
+    orderBy: [{ uploadedAt: 'asc' }, { id: 'asc' }],
+  })
+  const files = []
+  for (const row of rows) {
+    if (!row.encrypted) {
+      files.push({
+        row,
+        name: row.name,
+        bytes: await readFile(path.join(appDirectory, row.path)),
+      })
+      continue
+    }
+    const fileKey = fileKeyOf(row, keys.accountPrivateKey)
+    files.push({
+      row,
+      name: metadataOf(row, fileKey).name,
+      bytes: await plaintextOf(row, fileKey),
+    })
+  }
+  return files
+}
+
+/** Checks an export ZIP against the library: names, bytes, the record and the report. */
+async function checkExport(zip, library, label) {
+  const entries = await unzip(zip)
+  const data = JSON.parse(entries['user-data.json'].toString('utf8'))
+  const report = JSON.parse(entries['export-report.json'].toString('utf8'))
+  assert.equal(
+    data.files.length,
+    library.length,
+    `${label}: files in the record`
+  )
+  assert.deepEqual(report.failed, [], `${label}: files left out`)
+  assert.deepEqual(report.notDecrypted, [], `${label}: files not decrypted`)
+  assert.equal(report.files, library.length)
+  let decrypted = 0
+  const used = new Set()
+  for (const [index, file] of library.entries()) {
+    const listed = data.files[index]
+    assert.equal(listed.name, file.name, `${label}: name in user-data.json`)
+    const entry = entries[listed.exportPath]
+    assert.ok(entry, `${label}: no entry ${listed.exportPath}`)
+    assert.ok(
+      !used.has(listed.exportPath),
+      `${label}: two files share an entry`
+    )
+    used.add(listed.exportPath)
+    assert.match(listed.exportPath, /^files\/\d{4}-\d{2}-\d{2}\/[^/]+$/)
+    assert.equal(
+      sha256(entry),
+      sha256(file.bytes),
+      `${label}: bytes of ${file.name}`
+    )
+    if (file.row.encrypted) {
+      assert.equal(listed.decrypted, true)
+      decrypted++
+    }
+  }
+  assert.equal(report.decrypted, decrypted)
+  // Nothing but the record, the report and one entry for each file.
+  assert.equal(Object.keys(entries).length, library.length + 2)
+  assert.ok(
+    !Object.keys(entries).some((name) => name.endsWith('.flare-encrypted')),
+    `${label}: an entry is ciphertext`
+  )
+  return { files: library.length, decrypted, bytes: zip.length }
+}
+
+async function openExport(page) {
+  await page.goto(`${origin}/dashboard/profile?section=data`)
+  const button = page.getByRole('button', { name: 'Export all data' })
+  await expect(button).toBeVisible()
+  return button
+}
+
+async function testExport(browser, keys) {
+  const library = await decryptedLibrary(keys)
+  for (const file of library)
+    if (file.row.encrypted)
+      extraPlaintext.set(file.name, 'the name of an exported file')
+
+  // --- A streamed download: no save dialog in this browser.
+  const streamed = await signIn(browser)
+  await streamed.page.addInitScript(() => {
+    delete window.showSaveFilePicker
+    window.__blobBytes = []
+    const create = URL.createObjectURL.bind(URL)
+    URL.createObjectURL = (object) => {
+      window.__blobBytes.push(object instanceof Blob ? object.size : -1)
+      return create(object)
+    }
+  })
+  let button = await openExport(streamed.page)
+  const [download] = await Promise.all([
+    streamed.page.waitForEvent('download', { timeout: 300000 }),
+    button.click(),
+  ])
+  await expect(
+    streamed.page.locator('[data-export-phase="running"]')
+  ).toBeVisible()
+  await shot(streamed.page, 'export-progress')
+  assert.match(download.suggestedFilename(), /^flare-data-export-\d+\.zip$/)
+  assert.match(download.url(), /\/_flare\/local\//)
+  localTokens.add(download.url().split(LOCAL_PREFIX)[1])
+  const zip = await readFile(await download.path())
+  await expect(streamed.page.locator('[data-export-phase="done"]')).toBeVisible(
+    { timeout: 60000 }
+  )
+  await shot(streamed.page, 'export-done')
+  const first = await checkExport(zip, library, 'streamed export')
+  assert.deepEqual(
+    await streamed.page.evaluate(() => window.__blobBytes),
+    [],
+    'The page held the export as a Blob'
+  )
+  await streamed.ctx.close()
+
+  // --- A file the person chooses (File System Access API). The save
+  // dialog cannot be driven here, so it gives a real file handle of the
+  // suite's own: the worker writes to it as it would to a chosen file.
+  const chosen = await signIn(browser)
+  await chosen.page.addInitScript(() => {
+    window.showSaveFilePicker = async (options) => {
+      window.__pickerOptions = options
+      const root = await navigator.storage.getDirectory()
+      return root.getFileHandle('suite-export.zip', { create: true })
+    }
+  })
+  button = await openExport(chosen.page)
+  await button.click()
+  await expect(chosen.page.locator('[data-export-phase="done"]')).toBeVisible({
+    timeout: 300000,
+  })
+  const options = await chosen.page.evaluate(() => window.__pickerOptions)
+  assert.match(options.suggestedName, /^flare-data-export-\d+\.zip$/)
+  const size = await chosen.page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory()
+    const handle = await root.getFileHandle('suite-export.zip')
+    return (await handle.getFile()).size
+  })
+  const parts = []
+  for (let offset = 0; offset < size; offset += 12 * 1024 * 1024)
+    parts.push(
+      Buffer.from(
+        await chosen.page.evaluate(
+          async ([from, to]) => {
+            const root = await navigator.storage.getDirectory()
+            const handle = await root.getFileHandle('suite-export.zip')
+            const bytes = new Uint8Array(
+              await (await handle.getFile()).slice(from, to).arrayBuffer()
+            )
+            let binary = ''
+            for (let index = 0; index < bytes.length; index += 0x8000)
+              binary += String.fromCharCode(
+                ...bytes.subarray(index, index + 0x8000)
+              )
+            return btoa(binary)
+          },
+          [offset, Math.min(size, offset + 12 * 1024 * 1024)]
+        ),
+        'base64'
+      )
+    )
+  await checkExport(Buffer.concat(parts), library, 'export to a chosen file')
+  await chosen.page.evaluate(async () => {
+    const root = await navigator.storage.getDirectory()
+    await root.removeEntry('suite-export.zip')
+  })
+
+  // --- Locked keys: the page says so and offers the server's export.
+  await chosen.page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const request = indexedDB.deleteDatabase('flare-e2ee')
+        request.onsuccess =
+          request.onerror =
+          request.onblocked =
+            () => resolve()
+      })
+  )
+  button = await openExport(chosen.page)
+  const prompt = chosen.page.getByRole('dialog', {
+    name: 'Unlock your encryption keys',
+  })
+  // Soon after a sign-in the unlock prompt opens by itself, one time.
+  await prompt.waitFor({ state: 'visible', timeout: 6000 }).catch(() => {})
+  if (await prompt.isVisible().catch(() => false)) {
+    await prompt.getByRole('button', { name: 'Not now', exact: true }).click()
+    await expect(prompt).toHaveCount(0)
+  }
+  await button.click()
+  await expect(
+    chosen.page.locator('[data-export-phase="locked"]')
+  ).toBeVisible()
+  await shot(chosen.page, 'export-locked')
+  const [serverDownload] = await Promise.all([
+    chosen.page.waitForEvent('download', { timeout: 300000 }),
+    chosen.page
+      .getByRole('button', { name: 'Export without decrypting' })
+      .click(),
+  ])
+  const serverEntries = await unzip(await readFile(await serverDownload.path()))
+  const ciphertexts = Object.keys(serverEntries).filter((name) =>
+    name.endsWith('.flare-encrypted')
+  )
+  assert.equal(
+    ciphertexts.length,
+    library.filter((file) => file.row.encrypted).length
+  )
+  for (const name of Object.keys(serverEntries))
+    for (const file of library)
+      if (file.row.encrypted)
+        assert.ok(!name.includes(file.name), 'The server export names a file')
+  await chosen.ctx.close()
+
+  // --- No save dialog and no service worker: memory, for an export this small.
+  const plain = await signIn(browser, { serviceWorkers: 'block' })
+  await plain.page.addInitScript(() => {
+    delete window.showSaveFilePicker
+  })
+  button = await openExport(plain.page)
+  const [memoryDownload] = await Promise.all([
+    plain.page.waitForEvent('download', { timeout: 300000 }),
+    button.click(),
+  ])
+  assert.match(memoryDownload.url(), /^blob:/)
+  await checkExport(
+    await readFile(await memoryDownload.path()),
+    library,
+    'export held in memory'
+  )
+  await plain.ctx.close()
+  results.push(
+    `The account export contains decrypted files with the right names and bytes: with no save dialog the browser saved flare-data-export-{time}.zip as a streamed download from a local address (${Math.round(first.bytes / 1048576)} MiB, the page made no Blob); it holds user-data.json with the decrypted name of each of ${first.decrypted} encrypted files, one entry files/{date}/{name} for each of ${first.files} files with the SHA-256 of the file as independent code decrypts it (the plain file as stored), and export-report.json with nothing left out. The same export written to a chosen file through the File System Access API, and held in memory in a browser with neither a save dialog nor a service worker, pass the same checks. With the keys locked the page says so, and "Export without decrypting" gives the server's export: ${ciphertexts.length} entries of ciphertext named by file ID, and no file name`
   )
 }
 
@@ -2114,6 +2370,7 @@ async function main() {
     scenario('pdf', () => testPdf(browser))
     scenario('truncated', () => testTruncated(browser, alex))
     scenario('archives', () => testArchives(browser, alex, keys))
+    scenario('export', () => testExport(browser, keys))
     for (const { name, run } of scenarios)
       if (!only.length || only.includes(name)) await run()
 

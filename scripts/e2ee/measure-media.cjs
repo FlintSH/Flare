@@ -5,6 +5,14 @@
 // seek asked for, and the peak memory of every process of the browser.
 // A production build, a disposable database, headless Chromium.
 //
+// The browser that is measured runs without Playwright. Playwright turns on
+// the DevTools Network domain for every page, and with it Chromium keeps
+// the body of every request until the page navigates: a 2 GiB upload then
+// shows 2 GiB more memory than a person's browser uses. Playwright only
+// signs in, into a profile directory. A second Chromium is started on that
+// profile and driven through a few DevTools commands (Runtime, DOM, Target,
+// Browser), never Network.
+//
 // Setup, with the application built and PostgreSQL running:
 //
 //   export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_measure_local'
@@ -17,7 +25,8 @@
 //
 // The application listens on 3295. This script's counting proxy listens on
 // 3296, the origin the browser uses. The proxy passes bodies through as
-// streams and keeps none. Either file can be left out.
+// streams and keeps none. Either file can be left out. The measured browser
+// listens for DevTools on `FLARE_E2EE_MEASURE_DEBUG_PORT` (3298).
 const assert = require('node:assert/strict')
 const { createHash } = require('node:crypto')
 const {
@@ -56,6 +65,7 @@ const videoFile = process.env.FLARE_E2EE_MEASURE_VIDEO
 const downloadsPath =
   process.env.FLARE_E2EE_MEASURE_DOWNLOADS ||
   path.join(os.tmpdir(), 'flare-e2ee-measure-downloads')
+const debugPort = Number(process.env.FLARE_E2EE_MEASURE_DEBUG_PORT) || 3298
 const uploadTimeoutMs =
   Number(process.env.FLARE_E2EE_MEASURE_TIMEOUT_MS) || 3600000
 const prisma = new PrismaClient()
@@ -210,6 +220,113 @@ function sha256File(file) {
   })
 }
 
+// ---------------------------------------------------------------- browser
+
+/** A few DevTools commands over one WebSocket. No Network domain. */
+async function devtools(port) {
+  let version = null
+  for (let attempt = 0; attempt < 100 && !version; attempt++) {
+    version = await fetch(`http://127.0.0.1:${port}/json/version`)
+      .then((response) => response.json())
+      .catch(() => null)
+    if (!version) await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  assert.ok(version, 'The browser did not open its DevTools port')
+  const socket = new WebSocket(version.webSocketDebuggerUrl)
+  await new Promise((resolve, reject) => {
+    socket.onopen = resolve
+    socket.onerror = reject
+  })
+  let next = 1
+  const pending = new Map()
+  const listeners = new Set()
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data)
+    if (message.id) {
+      const waiter = pending.get(message.id)
+      pending.delete(message.id)
+      if (message.error) waiter?.reject(new Error(message.error.message))
+      else waiter?.resolve(message.result)
+    } else for (const listener of listeners) listener(message)
+  }
+  const send = (method, params = {}, sessionId) =>
+    new Promise((resolve, reject) => {
+      const id = next++
+      pending.set(id, { resolve, reject })
+      socket.send(JSON.stringify({ id, method, params, sessionId }))
+    })
+  return {
+    version: version.Browser,
+    send,
+    on: (listener) => listeners.add(listener),
+    close: () => socket.close(),
+  }
+}
+
+/** One tab: go to an address, run script in it, wait for a condition. */
+async function openTab(browser) {
+  const { targetId } = await browser.send('Target.createTarget', {
+    url: 'about:blank',
+  })
+  const { sessionId } = await browser.send('Target.attachToTarget', {
+    targetId,
+    flatten: true,
+  })
+  const evaluate = async (expression) => {
+    const result = await browser.send(
+      'Runtime.evaluate',
+      { expression, awaitPromise: true, returnByValue: true },
+      sessionId
+    )
+    if (result.exceptionDetails)
+      throw new Error(
+        result.exceptionDetails.exception?.description ||
+          result.exceptionDetails.text
+      )
+    return result.result.value
+  }
+  const until = async (expression, timeoutMs = 60000, intervalMs = 50) => {
+    const deadline = Date.now() + timeoutMs
+    for (;;) {
+      const value = await evaluate(expression).catch(() => null)
+      if (value) return value
+      if (Date.now() > deadline)
+        throw new Error(`Timed out waiting for: ${expression.slice(0, 120)}`)
+      await new Promise((resolve) => setTimeout(resolve, intervalMs))
+    }
+  }
+  return {
+    evaluate,
+    until,
+    goto: (url) => browser.send('Page.navigate', { url }, sessionId),
+    async setFile(selector, file) {
+      const { root } = await browser.send('DOM.getDocument', {}, sessionId)
+      const { nodeId } = await browser.send(
+        'DOM.querySelector',
+        { nodeId: root.nodeId, selector },
+        sessionId
+      )
+      await browser.send(
+        'DOM.setFileInputFiles',
+        { nodeId, files: [file] },
+        sessionId
+      )
+    },
+    close: () => browser.send('Target.closeTarget', { targetId }),
+  }
+}
+
+const clickButton = (name) => `(() => {
+  const button = [...document.querySelectorAll('button')].find(
+    (candidate) =>
+      !candidate.disabled &&
+      (candidate.getAttribute('aria-label') || candidate.textContent).trim() === ${JSON.stringify(name)}
+  )
+  if (!button) return false
+  button.click()
+  return true
+})()`
+
 // ---------------------------------------------------------------- run
 
 async function seed() {
@@ -249,79 +366,89 @@ async function seed() {
   })
 }
 
-async function upload(page, file) {
+/** Uploads a file through the upload form and returns its address without a key. */
+async function upload(tab, file) {
   const name = path.basename(file)
-  await page.goto(`${origin}/dashboard/upload`)
-  await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
-    'data-encryption-choice',
-    'encrypted'
+  await tab.goto(`${origin}/dashboard/upload`)
+  await tab.until(
+    `document.querySelector('[data-encryption-choice="encrypted"]') && document.querySelector('input[type="file"]')`
   )
-  await page.locator('input[type="file"]').setInputFiles(file)
-  await page.getByRole('button', { name: /^Upload 1 file$/ }).click()
-  try {
-    await expect(
-      page.getByRole('link', { name: `Open ${name}`, exact: true })
-    ).toBeVisible({ timeout: uploadTimeoutMs })
-  } catch (error) {
-    await page
-      .screenshot({ path: path.join(downloadsPath, 'upload-failed.png') })
-      .catch(() => undefined)
-    throw error
-  }
-  await page
-    .getByRole('button', { name: `Copy link for ${name}`, exact: true })
-    .click()
-  await expect
-    .poll(() => page.evaluate(() => navigator.clipboard.readText()))
-    .toMatch(/\/alexm\/e_[A-Za-z0-9_-]{22}#/)
-  return page.evaluate(() => navigator.clipboard.readText())
+  await tab.setFile('input[type="file"]', file)
+  await tab.until(clickButton('Upload 1 file'))
+  await tab.until(
+    `[...document.querySelectorAll('a')].some((link) => (link.getAttribute('aria-label') || link.textContent).trim() === ${JSON.stringify(`Open ${name}`)})`,
+    uploadTimeoutMs,
+    500
+  )
+  const row = await prisma.file.findFirstOrThrow({
+    where: { userId: ACCOUNT.id },
+    orderBy: [{ uploadedAt: 'desc' }, { id: 'desc' }],
+  })
+  return `${origin}${row.urlPath}`
 }
 
 async function main() {
   await mkdir(downloadsPath, { recursive: true })
+  const profile = path.join(downloadsPath, 'profile')
+  await rm(profile, { recursive: true, force: true })
   const proxy = await startCountingProxy()
-  const server = await chromium.launchServer({
+  await seed()
+
+  // Playwright signs in. The session cookie and the account keys stay in
+  // the profile directory.
+  const signedIn = await chromium.launchPersistentContext(profile, {
     headless: true,
     channel: 'chromium',
-    downloadsPath,
+    baseURL: origin,
   })
-  const root = server.process().pid
-  const browser = await chromium.connect(server.wsEndpoint())
-  const report = { chromium: browser.version(), cpus: os.cpus().length }
+  const page = signedIn.pages()[0] ?? (await signedIn.newPage())
+  page.setDefaultTimeout(60000)
+  await shared.signIn(page, expect, {
+    origin,
+    email: `${ACCOUNT.id}@example.test`,
+    secret: PASSPHRASE,
+  })
+  await expect(page.getByRole('button', { name: 'Account menu' })).toBeVisible()
+  await signedIn.close()
+
+  const chrome = spawn(
+    chromium.executablePath(),
+    [
+      '--headless=new',
+      '--no-sandbox',
+      '--disable-gpu',
+      '--no-first-run',
+      '--autoplay-policy=no-user-gesture-required',
+      `--user-data-dir=${profile}`,
+      `--remote-debugging-port=${debugPort}`,
+      'about:blank',
+    ],
+    { stdio: 'ignore' }
+  )
+  const root = chrome.pid
+  const report = { cpus: os.cpus().length }
+  let browser = null
   try {
-    await seed()
-    const ctx = await browser.newContext({
-      baseURL: origin,
-      viewport: { width: 1440, height: 900 },
-      acceptDownloads: true,
-      permissions: ['clipboard-read', 'clipboard-write'],
+    browser = await devtools(debugPort)
+    report.chromium = browser.version
+    const downloads = new Map()
+    browser.on((message) => {
+      if (message.method === 'Browser.downloadWillBegin')
+        downloads.set(message.params.guid, { url: message.params.url })
+      if (message.method === 'Browser.downloadProgress')
+        Object.assign(downloads.get(message.params.guid) ?? {}, message.params)
     })
-    const page = await ctx.newPage()
-    page.setDefaultTimeout(60000)
-    // What went wrong, if something does: refused requests and page errors.
-    page.on('response', (response) => {
-      if (response.status() >= 400)
-        console.error(
-          `HTTP ${response.status()} ${response.request().method()} ${new URL(response.url()).pathname}`
-        )
+    await browser.send('Browser.setDownloadBehavior', {
+      behavior: 'allowAndName',
+      downloadPath: downloadsPath,
+      eventsEnabled: true,
     })
-    page.on('pageerror', (error) =>
-      console.error(`page error: ${error.message}`)
-    )
-    page.on('console', (message) => {
-      if (message.type() === 'error')
-        console.error(`console: ${message.text()}`)
-    })
-    await shared.signIn(page, expect, {
-      origin,
-      email: `${ACCOUNT.id}@example.test`,
-      secret: PASSPHRASE,
-    })
+    const tab = await openTab(browser)
 
     if (bigFile) {
       const bytes = statSync(bigFile).size
       const expected = await sha256File(bigFile)
-      const uploaded = await withPeakMemory(root, () => upload(page, bigFile))
+      const uploaded = await withPeakMemory(root, () => upload(tab, bigFile))
       report.upload = {
         mib: Math.round(bytes / MIB),
         seconds: Math.round(uploaded.seconds),
@@ -332,31 +459,36 @@ async function main() {
       }
       console.log(JSON.stringify({ upload: report.upload }))
 
-      // A signed-out visitor downloads it from the share page.
-      const visitor = await browser.newContext({
-        baseURL: origin,
-        acceptDownloads: true,
-      })
-      const share = await visitor.newPage()
-      await share.goto(uploaded.value)
-      await expect(share.locator('[data-encrypted-share]')).toHaveAttribute(
-        'data-encrypted-share',
-        'open',
-        { timeout: 60000 }
-      )
+      // The owner downloads it from its page: the account stanza gives the key.
+      await tab.goto(uploaded.value)
+      await tab.until(`document.querySelector('[data-encrypted-share="open"]')`)
       const before = ciphertext.length
       const saved = await withPeakMemory(root, async () => {
-        const [download] = await Promise.all([
-          share.waitForEvent('download', { timeout: 120000 }),
-          share.getByRole('button', { name: 'Download', exact: true }).click(),
-        ])
-        assert.match(download.url(), /\/_flare\/local\//)
-        // Resolves when the browser wrote the last byte.
-        return download.path()
+        await tab.until(clickButton('Download'))
+        const deadline = Date.now() + uploadTimeoutMs
+        for (;;) {
+          const done = [...downloads.entries()].find(
+            ([, download]) => download.state === 'completed'
+          )
+          if (done) return done
+          const failed = [...downloads.values()].find(
+            (download) => download.state === 'canceled'
+          )
+          assert.ok(!failed, 'The download failed')
+          assert.ok(Date.now() < deadline, 'The download did not finish')
+          await new Promise((resolve) => setTimeout(resolve, 250))
+        }
       })
-      const size = statSync(saved.value).size
-      assert.equal(size, bytes, 'The download has a different size')
-      assert.equal(await sha256File(saved.value), expected, 'SHA-256')
+      const [guid, download] = saved.value
+      assert.match(download.url, /\/_flare\/local\//)
+      const file = path.join(downloadsPath, guid)
+      assert.equal(
+        statSync(file).size,
+        bytes,
+        'The download has a different size'
+      )
+      assert.equal(await sha256File(file), expected, 'SHA-256')
+      await rm(file, { force: true })
       report.download = {
         mib: Math.round(bytes / MIB),
         seconds: Math.round(saved.seconds),
@@ -368,19 +500,16 @@ async function main() {
         ciphertextRequests: ciphertext.length - before,
       }
       console.log(JSON.stringify({ download: report.download }))
-      await visitor.close()
     }
 
     if (videoFile) {
       const bytes = statSync(videoFile).size
-      const uploaded = await withPeakMemory(root, () => upload(page, videoFile))
+      const uploaded = await withPeakMemory(root, () => upload(tab, videoFile))
       report.videoUpload = {
         mib: Math.round(bytes / MIB),
         seconds: Math.round(uploaded.seconds),
         browserPeakMiB: uploaded.peakMiB,
       }
-      const visitor = await browser.newContext({ baseURL: origin })
-      const share = await visitor.newPage()
       const before = ciphertext.length
       const asked = () =>
         ciphertext
@@ -390,34 +519,27 @@ async function main() {
         ciphertext.slice(before).reduce((sum, request) => sum + request.sent, 0)
       const played = await withPeakMemory(root, async () => {
         const opened = Date.now()
-        await share.goto(uploaded.value)
-        const player = share.locator('video')
-        await expect(player).toBeVisible({ timeout: 60000 })
-        await expect
-          .poll(() => player.evaluate((element) => element.readyState >= 1), {
-            timeout: 120000,
-            intervals: [50],
-          })
-          .toBe(true)
+        await tab.goto(uploaded.value)
+        const duration = await tab.until(
+          `(() => { const video = document.querySelector('video'); return video && video.readyState >= 1 ? video.duration : 0 })()`,
+          120000,
+          25
+        )
         const ready = (Date.now() - opened) / 1000
-        const duration = await player.evaluate((element) => element.duration)
         const start = { asked: asked(), sent: sent() }
         // Seek to three quarters of the film and play.
         const seekTo = Math.floor(duration * 0.75)
         const seekStarted = Date.now()
-        await player.evaluate(async (element, time) => {
-          element.muted = true
-          element.currentTime = time
-          await element.play()
-        }, seekTo)
-        await expect
-          .poll(() => player.evaluate((element) => element.currentTime), {
-            timeout: 120000,
-            intervals: [50],
-          })
-          .toBeGreaterThan(seekTo + 0.5)
+        await tab.evaluate(
+          `(() => { const video = document.querySelector('video'); video.muted = true; video.currentTime = ${seekTo}; return video.play().then(() => true) })()`
+        )
+        await tab.until(
+          `document.querySelector('video').currentTime > ${seekTo + 0.5}`,
+          120000,
+          25
+        )
         const seek = (Date.now() - seekStarted) / 1000
-        await player.evaluate((element) => element.pause())
+        await tab.evaluate(`document.querySelector('video').pause()`)
         return { ready, duration, seekTo, seek, start }
       })
       report.videoSeek = {
@@ -435,12 +557,11 @@ async function main() {
         largestRendererPeakMiB: played.peakRendererMiB,
       }
       console.log(JSON.stringify({ videoSeek: report.videoSeek }))
-      await visitor.close()
     }
     console.log(JSON.stringify(report, null, 2))
   } finally {
-    await browser.close()
-    await server.close()
+    browser?.close()
+    chrome.kill()
     proxy.close()
     await prisma.$disconnect()
   }
