@@ -354,6 +354,10 @@ importers:
       vitest:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@24.13.6)(vite@8.3.5(@types/node@24.13.6)(jiti@1.21.7)(yaml@2.9.1))
+    optionalDependencies:
+      sharp:
+        specifier: 0.35.5
+        version: 0.35.5(@types/node@24.13.6)
 
 packages:
 

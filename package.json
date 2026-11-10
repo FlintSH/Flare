@@ -146,5 +146,8 @@
   },
   "lint-staged": {
     "**/*.{ts,tsx,js,jsx,json,md}": "prettier --write"
+  },
+  "optionalDependencies": {
+    "sharp": "0.35.5"
   }
 }

@@ -7,6 +7,8 @@ import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+import { queueStorageDeletion } from '@/lib/storage/deletion'
+import { parseStorageTarget } from '@/lib/storage/targets'
 
 import {
   auditFileName,
@@ -144,10 +146,18 @@ export async function updateFileSettings(
     folderStanza: _folderStanza,
     folderStanzaPublicKey: _folderStanzaPublicKey,
     ...file
-  } = await prisma.file.update({
-    where,
-    data,
-  })
+  } = await prisma.file
+    .update({
+      // A file that the server encrypted since `current` was read takes the
+      // other kind of password (docs/e2ee-spec.md, section 14.2).
+      where: { ...where, encrypted: current.encrypted },
+      data,
+    })
+    .catch((error: unknown) => {
+      if ((error as { code?: string }).code === 'P2025')
+        throw new HttpError(409, 'This file changed. Reload and try again.')
+      throw error
+    })
   return {
     ...file,
     hasPassword: Boolean(passwordHash) || Boolean(storedStanza),
@@ -194,10 +204,20 @@ export async function deleteFile(authority: FileAuthority, id: string) {
     })
   }
   await prisma.$transaction(async (tx) => {
-    await tx.file.delete({ where })
+    // The row as it was deleted. The server can encrypt a file after it was
+    // read above (docs/e2ee-spec.md, section 14.2): the row then has a new
+    // object and a new size, and that object is removed too.
+    const deleted = (await tx.file.delete({ where })) ?? file
+    if (deleted.path !== file.path)
+      await queueStorageDeletion(
+        tx,
+        deleted.userId,
+        deleted.path,
+        parseStorageTarget(deleted.storageTarget)
+      )
     await tx.user.update({
       where: { id: file.userId },
-      data: { storageUsed: { decrement: file.size } },
+      data: { storageUsed: { decrement: deleted.size } },
     })
   })
 }

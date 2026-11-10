@@ -211,6 +211,45 @@ A trigger on `File` deletes a folder stanza when a file becomes private or chang
 
 Rolling back to a build before this migration leaves encrypted rows that the older build would serve as nameless binary files. Delete or keep them knowingly; do not roll back the migration itself while such rows exist.
 
+### Existing files migration
+
+Migration `20261114000000_e2ee_existing_files` adds what the encryption of files from before this release needs. It only adds columns and one table and touches no existing row: no file changes until its owner chooses.
+
+| Table               | What the migration adds                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`              | `existingFilesChoice` (`none`, `private` or `all`, null until the person answered) and `existingFilesChoiceAt`.                                           |
+| `File`              | `passwordPendingFrom`: set on a file that had a server-side password when the server encrypted it. It holds the visibility the file had.                  |
+| `FileEncryptionJob` | New. One row per file that waits for encryption or is being encrypted, with the IDs of the file and the account, a state, an error code and no file name. |
+
+**Who starts it.** Each person does, for their own files, after they [set up their keys](#account-key-migration). Encrypting a file needs that person's public key and their decision about links and passwords, so an administrator cannot start it for someone else, and no setting starts it for the whole instance. An account that never signs in again has no keys and keeps its plain files.
+
+**What the server does for one file.** It reads the stored object as a stream, encrypts it, and writes the ciphertext to a new object next to it. It reads that new object back and decrypts it to check the length and a hash of the content. Then one database transaction points the file at the ciphertext, replaces the name, the type and the image text with sealed records, and queues the deletion of the old object. The old object is deleted right after that commit. A stop at any point leaves the file readable: before the commit it is the plain file it was, and after it the encrypted file. What a stopped attempt wrote is removed by [account storage cleanup](#account-storage-cleanup), which is also what deletes the old object if the process stops between the commit and the deletion.
+
+Plan for this:
+
+- **Free storage for one file at a time.** While a file is encrypted, its plaintext and its ciphertext both exist. Two files are in progress at most across all app processes, so keep free space for your two largest files. The ciphertext is 26 bytes plus 32 bytes per 64 KiB larger than the file, about 0.05%. A quota never stops the encryption of a file that is already stored, so an account at its limit ends slightly above it.
+- **Load.** Each file is read twice and written once, and encrypted and decrypted on one CPU core inside the app process. Expect one core busy and steady storage traffic while a large library is converted. The worker polls every **5 seconds**, runs **2 files at a time** in total, and gives each account a turn. A job has a **2-minute lease**, renewed every 30 seconds; a failed attempt is retried after 30 seconds and then 60 seconds, and after **3 attempts** the file is listed for its owner with a retry button. For an image of at most 25 MiB the server also makes the 480-pixel WebP thumbnail with `sharp` during the job, so browsers do not download every image again. `sharp` is an optional dependency; where it is not installed, thumbnails are made later by the owner's browser.
+- **S3.** The ciphertext is a new object with a new key, uploaded in parts, and the old object is deleted with the credentials Flare already has. Bucket versioning keeps the old plaintext version: expire noncurrent versions or delete them after the migration.
+- **Old backups contain the plaintext.** Every database backup and every storage backup or snapshot from before a file was encrypted still holds its name, its content and its image text. Encrypting the live copy does not change them. After people have converted their files, take a new consistent backup, verify a restore, and then delete or replace the old backups, snapshots and replicas. Until you do, the files are only as private as those copies.
+- **What the server keeps of a converted file.** The name is removed from the file's row, from its queued expiry job, from its earlier audit records and from its `file.ready` webhook deliveries. Resized copies of public images that the image optimizer cached in `.next/cache/images` are deleted. Requests that your reverse proxy or CDN logged or cached before the conversion are yours to expire.
+- **The server read the files already.** This migration encrypts files that the server stored as plaintext, some of them for years. It protects them from now on. It cannot show that nobody read or copied them before, and you should not tell people that it does.
+
+**What people see.** After they have keys, Flare asks them one time which existing files to encrypt. See [files from before encryption](/guide/encryption#files-from-before-encryption) for the choices. A public file gets a new address when it is encrypted, and its old link answers 404 like an address that never existed. A file with a server-side password is encrypted without one and made private until its owner sets a password again, because the server has only a hash of the old password.
+
+**Check what is left.** Count plain files per account without reading a name:
+
+```sh
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT "userId", count(*) AS plain_files, round(sum(size)::numeric, 1) AS megabytes FROM "File" WHERE encrypted = false GROUP BY "userId" ORDER BY plain_files DESC;'
+
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT status, coalesce(result, "errorCode", $$-$$) AS detail, count(*) AS files FROM "FileEncryptionJob" GROUP BY 1, 2 ORDER BY 1, 2;'
+```
+
+The first query lists accounts that still have plain files: people who chose to keep public or password files plain, people who have not answered, accounts that never came back, and uploads from old tool configurations, which stay plain. The second shows the queue. `pending` with `library_not_ready` waits for the owner's browser to convert their folders and tags, which happens the next time they open Flare with their keys unlocked. `failed` rows carry one of `source_missing` (the stored object is gone: check storage), `storage_read_failed`, `storage_write_failed`, `verification_failed`, `account_keys_missing` or `internal_error`. A failed file is still the plain file it was. The `file-encryption` log component names files by ID only. Finished jobs are removed after 7 days. To confirm that no plaintext object is left in storage for converted files, also check that [pending cleanup](#inspect-pending-cleanup) is empty.
+
+Rolling back to an earlier build does not turn converted files back into plain files. Nothing can: the server does not have their keys.
+
 ### Upload token migration
 
 Migration `20261113000000_e2ee_upload_tokens` changes how upload credentials are stored. It runs with the usual `migrate deploy` and needs no downtime beyond it.
@@ -484,6 +523,7 @@ Background work runs inside the application. Each process starts these workers w
 | [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set | 1 minute after start, then hourly | `audit-retention`  |
 | [Account storage cleanup](#account-storage-cleanup)                                                            | Every 5 seconds                   | `storage-cleanup`  |
 | [File expiry](#file-expiry-jobs)                                                                               | Every 5 seconds                   | `file-expiry`      |
+| [Encryption of existing files](#existing-files-migration)                                                      | Every 5 seconds                   | `file-encryption`  |
 | [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
 | [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
 | [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |

@@ -151,6 +151,25 @@ Work that needs your browser waits for it. A file that another device or a tool 
 
 <Screenshot src="/screenshots/encryption/library-work.webp" alt="File library where three encrypted images still show a file-type icon, with a small status at the bottom left reading Finishing new files, 0 of 3, and a pause button" caption="Files that arrived without a thumbnail or text are finished in the background. The status at the edge of the page shows the progress and can pause the work." />
 
+## Files from before encryption
+
+Files that were in your library before this release are plain files, and they stay plain until you decide otherwise. The server already has them, so it can encrypt them for you: your browser does not download or upload anything.
+
+When the server encrypts one of your files:
+
+- **The content, the name, the type and the image text become ciphertext** that only your keys open. The plain copy is deleted from storage after the encrypted copy was written, read back and checked.
+- **Its tags, its folder, its visibility, its expiry, its view and download counts and its upload time stay.**
+- **Its address changes.** An encrypted file has an address without a name. For a private file nothing breaks, because nobody had a link. For a public file the old link stops and answers "not found". You copy the new link from the library.
+- **A password does not carry over.** The server only has a check value of the password you set, and an encrypted file needs the password itself to protect its key. A file that had a password is encrypted without one and made **private**, so it is never more exposed than before. The library marks it **Password removed** until you set a password again or change its visibility yourself.
+
+| File            | What Flare suggests                                                          |
+| --------------- | ---------------------------------------------------------------------------- |
+| Private         | Encrypt. No link exists that can break.                                      |
+| Public          | Keeps working as it is. Encrypt it when you are ready to share the new link. |
+| With a password | Keeps working as it is. Encrypt it and then set the password again.          |
+
+This protects your files from now on. It does not undo the past: the server stored these files readable until this moment, and old backups that your administrator has not yet replaced still contain them.
+
 ## What does not work yet
 
 These features do not work for encrypted files in this release. The controls are hidden or disabled rather than left to fail.

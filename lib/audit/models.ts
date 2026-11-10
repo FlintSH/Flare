@@ -91,6 +91,8 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
   },
   // Ciphertext that only a client opens; the file's own events cover it.
   FileSealedData: null,
+  // A queue row with IDs and a state; the job writes its own audit record.
+  FileEncryptionJob: null,
   VaultFolder: {
     category: 'folders',
     target: 'folder',
