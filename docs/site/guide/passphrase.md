@@ -83,7 +83,7 @@ The notice does not block the page. Until files are encrypted, nothing in Flare 
 
 <Screenshot src="/screenshots/encryption/unlock.webp" alt="Dashboard with a notice that the encryption keys are locked in this browser and an Unlock dialog asking for the passphrase, with Not now and Unlock buttons" caption="Unlocking checks the passphrase with the server and opens the keys in this browser." />
 
-Your browser keeps the account key in its IndexedDB storage while you are signed in. It erases the key when you sign out, when your session ends, and when another account signs in on the same browser. It never stores the passphrase or the recovery phrase.
+Your browser keeps the account key in its IndexedDB storage while you are signed in. It erases the key when you sign out, when your session ends, and when another account signs in on the same browser. A session that ends while Flare is not open, for example because it expired or you revoked it from another device, leaves the key on this device until Flare is opened here again. Sign out on a shared or borrowed device before you leave it. It never stores the passphrase or the recovery phrase.
 
 ## Show your recovery phrase again
 

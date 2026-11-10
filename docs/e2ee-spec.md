@@ -245,7 +245,10 @@ These limits are accepted. The public documentation must state them.
    `wrapped_root` before.
 6. **Browser storage.** The browser keeps `account_private_key` and the old
    private keys of the keyring during a session. Code that runs in the page
-   during that session can use these keys.
+   during that session can use these keys. The keys are in the storage of
+   the browser on the disk of the device. If a session ends while the
+   application is not open, the keys stay there until the application is
+   opened again and deletes them (draft 23, from the security review).
 7. **Visible metadata.** The server sees the size of each file, the time of
    each upload and each access, and the network address of each client.
 8. **Hidden and old records.** A compromised server can hide a file. It can
@@ -2403,8 +2406,16 @@ file_id || folder_id || visibility)` for a file and the same with the two
    folder identifiers for a folder, and the browser makes a record later
    only if the tag is correct. A script client has no account private key
    and cannot make the tag, so its files in a folder would wait until the
-   owner agrees. A different proposal: the owner agrees to each repair that
-   adds a reader. No decision is made.
+   owner agrees. A second proposal: the place of the file (the folder
+   identifier and the visibility) is a part of `sealed_metadata`, which
+   `file_key` protects. The uploader writes it, the owner writes it again
+   with each move and each change of visibility, and the browser makes a
+   folder stanza later only for the place that the metadata names. A script
+   client can do this, because it has `file_key`. A server that gives an
+   old `sealed_metadata` (section 3.3, limit 8) can only give back a reader
+   that the file had before. This proposal does not cover the stanza of a
+   folder in its parent. A third proposal: the owner agrees to each repair
+   that adds a reader. No decision is made.
 4. **Storage quota of sealed records.** From the security review. A
    `sealed_ocr_text` and a `sealed_thumbnail` can each have 256 KiB, and the
    server does not count them in the storage quota of the account. Thus an
