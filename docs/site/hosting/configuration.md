@@ -176,7 +176,7 @@ Policy activation timestamps and the internal applied-mode marker are server-own
 | `FLARE_EMAIL_BRANDING_SUPPORT_ADDRESS`      | Empty                            |
 | `FLARE_EMAIL_BRANDING_SUBJECT_PREFIX`       | Empty                            |
 | `FLARE_EMAIL_BRANDING_VERIFICATION_SUBJECT` | `Verify your email address`      |
-| `FLARE_EMAIL_BRANDING_RESET_SUBJECT`        | `Reset your password`            |
+| `FLARE_EMAIL_BRANDING_RESET_SUBJECT`        | `Reset your passphrase`          |
 | `FLARE_EMAIL_BRANDING_CHANGE_SUBJECT`       | `Confirm your new email address` |
 | `FLARE_EMAIL_BRANDING_INTRO_TEXT`           | Empty                            |
 

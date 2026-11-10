@@ -5,6 +5,7 @@ import {
   probeStoredLength,
 } from '@/lib/e2ee/client/encrypted-source'
 import { decodeStream } from '@/lib/e2ee/client/plain-view'
+import { asFolderPublicKey } from '@/lib/e2ee/types'
 import { BATCH_LIMIT } from '@/lib/library/contract'
 import type {
   EncryptedStreamSource,
@@ -78,6 +79,38 @@ export interface JobEnvironment {
   readonly signal: AbortSignal
   readonly onProgress?: (progress: JobProgress) => void
 }
+
+/** A folder of an archive that an extraction makes as an account folder. */
+export interface PlannedFolder {
+  /** The path inside the archive, without a slash at either end. */
+  readonly path: string
+  readonly name: string
+  /** The path of the folder above it. Empty: directly in the new folder. */
+  readonly parentPath: string
+}
+
+/** An account folder that was made for an extraction. */
+export interface ExtractionFolder {
+  readonly id: string
+  /**
+   * `folder_public_key`, which the owner's browser got from the private key
+   * it made (docs/e2ee-spec.md, section 8.4.2). A public file gets a folder
+   * stanza for it. Null: the file is stored without one.
+   */
+  readonly folderPublicKey: Uint8Array | null
+}
+
+/**
+ * Makes the folders of an extraction: one new folder that holds
+ * everything, at the empty path, and one for each folder of the archive.
+ * The owner's page does this, because a folder record needs the account
+ * private key and the names must be sealed before they are sent (section
+ * 12.3.1, rule 4). It is called once, after every check of the archive
+ * passed and before the first upload.
+ */
+export type MakeExtractionFolders = (
+  planned: readonly PlannedFolder[]
+) => Promise<ReadonlyMap<string, ExtractionFolder>>
 
 export interface ExtractResult {
   readonly fileCount: number
@@ -160,13 +193,28 @@ export function typeOfName(name: string): string {
 }
 
 /**
- * The name of an extracted file. An entry in a folder of the archive keeps
- * its path in its name, joined with " - ": the server stores folder names
- * as plain text, so the browser makes no folders from the names inside an
- * encrypted archive.
+ * The folders of an archive, parents before the folders inside them, as the
+ * server plans them for a plain archive. `nodes` is what a `ManifestBuilder`
+ * collected: every folder that an entry names or lies in.
  */
-export function extractedName(path: string): string {
-  return path.split('/').filter(Boolean).join(' - ').slice(0, 255)
+export function plannedFolders(
+  nodes: Iterable<{ readonly path: string; readonly type: string }>
+): PlannedFolder[] {
+  const folders: PlannedFolder[] = []
+  for (const node of nodes) {
+    if (node.type !== 'directory') continue
+    const parts = node.path.split('/')
+    folders.push({
+      path: node.path,
+      name: parts[parts.length - 1],
+      parentPath: parts.slice(0, -1).join('/'),
+    })
+  }
+  return folders.sort(
+    (left, right) =>
+      left.path.split('/').length - right.path.split('/').length ||
+      left.path.localeCompare(right.path)
+  )
 }
 
 /**
@@ -205,11 +253,16 @@ function sequentialReader(
   }
 }
 
-/** Extracts every file of an encrypted archive as a new encrypted file. */
+/**
+ * Extracts every file of an encrypted archive as a new encrypted file, in
+ * the folder structure of the archive: a new folder holds everything, as
+ * the server makes one for a plain archive. `target.folderId` is where that
+ * new folder goes and is not where the files go.
+ */
 export async function extractEncryptedArchive(
   file: JobFile,
   target: JobTarget,
-  environment: JobEnvironment
+  environment: JobEnvironment & { readonly folders: MakeExtractionFolders }
 ): Promise<ExtractResult> {
   const { signal } = environment
   const source = await openSource(file, environment)
@@ -243,12 +296,21 @@ export async function extractEncryptedArchive(
             )
           )
         : null
+    // Every check of the archive passed. Nothing was made before this.
+    signal.throwIfAborted()
+    const folders = await environment.folders(
+      plannedFolders(builder.nodes.values())
+    )
     let bytesDone = 0
     let filesDone = 0
     try {
       for (const { entry, position, path } of files) {
         signal.throwIfAborted()
-        const name = extractedName(path)
+        const parts = path.split('/')
+        const name = parts[parts.length - 1]
+        const folder = folders.get(parts.slice(0, -1).join('/'))
+        if (!folder)
+          throw new ArchiveError('A folder of the archive was not made.', 500)
         const report = (current: number) =>
           environment.onProgress?.({
             filesDone,
@@ -265,6 +327,15 @@ export async function extractEncryptedArchive(
           { name, type: typeOfName(name), size: entry.size, bytes },
           {
             ...target,
+            folderId: folder.id,
+            // A file that is public by this request gets its folder stanza
+            // now. Where a profile decides, the background work of the
+            // owner's browser makes it (sections 8.4.3 and 9.4.7).
+            library: {
+              folder: folder.folderPublicKey && {
+                folderPublicKey: asFolderPublicKey(folder.folderPublicKey),
+              },
+            },
             encryptFor: environment.accountPublicKey,
             signal,
           },

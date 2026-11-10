@@ -4,6 +4,7 @@ import { signOut } from 'next-auth/react'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { clearStoredAccountKeys } from '@/lib/e2ee/client/browser-store'
+import { dropLocalAddresses } from '@/lib/e2ee/client/local-address'
 import { endSearchSession } from '@/lib/library/search-client'
 
 import { useToast } from '@/hooks/use-toast'
@@ -26,6 +27,10 @@ export function useSignOut({
       await clearStoredAccountKeys()
       // The local cache of encrypted records goes too (section 9.8.1).
       await endSearchSession()
+      // This page is replaced before its key state says "signed out", so it
+      // tells the service worker itself to forget every file key (section
+      // 12.2.3). The keys this page opened go with the page.
+      dropLocalAddresses()
       await signOut({ callbackUrl: LOCAL_SIGN_IN_PATH })
     } catch (error) {
       if (onError) return onError(error)

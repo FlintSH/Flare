@@ -5,10 +5,12 @@ import type { ArchiveOutputFormat } from '../shared'
 import {
   type CreateResult,
   type ExtractResult,
+  type ExtractionFolder,
   type JobFile,
   type JobProgress,
   type JobSource,
   type JobTarget,
+  type PlannedFolder,
   createEncryptedArchive,
   extractEncryptedArchive,
 } from './jobs'
@@ -34,9 +36,16 @@ export type ArchiveWorkerRequest =
       target: JobTarget
       accountPublicKey: Uint8Array
     }
+  /** The page's answer to `folders`: the account folder of each path. */
+  | { type: 'folders'; made: [path: string, folder: ExtractionFolder][] }
 
 export type ArchiveWorkerResponse =
   | { type: 'progress'; progress: JobProgress }
+  /**
+   * The folders an extraction needs. The page makes them: only it has the
+   * account private key, and their names never leave the browser unsealed.
+   */
+  | { type: 'folders'; planned: PlannedFolder[] }
   | { type: 'extracted'; result: ExtractResult }
   | { type: 'created'; result: CreateResult }
   /** `message` is for the person. It never holds a key. */
@@ -49,8 +58,16 @@ interface WorkerScope {
 
 const scope = globalThis as unknown as WorkerScope
 
+let foldersMade:
+  ((made: ReadonlyMap<string, ExtractionFolder>) => void) | null = null
+
 scope.onmessage = (event) => {
   const request = event.data
+  if (request.type === 'folders') {
+    foldersMade?.(new Map(request.made))
+    foldersMade = null
+    return
+  }
   const environment = {
     fetch: (url: string, init: RequestInit) => fetch(url, init),
     upload: uploadEncryptedStream,
@@ -61,9 +78,15 @@ scope.onmessage = (event) => {
   }
   const work =
     request.type === 'extract'
-      ? extractEncryptedArchive(request.file, request.target, environment).then(
-          (result) => scope.postMessage({ type: 'extracted', result })
-        )
+      ? extractEncryptedArchive(request.file, request.target, {
+          ...environment,
+          // The page answers, or ends this worker if it cannot.
+          folders: (planned) =>
+            new Promise<ReadonlyMap<string, ExtractionFolder>>((resolve) => {
+              foldersMade = resolve
+              scope.postMessage({ type: 'folders', planned: [...planned] })
+            }),
+        }).then((result) => scope.postMessage({ type: 'extracted', result }))
       : createEncryptedArchive(
           request.sources,
           request.output,

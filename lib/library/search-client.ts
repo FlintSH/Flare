@@ -33,6 +33,10 @@ const STOPPED: SearchIndexState = {
 let worker: Worker | null = null
 let state = STOPPED
 let startedFor: StoredAccountKeys | null = null
+/** The keys of the last start, kept after a stop. */
+let lastKeys: StoredAccountKeys | null = null
+/** The keys whose session ended in this page. No worker starts for them again. */
+let endedFor: StoredAccountKeys | null = null
 let nextCall = 0
 const calls = new Map<
   number,
@@ -76,9 +80,11 @@ export const searchIndex = {
 
   /** Starts the worker for these keys. Does nothing if it runs for them already. */
   start(keys: StoredAccountKeys) {
+    if (keys === endedFor) return
     if (worker && startedFor === keys) return
     this.stop()
     startedFor = keys
+    lastKeys = keys
     worker = new Worker(new URL('./search.worker.ts', import.meta.url), {
       type: 'module',
     })
@@ -150,8 +156,15 @@ export const searchIndex = {
 /**
  * Ends search for a session that is over: stops the worker and deletes the
  * cache of encrypted records (section 9.8.1). Never rejects.
+ *
+ * At sign-out the page still holds its keys until it is replaced, and the
+ * background work of the library goes on for that long. Its index job
+ * starts a worker that does not run, and a new worker writes the cache
+ * again. So the keys of the session that ended start no worker any more.
+ * A new sign-in gives the page a new record of keys.
  */
 export async function endSearchSession(): Promise<void> {
+  endedFor = lastKeys
   searchIndex.stop()
   await clearSearchCache()
 }

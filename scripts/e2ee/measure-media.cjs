@@ -394,7 +394,6 @@ async function seed() {
       ...record.columns,
       roles: { connect: { systemKey: 'administrator' } },
       urlId: 'alexm',
-      uploadToken: `${ACCOUNT.id}-public-disposable-upload-token`,
     },
   })
 }

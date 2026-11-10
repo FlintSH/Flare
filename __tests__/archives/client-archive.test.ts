@@ -22,14 +22,16 @@ import {
 import {
   type JobEnvironment,
   type JobFile,
+  type PlannedFolder,
   createEncryptedArchive,
   extractEncryptedArchive,
-  extractedName,
   memberNames,
+  plannedFolders,
   typeOfName,
 } from '@/lib/archives/client/jobs'
 import { readArchive } from '@/lib/archives/codec'
 import { crc32 as browserCrc32 } from '@/lib/archives/crc32'
+import { ManifestBuilder } from '@/lib/archives/manifest'
 import { ARCHIVE_LIMITS } from '@/lib/archives/shared'
 import { openEncryptedSource } from '@/lib/e2ee/client/encrypted-source'
 import { STORED_CHUNK_SIZE } from '@/lib/e2ee/file'
@@ -389,6 +391,10 @@ describe('the limits of extraction', () => {
       {
         fetch: server.fetch,
         upload: noUpload,
+        // An archive that fails a check leaves nothing behind, no folder.
+        folders: async () => {
+          throw new Error('No folder may be made')
+        },
         accountPublicKey: new Uint8Array(32),
         signal: new AbortController().signal,
       }
@@ -518,10 +524,14 @@ describe('extracting an encrypted archive', () => {
     { name: 'empty.bin', data: Buffer.alloc(0) },
   ]
 
+  const folderKey = (path: string) => new Uint8Array(32).fill(path.length + 1)
+
   async function run(archive: Uint8Array, name: string) {
     const { server, stored } = await sourceOf(archive)
     const { uploads, upload } = collector()
     const progress: number[] = []
+    const planned: PlannedFolder[][] = []
+    const uploadsAtFolders: number[] = []
     const result = await extractEncryptedArchive(
       {
         url: URL,
@@ -535,12 +545,29 @@ describe('extracting an encrypted archive', () => {
       {
         fetch: server.fetch,
         upload,
+        folders: async (folders) => {
+          planned.push([...folders])
+          uploadsAtFolders.push(uploads.length)
+          return new Map([
+            ['', { id: 'new-folder', folderPublicKey: folderKey('') }],
+            ...folders.map(
+              (folder) =>
+                [
+                  folder.path,
+                  {
+                    id: `made:${folder.path}`,
+                    folderPublicKey: folderKey(folder.path),
+                  },
+                ] as const
+            ),
+          ])
+        },
         accountPublicKey: new Uint8Array(32).fill(5),
         signal: new AbortController().signal,
         onProgress: (event) => progress.push(event.bytesDone),
       }
     )
-    return { result, uploads, progress, server }
+    return { result, uploads, progress, server, planned, uploadsAtFolders }
   }
 
   it.each([
@@ -549,16 +576,52 @@ describe('extracting an encrypted archive', () => {
     ['TAR.GZ', 'bundle.tar.gz', async () => gzipSync(await tarStream(files))],
     ['TGZ', 'bundle.tgz', async () => gzipSync(await tarStream(files))],
   ])('makes one file for each entry of a %s', async (_format, name, make) => {
-    const { result, uploads, progress } = await run(await make(), name)
+    const { result, uploads, progress, planned, uploadsAtFolders } = await run(
+      await make(),
+      name
+    )
     expect(result.fileCount).toBe(4)
     expect(result.totalBytes).toBe(
       files.reduce((sum, file) => sum + file.data.length, 0)
     )
+    // The folders are asked for one time, before the first upload, parents
+    // first, as the server plans them for a plain archive.
+    expect(uploadsAtFolders).toEqual([0])
+    expect(planned).toEqual([
+      [
+        { path: 'photos', name: 'photos', parentPath: '' },
+        { path: 'photos/2026', name: '2026', parentPath: 'photos' },
+      ],
+    ])
+    // A file keeps the name it has in the archive, without its path.
     expect(uploads.map((upload) => upload.name)).toEqual([
-      'photos - 2026 - harbor.png',
-      'photos - 2026 - pier.jpg',
+      'harbor.png',
+      'pier.jpg',
       'notes.txt',
       'empty.bin',
+    ])
+    // Each file goes into the folder of its path. `folderId` of the request
+    // is where the new folder goes, and no file goes there.
+    expect(uploads.map((upload) => upload.options.folderId)).toEqual([
+      'made:photos/2026',
+      'made:photos/2026',
+      'new-folder',
+      'new-folder',
+    ])
+    expect(
+      uploads.map(
+        (upload) =>
+          (
+            upload.options.library as {
+              folder: { folderPublicKey: Uint8Array }
+            }
+          ).folder.folderPublicKey
+      )
+    ).toEqual([
+      folderKey('photos/2026'),
+      folderKey('photos/2026'),
+      folderKey(''),
+      folderKey(''),
     ])
     expect(uploads.map((upload) => upload.type)).toEqual([
       'image/png',
@@ -570,7 +633,6 @@ describe('extracting an encrypted archive', () => {
       expectSameBytes(uploads[index].bytes, file.data)
       expect(uploads[index].size).toBe(file.data.length)
       expect(uploads[index].options).toMatchObject({
-        folderId: 'folder-1',
         profileId: null,
         visibility: 'PRIVATE',
       })
@@ -933,12 +995,21 @@ describe('creating an archive from files', () => {
 })
 
 describe('names and types of extracted files', () => {
-  it('keeps the path of an entry in its name', () => {
-    expect(extractedName('a.txt')).toBe('a.txt')
-    expect(extractedName('photos/2026/harbor.png')).toBe(
-      'photos - 2026 - harbor.png'
-    )
-    expect(extractedName('x'.repeat(400)).length).toBe(255)
+  it('plans every folder of the archive, parents first', () => {
+    const builder = new ManifestBuilder()
+    builder.add('b/deep/er/file.txt', 'file', 1)
+    builder.add('a.txt', 'file', 1)
+    builder.add('empty/', 'directory', 0)
+    builder.add('b/other.txt', 'file', 1)
+    expect(plannedFolders(builder.nodes.values())).toEqual([
+      { path: 'b', name: 'b', parentPath: '' },
+      { path: 'empty', name: 'empty', parentPath: '' },
+      { path: 'b/deep', name: 'deep', parentPath: 'b' },
+      { path: 'b/deep/er', name: 'er', parentPath: 'b/deep' },
+    ])
+    const flat = new ManifestBuilder()
+    flat.add('a.txt', 'file', 1)
+    expect(plannedFolders(flat.nodes.values())).toEqual([])
   })
 
   it('claims a type from the extension, and the generic type otherwise', () => {

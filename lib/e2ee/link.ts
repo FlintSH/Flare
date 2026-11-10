@@ -78,8 +78,28 @@ export function parseShareFragment(fragment: string): ParsedShareFragment {
 }
 
 /**
- * `{page address}#{fragment}`. `pageUrl` is the address the server gave for
- * the file. A fragment it already has is replaced.
+ * The path and query of an address, for use on the origin of the page
+ * itself. A client puts a key only into an address of its own origin: the
+ * script of another origin would read the part after `#`. An address from
+ * the server is data that a compromised server controls, so the client
+ * keeps its path and drops its origin (section 10.3).
+ */
+export function ownOriginPath(address: string, origin: string): string {
+  let url: URL
+  try {
+    url = new URL(address, origin)
+  } catch {
+    return '/'
+  }
+  // A path that starts with `//` would name another host when it is used
+  // as a relative address.
+  const path = `/${url.pathname.replace(/^\/+/, '')}`
+  return `${path}${url.search}`
+}
+
+/**
+ * `{page address}#{fragment}`. `pageUrl` is an address of this origin (see
+ * `ownOriginPath`). A fragment it already has is replaced.
  */
 export function shareLink(pageUrl: string, secret: ShareSecret): string {
   const hash = pageUrl.indexOf('#')

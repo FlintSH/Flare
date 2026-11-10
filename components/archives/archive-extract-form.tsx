@@ -28,12 +28,14 @@ import { Progress } from '@/components/ui/progress'
 import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 
 import { extractInWorker } from '@/lib/archives/client/archive-worker'
+import { extractionFolderMaker } from '@/lib/archives/client/extraction-folders'
 import type { JobProgress } from '@/lib/archives/client/jobs'
 import { type ArchiveManifest, archiveBasename } from '@/lib/archives/shared'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { folderPath } from '@/lib/folders/navigation'
 import { folderNameTaken } from '@/lib/folders/owned'
-import { FOLDER_NAME_MAX_LENGTH } from '@/lib/folders/schema'
+import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { UNFILED, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes } from '@/lib/utils'
@@ -74,8 +76,7 @@ export function ArchiveExtractForm({
 }) {
   const { user } = usePermissions()
   const keys = useAccountKeyState()
-  const accountPublicKey =
-    keys.status === 'unlocked' ? keys.keys.accountPublicKey : null
+  const accountKeys = keys.status === 'unlocked' ? keys.keys : null
   const [progress, setProgress] = useState<JobProgress | null>(null)
   const lifetime = useRequestLifetime()
   const {
@@ -145,27 +146,71 @@ export function ArchiveExtractForm({
         totalBytes: number
       }
       if (archive) {
-        if (!accountPublicKey)
+        if (!accountKeys)
           throw new Error('Unlock your encryption keys, then try again.')
         setProgress(null)
-        const extracted = await extractInWorker(
-          {
-            file: archive.jobFile(),
-            // Private and without expiration unless a profile says otherwise,
-            // as the server does for a plain archive.
-            target: profileId
-              ? { folderId, profileId }
-              : {
-                  folderId,
-                  profileId: null,
-                  visibility: 'PRIVATE',
-                  expiresAt: null,
-                },
-            accountPublicKey,
-          },
-          { signal, onProgress: setProgress }
-        )
-        next = { folderId, ...extracted }
+        // The folders this extraction made, the new folder first.
+        const made: FolderView[] = []
+        let uploaded = 0
+        try {
+          const extracted = await extractInWorker(
+            {
+              file: archive.jobFile(),
+              // Private and without expiration unless a profile says
+              // otherwise, as the server does for a plain archive.
+              target: profileId
+                ? { folderId, profileId }
+                : {
+                    folderId,
+                    profileId: null,
+                    visibility: 'PRIVATE',
+                    expiresAt: null,
+                  },
+              accountPublicKey: accountKeys.accountPublicKey,
+            },
+            {
+              signal,
+              onProgress: (current) => {
+                uploaded = current.filesDone
+                setProgress(current)
+              },
+              // The worker checked the archive. This page has the account
+              // key, so it makes the folders, each with a sealed name.
+              folders: extractionFolderMaker({
+                name: name.trim(),
+                parentId: folderId,
+                folders: folders.filter((folder) => !folder.locked),
+                keys: accountKeys,
+                create: (body) =>
+                  apiRequest<FolderView>('/api/folders', {
+                    method: 'POST',
+                    body,
+                    signal,
+                    fallback: ARCHIVE_REQUEST_FAILED,
+                  }),
+                made: (folder) => made.push(folder),
+              }),
+            }
+          )
+          next = { folderId: made[0]?.id ?? folderId, ...extracted }
+        } catch (cause) {
+          // Folders without a file in them are of no use: remove them, the
+          // deepest first. Once a file is stored, everything stays.
+          if (!uploaded)
+            for (const folder of made.reverse())
+              await apiRequest(`/api/folders/${folder.id}`, {
+                method: 'DELETE',
+              }).catch(() => undefined)
+          else if (!signal.aborted && cause instanceof Error)
+            throw new Error(
+              `${archiveErrorMessage(cause)} ${uploaded} ${uploaded === 1 ? 'file was' : 'files were'} already extracted and stay in the new folder.`
+            )
+          throw cause
+        } finally {
+          // New files wait for thumbnails, tag rules and folder stanzas,
+          // and the new folders belong in every open list (section 9.7).
+          if (made.length) requestMaintenance('folders', 'index', 'pending')
+        }
       } else
         next = await apiRequest<{
           folderId: string
@@ -213,13 +258,8 @@ export function ArchiveExtractForm({
           <DialogTitle>Archive extracted</DialogTitle>
           <DialogDescription>
             {result.fileCount}{' '}
-            {result.fileCount === 1 ? 'file is' : 'files are'} ready in{' '}
-            {archive
-              ? result.folderId
-                ? folderPath(folders, result.folderId) || 'the selected folder'
-                : 'Unfiled'
-              : 'your new folder'}
-            . The original archive is unchanged.
+            {result.fileCount === 1 ? 'file is' : 'files are'} ready in your new
+            folder. The original archive is unchanged.
           </DialogDescription>
         </DialogHeader>
         <p className="rounded-xl border bg-muted/30 p-4 text-sm">
@@ -228,7 +268,7 @@ export function ArchiveExtractForm({
             ? ' using your selected upload profile'
             : ' as private files'}
           {archive
-            ? ', each encrypted in this browser. A file from a folder of the archive keeps its path in its name.'
+            ? ', each encrypted in this browser, with the archive’s folder structure preserved in folders whose names are encrypted too.'
             : ', with the archive’s folder structure preserved.'}
         </p>
         <DialogFooter>
@@ -256,7 +296,9 @@ export function ArchiveExtractForm({
           Extract all {manifest.fileCount}{' '}
           {manifest.fileCount === 1 ? 'file' : 'files'} from{' '}
           <span className="font-medium text-foreground">{file.name}</span>{' '}
-          {archive ? 'as new encrypted files.' : 'into a new account folder.'}
+          {archive
+            ? 'into a new account folder, as new encrypted files.'
+            : 'into a new account folder.'}
         </DialogDescription>
       </DialogHeader>
       <form
@@ -274,14 +316,14 @@ export function ArchiveExtractForm({
             disabled={busy}
             allowFolders
           />
-          <div className={archive ? 'hidden' : 'space-y-2'}>
+          <div className="space-y-2">
             <Label htmlFor="archive-extract-name">New folder name</Label>
             <Input
               id="archive-extract-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
               maxLength={FOLDER_NAME_MAX_LENGTH}
-              required={!archive}
+              required
               disabled={busy}
             />
             <p className="break-words text-xs text-muted-foreground">
@@ -306,7 +348,7 @@ export function ArchiveExtractForm({
             <Lock aria-hidden="true" />
             <AlertDescription>
               {archive
-                ? 'This browser decrypts each file, encrypts it again as its own file and uploads it, so a large archive takes time and bandwidth. The files go straight into the destination above: Flare makes no folders from an encrypted archive, and a file from a folder keeps its path in its name.'
+                ? 'This browser decrypts each file, encrypts it again as its own file and uploads it, so a large archive takes time and bandwidth. Files keep their archive folder structure. The names of the new folders are encrypted in this browser, like the file names.'
                 : 'Files keep their archive folder structure and use the settings shown above.'}{' '}
               No file password is inherited. Your original archive stays in
               place. This uses up to {formatBytes(manifest.totalBytes)} of
@@ -369,8 +411,8 @@ export function ArchiveExtractForm({
               !allowed ||
               !profileReady ||
               destinationUnavailable ||
-              (!archive && !name.trim()) ||
-              (!!archive && !accountPublicKey) ||
+              !name.trim() ||
+              (!!archive && !accountKeys) ||
               !manifest.entries.length
             }
           >

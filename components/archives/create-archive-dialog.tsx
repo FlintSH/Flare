@@ -35,7 +35,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
+import {
+  ProfilePicker,
+  useUploadProfiles,
+} from '@/components/upload-profiles/profile-picker'
 
 import { createInWorker } from '@/lib/archives/client/archive-worker'
 import { canWriteTarGz } from '@/lib/archives/client/archive-writer'
@@ -50,6 +53,7 @@ import {
 import { base64urlDecode } from '@/lib/e2ee/primitives'
 import { safeFileName } from '@/lib/files/safe-render'
 import { fileUrls } from '@/lib/files/urls'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { UNFILED, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import { formatBytes, formatFileSize } from '@/lib/utils'
@@ -115,8 +119,13 @@ export function CreateArchiveDialog({
   const { totalBytes, overLimit } = archiveSelectionSize(files)
   // A selection with an encrypted file is archived in this browser: the
   // server cannot read such a file, and the new archive is encrypted too
-  // (docs/e2ee-spec.md, section 12.3).
-  const inBrowser = files.some((file) => file.encrypted)
+  // (docs/e2ee-spec.md, section 12.3). So is a selection of plain files
+  // where the administrator forbids plain uploads: the server would make a
+  // plain archive and refuse to store it (section 11.1).
+  const plainForbidden =
+    useUploadProfiles().data?.plainUploadsForbidden === true
+  const encryptedSources = files.some((file) => file.encrypted)
+  const inBrowser = encryptedSources || plainForbidden
   const keys = useAccountKeyState()
   const accountKeys = keys.status === 'unlocked' ? keys.keys : null
   const snapshot = useSyncExternalStore(
@@ -215,6 +224,9 @@ export function CreateArchiveDialog({
           },
           { signal, onProgress: setProgress }
         )
+        // The new file waits for its tag rules and, where a profile made it
+        // public in a folder, for its folder stanza (section 9.7).
+        requestMaintenance('folders', 'index', 'pending')
         next = {
           file: {
             id: created.id,
@@ -425,9 +437,11 @@ export function CreateArchiveDialog({
                 <Alert variant="info" role="status">
                   <Lock aria-hidden="true" />
                   <AlertDescription>
-                    {inBrowser
+                    {encryptedSources
                       ? 'This browser decrypts the selected files, builds the archive and uploads it encrypted, so large files take time and bandwidth. The archive'
-                      : 'Your archive'}{' '}
+                      : inBrowser
+                        ? 'This server accepts encrypted uploads only, so this browser builds the archive from the selected files and uploads it encrypted. Large files take time and bandwidth. The archive'
+                        : 'Your archive'}{' '}
                     uses the settings shown above. Original files stay
                     unchanged. No file password is inherited.
                   </AlertDescription>

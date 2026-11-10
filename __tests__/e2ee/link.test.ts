@@ -4,6 +4,7 @@ import {
   folderShareFragment,
   folderShareLink,
   fragmentCarriesShareSecret,
+  ownOriginPath,
   parseFolderFragment,
   parseShareFragment,
   shareFragment,
@@ -162,5 +163,38 @@ describe('shared folder link (section 9.4.3)', () => {
     expect(
       fragmentCarriesShareSecret(`https://x.test/s/folders/token#${text}`)
     ).toBe(true)
+  })
+})
+
+describe('ownOriginPath', () => {
+  const origin = 'https://flare.example'
+  it('keeps the path and the query of an address of this origin', () => {
+    expect(ownOriginPath('https://flare.example/alex/e_abc', origin)).toBe(
+      '/alex/e_abc'
+    )
+    expect(ownOriginPath('/alex/e_abc?page=2', origin)).toBe(
+      '/alex/e_abc?page=2'
+    )
+  })
+  it('drops another origin, so a key never goes into its address', () => {
+    for (const address of [
+      'https://other.example/alex/e_abc',
+      'http://flare.example.other.example/alex/e_abc',
+      '//other.example/alex/e_abc',
+      'https://flare.example//other.example/alex/e_abc',
+    ]) {
+      const path = ownOriginPath(address, origin)
+      expect(path.startsWith('/')).toBe(true)
+      expect(path.startsWith('//')).toBe(false)
+      expect(new URL(`${origin}${path}`).origin).toBe(origin)
+      expect(new URL(path, origin).origin).toBe(origin)
+    }
+  })
+  it('drops the fragment and survives an address that is no address', () => {
+    expect(ownOriginPath('/alex/e_abc#secret', origin)).toBe('/alex/e_abc')
+    expect(ownOriginPath('javascript:alert(1)', origin).startsWith('/')).toBe(
+      true
+    )
+    expect(ownOriginPath('http://[', origin)).toBe('/')
   })
 })

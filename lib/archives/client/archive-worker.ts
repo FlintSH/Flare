@@ -2,7 +2,12 @@ import type {
   ArchiveWorkerRequest,
   ArchiveWorkerResponse,
 } from './archive.worker'
-import type { CreateResult, ExtractResult, JobProgress } from './jobs'
+import type {
+  CreateResult,
+  ExtractResult,
+  JobProgress,
+  MakeExtractionFolders,
+} from './jobs'
 
 /**
  * The page's side of `archive.worker.ts`. Each call starts one worker and
@@ -24,6 +29,7 @@ function run<Result>(
   options: {
     signal?: AbortSignal
     onProgress?: (progress: JobProgress) => void
+    folders?: MakeExtractionFolders
   }
 ): Promise<Result> {
   return new Promise<Result>((resolve, reject) => {
@@ -45,7 +51,24 @@ function run<Result>(
     worker.onmessage = (event: MessageEvent<ArchiveWorkerResponse>) => {
       const message = event.data
       if (message.type === 'progress') options.onProgress?.(message.progress)
-      else if (message.type === 'error')
+      else if (message.type === 'folders') {
+        const make =
+          options.folders ??
+          (() => Promise.reject(new Error('This job makes no folders.')))
+        make(message.planned).then(
+          (made) => {
+            if (!settled)
+              worker.postMessage({ type: 'folders', made: [...made] })
+          },
+          (error: unknown) =>
+            end({
+              error:
+                error instanceof Error
+                  ? error
+                  : new ArchiveJobError('The folders could not be made.'),
+            })
+        )
+      } else if (message.type === 'error')
         end({ error: new ArchiveJobError(message.message, message.status) })
       else {
         const value = done(message)
@@ -70,9 +93,13 @@ type JobOptions = {
   onProgress?: (progress: JobProgress) => void
 }
 
+/**
+ * `folders` makes the account folders once the worker checked the archive
+ * (see `MakeExtractionFolders`). If it rejects, the job ends with its error.
+ */
 export function extractInWorker(
   request: Omit<Extract<ArchiveWorkerRequest, { type: 'extract' }>, 'type'>,
-  options: JobOptions = {}
+  options: JobOptions & { folders: MakeExtractionFolders }
 ): Promise<ExtractResult> {
   return run(
     { type: 'extract', ...request },

@@ -101,7 +101,7 @@ The second control is off by default. When enabled, proof is tied to the account
 
 ## Brand account messages
 
-Advanced branding includes instance name, logo URL, accent color, support address, footer, introductory text, subject prefix, and separate verification/reset/change subjects. Flare generates HTML and plain-text versions and escapes the configured text. It does not accept arbitrary HTML email templates, attachments, or executable template code.
+Advanced branding includes instance name, logo URL, accent color, support address, footer, introductory text, subject prefix, and separate verification/reset/change subjects. Flare generates HTML and plain-text versions and escapes the configured text. It does not accept arbitrary HTML email templates, attachments, or executable template code. The default reset subject is **Reset your passphrase**. An installation that saved its email settings before accounts moved to passphrases keeps the subject it saved, usually **Reset your password**: change it under the email settings if you want the new wording.
 
 Use sender-domain SPF, DKIM, and DMARC settings as provided by your mail service. Flare does not receive provider bounce webhooks in this release, so investigate provider logs when mail is accepted but does not arrive.
 

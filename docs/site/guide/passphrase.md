@@ -9,8 +9,8 @@ Your Flare account has **encryption keys**. Your browser makes them, and only yo
 
 A **recovery phrase** of 24 words is the second way to open the same keys. You see it when the keys are made. Save it offline.
 
-::: warning Files are not encrypted yet
-This release moves accounts and sign-in to passphrases and keys. Uploads, downloads, and sharing still handle plain files, as [sharing and privacy](./sharing) describes. File encryption uses these keys and arrives in a later release. Everything on this page about "encrypted files" describes what the keys will protect then.
+::: tip These keys encrypt your files
+New uploads are encrypted on your device with keys that only your passphrase or your recovery phrase opens. [Encrypted and plain files](./encryption) describes what is encrypted, what the server still sees, and which files stay plain.
 :::
 
 ## What each secret does

@@ -457,6 +457,49 @@ function metadataOf(file, fileKey) {
   )
 }
 
+/**
+ * The names of the account's folders that have keys, by folder ID, opened
+ * with independent code: `folder_owner_key` opens the folder private key,
+ * which gives the public key the server stores and opens the sealed name
+ * (docs/e2ee-spec.md, section 8.4.2).
+ */
+async function folderNamesOf(userId, accountPrivateKeyHex) {
+  const owner = deriveKey(
+    'flare e2ee v1 folder owner',
+    Buffer.from(accountPrivateKeyHex, 'hex')
+  )
+  const names = new Map()
+  for (const folder of await prisma.vaultFolder.findMany({
+    where: { userId },
+  })) {
+    assert.equal(folder.name, '', 'A folder has a plain name')
+    const sealedKey = Buffer.from(folder.sealedFolderPrivateKey).subarray(1)
+    const privateKey = Buffer.from(
+      openBox(owner, sealedKey.subarray(0, 24), sealedKey.subarray(24, -32))
+    )
+    assert.ok(
+      Buffer.from(x25519.getPublicKey(privateKey)).equals(
+        Buffer.from(folder.folderPublicKey)
+      ),
+      'A sealed folder key does not give the folder public key'
+    )
+    const sealedName = Buffer.from(folder.sealedFolderMetadata).subarray(1)
+    names.set(
+      folder.id,
+      JSON.parse(
+        Buffer.from(
+          openBox(
+            deriveKey('flare e2ee v1 folder metadata', privateKey),
+            sealedName.subarray(0, 24),
+            sealedName.subarray(24, -32)
+          )
+        ).toString('utf8')
+      ).name
+    )
+  }
+  return names
+}
+
 /** The whole plaintext of a stored file, decrypted with independent code. */
 async function plaintextOf(file, fileKey) {
   const stored = await readFile(path.join(appDirectory, file.path))
@@ -789,7 +832,6 @@ async function seed() {
       ...record.columns,
       roles: { connect: { systemKey: 'administrator' } },
       urlId: 'alexm',
-      uploadToken: `${accounts.alex.id}-public-disposable-upload-token`,
     },
   })
   return keys
@@ -1487,9 +1529,58 @@ async function reveal(page, locator) {
   await locator.scrollIntoViewIfNeeded()
 }
 
+/**
+ * Waits until the background work of the library is done (docs/e2ee-spec.md,
+ * section 9.7): no file of the account waits for a thumbnail, a tag rule or
+ * text, no folder waits for a repair, and the page shows no work. Files
+ * from an archive job get this work after the job, and a list that still
+ * changes under the pointer closes an open card menu.
+ */
+async function librarySettled(page, { timeout = 150000 } = {}) {
+  const left = async () => {
+    const [repairs, pending] = await Promise.all([
+      prisma.vaultFolder.count({
+        where: {
+          userId: accounts.alex.id,
+          OR: [{ folderPublicKey: null }, { rekeyPending: true }],
+        },
+      }),
+      prisma.file.count({
+        where: {
+          userId: accounts.alex.id,
+          unreadable: false,
+          pendingAttempts: { lt: 3 },
+          OR: [
+            { rulesPending: true },
+            { ocrPending: true },
+            { thumbnailPending: true },
+          ],
+        },
+      }),
+    ])
+    return (
+      repairs + pending + (await page.locator('[data-library-work]').count())
+    )
+  }
+  const deadline = Date.now() + timeout
+  let quiet = 0
+  for (;;) {
+    if ((await left()) === 0) {
+      // Two looks apart: a job that is about to start is not missed.
+      if (++quiet >= 2) return
+    } else quiet = 0
+    assert.ok(
+      Date.now() < deadline,
+      `The background work did not finish: ${await left()} items left`
+    )
+    await page.waitForTimeout(1500)
+  }
+}
+
 /** The library card menu of a file, by its decrypted name. */
 async function openCardMenu(page, name) {
   await page.goto(`${origin}/dashboard`)
+  await librarySettled(page)
   const manage = page.getByRole('button', {
     name: `Manage ${name}`,
     exact: true,
@@ -1526,8 +1617,13 @@ async function testDownload(browser, alex) {
   const saved = await readFile(await download.path())
   const seconds = (Date.now() - started) / 1000
   assert.equal(sha256(saved), sha256(fixture.buffer), 'SHA-256 of the download')
+  // The library cards on this page show sealed thumbnails, each a Blob of
+  // at most 250,000 bytes (section 12.1). A larger Blob, or an object that
+  // is no Blob, would hold content of the file.
   assert.deepEqual(
-    await page.evaluate(() => window.__blobBytes),
+    (await page.evaluate(() => window.__blobBytes)).filter(
+      (bytes) => bytes < 0 || bytes > 250000
+    ),
     [],
     'The page made a Blob for a streamed download'
   )
@@ -1696,19 +1792,25 @@ async function testTruncated(browser, alex) {
 /** The files inside every archive fixture. Their names and texts are plaintext too. */
 const ARCHIVE_ENTRIES = [
   {
-    name: 'photos/harbor-inside-private.png',
+    name: 'photos-inside-private/harbor-inside-private.png',
     buffer: pngFixture(marker('zipimage')),
   },
   {
-    name: 'notes/readme-inside-private.txt',
+    name: 'notes-inside-private/readme-inside-private.txt',
     buffer: Buffer.from(`${marker('ziptext')}\nInside the archive.\n`),
   },
   {
-    name: 'web/landing-inside-private.html',
+    name: 'web-inside-private/landing-inside-private.html',
     buffer: Buffer.from(HOSTILE_HTML),
   },
-  { name: 'web/diagram-inside-private.svg', buffer: Buffer.from(HOSTILE_SVG) },
-  { name: 'data/blob-inside-private.bin', buffer: randomBytes(300 * 1024) },
+  {
+    name: 'web-inside-private/diagram-inside-private.svg',
+    buffer: Buffer.from(HOSTILE_SVG),
+  },
+  {
+    name: 'data-inside-private/blob-inside-private.bin',
+    buffer: randomBytes(300 * 1024),
+  },
 ]
 for (const entry of ARCHIVE_ENTRIES) {
   extraPlaintext.set(entry.name, 'the name of an archive entry')
@@ -1716,6 +1818,8 @@ for (const entry of ARCHIVE_ENTRIES) {
     entry.name.split('/').at(-1),
     'the name of an archive entry'
   )
+  // An extraction makes an account folder with this name, sealed.
+  extraPlaintext.set(entry.name.split('/')[0], 'the name of an archive folder')
 }
 extraPlaintext.set(marker('zipimage'), 'plaintext of an archive entry')
 extraPlaintext.set(marker('ziptext'), 'plaintext of an archive entry')
@@ -1849,11 +1953,17 @@ async function backToRoot(scope) {
 
 /** Checks the listing and the previews of the common entries in an archive browser. */
 async function browseEntries(page, scope, { image = true } = {}) {
-  const text = await openEntry(scope, 'notes/readme-inside-private.txt')
+  const text = await openEntry(
+    scope,
+    'notes-inside-private/readme-inside-private.txt'
+  )
   await expect(text.getByLabel('Entry text')).toContainText(marker('ziptext'))
   await backToRoot(scope)
   if (image) {
-    const picture = await openEntry(scope, 'photos/harbor-inside-private.png')
+    const picture = await openEntry(
+      scope,
+      'photos-inside-private/harbor-inside-private.png'
+    )
     const img = picture.getByRole('img')
     await expect
       .poll(() => img.evaluate((element) => element.naturalWidth), {
@@ -1865,8 +1975,8 @@ async function browseEntries(page, scope, { image = true } = {}) {
   }
   // HTML and SVG entries are text. Nothing in them runs.
   for (const path of [
-    'web/landing-inside-private.html',
-    'web/diagram-inside-private.svg',
+    'web-inside-private/landing-inside-private.html',
+    'web-inside-private/diagram-inside-private.svg',
   ]) {
     const hostile = await openEntry(scope, path)
     await expect(hostile.getByLabel('Entry text')).toContainText('__flarePwned')
@@ -1932,12 +2042,18 @@ async function testArchives(browser, alex, keys) {
   })
   await shot(page, 'archive-browser')
   await browseEntries(page, dialog)
-  const preview = await openEntry(dialog, 'photos/harbor-inside-private.png')
+  const preview = await openEntry(
+    dialog,
+    'photos-inside-private/harbor-inside-private.png'
+  )
   await expect(preview.getByRole('img')).toBeVisible()
   await shot(page, 'archive-entry-image')
   // One entry saved on its own.
   await backToRoot(dialog)
-  const blob = await openEntry(dialog, 'data/blob-inside-private.bin')
+  const blob = await openEntry(
+    dialog,
+    'data-inside-private/blob-inside-private.bin'
+  )
   const [entryDownload] = await Promise.all([
     page.waitForEvent('download'),
     blob.getByRole('button', { name: 'Download entry' }).click(),
@@ -1995,22 +2111,55 @@ async function testArchives(browser, alex, keys) {
       filesBefore,
   })
   assert.equal(extracted.length, ARCHIVE_ENTRIES.length)
+  // The folders of the archive are account folders now: one new folder
+  // that holds everything, and in it one for each folder of the archive.
+  // Their names are sealed, and independent code opens them.
+  const folderNames = await folderNamesOf(
+    accounts.alex.id,
+    keys.accountPrivateKey
+  )
+  const folderRows = await prisma.vaultFolder.findMany({
+    where: { userId: accounts.alex.id },
+  })
+  extraPlaintext.set(
+    'project-bundle-private',
+    'the name of the folder of an extraction'
+  )
+  const wrapper = folderRows.find(
+    (row) => folderNames.get(row.id) === 'project-bundle-private'
+  )
+  assert.ok(wrapper, 'No new folder holds the extracted files')
+  assert.equal(wrapper.parentId, null)
   const made = new Map()
   for (const row of extracted) {
     assert.equal(row.encrypted, true)
     assert.equal(row.name, '')
     assert.equal(row.visibility, 'PRIVATE')
+    // A private file has no folder stanza (section 8.4.3).
+    assert.equal(row.folderStanza, null)
+    const folder = folderRows.find((item) => item.id === row.folderId)
+    assert.ok(folder, 'An extracted file is in no folder')
+    assert.equal(folder.parentId, wrapper.id)
+    assert.equal(folder.parentFolderStanza.length, 97)
     const fileKey = fileKeyOf(row, keys.accountPrivateKey)
-    made.set(metadataOf(row, fileKey).name, await plaintextOf(row, fileKey))
+    made.set(
+      `${folderNames.get(folder.id)}/${metadataOf(row, fileKey).name}`,
+      await plaintextOf(row, fileKey)
+    )
   }
   for (const entry of ARCHIVE_ENTRIES) {
-    const name = entry.name.split('/').join(' - ')
-    extraPlaintext.set(name, 'the name of an extracted file')
-    assert.ok(made.has(name), `No extracted file is named ${name}`)
-    assert.ok(made.get(name).equals(entry.buffer), `${name} differs`)
+    assert.ok(made.has(entry.name), `No extracted file is ${entry.name}`)
+    assert.ok(
+      made.get(entry.name).equals(entry.buffer),
+      `${entry.name} differs`
+    )
   }
+  assert.equal(
+    folderRows.filter((row) => row.parentId === wrapper.id).length,
+    new Set(ARCHIVE_ENTRIES.map((entry) => entry.name.split('/')[0])).size
+  )
   results.push(
-    `The owner browses an encrypted ZIP from the library: "Browse archive" lists 5 files in 4 folders after ${listed.length} range requests for parts of the ciphertext, a text entry and an image entry open (the image from a local address), HTML and SVG entries are shown as source text and run nothing, and "Download entry" saves one entry byte for byte. "Extract all" makes ${extracted.length} new private encrypted files whose decrypted names carry their path ("photos - harbor-inside-private.png") and whose decrypted bytes equal the entries`
+    `The owner browses an encrypted ZIP from the library: "Browse archive" lists 5 files in 4 folders after ${listed.length} range requests for parts of the ciphertext, a text entry and an image entry open (the image from a local address), HTML and SVG entries are shown as source text and run nothing, and "Download entry" saves one entry byte for byte. "Extract all" makes a new folder with the 4 folders of the archive in it, each with its own key pair and a sealed name that independent code opens, and ${extracted.length} new private encrypted files in those folders whose decrypted names and bytes equal the entries`
   )
 
   // --- Create an archive from two encrypted files and one plain file.
@@ -2121,6 +2270,13 @@ async function testArchives(browser, alex, keys) {
       where: { userId: accounts.alex.id },
     })
     await tarDialog.getByRole('button', { name: 'Extract all' }).click()
+    // The folder of the first extraction has the name that the form
+    // offers, and the form refuses a second folder with that name.
+    await page.getByRole('button', { name: 'Extract files' }).click()
+    await expect(
+      page.getByText('A folder with that name already exists here.')
+    ).toBeVisible()
+    await page.getByLabel('New folder name').fill('project-bundle-private-tar')
     await page.getByRole('button', { name: 'Extract files' }).click()
     await expect(
       page.getByRole('heading', { name: 'Archive extracted' })
@@ -2144,6 +2300,7 @@ async function testArchives(browser, alex, keys) {
     where: { userId: accounts.alex.id },
   })
   await tgzDialog.getByRole('button', { name: 'Extract all' }).click()
+  await page.getByLabel('New folder name').fill('project-bundle-private-tgz')
   await page.getByRole('button', { name: 'Extract files' }).click()
   await expect(
     page.getByRole('heading', { name: 'Archive extracted' })

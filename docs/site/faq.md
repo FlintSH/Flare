@@ -22,7 +22,7 @@ No. A private file requires the signed-in owner with `files.read`, or a person w
 
 ## Does Flare encrypt my files end to end?
 
-Not yet. Accounts have [encryption keys and sign in with a passphrase](./guide/passphrase) that the server never receives, and that part is in place. Uploads, downloads, and sharing still handle plain files, which the operator of the server can read. File encryption uses the same keys and arrives in a later release.
+Yes, for new uploads. Your browser, or the [flare-upload program](./guide/screenshot-tools) that a screenshot tool runs, encrypts each file before it leaves your device, together with its name, type, tags, folder names, image text and thumbnail. The server stores ciphertext and never receives your [passphrase](./guide/passphrase) or a file key. A share link carries the key after the `#`, which a browser does not send to the server. Files that were uploaded before the upgrade, and uploads through a [profile set to Plain](./guide/upload-profiles#encryption), are plain files that the operator of the server can read. [Encrypted and plain files](./guide/encryption) lists what the server still sees and what encryption does not protect against.
 
 ## Can an administrator reset my passphrase?
 

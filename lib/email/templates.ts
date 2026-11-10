@@ -65,7 +65,7 @@ export function renderAccountEmail(
       action: 'Verify email address',
     },
     reset: {
-      subject: branding.resetSubject || 'Reset your password',
+      subject: branding.resetSubject || 'Reset your passphrase',
       body: `A reset of the passphrase for your ${instance} account was requested. If this was you, use the link below to choose a new passphrase. Keep your recovery phrase at hand: without it, files that the account encrypted cannot be opened after a reset. If you did not request it, you can ignore this email.`,
       action: 'Reset passphrase',
     },

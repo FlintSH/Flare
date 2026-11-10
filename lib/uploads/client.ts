@@ -10,7 +10,7 @@ import {
 import { type OpenedFolder, folderStanzaFor } from '@/lib/e2ee/client/folders'
 import { rememberOpenedFile } from '@/lib/e2ee/client/opened-files'
 import { encryptFile, storedLengthOf } from '@/lib/e2ee/file'
-import { type ShareSecret, shareLink } from '@/lib/e2ee/link'
+import { type ShareSecret, ownOriginPath, shareLink } from '@/lib/e2ee/link'
 
 import {
   type UploadResponse,
@@ -415,7 +415,13 @@ function encryptedUploadResult(
   whole?: File
 ): UploadResponse {
   const uploaded = parseEncryptedUploadResponse(body)
-  const link = shareLink(uploaded.pageUrl, secret)
+  // The key goes only into an address of this origin, whatever origin the
+  // answer of the server names. A worker has `location` too.
+  const { origin } = globalThis.location
+  const link = shareLink(
+    `${origin}${ownOriginPath(uploaded.pageUrl, origin)}`,
+    secret
+  )
   const opened: OpenedFile = {
     fileKey: created.fileKey,
     headerHash: created.headerHash,

@@ -50,7 +50,7 @@
     "supportAddress": "",
     "subjectPrefix": "",
     "verificationSubject": "Verify your email address",
-    "resetSubject": "Reset your password",
+    "resetSubject": "Reset your passphrase",
     "changeSubject": "Confirm your new email address",
     "introText": ""
   }

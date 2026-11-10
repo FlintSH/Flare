@@ -2,8 +2,6 @@
 
 import { type ReactNode, useEffect, useMemo, useState } from 'react'
 
-import Link from 'next/link'
-
 import {
   ArrowLeft,
   ArrowRight,
@@ -27,7 +25,7 @@ import {
   openFolderWithKey,
 } from '@/lib/e2ee/client/folders'
 import { isE2eeError } from '@/lib/e2ee/errors'
-import { parseFolderFragment } from '@/lib/e2ee/link'
+import { ownOriginPath, parseFolderFragment } from '@/lib/e2ee/link'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { sharedFolderUrl } from '@/lib/files/urls'
 import type {
@@ -82,6 +80,15 @@ const PROBLEMS: Record<KeyProblem, { title: string; text: string }> = {
     title: 'This folder is not ready yet',
     text: 'Its owner changed this folder and their browser has not finished updating its keys. Try again later.',
   },
+}
+
+/**
+ * The address of a file page that gets a key after `#`. It stays on this
+ * origin, whatever the listing of the server names: the script of another
+ * origin would read the key (docs/e2ee-spec.md, section 10.3).
+ */
+function keyedHref(href: string): string {
+  return ownOriginPath(href, window.location.origin)
 }
 
 function openTrail(listing: SharedFolderListing, fragment: string): Opened {
@@ -153,7 +160,7 @@ function fileTiles(
           {
             id: file.id,
             name: 'Password-protected file',
-            href: `${file.href}#${result.fragment}`,
+            href: `${keyedHref(file.href)}#${result.fragment}`,
             image: null,
             icon: null,
             hasPassword: true,
@@ -166,7 +173,7 @@ function fileTiles(
         {
           id: file.id,
           name,
-          href: `${file.href}#${result.fragment}`,
+          href: `${keyedHref(file.href)}#${result.fragment}`,
           image: null,
           icon: { name, mimeType: result.opened.type },
           hasPassword: false,
@@ -254,6 +261,10 @@ export function SharedFolder({
       : (entry.name ?? 'Shared folder')
   )
   const hash = fragment ?? ''
+  // Every link to this page is a plain link, so the browser itself carries
+  // the part after `#` to the next page. The router of the framework can
+  // replace an address with one that it built from a server response, and
+  // such an address has no fragment: the folder key would be lost.
   const address = (folder: SharedFolderNode, page = 1) =>
     `${sharedFolderUrl(listing.token, {
       page,
@@ -297,9 +308,8 @@ export function SharedFolder({
           >
             {folders.map((folder) => (
               <li key={folder.id} className="min-w-0">
-                <Link
+                <a
                   href={address({ id: folder.id, name: null, keys: null })}
-                  prefetch={false}
                   data-shared-subfolder=""
                   className="group flex items-center gap-3 rounded-xl border bg-muted/30 px-3.5 py-3 text-sm font-medium transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
@@ -312,7 +322,7 @@ export function SharedFolder({
                     className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
                     aria-hidden="true"
                   />
-                </Link>
+                </a>
               </li>
             ))}
           </ul>
@@ -435,13 +445,12 @@ export function SharedFolder({
                   key={entry.id}
                   className="flex min-w-0 items-center gap-1"
                 >
-                  <Link
+                  <a
                     href={address(entry)}
-                    prefetch={false}
                     className="max-w-[12rem] truncate rounded underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {names[index]}
-                  </Link>
+                  </a>
                   <ChevronRight
                     className="h-3.5 w-3.5 shrink-0"
                     aria-hidden="true"
@@ -500,18 +509,18 @@ export function SharedFolder({
           <div className="flex gap-2">
             {listing.page > 1 && (
               <Button asChild size="sm" variant="outline">
-                <Link href={address(here, listing.page - 1)} prefetch={false}>
+                <a href={address(here, listing.page - 1)}>
                   <ArrowLeft aria-hidden="true" />
                   Previous
-                </Link>
+                </a>
               </Button>
             )}
             {listing.page < listing.pageCount && (
               <Button asChild size="sm" variant="outline">
-                <Link href={address(here, listing.page + 1)} prefetch={false}>
+                <a href={address(here, listing.page + 1)}>
                   Next
                   <ArrowRight aria-hidden="true" />
-                </Link>
+                </a>
               </Button>
             )}
           </div>
