@@ -30,6 +30,7 @@ import {
   createMaintenance,
 } from './maintenance'
 import { type PendingFile, processPendingWork } from './pending-work'
+import { searchIndex } from './search-client'
 
 /**
  * The background work of this browser tab for the unlocked account: the
@@ -107,6 +108,29 @@ async function runTagConversion({ keys, signal, report }: Context) {
   if (await sealPlainTags(tagsApi, keys, { signal })) libraryChanged?.()
 }
 
+/**
+ * The local search index (docs/e2ee-spec.md, section 9.8): starts the worker
+ * for these keys if it does not run, and asks the server for what changed.
+ */
+async function runSearchIndex({ keys, report }: Context) {
+  searchIndex.start(keys)
+  const show = () => {
+    const state = searchIndex.getState()
+    if (state.status !== 'ready' && state.total > 0)
+      report({
+        label: 'Preparing search',
+        done: state.indexed,
+        total: state.total,
+      })
+  }
+  const unsubscribe = searchIndex.subscribe(show)
+  try {
+    await searchIndex.sync()
+  } finally {
+    unsubscribe()
+  }
+}
+
 async function runPendingWork({ keys, signal, report, unpaused }: Context) {
   const unwrapper = await unwrapperFor(keys)
   let tags: Promise<readonly OwnedTagView[] | null> | null = null
@@ -157,6 +181,7 @@ const runners: Partial<Record<MaintenanceJob, JobRunner<StoredAccountKeys>>> = {
   tags: runTagConversion,
   folders: runFolderRepairs,
   migration: runStanzaMigration,
+  index: runSearchIndex,
   pending: runPendingWork,
 }
 

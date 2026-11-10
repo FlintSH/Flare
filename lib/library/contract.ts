@@ -72,6 +72,13 @@ export const SORT_OPTIONS = [
     field: 'downloads',
     direction: 'asc',
   },
+  { value: 'name', label: 'Name (A to Z)', field: 'name', direction: 'asc' },
+  {
+    value: 'name-desc',
+    label: 'Name (Z to A)',
+    field: 'name',
+    direction: 'desc',
+  },
 ] as const satisfies readonly (FileSort & { value: string; label: string })[]
 export type SortOption = (typeof SORT_OPTIONS)[number]['value']
 /** Addresses leave this order out. */

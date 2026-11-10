@@ -13,6 +13,7 @@ import {
   onMaintenanceChange,
 } from '@/lib/library/browser-maintenance'
 import { libraryChanged } from '@/lib/library/changes'
+import { searchIndex } from '@/lib/library/search-client'
 
 /**
  * Runs the background work of the library while the account keys are
@@ -47,6 +48,8 @@ export function LibraryMaintenance() {
     libraryMaintenance.start(keys)
     return () => {
       libraryMaintenance.stop()
+      // The names and the text in the search worker go with the keys.
+      searchIndex.stop()
       onMaintenanceChange(null)
       onKeyringPruned(null)
     }

@@ -17,7 +17,9 @@ export const GET = api(async (request) => {
   const user = await requireAccount(request)
 
   const files = await prisma.file.findMany({
-    where: { userId: user.id },
+    // The types of plain files. The server has no type for an encrypted
+    // file: the owner's browser adds the ones it opened.
+    where: { userId: user.id, encrypted: false },
     select: { mimeType: true },
     distinct: ['mimeType'],
   })

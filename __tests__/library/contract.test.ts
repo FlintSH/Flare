@@ -46,7 +46,9 @@ describe('library addresses', () => {
   })
 
   it('ignores values the library does not offer and groups only upload-date orders', () => {
-    expect(view('sortBy=name').sortBy).toBe('newest')
+    // The library orders by name too: the browser orders encrypted names.
+    expect(view('sortBy=name').sortBy).toBe('name')
+    expect(view('sortBy=title').sortBy).toBe('newest')
     expect(view('sortBy=constructor').sortBy).toBe('newest')
     expect(view('sortBy=largest&groupBy=month').groupBy).toBe('none')
     expect(view('sortBy=oldest&groupBy=week').groupBy).toBe('week')
@@ -134,7 +136,7 @@ describe('timeline windows', () => {
 })
 
 describe('the list API reads the same vocabulary', () => {
-  it('orders by what each library sort names, plus name, and newest otherwise', () => {
+  it('orders by what each library sort names, and newest otherwise', () => {
     expect(
       SORT_OPTIONS.map(({ value }) => [value, fileSort(value)])
     ).toMatchObject([
@@ -146,8 +148,10 @@ describe('the list API reads the same vocabulary', () => {
       ['least-viewed', { field: 'views', direction: 'asc' }],
       ['most-downloaded', { field: 'downloads', direction: 'desc' }],
       ['least-downloaded', { field: 'downloads', direction: 'asc' }],
+      ['name', { field: 'name', direction: 'asc' }],
+      ['name-desc', { field: 'name', direction: 'desc' }],
     ])
-    expect(fileSort('name')).toEqual({ field: 'name', direction: 'asc' })
+    expect(fileSort('name')).toMatchObject({ field: 'name', direction: 'asc' })
     expect(fileSort('constructor')).toMatchObject({
       field: 'uploadedAt',
       direction: 'desc',

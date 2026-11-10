@@ -615,5 +615,52 @@ describe.skipIf(!databaseUrl)(
         []
       )
     })
+    it('lists the plain matches of a view as IDs and sort keys, and never an encrypted file', async () => {
+      const { plainFileOrder } = await import('@/lib/files/order')
+      const { fileListFilters } = await import('@/lib/files/list-filters')
+      const report = await plainFile('Quarterly report.pdf')
+      const photo = await plainFile('holiday.png', 'the report is late')
+      await plainFile('other.png')
+      const secret = await insertEncryptedFile(
+        prisma,
+        owner,
+        encryptedFile(keys, 'secret report.png')
+      )
+      const order = (query: string) =>
+        plainFileOrder(owner, new URLSearchParams(query), null)
+      // The search of the server reaches plain names and plain text only.
+      const found = await order('search=REPORT&sortBy=name')
+      expect(found.more).toBe(false)
+      expect(new Map(found.keys)).toEqual(
+        new Map([
+          [report.id, 'Quarterly report.pdf'],
+          [photo.id, 'holiday.png'],
+        ])
+      )
+      // A type filter for the generic type does not list encrypted files.
+      expect((await order('types=application/octet-stream')).keys).toEqual([])
+      const byDate = await order('sortBy=newest')
+      expect(byDate.keys).toHaveLength(3)
+      expect(
+        byDate.keys.every(([, key]) => /^\d{4}-.*Z$/.test(String(key)))
+      ).toBe(true)
+      expect(byDate.keys.map(([id]) => id)).not.toContain(secret.id)
+      // Pages by ID.
+      const first = byDate.keys[0][0]
+      expect(
+        (await plainFileOrder(owner, new URLSearchParams(), first)).keys
+      ).toHaveLength(2)
+      // The list API takes the same filter.
+      const count = (query: string) =>
+        prisma.file.count({
+          where: fileListFilters(owner, new URLSearchParams(query)).where,
+        })
+      expect(await count('encrypted=false')).toBe(3)
+      expect(await count('encrypted=true')).toBe(1)
+      expect(await count('')).toBe(4)
+      expect(() =>
+        fileListFilters(owner, new URLSearchParams('encrypted=yes'))
+      ).toThrow('encrypted must be true or false')
+    })
   }
 )

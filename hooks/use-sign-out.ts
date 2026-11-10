@@ -4,6 +4,7 @@ import { signOut } from 'next-auth/react'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { clearStoredAccountKeys } from '@/lib/e2ee/client/browser-store'
+import { endSearchSession } from '@/lib/library/search-client'
 
 import { useToast } from '@/hooks/use-toast'
 
@@ -23,6 +24,8 @@ export function useSignOut({
       // The account keys of this browser go first (docs/e2ee-spec.md, section
       // 6.4), so they are gone even if the sign-out request fails.
       await clearStoredAccountKeys()
+      // The local cache of encrypted records goes too (section 9.8.1).
+      await endSearchSession()
       await signOut({ callbackUrl: LOCAL_SIGN_IN_PATH })
     } catch (error) {
       if (onError) return onError(error)

@@ -90,11 +90,13 @@ export function fileListItem(
 type GalleryDirection = 'next' | 'previous'
 type GalleryAnchor = Pick<File, 'id' | SortField>
 
-/** What a `sortBy` value orders by. The API also sorts by name, which the library doesn't offer. */
+/**
+ * What a `sortBy` value orders by. The server orders by the names it has:
+ * an encrypted file has none, so the library orders those in the browser
+ * (docs/e2ee-spec.md, section 9.3).
+ */
 export function fileSort(sortBy: string): FileSort {
-  return sortBy === 'name'
-    ? { field: 'name', direction: 'asc' }
-    : librarySort(sortBy)
+  return librarySort(sortBy)
 }
 
 export function fileOrderBy(

@@ -29,6 +29,7 @@ import {
 } from '@/lib/e2ee/client/state'
 import { forgetThumbnails } from '@/lib/e2ee/client/thumbnails'
 import { wipe } from '@/lib/e2ee/primitives'
+import { endSearchSession } from '@/lib/library/search-client'
 
 /** Where an account without keys chooses its passphrase. */
 export const KEY_SETUP_PATH = '/auth/encryption'
@@ -149,6 +150,9 @@ export function AccountKeysProvider({
       forgetOpenedFiles()
       forgetThumbnails()
     }
+    // A session that ended in any way leaves no cache of encrypted records
+    // in this browser (section 9.8.1).
+    if (state.status === 'signed-out') void endSearchSession()
   }, [state.status])
 
   const adopt = useCallback(
