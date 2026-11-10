@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 3. Not implemented. Not reviewed.             |
+| Status  | Draft 4. Not implemented. Not reviewed.             |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -151,8 +151,9 @@ the server at any later time. The design must limit what the attacker gets.
 5. A moderator cannot read the encrypted files of a different account.
 6. The server cannot change a file that a share link refers to. The client
    detects the change.
-7. The theft of one account private key does not expose files that the user
-   uploads after the next key rotation (section 8.3).
+7. After a compromise of the passphrase or of an account key, the user can
+   rotate the keys. Files that the user uploads after the rotation are safe
+   (section 8.3).
 
 ### 3.3 Limits
 
@@ -168,8 +169,8 @@ These limits are accepted. The public documentation must state them.
    upload machine.
 3. **Limited forward secrecy.** The owner must be able to read old files. Thus
    the current account private key opens all current stanzas. Key rotation
-   (section 8.3) limits the damage of a stolen key. It cannot protect a file
-   if the attacker has the old key and a copy of the old stanza.
+   (section 8.3) protects the files that come after it. It cannot protect an
+   old file if the attacker has the old key and a copy of the old stanza.
 4. **Offline guesses.** A person who has the database has `wrapped_root` and
    `passphrase_salt`. That person can test passphrases offline. Only the
    strength of the passphrase and the cost of Argon2id give protection.
@@ -426,7 +427,7 @@ The client must ask for the passphrase before each of these operations:
 
 - show the mnemonic,
 - change the passphrase,
-- rotate the account key on the request of the user.
+- rotate the keys (section 8.3).
 
 ### 6.6 Signed requests
 
@@ -631,95 +632,91 @@ Properties:
 The owner reads the file through the account stanza. The owner does not need
 the password.
 
-### 8.3 Account key rotation
+### 8.3 Key rotation
 
-**PROPOSED**. One part is **OPEN** (section 8.3.5).
+**AGREED** for the goal and the structure. **PROPOSED** for the steps.
 
-**Goal:** a stolen account private key must not expose files that the user
-uploads after the theft is over. Rotation must be possible on demand and
-automatically after a number of uploads.
+**Goal:** after a compromise, the user can change the secrets, and the files
+that the user uploads from then on are safe.
 
-**Idea:** the account key has generations. Each generation comes from
-`root_entropy` and a number. A rotation makes the next generation, makes new
-stanzas for all files, and deletes the old stanzas and the old private key.
+**Idea:** a rotation replaces `root_entropy`. All account keys come from
+`root_entropy`, thus all of them change. The client makes new stanzas for
+the old files, and the server deletes the old stanzas.
 
-**Restriction:** the browser stores `account_private_key` (section 6.4). This
-is the key that an attacker can most easily steal. The browser does not store
-`root_entropy`. Thus a theft from the browser gives one generation only.
+**Restriction:** a person who knows the passphrase and gets `wrapped_root`
+has `root_entropy`. That person can calculate each key that comes from it. A
+new key from the same `root_entropy` gives no protection. Only a new
+`root_entropy` does.
 
-#### 8.3.1 Generations
+#### 8.3.1 When a passphrase change is sufficient
 
-`key_generation` is an integer. It starts at `0`.
+A passphrase change (section 6.7) keeps `root_entropy`. It is sufficient
+only if the attacker did not get `wrapped_root`. For example, the second
+factor stopped the sign-in of the attacker.
 
-`account_seed = blake3_derive_key("flare e2ee v1 account seed", root_entropy || LE64(key_generation))`
+If the user is not sure, the user must rotate.
 
-The key of one generation does not reveal the key of a different generation.
-Each account stanza records the `key_generation` of its recipient key.
+#### 8.3.2 When the user must rotate
 
-#### 8.3.2 What rotation gives and does not give
-
-| Attacker has                                         | Result after rotation                         |
-| ---------------------------------------------------- | --------------------------------------------- |
-| An old private key only                              | Reads nothing.                                |
-| An old private key, and later a copy of the database | Reads nothing. The old stanzas are deleted.   |
-| An old private key and a copy of the old stanzas     | Reads the old files. Does not read new files. |
-| `root_entropy` or the passphrase                     | Reads all files. Use section 8.3.4.           |
+- A different person knows the passphrase and possibly signed in.
+- A different person saw the mnemonic.
+- A device with an open session is lost, or malicious code ran in a session.
+- A person copied the database, and the passphrase is possibly weak.
 
 #### 8.3.3 Rotation procedure
 
-The client must have `root_entropy`. It has it during sign-in, and after the
-user types the passphrase.
-
-1. Calculate the key pair for `key_generation + 1`.
-2. For each file: open the account stanza with the old key. Make a new
-   account stanza for the new public key (section 8.1).
-3. Send the new public key and the new stanzas in a request that is signed
-   with the old key (section 6.6).
-4. The server replaces each stanza and the public key. The server deletes
-   the old stanzas.
-5. The client deletes the old private key.
-
-The procedure can stop and continue. A stanza with the old `key_generation`
-shows that the file is not done.
+1. The client asks for the passphrase and gets the old `root_entropy` and
+   the old `account_private_key` (section 6.2).
+2. The client asks for a new passphrase. The strength check of section 5.2.1
+   applies.
+3. The client makes a new `root_entropy`, a new account key pair, a new
+   `passphrase_salt`, a new `auth_public_key`, a new `wrap_key` and a new
+   `wrapped_root` (section 5.4).
+4. For each file: the client opens the account stanza with the old key and
+   makes a new account stanza for the new public key (section 8.1).
+5. The client sends the new account data and the new stanzas in a request
+   that is signed with the old account key (section 6.6).
+6. The server replaces the account data and each stanza. The server deletes
+   the old stanzas and the old `wrapped_root`.
+7. The server cancels all other sessions and all bearer tokens of the
+   account.
+8. The client shows the new mnemonic. The user must save it. The old
+   mnemonic does not open the account after this step.
+9. The client deletes the old keys.
 
 The file content does not change. The cost for each file is two X25519
 operations and about 100 bytes.
 
-When rotation occurs:
+The procedure can stop and continue. Each account stanza records the
+`account_public_key` that it is for. A stanza for the old key shows that the
+file is not done. The server keeps the old `wrapped_root` until all stanzas
+are done.
 
-- when the user requests it, for example after a lost device,
-- automatically at sign-in, after `rotation_upload_limit` uploads since the
-  last rotation. The value is **OPEN**.
+#### 8.3.4 What rotation gives and does not give
 
-#### 8.3.4 Rotation of the root
+| Attacker has before the rotation                | Result after the rotation                             |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| The passphrase only                             | Reads nothing.                                        |
+| The old keys, and not a copy of the old stanzas | Reads nothing. The old stanzas are deleted.           |
+| The old keys and a copy of the old stanzas      | Reads the old files. Does not read new files.         |
+| A share link                                    | Reads that file. Rotation does not change `file_key`. |
 
-If `root_entropy` or the passphrase is compromised, the generations give no
-protection. The client makes a new `root_entropy`, a new mnemonic and a new
-passphrase. Then it does the procedure of section 8.3.3. The user must save
-the new mnemonic.
+To protect an old file from the third attacker, the client must encrypt the
+file again with a new `file_key`. This breaks the share links of that file.
+This document does not specify it. See section 13.
 
-#### 8.3.5 Conflict with script clients
+#### 8.3.5 Script clients after a rotation
 
-**OPEN**
+A script client has the old `account_public_key` in its configuration
+(section 10.2). After a rotation:
 
-A script client has `account_public_key` in its configuration (section
-10.2). After a rotation, that key is old. Three solutions are possible:
+- The server rejects an upload with a stanza for the old key.
+- The server cancels the bearer token (step 7 of section 8.3.3).
+- The user installs a new configuration for each script client.
 
-1. **Accept old keys.** The client keeps old private keys to read script
-   uploads. This cancels the benefit of rotation.
-2. **New configuration after each rotation.** The server rejects uploads to
-   an old generation. The user installs a new configuration. This is
-   acceptable after a compromise. It is not acceptable for automatic
-   rotation.
-3. **Signed key certificate.** The account has a signing key that does not
-   rotate. The script client pins that key. The signing key signs the public
-   key of each generation. The script client gets the current public key
-   from the server and verifies the signature.
-
-Solution 3 keeps automatic rotation and pinned keys. It needs a signing key
-that is separate from the key that rotates. This conflicts with the use of
-one Ed25519 key pair for both purposes (section 4.1). The authors must
-decide.
+A rotation is a rare operation after a compromise. Thus a new configuration
+is acceptable. No separate signing key is necessary, and one Ed25519 key
+pair continues to serve both purposes (section 4.1).
 
 ## 9. Metadata
 
@@ -882,8 +879,10 @@ file with a link preview cannot be encrypted.
 5. **Size.** Does the format pad the content to hide the exact size?
 6. **Argon2id parameters.** 64 MiB and 3 passes are a first proposal. They
    must work in a browser on a slow device.
-7. **Rotation and script clients.** See section 8.3.5.
-8. **Rotation limit.** The value of `rotation_upload_limit`.
+7. **Old files after a rotation.** Does the client encrypt old files again
+   with new file keys? Which share links break?
+8. **Automatic rotation.** This draft has no automatic rotation. Is a
+   rotation after a number of uploads necessary?
 9. **Existing accounts.** Sign-in sends the password to the server today. How
    does an existing account move to section 6.2?
 10. **Existing files.** Do old plain files stay plain, or does the client
@@ -904,3 +903,4 @@ file with a link preview cannot be encrypted.
 | 1     | 2026-11-10 | Full names for all values. Goal, idea and restriction for each section. One-page design summary. Account key rotation with generations.            |
 | 2     | 2026-11-10 | Sign-in uses a signature from a passphrase-derived key pair. The bearer `auth_key` and `auth_verifier` are removed.                                |
 | 3     | 2026-11-10 | Password stanza needs a secret from the link and binds to the owner key and the file. Strength check with zxcvbn for each passphrase and password. |
+| 4     | 2026-11-10 | Key rotation replaces `root_entropy`. Key generations and the separate signing key proposal are removed.                                           |
