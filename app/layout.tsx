@@ -51,13 +51,12 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title: null,
     description: null,
+    // Link one icon only. Given both, browsers picked differently, so a
+    // custom favicon showed in some browsers and Flare's own icon in others.
     icons: {
-      icon: [
-        ...(favicon
-          ? [{ url: favicon, type: 'image/png', sizes: '32x32' }]
-          : []),
-        { url: '/icon.svg', type: 'image/svg+xml' },
-      ],
+      icon: favicon
+        ? { url: favicon, type: 'image/png' }
+        : { url: '/icon.svg', type: 'image/svg+xml' },
     },
   }
 }

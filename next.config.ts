@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
   outputFileTracingExcludes: {
     '/*': ['./uploads/**/*', './tmp/**/*'],
   },
+  // Browsers ask for /favicon.ico on pages that link no icon, such as an
+  // image or PDF opened on its own, so answer it with the custom favicon.
+  async rewrites() {
+    return [{ source: '/favicon.ico', destination: '/api/favicon' }]
+  },
   async headers() {
     return [
       {

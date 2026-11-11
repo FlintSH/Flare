@@ -24,16 +24,22 @@ export function faviconAddress(version: string) {
   return `${ROUTE}?v=${version}`
 }
 
+/** The version a saved favicon address names, or null when it names none. */
+export function faviconVersion(
+  saved: string | null | undefined
+): string | null {
+  if (!saved?.startsWith(`${ROUTE}?v=`)) return null
+  const version = saved.slice(ROUTE.length + 3)
+  return VERSION.test(version) ? version : null
+}
+
 /**
  * The address pages link to for the saved favicon, or null when none is
- * saved. Uploads save the address with a hash of the icon, so a replaced icon
- * gets a new one. Anything else, such as a value saved by an earlier version,
- * links to a version that never matches and so is never cached for long.
+ * saved. Each upload saves a new address, so a replaced icon gets a new one.
+ * Anything else, such as a value saved by an earlier version, links to a
+ * version that never matches and so is never cached for long.
  */
 export function faviconUrl(saved: string | null | undefined): string | null {
   if (!saved) return null
-  const version = saved.startsWith(`${ROUTE}?v=`)
-    ? saved.slice(ROUTE.length + 3)
-    : ''
-  return VERSION.test(version) ? saved : faviconAddress('0')
+  return faviconVersion(saved) ? saved : faviconAddress('0')
 }

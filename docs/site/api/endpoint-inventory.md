@@ -222,7 +222,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/users/{id}/urls/{urlId}`   | DELETE         | `content.delete`; session-only deletion of a short link owned by that target account. Returns `204`; wrong owner/missing URL returns `404`.               |
 | `/api/users/{id}/login`          | POST           | `users.read`; fetch target account information. Does not itself issue a login session. The dashboard no longer calls it; it remains for existing clients. |
 | `/api/settings`                  | PATCH, POST    | PATCH: corresponding section permission; legacy whole-settings POST: Administrator. [Field mapping](./roles#delegated-settings-writes).                   |
-| `/api/settings/favicon`          | POST           | `appearance.manage`; replace the favicon with a multipart `file`: a PNG of at most 1 MB, else `413`, `415` or `400`. Answers `{ url }`, its new address.  |
+| `/api/settings/favicon`          | POST, DELETE   | `appearance.manage`; POST replaces the favicon with a multipart `file`, a PNG of at most 1 MB, and answers `{ url }`. [More](#favicon-routes).            |
 | `/api/settings/email`            | GET, PUT       | `settings.email`; read/save email configuration and diagnostics.                                                                                          |
 | `/api/settings/email/impact`     | GET, POST      | `settings.email`; preview email-policy impact.                                                                                                            |
 | `/api/settings/email/test`       | POST           | `settings.email`; test SMTP or send a test message.                                                                                                       |
@@ -232,6 +232,10 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 
 Administration writes follow the [browser-session write rule](./authentication#browser-session-writes). Permission checks are independent of these request guards. A valid role does not bypass malformed requests, email eligibility, or ownership rules.
+
+### Favicon routes
+
+`POST /api/settings/favicon` refuses a file over 1 MB with `413`, a type other than PNG with `415`, and content that isn't a PNG with `400`. `DELETE /api/settings/favicon` stops pages linking the custom favicon, deletes the stored image and answers `{ url: null }`, also when no favicon is set. Earlier versions had no `DELETE`. `GET /api/favicon` and `GET /favicon.ico` serve the image from Flare with every storage provider; earlier versions redirected S3 storage to a signed bucket URL. See [Legacy colors and favicon](/admin/appearance#legacy-colors-and-favicon).
 
 A `/api/settings` save that includes storage settings with S3 selected answers `400` with the missing or invalid value, such as `Bucket name is required`, when the [saved result](/hosting/storage#s3-compatible-storage) would lack a bucket, region, either key, or a valid HTTP(S) endpoint; a blank key keeps the saved one. Earlier builds saved such settings.
 
@@ -249,7 +253,7 @@ A `/api/settings` save that includes storage settings with S3 selected answers `
 | `/api/auth/register`            | POST      | Public account creation, subject to registration settings, validation, email policy, and rate limits. An active `invite` creates an account while registration is closed and applies its roles. |
 | `/api/auth/{nextauth}`          | GET, POST | NextAuth session, sign-in/out, provider, CSRF, and callback flows; protocol-specific protections apply.                                                                                         |
 | `/api/settings`                 | GET       | Returns public settings by default. A browser session with `settings.read` receives private settings with storage/OIDC credentials masked; named tokens receive only the public projection.     |
-| `/api/favicon`                  | GET       | Serve the uploaded favicon; `404` when there is none. Only a `?v=` matching the image hash is cached (one year); other requests revalidate. S3 storage redirects to a signed URL.               |
+| `/api/favicon`                  | GET       | Serve the uploaded favicon; `404` when there is none. Only a `?v=` naming the saved image is cached (one year). `/favicon.ico` answers the same. [More](#favicon-routes).                       |
 | `/api/avatars/{filename}`       | GET       | Serve a currently referenced avatar; `404` for obsolete/unowned keys and `503` when its recorded storage target is unavailable.                                                                 |
 
 Public does not mean unrestricted mutation: registration can be closed and bootstrap stops once a user exists. With closed registration, account creation additionally requires an active [invite](./invites#register-with-an-invite). Email one-time-token routes are listed separately because possession of the relevant action token is their authorization.
