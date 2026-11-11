@@ -108,6 +108,7 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/archiver": "^6.0.4",
     "@types/bcryptjs": "^2.4.6",
@@ -124,6 +125,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.4.3",
     "husky": "^8.0.3",
+    "jsdom": "^31.0.0",
     "knip": "^5.88.1",
     "lint-staged": "^15.5.2",
     "postcss": "^8.5.28",

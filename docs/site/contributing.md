@@ -125,6 +125,8 @@ The application checks that CI runs are `pnpm exec tsc --noEmit`, `pnpm test`, `
 
 The **Docker Test** workflow builds the image for `linux/amd64` and `linux/arm64`, starts it next to an empty PostgreSQL 16 database, and passes only when the image's own health check reports `healthy`. The container applies the migrations itself during that start, as it does for operators. If the container stops, its health check reports `unhealthy`, or it is still starting after 3 minutes, the job prints the health-check results and the container log and fails.
 
+The gallery file-type picker has component regression tests using React Testing Library and jsdom. Run `pnpm exec vitest run __tests__/components/file-filters.test.ts` to check MIME and readable-label search, selections surviving a nonmatching query, clearing the query on close, and category order. These tests render the actual picker and popover; jsdom does not validate layout, so UI PRs still need reviewed captures from the real application.
+
 The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger to address vulnerable transitive packages. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress.
 
 The root override keeps Vitest's Vite on a patched release, because dependency updates can leave it at a locked vulnerable version. Tailwind CSS 3 requires `postcss-selector-parser` 6.x. Keep it on 6.1.5 or later, the maintainers' backport of the 7.1.6 parser fix, rather than forcing 7.x onto Tailwind 3. Until advisory GHSA-rj75-hqrm-r3gf lists 6.1.5 as patched, `pnpm audit` and Dependabot still report it.
