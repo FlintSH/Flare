@@ -68,6 +68,12 @@ Use the controls beside search to narrow the current library. On a phone, sortin
 | **File type**   | Select the MIME types present in your library. Use **Find a file type…** to search MIME types (such as `image/png`) or display names, ignoring capitalization. Search narrows the choices without clearing selected types, and resets when you close the dropdown. Types are grouped into images, videos, audio, documents, and finally other files. Documents include PDF, text, code, and CSV types, such as `application/json`, and office documents; archives are other files. |
 | **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                                                                                                                                                                                                                                                                                                                                          |
 
+The file-type picker keeps **Other files** after the named categories. Type a MIME value such as `application/` or a readable label such as `Plain text` in **Find a file type** to narrow its choices. These captures show the real gallery with isolated demonstration data, on desktop and at a phone viewport.
+
+![Desktop gallery file-type picker with Images and Documents above Other files.](/screenshots/file-types/order.webp)
+
+![Phone gallery file-type picker searching application/ and showing PDF and Other file as matches.](/screenshots/file-types/mobile-search.webp)
+
 Separate controls combine. For example, a folder, an image type, and a search phrase narrow results to matching images in that folder. Visibility is the notable exception within its own menu: checking multiple values includes any selected value.
 
 Each applied filter appears as a removable chip below search. Choose its **×** to remove only that search, tag, file type, visibility choice, date range, or grouping; the other constraints and current folder stay selected. A date chip names the selected dates in your browser’s time zone.
