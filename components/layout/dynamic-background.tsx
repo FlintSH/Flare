@@ -25,7 +25,7 @@ export function DynamicBackground() {
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background/95" />
 
       {}
-      <div className="absolute inset-0 bg-gradient-to-tr from-primary/[.08] via-transparent to-transparent dark:from-primary/[.03]" />
+      <div className="absolute inset-0 bg-gradient-to-tr from-primary/[.08] via-transparent to-transparent dark:from-primary/[.02]" />
 
       {}
       <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-transparent to-secondary/[.06]" />
