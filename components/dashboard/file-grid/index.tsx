@@ -748,6 +748,7 @@ function FileLibrary({ scope }: { scope: string }) {
               name: file.name,
               src: urls.thumbnail,
               downloadUrl: urls.download,
+              shareUrl: urls.page,
               subtitle: format(new Date(file.uploadedAt), 'MMMM d, yyyy'),
             }
           })}
