@@ -118,27 +118,6 @@ export const FileFilters = memo(function FileFilters({
 
   return (
     <div className="flex flex-wrap gap-2">
-      <Select value={sortBy} onValueChange={onSortChange}>
-        {/* On narrow phones a long choice ends in an ellipsis instead of
-            being cut off mid-letter. */}
-        <SelectTrigger
-          aria-label="Sort files"
-          className="h-10 min-w-0 flex-1 gap-1 rounded-lg bg-background/70 px-2 text-sm font-medium data-[state=open]:bg-accent sm:w-[172px] sm:flex-none sm:px-3 [&>span]:block [&>span]:truncate"
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORT_OPTIONS.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              className={sortItemClassName}
-            >
-              {option.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
       <Button
         variant="outline"
         aria-expanded={expanded}
@@ -147,7 +126,7 @@ export const FileFilters = memo(function FileFilters({
         className="h-10 gap-2 rounded-lg bg-background/70 px-3 sm:hidden"
       >
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
-        Filters
+        Sort & filters
         {activeCount > 0 && (
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs tabular-nums text-primary-foreground">
             {activeCount}
@@ -167,6 +146,27 @@ export const FileFilters = memo(function FileFilters({
           expanded ? 'grid' : 'hidden'
         )}
       >
+        <Select value={sortBy} onValueChange={onSortChange}>
+          {/* On narrow phones a long choice ends in an ellipsis instead of
+            being cut off mid-letter. */}
+          <SelectTrigger
+            aria-label="Sort files"
+            className="h-10 min-w-0 col-span-2 w-full gap-1 rounded-lg bg-background/70 px-2 text-sm font-medium data-[state=open]:bg-accent sm:w-[172px] sm:flex-none sm:px-3 [&>span]:block [&>span]:truncate"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((option) => (
+              <SelectItem
+                key={option.value}
+                value={option.value}
+                className={sortItemClassName}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {tagFilter}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

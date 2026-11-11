@@ -323,7 +323,7 @@ function FileLibrary({ scope }: { scope: string }) {
       : undefined
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pr-6 sm:pr-8 min-[1360px]:pr-0">
       <section
         aria-label="Find and filter files"
         className={pagePanelClassName}
@@ -564,7 +564,11 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           aria-busy="true"
           aria-label="Loading files"
-          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-[1360px]:mr-0"
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(min(240px, calc((100% - 16px) / 2)), 1fr))',
+          }}
         >
           {Array.from({ length: 8 }, (_, index) => (
             <FileCardSkeleton key={index} />

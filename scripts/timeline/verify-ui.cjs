@@ -695,7 +695,7 @@ async function main() {
     await ready(page)
     const desktopAnchor = await firstVisibleIndex(page)
     await page.setViewportSize({ width: 390, height: 844 })
-    await columns(page, 1)
+    await columns(page, 2)
     await expect(
       page.getByRole('slider', { name: 'Browse files by date' })
     ).toHaveAttribute('aria-valuetext', 'July 2018')

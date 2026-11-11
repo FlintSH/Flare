@@ -192,14 +192,9 @@ export function VirtualFiles({
     if (!element) return
     const measure = () => {
       const width = element.getBoundingClientRect().width
-      const columns =
-        window.innerWidth >= 1280
-          ? 4
-          : window.innerWidth >= 1024
-            ? 3
-            : window.innerWidth >= 640
-              ? 2
-              : 1
+      // Measure the content, not the viewport: sidebars and page gutters
+      // change how much room the cards actually have.
+      const columns = Math.max(2, Math.min(4, Math.floor((width + 16) / 256)))
       const top = element.getBoundingClientRect().top + window.scrollY
       setDimensions((old) =>
         old.width === width &&
@@ -425,7 +420,7 @@ export function VirtualFiles({
         role="list"
         aria-label="Your files"
         aria-busy={loading}
-        className="relative mr-6 sm:mr-8 min-[1360px]:mr-0"
+        className="relative"
         style={{ height: virtualizer.getTotalSize(), overflowAnchor: 'none' }}
         onFocusCapture={(event) => {
           const row = (event.target as HTMLElement).closest<HTMLElement>(

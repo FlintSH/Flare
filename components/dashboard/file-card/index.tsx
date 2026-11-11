@@ -556,7 +556,7 @@ export function FileCard({
             {file.hasPassword ? 'Protected' : visibilityLabel}
           </span>
           <span
-            className="inline-flex items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm"
+            className="hidden items-center gap-1 rounded-md border border-border/40 bg-background/90 px-2 py-1 backdrop-blur-sm sm:inline-flex"
             title={format(new Date(file.uploadedAt), 'PPP p')}
           >
             <Clock className="h-3 w-3" />
@@ -589,12 +589,12 @@ export function FileCard({
         )}
       </div>
       <div className="border-t border-border/40 p-3">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 sm:flex-nowrap">
           <Link
             prefetch={false}
             href={urls.page}
             title={file.name}
-            className="min-w-0 truncate rounded-sm text-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="min-w-0 max-w-full basis-full truncate rounded-sm text-sm font-medium sm:basis-auto hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {file.name}
           </Link>

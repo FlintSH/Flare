@@ -53,11 +53,15 @@ Filters in the page address remain bookmark settings. If an old folder or tag fi
 
 <Screenshot src="/screenshots/timeline/library-account-switch.webp" alt="The original library tab after signing in as Jamie in another tab, showing Jamie's 97 demonstration files with no previous selection or archive dialog" caption="A real account switch loads the new account's library in the original tab. These filenames and images are disposable demonstration data." />
 
+The gallery uses two compact columns on phones and adds columns as the available content width grows, up to four. Cards align with both edges of the search panel, with a shared gutter for the date rail. Phone cards keep the filename, size, and visibility in view; the upload-age badge appears on wider screens. Tap an image preview to inspect it at full size. Existing files and saved filters need no migration.
+
+<Screenshot src="/screenshots/image-gallery/after-390.png" alt="Two compact columns of demonstration images below the collapsed Sort and filters toolbar on a phone" caption="Phone browsing keeps search simple and fits two previews across each row." />
+
 ## Search and narrow the results
 
 Type in the search field to find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.
 
-Use the controls beside search to narrow the current library. On a phone, sorting stays visible; choose **Filters** to reveal labeled tag, visibility, file-type, and upload-date controls. The number on **Filters** counts active tag, type, visibility, date-range, and grouping choices, and the applied values remain visible below search when these controls are closed:
+Use the controls beside search to narrow the current library. On a phone, choose **Sort & filters** to reveal sorting and labeled tag, visibility, file-type, and upload-date controls. The number on **Sort & filters** counts active tag, type, visibility, date-range, and grouping choices, and the applied values remain visible below search when these controls are closed:
 
 | Control         | Choices and behavior                                                                                                                                                                                                                                   |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
