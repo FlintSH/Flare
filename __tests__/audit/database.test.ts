@@ -74,7 +74,6 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         id: 'audit-actor',
         name: 'Alex',
         urlId: 'audit-actor',
-        uploadToken: 'fixture-secret',
       },
     })
   })
@@ -966,6 +965,72 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
   })
 
+  it('keeps the plain name out of the event when a folder or a tag gets a sealed name', async () => {
+    const folder = await base.vaultFolder.create({
+      data: {
+        name: 'Tax papers',
+        normalizedName: 'tax papers',
+        userId: 'audit-actor',
+      },
+    })
+    await prisma.vaultFolder.update({
+      where: { id: folder.id },
+      data: {
+        name: '',
+        normalizedName: `/sealed/${folder.id}`,
+        folderPublicKey: Buffer.alloc(32, 1),
+        sealedFolderMetadata: Buffer.alloc(80, 2),
+        sealedFolderPrivateKey: Buffer.alloc(89, 3),
+      },
+    })
+    const folderEvent = await base.auditEvent.findFirstOrThrow({
+      where: { action: 'folder.update', targetId: folder.id },
+    })
+    expect(folderEvent.targetName).toBeNull()
+    expect(JSON.stringify(folderEvent)).not.toContain('Tax papers')
+    expect(folderEvent.details).toMatchObject({
+      before: { id: folder.id },
+      after: { id: folder.id },
+    })
+
+    const tag = await base.vaultTag.create({
+      data: {
+        name: 'Receipts',
+        normalizedName: 'receipts',
+        userId: 'audit-actor',
+      },
+    })
+    await prisma.vaultTag.updateMany({
+      where: { id: tag.id, sealedTagMetadata: null },
+      data: {
+        name: '',
+        normalizedName: `/sealed/${tag.id}`,
+        sealedTagMetadata: Buffer.alloc(80, 4),
+      },
+    })
+    const tagEvents = await base.auditEvent.findMany({
+      where: { action: 'tag.updateMany' },
+    })
+    expect(tagEvents).toHaveLength(1)
+    expect(JSON.stringify(tagEvents)).not.toContain('Receipts')
+    // A rename of a folder that stays plain still records both names.
+    const plain = await base.vaultFolder.create({
+      data: { name: 'Old', normalizedName: 'old', userId: 'audit-actor' },
+    })
+    await prisma.vaultFolder.update({
+      where: { id: plain.id },
+      data: { name: 'New', normalizedName: 'new' },
+    })
+    expect(
+      await base.auditEvent.findFirstOrThrow({
+        where: { action: 'folder.update', targetId: plain.id },
+      })
+    ).toMatchObject({
+      targetName: 'New',
+      details: { before: { name: 'Old' }, after: { name: 'New' } },
+    })
+  })
+
   it('performs the original bulk deletion with aggregate evidence if its optional snapshot lookup fails', async () => {
     await fixtureFile('lookup-failed-first')
     await fixtureFile('lookup-failed-second')
@@ -1131,7 +1196,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
       })
       await tx.user.update({
         where: { id: 'audit-actor' },
-        data: { password: 'password-secret', uploadToken: 'token-secret' },
+        data: { password: 'password-secret', uploadTokenHash: 'token-secret' },
       })
     })
     const events = await base.auditEvent.findMany()
@@ -1146,7 +1211,7 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     expect(
       events.find((event) => event.action === 'user.update')?.details
-    ).toMatchObject({ changedFields: ['password', 'uploadToken'] })
+    ).toMatchObject({ changedFields: ['password', 'uploadTokenHash'] })
   })
 
   it('retains filenames on tag changes and failure outcomes for failed email delivery', async () => {
@@ -1339,7 +1404,6 @@ suite.sequential('audit against disposable PostgreSQL', () => {
         id: 'file-owner',
         name: 'Sam',
         urlId: 'file-owner',
-        uploadToken: 'owner-fixture-secret',
         storageUsed: 5,
       },
     })

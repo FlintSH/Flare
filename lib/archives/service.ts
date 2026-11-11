@@ -82,10 +82,13 @@ type SourceFile = Prisma.FileGetPayload<{ select: typeof sourceSelect }>
 type Prepared = Awaited<ReturnType<typeof prepareUpload>>
 
 async function ownedFiles(actor: ArchiveActor, ids: string[]) {
-  const files = await prisma.file.findMany({
+  const found = await prisma.file.findMany({
     where: { id: { in: ids }, userId: actor.user.id },
-    select: sourceSelect,
+    select: { ...sourceSelect, encrypted: true },
   })
+  const files: SourceFile[] = found.map(
+    ({ encrypted: _encrypted, ...file }) => file
+  )
   if (files.length !== ids.length) {
     setAuditOutcome('denied')
     throw new ArchiveError(
@@ -94,6 +97,14 @@ async function ownedFiles(actor: ArchiveActor, ids: string[]) {
       true
     )
   }
+  // The server holds ciphertext only. It cannot read an encrypted archive
+  // or put a readable copy of an encrypted file into a new one. The browser
+  // of a person who has the key does this work (docs/e2ee-spec.md, section
+  // 12.3).
+  if (found.some((file) => file.encrypted))
+    throw new ArchiveError(
+      'The server cannot read an encrypted file. Open it in a browser, which lists, extracts and creates archives of encrypted files itself.'
+    )
   return ids.map((id) => files.find((file) => file.id === id)!)
 }
 

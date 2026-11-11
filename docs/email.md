@@ -161,7 +161,7 @@ FLARE_EMAIL_VERIFICATION_MODE=new_users
 | `BRANDING_ACCENT_COLOR`                                                                                              | `#6366f1`; six-digit hex color                     |
 | `BRANDING_LOGO_URL`, `BRANDING_FOOTER`, `BRANDING_SUPPORT_ADDRESS`, `BRANDING_SUBJECT_PREFIX`, `BRANDING_INTRO_TEXT` | Empty                                              |
 | `BRANDING_VERIFICATION_SUBJECT`                                                                                      | `Verify your email address`                        |
-| `BRANDING_RESET_SUBJECT`                                                                                             | `Reset your password`                              |
+| `BRANDING_RESET_SUBJECT`                                                                                             | `Reset your passphrase`                            |
 | `BRANDING_CHANGE_SUBJECT`                                                                                            | `Confirm your new email address`                   |
 
 Environment-based policy changes are intentional operator actions. Switching to

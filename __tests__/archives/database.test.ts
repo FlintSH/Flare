@@ -166,7 +166,7 @@ suite('archive publication against disposable PostgreSQL', () => {
     })
     for (const id of ['archive-owner', 'archive-other'])
       await prisma.user.create({
-        data: { id, urlId: id, uploadToken: id, email: `${id}@example.test` },
+        data: { id, urlId: id, email: `${id}@example.test` },
       })
   })
   afterAll(async () => {

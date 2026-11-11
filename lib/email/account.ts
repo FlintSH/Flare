@@ -93,6 +93,7 @@ export async function requestPasswordReset(email: string, config: EmailConfig) {
   const match = await findAccountByEmail(prisma, email, {
     id: true,
     password: true,
+    authPublicKey: true,
     email: true,
     emailVerified: true,
     emailVerifiedFor: true,
@@ -126,6 +127,15 @@ export async function resetPassword(
     const user = await lockEmailUser(tx, record.userId)
     if (!canRecoverPassword(user, config) || user.email !== record.email)
       throw new EmailHttpError('This email link is invalid or expired.')
+    // An account that has keys never gets a password hash again. Its link
+    // stays unused for the recovery and reset routes (docs/e2ee-spec.md,
+    // sections 6.8 and 6.9).
+    if (user.authPublicKey)
+      throw new EmailHttpError(
+        'This account signs in with a passphrase. Use the reset link to choose a new passphrase.',
+        409,
+        { body: { code: 'passphrase_account' } }
+      )
     await tx.user.update({
       where: { id: user.id },
       data: await changeCredentials(tx, user.id, {
@@ -290,6 +300,7 @@ function assertAccountUnchanged(fresh: User, user: User) {
   if (
     fresh.email !== user.email ||
     fresh.password !== user.password ||
+    Boolean(fresh.authPublicKey) !== Boolean(user.authPublicKey) ||
     fresh.sessionVersion !== user.sessionVersion
   )
     throw new EmailHttpError('Account changed. Sign in and try again.')

@@ -1,6 +1,7 @@
 import type { File, Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/database/prisma'
+import { encryptedRecordsWire } from '@/lib/files/encrypted'
 import type { FileExpiry } from '@/lib/files/expiry'
 import {
   type FileSort,
@@ -20,6 +21,16 @@ export const fileListSelect = {
   views: true,
   downloads: true,
   folderId: true,
+  encrypted: true,
+  header: true,
+  sealedMetadata: true,
+  accountStanza: true,
+  stanzaAccountPublicKey: true,
+  passwordStanza: true,
+  unreadable: true,
+  thumbnailPending: true,
+  ocrPending: true,
+  passwordPendingFrom: true,
   user: { select: { urlId: true } },
   tags: {
     where: { excluded: false },
@@ -36,14 +47,46 @@ export function fileListItem(
   {
     password,
     tags,
+    encrypted,
+    header,
+    sealedMetadata,
+    accountStanza,
+    stanzaAccountPublicKey,
+    passwordStanza,
+    unreadable,
+    thumbnailPending,
+    ocrPending,
+    passwordPendingFrom,
     ...file
   }: Prisma.FileGetPayload<{ select: typeof fileListSelect }>,
   expiry: FileExpiry | null
 ) {
+  // The list is the owner's, so it carries the account stanza. The client
+  // opens the name and the type; this row has neither.
+  const records = encryptedRecordsWire(
+    {
+      encrypted,
+      header,
+      sealedMetadata,
+      accountStanza,
+      stanzaAccountPublicKey,
+      passwordStanza,
+    },
+    { forOwner: true }
+  )
   return {
     ...file,
+    encrypted,
+    ...(records && { encryption: records }),
+    // Only an encrypted file has these: a plain file never sets them.
+    ...(unreadable && { unreadable }),
+    ...(thumbnailPending && { thumbnailPending }),
+    ...(ocrPending && { ocrPending }),
+    // The server encrypted this file and could not keep its password
+    // (docs/e2ee-spec.md, section 14.2).
+    ...(passwordPendingFrom && { passwordPending: true }),
     tags: tags.map(({ tag }) => tag),
-    hasPassword: Boolean(password),
+    hasPassword: Boolean(password) || Boolean(passwordStanza),
     expiresAt: expiry?.expiresAt ?? null,
     expiryAction: expiry?.action ?? null,
   }
@@ -52,11 +95,13 @@ export function fileListItem(
 type GalleryDirection = 'next' | 'previous'
 type GalleryAnchor = Pick<File, 'id' | SortField>
 
-/** What a `sortBy` value orders by. The API also sorts by name, which the library doesn't offer. */
+/**
+ * What a `sortBy` value orders by. The server orders by the names it has:
+ * an encrypted file has none, so the library orders those in the browser
+ * (docs/e2ee-spec.md, section 9.3).
+ */
 export function fileSort(sortBy: string): FileSort {
-  return sortBy === 'name'
-    ? { field: 'name', direction: 'asc' }
-    : librarySort(sortBy)
+  return librarySort(sortBy)
 }
 
 export function fileOrderBy(

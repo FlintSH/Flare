@@ -8,6 +8,12 @@ import { FileCard } from '@/components/dashboard/file-card'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 
 const session = vi.hoisted(() => ({ permissions: [] as string[] }))
+// The card reads tag names through the account's tag list, which needs a
+// query client. These cases give each file its names directly.
+vi.mock('@/hooks/use-tags', () => ({
+  useNamedTags: (tags: { id: string; name: string }[] | undefined) =>
+    tags ?? [],
+}))
 vi.mock('next-auth/react', () => ({
   useSession: () => ({
     data: { user: { id: 'owner', permissions: session.permissions } },

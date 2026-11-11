@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   list: vi.fn(),
+  owner: vi.fn(),
   transaction: vi.fn(),
   tx: {
     $executeRaw: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('@/lib/database/prisma', () => ({
     webhook: { findMany: mocks.list },
     webhookDelivery: { findMany: mocks.list },
     uploadProfile: { findMany: mocks.list },
+    user: { findUnique: mocks.owner },
   },
 }))
 
@@ -36,6 +38,7 @@ beforeEach(() => {
     user: { id: 'owner', permissions: ['webhooks.manage'] },
   })
   mocks.list.mockResolvedValue([{ id: 'row' }])
+  mocks.owner.mockResolvedValue({ uploadTokenHash: 'a'.repeat(64) })
   mocks.transaction.mockImplementation(
     (run: (tx: typeof mocks.tx) => Promise<unknown>) => run(mocks.tx)
   )
@@ -51,7 +54,26 @@ describe('integrations route', () => {
       webhooks: [{ id: 'row' }],
       deliveries: [{ id: 'row' }],
       profiles: [],
+      // The state of the old upload token is for people who manage tokens.
+      legacyUploadToken: false,
     })
+  })
+
+  it('says whether the upload token from before encryption still works, and returns no hash', async () => {
+    mocks.session.mockResolvedValue({
+      user: { id: 'owner', permissions: ['tokens.manage'] },
+    })
+    const active = await GET(new Request('http://localhost/api/integrations'))
+    const body = await active.json()
+    expect(body.legacyUploadToken).toBe(true)
+    expect(JSON.stringify(body)).not.toContain('a'.repeat(64))
+    expect(mocks.owner).toHaveBeenCalledWith({
+      where: { id: 'owner' },
+      select: { uploadTokenHash: true },
+    })
+    mocks.owner.mockResolvedValue({ uploadTokenHash: null })
+    const revoked = await GET(new Request('http://localhost/api/integrations'))
+    expect((await revoked.json()).legacyUploadToken).toBe(false)
   })
 
   it('answers command results and refusals uncached', async () => {

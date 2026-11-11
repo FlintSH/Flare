@@ -21,6 +21,7 @@ import {
 } from '@/lib/auth/security/policy'
 
 import { PasskeyConfirmation } from './passkey-confirmation'
+import { PassphraseConfirmation } from './passphrase-confirmation'
 
 export function readSecurityProof(form: HTMLFormElement) {
   const data = new FormData(form)
@@ -76,6 +77,37 @@ export function SecurityProof({
     )
   }
 
+  if (status.hasPassphrase) {
+    // The passphrase cannot be sent, so the proof is a passphrase sign-in of
+    // the last five minutes. The authenticator code is still used up.
+    if (!status.canUseRecentPassphrase)
+      return (
+        <PassphraseConfirmation
+          status={status}
+          busy={busy}
+          onConfirmed={onConfirmed}
+          onBusyChange={onBusyChange}
+          idPrefix="proof"
+        />
+      )
+    return (
+      <div className="space-y-4">
+        <p className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">
+          Your recent passphrase sign-in confirms your identity for this change.
+          This confirmation is available for five minutes after sign-in.
+        </p>
+        {status.twoFactorEnabled && (
+          <CodeField
+            busy={busy}
+            useRecoveryCode={useRecoveryCode}
+            onToggle={() => setUseRecoveryCode(!useRecoveryCode)}
+            hint="Use a code that has not signed you in. Each authenticator code works once."
+          />
+        )}
+      </div>
+    )
+  }
+
   if (!status.hasPassword) {
     return (
       <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
@@ -122,42 +154,65 @@ export function SecurityProof({
         )}
       </div>
       {status.twoFactorEnabled && (
-        <div className="space-y-2">
-          <Label htmlFor="proof-code">
-            {useRecoveryCode ? 'Recovery code' : 'Authenticator code'}
-          </Label>
-          <Input
-            key={String(useRecoveryCode)}
-            id="proof-code"
-            name="proof-code"
-            inputMode={useRecoveryCode ? 'text' : 'numeric'}
-            autoComplete="one-time-code"
-            autoCapitalize="none"
-            spellCheck={false}
-            data-sensitive="true"
-            placeholder={
-              useRecoveryCode ? 'Enter a saved recovery code' : TOTP_PLACEHOLDER
-            }
-            pattern={useRecoveryCode ? undefined : TOTP_CODE_PATTERN}
-            maxLength={
-              useRecoveryCode ? RECOVERY_CODE_INPUT_LENGTH : TOTP_DIGITS
-            }
-            required
-            disabled={busy}
-          />
-          <Button
-            type="button"
-            variant="link"
-            className="h-auto p-0 text-xs"
-            disabled={busy}
-            onClick={() => setUseRecoveryCode(!useRecoveryCode)}
-          >
-            {useRecoveryCode
-              ? 'Use an authenticator code'
-              : 'Use a recovery code'}
-          </Button>
-        </div>
+        <CodeField
+          busy={busy}
+          useRecoveryCode={useRecoveryCode}
+          onToggle={() => setUseRecoveryCode(!useRecoveryCode)}
+        />
       )}
+    </div>
+  )
+}
+
+/** The authenticator or recovery code that a security change uses up. */
+function CodeField({
+  busy,
+  useRecoveryCode,
+  onToggle,
+  hint,
+}: {
+  busy: boolean
+  useRecoveryCode: boolean
+  onToggle: () => void
+  hint?: string
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="proof-code">
+        {useRecoveryCode ? 'Recovery code' : 'Authenticator code'}
+      </Label>
+      <Input
+        key={String(useRecoveryCode)}
+        id="proof-code"
+        name="proof-code"
+        inputMode={useRecoveryCode ? 'text' : 'numeric'}
+        autoComplete="one-time-code"
+        autoCapitalize="none"
+        spellCheck={false}
+        data-sensitive="true"
+        placeholder={
+          useRecoveryCode ? 'Enter a saved recovery code' : TOTP_PLACEHOLDER
+        }
+        pattern={useRecoveryCode ? undefined : TOTP_CODE_PATTERN}
+        maxLength={useRecoveryCode ? RECOVERY_CODE_INPUT_LENGTH : TOTP_DIGITS}
+        required
+        disabled={busy}
+        aria-describedby={hint ? 'proof-code-hint' : undefined}
+      />
+      {hint && (
+        <p id="proof-code-hint" className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto p-0 text-xs"
+        disabled={busy}
+        onClick={onToggle}
+      >
+        {useRecoveryCode ? 'Use an authenticator code' : 'Use a recovery code'}
+      </Button>
     </div>
   )
 }

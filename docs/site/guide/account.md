@@ -1,6 +1,6 @@
 ---
 title: Account, email, and data
-description: Manage your identity and sign-in details, verify or change email, check storage, and export your Flare data.
+description: Manage your identity, passphrase and sign-in details, verify or change email, check storage, and export your Flare data.
 ---
 
 # Account, email, and data
@@ -15,13 +15,13 @@ Switching sections keeps unfinished edits available in the same page, but does n
 
 <Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Profile Account section showing the demonstration account's Admin and Everyone roles above its identity fields, security, and personal preferences" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
 
-Verification, recovery-address enrollment, password recovery, and confirmed email-change flows remain available under their own identity and email-policy checks, even without `profile.update`. Role restrictions on application preferences do not remove those account-security paths.
+Verification, recovery-address enrollment, passphrase recovery, and confirmed email-change flows remain available under their own identity and email-policy checks, even without `profile.update`. Role restrictions on application preferences do not remove those account-security paths.
 
 ## Protect your sign-in
 
 **Profile → Account → Sign-in security** contains authenticator setup, recovery codes, and passkeys. [Follow the complete security guide](./security) to enable two-factor authentication, save a recovery method, and test passkey sign-in. These controls remain available without `profile.update` and require their own identity confirmation. Adding/removing sign-in methods and replacing recovery codes end existing browser sessions, so save any newly displayed recovery codes before signing in again.
 
-**Require passkey to sign in** is a separate opt-in setting, off by default. It blocks password and SSO sign-in and gives you ten dedicated emergency codes, each capable of signing in with only your account email. Save these separately from authenticator recovery codes. Registration alone does not enable the requirement. [Enable it and prepare recovery](./security#require-a-passkey-for-sign-in).
+**Require passkey to sign in** is a separate opt-in setting, off by default. It blocks passphrase and SSO sign-in and gives you ten dedicated emergency codes, each capable of signing in with only your account email. Save these separately from authenticator recovery codes. Registration alone does not enable the requirement. [Enable it and prepare recovery](./security#require-a-passkey-for-sign-in).
 
 ## Login history and active sessions
 
@@ -84,35 +84,41 @@ Wait for the avatar save to finish. Your existing photo stays in place if public
 
 Changing your username does not automatically change file URL paths. For a memorable upload path, use **Vanity URL** under [account upload defaults](./upload-profiles#account-upload-defaults). The field keeps capital letters as you type them, because links use the vanity URL exactly as written; earlier versions turned everything into lowercase. Flare refuses a vanity URL that another account already uses as its vanity URL or URL ID, or that is your own URL ID, and says which.
 
-## Change your password
+## Change your passphrase
 
-In **Profile → Account**, choose the **Password** shortcut. Under **Change your password**, enter your current password, choose a new password of at least eight characters and at most 72 UTF-8 bytes, and confirm it. If two-factor authentication is enabled, complete **Authenticator or recovery code** with a fresh code unless the form confirms a recent passkey or recovery-code sign-in already supplies that proof. **Update password** becomes available once you start filling in the form. Choose it, then sign in again; registered factors remain in place. The new password also cancels an email address change you haven't finished, and links Flare already emailed you, such as verification links, stop working.
+An account signs in with a **passphrase** that never leaves your browser, and has a 24-word **recovery phrase**. Both belong to the encryption keys of your account. [Passphrase and recovery phrase](./passphrase) explains them in full; this section is the short version for **Profile → Account**, where the **Passphrase** shortcut jumps to **Passphrase and recovery**.
 
-If you require passkeys, confirm with a passkey or dedicated passkey-recovery sign-in within five minutes before changing the password; the current password is still needed to replace it. Updating or resetting the password preserves the requirement, so the new password alone still cannot sign you in.
+- **Show recovery phrase** asks for your passphrase and shows the 24 words again.
+- **Change passphrase** makes new keys for your account. It ends every session, including the one you are using, deletes every API token, revokes the upload token from before encryption if you still had one, and gives you a new recovery phrase. The dialog lists this before it asks for anything. [Read the steps and the consequences](./passphrase#change-your-passphrase) first; screenshot tools need their configuration installed again afterwards.
 
-If that recent sign-in expires while you fill in the form, **Update password** first reveals the code field and asks **Enter an authenticator or recovery code to continue.** Your entered passwords stay in the form; enter a fresh code and submit again. Flare checks the current confirmation requirements before sending the password change.
+A passphrase change asks for your current passphrase and nothing else. Two-factor authentication, recovery codes, passkeys, and a passkey requirement stay as they are, so the next sign-in still asks for them.
 
-<Screenshot src="/screenshots/security/proof-expired.webp" alt="Change your password form preserves concealed password entries and asks for an authenticator or recovery code after recent sign-in proof expires" caption="The real form requests a fresh code before sending the change. This regression capture uses a disposable session with its sign-in time adjusted beyond five minutes; password values are masked." />
+An account that was created before passphrases and has not signed in since still has a password. It cannot open the dashboard with it: the first sign-in goes straight to [Set up encryption](./passphrase#accounts-from-before-passphrases), which replaces the password with a passphrase. The card title **Change your password** and its form remain only for an account without a sign-in email address, which cannot set up encryption until an administrator adds one.
 
-For an account managed entirely through SSO, change your identity-provider password with that provider. Flare's local password form requires an existing local password; it is not an SSO account-linking or local-password creation flow.
+For an account managed entirely through SSO, change your identity-provider password with that provider. Such an account still chooses a Flare passphrase, which unlocks its keys after each SSO sign-in.
 
-### Recover a forgotten password
+### Recover a forgotten passphrase
 
-If your instance offers password recovery, use the login page's password-recovery option, enter your account email address, and follow the emailed reset link. Recovery availability depends on the administrator's email configuration and policy. Resetting your password does not remove two-factor authentication, either recovery-code set, registered passkeys, or a passkey requirement. When passkeys are required, use a passkey or [dedicated passkey recovery code](./security#recover-when-required-passkeys-are-unavailable); resetting the password does not restore password or SSO sign-in.
+If your instance offers recovery by email, choose **Forgot your passphrase?** on the sign-in page, enter your account email address, and follow the emailed reset link. The link offers two paths with different results:
 
-Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again; on an incomplete link, choose **Request a new link**. If email recovery is unavailable, the recovery page says so; contact your instance administrator.
+- **I have my recovery phrase** lets you choose a new passphrase and keeps access to your encrypted files.
+- **I lost my recovery phrase** gives the account new keys. Its encrypted files can never be opened again, by anyone.
+
+[Forgot your passphrase](./passphrase#forgot-your-passphrase) describes both. Recovery availability depends on the administrator's email configuration and policy, and the link is sent only to a verified address. Neither path removes two-factor authentication, either recovery-code set, registered passkeys, or a passkey requirement. When passkeys are required, use a passkey or [dedicated passkey recovery code](./security#recover-when-required-passkeys-are-unavailable) to sign in; a new passphrase does not restore passphrase or SSO sign-in.
+
+Follow the result shown on the reset page. Invalid, expired, incomplete, or already used links require starting the recovery process again; choose **Request a new link**. If email recovery is unavailable, the recovery page says so; contact your instance administrator. An administrator cannot set a passphrase for you.
 
 ## Sign in with SSO
 
 Your administrator may offer an OpenID Connect identity provider. Choose its sign-in button and complete the provider's flow. Account identity is based on the provider and its subject identifier, not merely the email address it returns.
 
-An existing local account with a matching email is not automatically converted or linked to SSO. Continue using its password login. If your instance automatically redirects to SSO, `/auth/login?local=1` opens the local-login route.
+An existing local account with a matching email is not automatically converted or linked to SSO. Continue using its passphrase login. If your instance automatically redirects to SSO, `/auth/login?local=1` opens the local-login route.
 
 There is currently no user-facing flow to link an existing local account to an SSO identity. An administrator precreating a local account with the same email also does not create that link.
 
 ## Verify your email
 
-When email features are enabled, **Profile → Account** shows your address and verification status. Choose **Verify my email** if offered, complete any current-password confirmation, and open the message sent to your inbox.
+When email features are enabled, **Profile → Account** shows your address and verification status. Choose **Verify my email** if offered, [confirm your passphrase](./passphrase#confirm-it-is-you-for-account-changes) if the form asks, and open the message sent to your inbox. A passphrase sign-in within the last five minutes already counts, and the form then says so.
 
 For SSO accounts, Flare may require a recent SSO sign-in instead of a password before a sensitive email action. If prompted, sign in with the provider again and retry within five minutes. If Flare keeps asking right after you sign in, ask your administrator to check the server clocks: a sign-in timed ahead of the clock of the server checking it doesn't count.
 
@@ -126,11 +132,11 @@ If the message does not arrive, check spam, confirm the address, and wait for th
 
 ## Change your email address
 
-When email features are disabled, edit the email field with your basic account information, confirm your current password and any **Authenticator or recovery code** requested, and save. The address change ends existing browser sessions. An SSO-only account instead needs a recent SSO or passkey sign-in.
+When email features are disabled, edit the email field with your basic account information, [confirm your passphrase](./passphrase#confirm-it-is-you-for-account-changes) unless you signed in with it in the last five minutes, enter any **Authenticator or recovery code** requested, and save. You then sign in with the new address and the same passphrase. The address change ends existing browser sessions. An SSO-only account instead needs a recent SSO or passkey sign-in.
 
 With a passkey requirement enabled, both the basic and confirmed email-change flows require a passkey or dedicated passkey-recovery sign-in within five minutes. The address change keeps the requirement and both recovery-code sets; use your new email address with dedicated passkey recovery codes afterward.
 
-If a recent sign-in expires while you edit the address, saving reveals the required password/code fields before changing the email. Your edits remain available; complete the requested confirmation and save again. An SSO-only account is asked to confirm with SSO again. If Flare cannot refresh the confirmation requirements, the change stays unsent until you can retry.
+If a recent sign-in expires while you edit the address, saving reveals the **Confirm passphrase** control or the code field before changing the email. Your edits remain available; complete the requested confirmation and save again. An SSO-only account is asked to confirm with SSO again. If Flare cannot refresh the confirmation requirements, the change stays unsent until you can retry.
 
 When email features are enabled:
 
@@ -174,11 +180,42 @@ This is a personal content export. It is not a full instance backup or a one-cli
 
 If Flare refuses to start the export, the error gives its reason, for example **Permission denied** after your role changed, or **Failed to export data** when it gives none. Earlier versions showed only the status, such as **Export failed with status: 403**.
 
+### An account with encrypted files
+
+The server cannot decrypt an [encrypted file](./encryption), so for an account that has at least one, your browser builds the export. **Export all data** then downloads each file, decrypts the encrypted ones with your keys, and writes one ZIP on your device. Plain files and the account record are in the same ZIP. An account with only plain files gets the export described above, unchanged.
+
+Where the ZIP goes depends on the browser:
+
+1. **A file you choose.** Chrome, Edge and other Chromium browsers on a computer open a save dialog first. The ZIP is written to that file as it is built.
+2. **A streamed download.** Firefox, Safari and mobile browsers save it like any download, through Flare's [service worker](./encryption#video-audio-and-downloads). It appears in your downloads at once and grows as the export runs.
+3. **Memory.** A browser with neither (a private window in some browsers, or a page on plain HTTP) builds the ZIP in memory, up to 512 MB of files. Above that the export stops before it starts and says which browsers can do it.
+
+The button shows **Exporting…** with a percentage, and below it the file being written, how much is done, and a **Cancel** button. Keep the tab open: closing it, reloading it or pressing **Cancel** stops the export. Nothing is saved from a stopped export to a chosen file; a stopped download shows as failed in your browser. An export does not resume. Start it again, and it reads every file again.
+
+<Screenshot src="/screenshots/encryption/export-progress.webp" alt="Your data section during an export built in the browser: the button reads Exporting with a percentage, Cancel is beside it, and below a progress bar are the number and name of the file being written, the bytes done, and a line that the browser decrypts each file and writes the ZIP on this device" caption="The export names the file it is writing. The percentage counts bytes, so small files move it little." />
+
+The ZIP contains:
+
+- `user-data.json`: the same account record. Each file also has `exportPath`, the path of its entry in the ZIP. An encrypted file that was decrypted has its real `name` and `mimeType` and `"decrypted": true`. Its sealed records stay listed.
+- `files/<upload date>/<name>`: each file, plain files as they are stored and encrypted files decrypted, under the name you uploaded them with. The name comes from the file's sealed metadata and is cleaned to one safe file name. Repeated names on one day are numbered as above, across plain and encrypted files.
+- `files/<upload date>/<file ID>.flare-encrypted`: an encrypted file that your keys do not open, for example one from before you [reset your keys without the recovery phrase](./passphrase). It is included as ciphertext, with `"decrypted": false`.
+- `export-report.json`: when the export ran, how many files were written, how many were decrypted, which were included as ciphertext, and which were left out with the reason for each.
+
+A file that fails part-way is left out and the export goes on: a file that fails its integrity check, a file the server no longer sends, or a lost connection during that file. The summary under the button says how many were left out, and `export-report.json` names them. Export again to retry. A plain file whose stored name has a `#` or a `?` in it is read by its exact address, like every other file.
+
+If your encryption keys are locked in this browser, the page says so and offers two buttons. **Unlock** asks for your passphrase and then exports decrypted files. **Export without decrypting** gives the server's export: each encrypted file as ciphertext named `<file ID>.flare-encrypted`, with the records that open it listed in `user-data.json`.
+
+<Screenshot src="/screenshots/encryption/export-locked.webp" alt="Take your files with you card with a notice that the account has encrypted files and the encryption keys are locked in this browser, and the buttons Unlock and Export without decrypting" caption="With locked keys you choose: unlock and export decrypted files, or take the ciphertext." />
+
+Decrypted data goes only to the ZIP: to the file you chose or to your browser's download. Flare writes none of it to browser storage. Building the export takes time and bandwidth in proportion to your library, because every file passes through your device.
+
+### After an export
+
 Inspect the archive and open important files before deleting their originals. A file that storage cannot open, for example because it is missing, is skipped and the rest of the export continues. If storage fails partway through a file, the download stops with an error rather than saving an archive with a cut-off file; start the export again. If an expected file is absent, or an export keeps failing, download the file individually if possible and ask the administrator to check storage.
 
 ## Integrations and connected tools
 
-**Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
+**Profile → Uploads** contains the [screenshot tools](./screenshot-tools). Each configuration you create there has its own upload token, listed in **Integrations** as **Upload tools: profile name**, where you can revoke it. An account from before encryption also has one older upload token. Flare cannot show it, and the card offers to [revoke it](./screenshot-tools#old-configurations) once your tools have new configurations.
 
 **Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 

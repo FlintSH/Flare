@@ -9,6 +9,8 @@ import {
   vi,
 } from 'vitest'
 
+import { clientKeys } from '../auth/e2ee-test-keys'
+
 const authentication = vi.hoisted(() => ({
   userId: 'admin' as string | null,
 }))
@@ -110,7 +112,6 @@ suite.sequential('invites against disposable PostgreSQL', () => {
         email: `${id}@example.test`,
         password: 'fixture-only',
         urlId: id.slice(0, 5).padEnd(5, '0'),
-        uploadToken: `${id}-fixture`,
         roles: { connect: roleIds.map((roleId) => ({ id: roleId })) },
       },
     })
@@ -152,7 +153,7 @@ suite.sequential('invites against disposable PostgreSQL', () => {
       call('/api/auth/register', 'POST', {
         name,
         email: `${name.toLowerCase().replace(/\W+/g, '.')}@example.test`,
-        password: 'Invite-tests-only-2026',
+        account: clientKeys().record,
         ...(invite === undefined ? {} : { invite }),
       })
     )
@@ -571,7 +572,7 @@ suite.sequential('invites against disposable PostgreSQL', () => {
       call('/api/auth/register', 'POST', {
         name: 'Duplicate',
         email: 'first.teammate@example.test',
-        password: 'Invite-tests-only-2026',
+        account: clientKeys().record,
         invite: team.token,
       })
     )

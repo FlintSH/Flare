@@ -7,7 +7,14 @@ import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+import { queueStorageDeletion } from '@/lib/storage/deletion'
+import { parseStorageTarget } from '@/lib/storage/targets'
 
+import {
+  auditFileName,
+  parsePasswordStanza,
+  passwordStanzaSchema,
+} from './encrypted'
 import { hashFilePassword } from './password-hash'
 import { newFilePasswordSchema } from './password-policy'
 
@@ -28,6 +35,12 @@ export type FileAuthority =
 export const fileSettingsSchema = z.object({
   visibility: z.enum(['PUBLIC', 'PRIVATE']).optional(),
   password: newFilePasswordSchema.nullable().optional(),
+  /**
+   * For an encrypted file: a new password stanza, base64url with its
+   * `record_version` byte, or null to remove it. The client makes it; the
+   * server never gets the password (docs/e2ee-spec.md, section 8.2).
+   */
+  passwordStanza: passwordStanzaSchema,
 })
 
 export type FileSettings = z.infer<typeof fileSettingsSchema>
@@ -49,6 +62,8 @@ const managedFileSelect = {
   userId: true,
   path: true,
   size: true,
+  encrypted: true,
+  passwordPendingFrom: true,
 } satisfies Prisma.FileSelect
 
 const accountFileSelect = {
@@ -61,6 +76,8 @@ const accountFileSelect = {
   urlPath: true,
   isPaste: true,
   password: true,
+  encrypted: true,
+  passwordStanza: true,
 } satisfies Prisma.FileSelect
 
 /** Moderators reach a file only through the account that owns it. */
@@ -91,18 +108,75 @@ async function findManagedFile(
 export async function updateFileSettings(
   authority: FileAuthority,
   id: string,
-  { visibility, password }: FileSettings
+  { visibility, password, passwordStanza }: FileSettings
 ) {
   const where = fileWhere(authority, id)
-  await findManagedFile(authority, where)
+  const current = await findManagedFile(authority, where)
   const data: Prisma.FileUpdateInput = {}
   if (visibility) data.visibility = visibility
-  if (password !== undefined) data.password = await hashFilePassword(password)
-  const { password: passwordHash, ...file } = await prisma.file.update({
-    where,
-    data,
-  })
-  return { ...file, hasPassword: Boolean(passwordHash) }
+  if (current.encrypted) {
+    // A moderator can restrict an encrypted file and cannot publish it. The
+    // owner's browser gives a public file in a folder to everyone who has
+    // the folder link (docs/e2ee-spec.md, sections 8.4.3 and 9.4.7), so the
+    // choice to publish is the owner's only (section 13, requirement 4).
+    if (authority.as === 'moderator' && visibility === 'PUBLIC')
+      throw new HttpError(
+        403,
+        'Only the owner can make an encrypted file public.'
+      )
+    // The server checks no password for an encrypted file. Its password is
+    // a stanza that only the owner's client can make.
+    if (password !== undefined)
+      throw new HttpError(
+        400,
+        'An encrypted file takes a password stanza, not a server password.'
+      )
+    if (passwordStanza !== undefined) {
+      if (authority.as !== 'owner')
+        throw new HttpError(
+          403,
+          'Only the owner can change the password of an encrypted file.'
+        )
+      data.passwordStanza = passwordStanza
+        ? parsePasswordStanza(passwordStanza)
+        : null
+      // The server encrypted this file, could not keep its password and
+      // made it private (docs/e2ee-spec.md, section 14.2). With a password
+      // again, it is shared as it was, unless this request says otherwise.
+      if (passwordStanza && current.passwordPendingFrom && !visibility)
+        data.visibility = current.passwordPendingFrom
+    }
+  } else {
+    if (passwordStanza !== undefined)
+      throw new HttpError(400, 'A plain file takes no password stanza.')
+    if (password !== undefined) data.password = await hashFilePassword(password)
+  }
+  const {
+    password: passwordHash,
+    header: _header,
+    sealedMetadata: _sealedMetadata,
+    accountStanza: _accountStanza,
+    stanzaAccountPublicKey: _stanzaAccountPublicKey,
+    passwordStanza: storedStanza,
+    folderStanza: _folderStanza,
+    folderStanzaPublicKey: _folderStanzaPublicKey,
+    ...file
+  } = await prisma.file
+    .update({
+      // A file that the server encrypted since `current` was read takes the
+      // other kind of password (docs/e2ee-spec.md, section 14.2).
+      where: { ...where, encrypted: current.encrypted },
+      data,
+    })
+    .catch((error: unknown) => {
+      if ((error as { code?: string }).code === 'P2025')
+        throw new HttpError(409, 'This file changed. Reload and try again.')
+      throw error
+    })
+  return {
+    ...file,
+    hasPassword: Boolean(passwordHash) || Boolean(storedStanza),
+  }
 }
 
 /**
@@ -114,7 +188,8 @@ export async function updateFileSettings(
 export async function deleteFile(authority: FileAuthority, id: string) {
   const where = fileWhere(authority, id)
   const file = await findManagedFile(authority, where)
-  setAuditTarget({ type: 'file', id: file.id, name: file.name })
+  const name = auditFileName(file)
+  setAuditTarget({ type: 'file', id: file.id, name })
   try {
     const storage = await getStorageProvider()
     await storage.deleteFile(file.path)
@@ -123,7 +198,7 @@ export async function deleteFile(authority: FileAuthority, id: string) {
       category: 'storage',
       targetType: 'file',
       targetId: file.id,
-      targetName: file.name,
+      targetName: name,
     })
   } catch (error) {
     await recordAudit({
@@ -132,7 +207,7 @@ export async function deleteFile(authority: FileAuthority, id: string) {
       outcome: 'failure',
       targetType: 'file',
       targetId: file.id,
-      targetName: file.name,
+      targetName: name,
       details: {
         reason: 'Storage deletion failed; file metadata deletion continues',
         ownerId: file.userId,
@@ -144,10 +219,20 @@ export async function deleteFile(authority: FileAuthority, id: string) {
     })
   }
   await prisma.$transaction(async (tx) => {
-    await tx.file.delete({ where })
+    // The row as it was deleted. The server can encrypt a file after it was
+    // read above (docs/e2ee-spec.md, section 14.2): the row then has a new
+    // object and a new size, and that object is removed too.
+    const deleted = (await tx.file.delete({ where })) ?? file
+    if (deleted.path !== file.path)
+      await queueStorageDeletion(
+        tx,
+        deleted.userId,
+        deleted.path,
+        parseStorageTarget(deleted.storageTarget)
+      )
     await tx.user.update({
       where: { id: file.userId },
-      data: { storageUsed: { decrement: file.size } },
+      data: { storageUsed: { decrement: deleted.size } },
     })
   })
 }
@@ -167,7 +252,7 @@ function visibilityFilter(value: string): FileVisibility | undefined {
  */
 export type AccountFile = Omit<
   Prisma.FileGetPayload<{ select: typeof accountFileSelect }>,
-  'password' | 'visibility' | 'uploadedAt'
+  'password' | 'passwordStanza' | 'visibility' | 'uploadedAt'
 > & {
   visibility: FileVisibility | 'PROTECTED'
   uploadedAt: string
@@ -209,9 +294,9 @@ export async function listAccountFiles(
     select: accountFileSelect,
   })
   return {
-    files: files.map(({ password, ...file }) => ({
+    files: files.map(({ password, passwordStanza, ...file }) => ({
       ...file,
-      visibility: password ? 'PROTECTED' : file.visibility,
+      visibility: password || passwordStanza ? 'PROTECTED' : file.visibility,
     })),
     pagination: { total, pages, page, limit },
   }

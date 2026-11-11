@@ -73,7 +73,6 @@ suite('account security against disposable PostgreSQL', () => {
         email: 'test@example.invalid',
         password,
         urlId: 'security-owner',
-        uploadToken: 'security-token',
       },
     })
   })
@@ -326,7 +325,6 @@ suite('account security against disposable PostgreSQL', () => {
         email: 'other@example.invalid',
         passkeyRequired: true,
         urlId: 'another-account',
-        uploadToken: 'another-account',
       },
     })
     const code = enabled.recoveryCodes![0]
@@ -375,7 +373,6 @@ suite('account security against disposable PostgreSQL', () => {
           id: 'different-account',
           email: `test${replacement}name@example.invalid`,
           urlId: 'different-account',
-          uploadToken: 'different-account',
         },
       })
       const enabled = await requirePasskey()
@@ -415,7 +412,6 @@ suite('account security against disposable PostgreSQL', () => {
         // Optional accounts still make the address ambiguous.
         passkeyRequired: false,
         urlId: 'case-variant-account',
-        uploadToken: 'case-variant-account',
       },
     })
     const code = enabled.recoveryCodes![0]
@@ -444,7 +440,6 @@ suite('account security against disposable PostgreSQL', () => {
         id: 'case-variant-account',
         email: 'distinct@example.invalid',
         urlId: 'case-variant-account',
-        uploadToken: 'case-variant-account',
       },
     })
     const lookup = prisma.user.findMany.bind(prisma.user)
@@ -1320,7 +1315,6 @@ suite('account security against disposable PostgreSQL', () => {
         id: 'second-owner',
         email: 'second@example.invalid',
         urlId: 'second-owner',
-        uploadToken: 'second-owner',
       },
     })
     const foreign = await browserSessions.createBrowserSession(
@@ -1375,7 +1369,6 @@ suite('account security against disposable PostgreSQL', () => {
     })
     expect(user).toMatchObject({
       sessionVersion: 2,
-      uploadToken: 'security-token',
     })
     expect(
       await prisma.browserSession.count({

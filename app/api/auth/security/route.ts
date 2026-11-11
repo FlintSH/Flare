@@ -30,6 +30,11 @@ export const GET = api(async (request) => {
     passkeyRequired: user.passkeyRequired,
     passkeyRecoveryCodesRemaining,
     hasPassword: Boolean(user.password),
+    hasPassphrase: Boolean(user.authPublicKey),
+    canUseRecentPassphrase:
+      Boolean(user.authPublicKey) &&
+      (recentAuthentication(session, 'passphrase') ||
+        recentAuthentication(session, 'recovery')),
     passkeys,
     passkeysAvailable,
     canUseRecentPasskey: recentAuthentication(session, 'passkey'),
@@ -38,6 +43,9 @@ export const GET = api(async (request) => {
       session,
       'passkey-recovery'
     ),
-    canUseRecentSso: !user.password && recentAuthentication(session, 'oidc'),
+    canUseRecentSso:
+      !user.password &&
+      !user.authPublicKey &&
+      recentAuthentication(session, 'oidc'),
   }
 })

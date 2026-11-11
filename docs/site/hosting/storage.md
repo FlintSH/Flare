@@ -55,6 +55,15 @@ Current S3 avatar uploads request a `public-read` object ACL and use a public av
 
 AWS S3's default bucket-owner-enforced mode disables ACLs. Plan for this compatibility constraint before selecting a bucket policy; do not make all file objects public to work around an avatar failure. Test the complete account/avatar flow on your chosen provider, or use local storage if its policy cannot support the current avatar behavior. [AWS Object Ownership and ACL behavior](https://docs.aws.amazon.com/AmazonS3/latest/userguide/about-object-ownership.html).
 
+## Encrypted files in storage
+
+A file that a browser [encrypted](/guide/encryption) is stored as ciphertext under `uploads/{urlId}/{uuid}/{fileId}`. The key has no filename in it, the object starts with `FLAREE2E`, and its content type is `application/octet-stream`. Local storage and S3 treat it like any other object.
+
+- Flare never redirects a browser to a signed S3 address for an encrypted file. The browser reads the ciphertext from Flare with byte ranges and decrypts it. Plan bandwidth for that: encrypted downloads pass through the application even on S3.
+- **The storage must serve byte ranges.** Playing an encrypted video, browsing an encrypted archive and resuming a read all ask `GET /api/files/{urlId}/{fileId}` for a `Range`, and Flare passes that range to storage: a positioned read on local disk, `GetObject` with `Range` on S3. AWS S3, MinIO, Cloudflare R2, Backblaze B2 and other S3-compatible services support ranged `GetObject`. A provider that ignores `Range` and returns the whole object makes Flare send more bytes than it announced, and the browser rejects the answer. Each range is one storage request of at most about 4 MiB while a video plays, so a long video is many small reads, not one long one.
+- Bucket-level scanning, lifecycle rules by content type, and CDN image transforms see only opaque bytes.
+- The object alone cannot be opened or named. [Back up the database with it](/hosting/maintenance#encrypted-files-migration).
+
 ## Maximum upload size
 
 The default maximum is **100 MB per file**. The setting supports MB or GB and uses powers of 1024. It applies to every role, including Administrator and roles with quota bypass. Your reverse proxy and host may impose additional request limits; [align them](/hosting/reverse-proxy#align-all-upload-limits).

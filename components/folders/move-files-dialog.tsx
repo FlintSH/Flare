@@ -22,8 +22,11 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { apiRequest } from '@/lib/client/request'
+import { displayFileName } from '@/lib/files/display-name'
+import { folderRequestBody } from '@/lib/folders/client'
 import { folderPath } from '@/lib/folders/navigation'
 import { FOLDER_NAME_MAX_LENGTH, type FolderView } from '@/lib/folders/schema'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 
@@ -39,7 +42,15 @@ export function MoveFilesDialog({
   onClose: () => void
 }) {
   const lifetime = useRequestLifetime()
-  const { folders, loading, error: loadError, reload, changed } = useFolders()
+  const {
+    folders,
+    keys,
+    keysLoading,
+    loading,
+    error: loadError,
+    reload,
+    changed,
+  } = useFolders()
   const { toast } = useToast()
   const [destination, setDestination] = useState<string | null | undefined>(
     undefined
@@ -79,6 +90,9 @@ export function MoveFilesDialog({
       })
       if (signal.aborted) return
       void changed()
+      // A public encrypted file needs a stanza for the key of its new folder
+      // (docs/e2ee-spec.md, section 9.4.4). This browser makes it now.
+      requestMaintenance('folders')
       toast({
         title:
           files.length === 1 ? 'File moved' : `${files.length} files moved`,
@@ -104,10 +118,12 @@ export function MoveFilesDialog({
     setError('')
     try {
       const folder = await apiRequest<FolderView>('/api/folders', {
-        body: {
-          name: name.trim(),
+        body: folderRequestBody({
+          name,
           parentId: destination ?? null,
-        },
+          folders,
+          keys,
+        }),
         signal,
         fallback: FOLDER_REQUEST_FAILED,
       })
@@ -144,7 +160,7 @@ export function MoveFilesDialog({
               <>
                 Choose a folder for{' '}
                 <span className="font-medium text-foreground">
-                  {files[0].name}
+                  {displayFileName(files[0])}
                 </span>
                 .
               </>
@@ -246,7 +262,9 @@ export function MoveFilesDialog({
               <Button
                 type="submit"
                 size="sm"
-                disabled={busy || destinationUnavailable || !name.trim()}
+                disabled={
+                  busy || keysLoading || destinationUnavailable || !name.trim()
+                }
               >
                 Create folder
               </Button>

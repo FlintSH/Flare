@@ -108,7 +108,7 @@ export const emailConfigSchema = z.object({
         .default('Verify your email address'),
       resetSubject: line
         .refine((value) => value.length > 0, 'Subject is required')
-        .default('Reset your password'),
+        .default('Reset your passphrase'),
       changeSubject: line
         .refine((value) => value.length > 0, 'Subject is required')
         .default('Confirm your new email address'),

@@ -1,6 +1,7 @@
 import { startAuditRetentionWorker } from '@/lib/audit/retention'
 import { startSecurityCleanupWorker } from '@/lib/auth/security/worker'
 import { startMailWorker } from '@/lib/email/worker'
+import { startFileEncryptionWorker } from '@/lib/files/existing-worker'
 import { startFileExpiryWorker } from '@/lib/files/expiry-worker'
 import { CORS_ENV, corsWarnings } from '@/lib/http/cors'
 import { startWebhookWorker } from '@/lib/integrations/worker'
@@ -38,6 +39,7 @@ export async function runStartupTasks() {
     ['audit retention', startAuditRetentionWorker],
     ['storage deletion', startStorageDeletionWorker],
     ['file expiry', startFileExpiryWorker],
+    ['encryption of existing files', startFileEncryptionWorker],
     ['email delivery', startMailWorker],
     ['webhook delivery', startWebhookWorker],
     ['OCR tag retries', startOcrTagWorker],

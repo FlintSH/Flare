@@ -122,9 +122,18 @@ export function canOptimizeThumbnail(file: {
 
 export function sharedFolderUrl(
   token: string,
-  { origin = '', page = 1 }: { origin?: string; page?: number } = {}
+  {
+    origin = '',
+    page = 1,
+    folder = null,
+  }: { origin?: string; page?: number; folder?: string | null } = {}
 ) {
-  return `${origin}/s/folders/${encodeSegment(token)}${page > 1 ? `?page=${page}` : ''}`
+  const query = new URLSearchParams()
+  // A folder below the shared one. The key after `#` stays the shared one's.
+  if (folder) query.set('folder', folder)
+  if (page > 1) query.set('page', String(page))
+  const text = query.toString()
+  return `${origin}/s/folders/${encodeSegment(token)}${text ? `?${text}` : ''}`
 }
 
 /**

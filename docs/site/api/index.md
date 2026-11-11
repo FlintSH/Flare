@@ -11,8 +11,10 @@ You need a running Flare instance and an account. Every example uses `https://fi
 
 ## Your first upload
 
-1. Open **Profile → Integrations** on your Flare instance.
-2. Create a named API token with **`files:upload`**. Give it a recognizable name, such as “Build artifacts,” and choose an expiration if appropriate.
+This first upload sends the file as it is, a **plain** file that the server can read. Flare [encrypts by default](/guide/encryption), and a script cannot encrypt with one `curl` request, so a token needs an upload profile that says plain uploads are intended.
+
+1. Open **Profile → Uploads** on your Flare instance and create an [upload profile](/guide/upload-profiles#encryption) with **Encryption** set to **Plain**, for example “Build artifacts”.
+2. Open **Profile → Integrations** and create a named API token with **`files:upload`**, bound to that profile. Choose an expiration if appropriate.
 3. Copy the secret when it appears. Flare cannot show it again.
 4. Set `FLARE_URL` to your instance's HTTPS origin and provide `FLARE_TOKEN` through your shell environment or secret manager.
 5. Send one file:
@@ -25,6 +27,8 @@ curl --fail-with-body \
 ```
 
 The response includes `data.pageUrl`, the share page to send to someone, alongside raw and download URLs. Let your HTTP client generate the multipart `Content-Type` boundary; do not set that header yourself.
+
+Without the Plain profile the request answers `403` with `"code": "profile_requires_encrypted"`. A token that was created before the upgrade to end-to-end encryption is the exception: it keeps uploading plain files without a profile. To upload **encrypted** files from a script, use the [`flare-upload`](/guide/screenshot-tools#install-flare-upload) program: `flare-upload ./screenshot.png` prints a link with the key after `#`. [Which uploads a token may send](./files#which-uploads-a-token-may-send) lists every case.
 
 <Screenshot src="/screenshots/handbook/integrations.webp" alt="The Flare profile integrations screen with API tokens and webhooks" caption="Each account manages its own tokens, webhook destinations, and delivery history in Profile → Integrations." />
 
@@ -47,6 +51,7 @@ Use the builder to see how your choices change a request. It generates a command
 | Call Flare from a web app or PWA in the browser                    | [Call Flare from a web app](./authentication#call-flare-from-a-web-app) |
 | Start with working code                                            | [Recipes](./recipes)                                                    |
 | Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)                                |
+| Build a client for passphrase sign-in, account keys, and recovery  | [Account key contracts](./account-keys)                                 |
 | Build browser session history or audit views                       | [Sessions and audit contracts](./activity)                              |
 | Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)                              |
 

@@ -23,7 +23,9 @@ curl --fail-with-body \
   "$FLARE_URL/api/urls"
 ```
 
-The `url` property is required and must be an absolute HTTP or HTTPS URL. Other protocols, such as `file:` or `javascript:`, are rejected. Successful creation returns **200**:
+The `url` property is required and must be an absolute HTTP or HTTPS URL. Other protocols, such as `file:` or `javascript:`, are rejected.
+
+A target whose part after `#` has the form of a Flare key is rejected with **400**: 43 base64url characters, alone or after a prefix such as `p.`. That is the link of an [encrypted file](/guide/encryption#a-link-is-the-key), and a short link would store its key on the server as plain text. The error is `This link has an encryption key after #. A short link is stored on the server, so shortening it would give the server the key. Share the full link instead.` Nothing is stored, and the refused address is not written to the audit log. The dashboard form applies the same rule before it sends anything, so a browser never transmits the key; a script that sends such a link has already sent it. An ordinary fragment such as `#installation` or `#t=10` is accepted. Successful creation returns **200**:
 
 ```json
 {

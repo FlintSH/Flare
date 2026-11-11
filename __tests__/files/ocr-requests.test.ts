@@ -24,6 +24,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
+    // No sealed tag: the server applies every rule of these accounts.
+    vaultTag: { findFirst: async () => null },
     file: {
       findUnique: async ({ where }: { where: { id: string } }) => {
         const file = mocks.files.get(where.id)

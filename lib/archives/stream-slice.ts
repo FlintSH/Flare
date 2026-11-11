@@ -1,7 +1,9 @@
 import { Readable, type Transform } from 'node:stream'
 import { crc32 } from 'node:zlib'
 
-import { ArchiveError } from './errors'
+import { ArchiveError, damagedEntry } from './errors'
+
+export { damagedEntry }
 
 /** How long reading archive data may go without receiving any bytes. */
 export const ARCHIVE_IDLE_MS = 60_000
@@ -62,12 +64,6 @@ export function rejectOnAbort(signal: AbortSignal) {
         once: true,
       })
   })
-}
-
-export function damagedEntry() {
-  return new ArchiveError(
-    'This file’s data in the archive is damaged, so it can’t be read.'
-  )
 }
 
 function integrityFailed() {

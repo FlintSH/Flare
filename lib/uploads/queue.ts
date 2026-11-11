@@ -22,6 +22,8 @@ export type UploadBatch = {
   readonly failure?: {
     readonly message: string
     readonly remaining: readonly File[]
+    /** The person stopped the upload. Nothing failed. */
+    readonly cancelled?: boolean
   }
 }
 
@@ -71,6 +73,7 @@ export function createUploadQueue(send = uploadFile) {
   } = { files: [], uploading: false }
   const watchers = new Set<() => void>()
   let keys = 0
+  let running: AbortController | null = null
 
   const update = (next: Partial<typeof state>) => {
     state = { ...state, ...next }
@@ -97,6 +100,8 @@ export function createUploadQueue(send = uploadFile) {
   ): Promise<UploadBatch | null> {
     if (state.uploading || !files.length) return null
     update({ uploading: true })
+    const controller = new AbortController()
+    running = controller
     const uploaded: UploadResponse[] = []
     let failure: UploadBatch['failure']
     let id = 0
@@ -110,29 +115,39 @@ export function createUploadQueue(send = uploadFile) {
         })
         track(queued?.[index], 0)
         uploaded.push(
-          await send(file, options, (bytes) => {
-            track(queued?.[index], bytes)
-            if (activity.file?.id === current)
-              setActivity({
-                file: {
-                  id: current,
-                  name: file.name,
-                  progress: percent(file, bytes),
-                },
-                uploading: true,
-              })
-          })
+          await send(
+            file,
+            { ...options, signal: controller.signal },
+            (bytes) => {
+              track(queued?.[index], bytes)
+              if (activity.file?.id === current)
+                setActivity({
+                  file: {
+                    id: current,
+                    name: file.name,
+                    progress: percent(file, bytes),
+                  },
+                  uploading: true,
+                })
+            }
+          )
         )
       }
     } catch (error) {
       failure = {
         message: batchFailure(
           uploaded.length,
-          error instanceof Error ? error.message : 'Upload failed'
+          controller.signal.aborted
+            ? 'Upload cancelled'
+            : error instanceof Error
+              ? error.message
+              : 'Upload failed'
         ),
         remaining: files.slice(uploaded.length),
+        ...(controller.signal.aborted && { cancelled: true }),
       }
     }
+    running = null
     if (activity.file?.id === id) setActivity({ ...activity, uploading: false })
     const sent = new Set(queued?.slice(0, uploaded.length))
     revoke(state.files.filter((item) => sent.has(item.key)))
@@ -191,6 +206,10 @@ export function createUploadQueue(send = uploadFile) {
     /** Sends these files without queueing them, so nothing waits afterwards. */
     uploadFiles: (files: readonly File[], options: UploadOptions) =>
       run(files, options),
+    /** Stops the batch that is being sent. The file in progress is not stored. */
+    cancel() {
+      running?.abort()
+    },
     /** Releases the previews when the queue's owner goes away. */
     dispose() {
       revoke(state.files)

@@ -52,7 +52,7 @@ When verification is required, a user can sign in to the restricted account flow
 ### A staged rollout for an existing instance
 
 1. Configure and test SMTP with recovery/verification enforcement still off.
-2. Enable sending and password recovery.
+2. Enable sending and password recovery, which is what offers **Forgot your passphrase?**.
 3. Enroll and verify your administrator recovery address from Profile.
 4. Ask existing users to enroll their own addresses while they still have access.
 5. Enable optional or new-user verification if desired.
@@ -62,13 +62,21 @@ An upgrade leaves email disabled and keeps existing access unchanged. Older `ema
 
 ## Password recovery
 
-Recovery works for **local-password accounts whose current email address has verified proof**. It is disabled by default. Once enabled, an eligible user can request a reset from the sign-in flow, open the link, and submit a new password.
+Recovery works for **local accounts whose current email address has verified proof**: accounts that sign in with a passphrase, and accounts that still have a password from before passphrases. It is disabled by default. Once enabled, an eligible user can request a reset from the sign-in flow with **Forgot your passphrase?** and open the link. The section keeps its name because the setting does.
 
-Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; submitting the reset does. The new password follows the rules for every account password, at least 8 characters and at most 72 UTF-8 bytes, and Flare stores only its bcrypt hash. Successful reset invalidates browser sessions and obsolete email action/reset tokens, while preserving both authenticator and dedicated passkey recovery codes. The legacy upload token is preserved unless **Rotate upload tokens after a password reset** is enabled; scoped API tokens should be managed separately.
+The link never sets a password. What it does depends on the account:
+
+- **An account with a passphrase and its recovery phrase** chooses a new passphrase and keeps its keys' history. The person types the 24 words in the browser, which proves them to the server with a signature.
+- **An account with a passphrase and no recovery phrase** can be reset. It gets new keys, and nothing it encrypted before can be opened again, by the person or by you. The page says this and asks for a confirmation.
+- **An account that still has a password** chooses a passphrase, which replaces the password.
+
+In every case the person saves a new recovery phrase at the end. [Forgot your passphrase](/guide/passphrase#forgot-your-passphrase) is the page to send people to. **You cannot do any of this for a user**: no administrator control sets or reveals a passphrase, and with the passphrase and the recovery phrase both lost, the encrypted files of the account are lost. A person who controls a user's mailbox can reset that account and take it over, without its encrypted files.
+
+Reset links expire after **30 minutes** by default, configurable from 5–120 minutes. Opening the link does not consume it; a successful recovery or reset does, and a refused one leaves it for another try. The new passphrase must pass the [strength check](/guide/passphrase#choose-a-passphrase) in the person's browser; the server never receives it and stores public keys and a sealed record only. A successful recovery or reset ends every browser session of the account, **deletes every named API token, and revokes the upload token from before encryption**, whatever **Revoke old upload tokens after a reset** says: new keys always cancel them. No new token of that kind is issued; people [create new tool configurations](/guide/screenshot-tools#create-a-configuration). Earlier versions named the switch **Rotate upload tokens after a password reset** and gave the account a new token to download. It also invalidates obsolete email action/reset tokens, and preserves both authenticator and dedicated passkey recovery codes.
 
 Recovery requests do not reveal whether the submitted email belongs to an eligible account. If an old user never enrolled a recovery address, an administrator must help them regain access; the stored address alone is insufficient. An exemption from verification does not enable recovery.
 
-A password reset does not disable [two-factor authentication](/guide/security), reset either recovery-code set, remove passkeys, or turn off **Require passkey to sign in**. With that requirement off, a user with local two-factor authentication still needs their authenticator or an unused authenticator recovery code after resetting the password. With it on, the new password cannot sign in: use a registered passkey or a dedicated passkey recovery code. Email verification remains enforced after passkey or emergency recovery sign-in when required by policy.
+A recovery or reset does not disable [two-factor authentication](/guide/security), reset either recovery-code set, remove passkeys, or turn off **Require passkey to sign in**. With that requirement off, a user with local two-factor authentication still needs their authenticator or an unused authenticator recovery code after choosing the new passphrase. With it on, the new passphrase cannot sign in: use a registered passkey or a dedicated passkey recovery code. Email verification remains enforced after passkey or emergency recovery sign-in when required by policy.
 
 SSO-only accounts using provider sign-in recover through that provider. An SSO-only account that explicitly requires passkeys instead uses its registered passkeys or dedicated passkey recovery codes; the code plus current account email grants emergency access without the provider. OIDC auto-login's `enforceSso` setting disables local email password recovery, while preserving the local login page for permitted sign-in methods. Keep an administrator method that remains usable under the account's own requirement.
 
@@ -93,7 +101,7 @@ The second control is off by default. When enabled, proof is tied to the account
 
 ## Brand account messages
 
-Advanced branding includes instance name, logo URL, accent color, support address, footer, introductory text, subject prefix, and separate verification/reset/change subjects. Flare generates HTML and plain-text versions and escapes the configured text. It does not accept arbitrary HTML email templates, attachments, or executable template code.
+Advanced branding includes instance name, logo URL, accent color, support address, footer, introductory text, subject prefix, and separate verification/reset/change subjects. Flare generates HTML and plain-text versions and escapes the configured text. It does not accept arbitrary HTML email templates, attachments, or executable template code. The default reset subject is **Reset your passphrase**. An installation that saved its email settings before accounts moved to passphrases keeps the subject it saved, usually **Reset your password**: change it under the email settings if you want the new wording.
 
 Use sender-domain SPF, DKIM, and DMARC settings as provided by your mail service. Flare does not receive provider bounce webhooks in this release, so investigate provider logs when mail is accepted but does not arrive.
 

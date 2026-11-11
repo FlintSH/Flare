@@ -12,6 +12,9 @@
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": ["prisma"],
   "includeEntryExports": true,
+  "ignoreIssues": {
+    "lib/e2ee/{account,contexts,errors,file,types}.ts": ["exports", "types"]
+  },
   "rules": {
     "classMembers": "error",
     "enumMembers": "error",

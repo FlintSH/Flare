@@ -148,6 +148,18 @@ export function fileListFilters(userId: string, params: URLSearchParams) {
     )
   }
 
+  // `encrypted=false` lists plain files only, and `encrypted=true` the
+  // encrypted ones. The server cannot search, filter by type or sort by
+  // name where a name is encrypted, so a client that does that itself asks
+  // the server for the plain files alone (docs/e2ee-spec.md, section 9.8).
+  const encrypted = params.get('encrypted')
+  if (encrypted !== null) {
+    if (encrypted !== 'true' && encrypted !== 'false')
+      throw new FileListInputError('encrypted must be true or false')
+    const value = encrypted === 'true'
+    add({ encrypted: value }, Prisma.sql`f."encrypted" = ${value}`)
+  }
+
   const snapshotValue = params.get('snapshot')
   if (snapshotValue) {
     const snapshot = dateValue(snapshotValue, 'snapshot')

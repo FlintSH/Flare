@@ -25,7 +25,6 @@ describe('bearer route permissions', () => {
     ['GET', '/api/urls', ['links.read']],
     ['POST', '/api/urls', ['links.create']],
     ['DELETE', '/api/urls/short', ['links.delete']],
-    ['GET', '/api/profile/upload-token', ['tokens.manage']],
     [
       'GET',
       '/api/profile/export',

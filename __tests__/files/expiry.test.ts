@@ -61,6 +61,7 @@ vi.mock('@/lib/config', () => ({
   readConfig: async () => ({
     settings: {
       general: {
+        ocr: { enabled: true },
         storage: {
           maxUploadSize: { value: 10, unit: 'MB' },
           quotas: { enabled: false, default: { value: 10, unit: 'GB' } },
@@ -74,6 +75,16 @@ vi.mock('@/lib/security/file-validation', () => ({
 }))
 vi.mock('@/lib/integrations/webhooks', () => ({ enqueueFileReady: vi.fn() }))
 vi.mock('@/lib/ocr', () => ({ ocrQueue: { add: vi.fn() } }))
+vi.mock('@/lib/files/library-records', () => ({
+  // The library records of an upload have their own suite.
+  newFileLibraryState: async () => ({
+    columns: {},
+    sealed: null,
+    ruleTagIds: [],
+  }),
+  applyRuleTags: async () => 0,
+  storeSealedData: async () => {},
+}))
 
 const deadline = new Date('2099-10-06T15:30:00.000Z')
 const file = {

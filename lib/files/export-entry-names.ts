@@ -1,5 +1,15 @@
-import { sanitizeDisplayName } from '@/lib/security/paths'
 import { uploadDisplayName } from '@/lib/uploads/display-name'
+
+/**
+ * The last path segment without control characters or `..`, as
+ * `sanitizeDisplayName` gives it. Written out here so the browser can name
+ * the entries of an export it builds itself (docs/e2ee-spec.md, section
+ * 12.4): that module imports `node:path`.
+ */
+function displayName(name: string): string {
+  const cleaned = name.replace(/[\x00-\x1f\x7f]/g, '').replace(/\.\./g, '')
+  return cleaned.replace(/\/+$/, '').split('/').at(-1) || 'download'
+}
 
 /**
  * Names each file's entry in a data export: `files/<upload date>/<name>`,
@@ -14,10 +24,29 @@ export function exportEntryNamer() {
   // than one per earlier copy. `used` still catches a literal file named
   // like a numbered copy.
   const nextCopy = new Map<string, number>()
-  return (file: { name: string; uploadedAt: Date }) => {
+  return (file: {
+    name: string
+    uploadedAt: Date | string
+    encrypted?: boolean
+    urlPath?: string
+  }) => {
     const folder = `files/${new Date(file.uploadedAt).toISOString().split('T')[0]}`
+    // The server has no name for an encrypted file. Its entry is the
+    // ciphertext, named by the public file identifier.
+    // The identifier comes from the server, so only the characters of a
+    // file identifier stay: a ZIP entry must not name another directory.
+    const encryptedName =
+      file.encrypted && file.urlPath
+        ? `${
+            (file.urlPath.split('/').at(-1) ?? '').replace(
+              /[^A-Za-z0-9_-]/g,
+              ''
+            ) || 'file'
+          }.flare-encrypted`
+        : null
     // Older chunked uploads could save a path as the name; keep its last part.
-    const name = sanitizeDisplayName(uploadDisplayName(file.name) ?? '')
+    const name =
+      encryptedName ?? displayName(uploadDisplayName(file.name) ?? '')
     const dot = name.lastIndexOf('.')
     const stem = dot > 0 ? name.slice(0, dot) : name
     const extension = dot > 0 ? name.slice(dot) : ''

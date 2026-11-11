@@ -1,6 +1,6 @@
 import { DashboardWrapper } from '@/components/dashboard/dashboard-wrapper'
 
-import { getPageSession } from '@/lib/auth/page-session'
+import { getPageSession, requireAccountKeys } from '@/lib/auth/page-session'
 import { getConfig } from '@/lib/config'
 import { maxUploadBytes } from '@/lib/config/limits'
 
@@ -9,7 +9,8 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode
 }) {
-  await getPageSession()
+  const session = await getPageSession()
+  await requireAccountKeys(session?.user?.id)
   const config = await getConfig()
   const maxSizeBytes = maxUploadBytes(config)
 

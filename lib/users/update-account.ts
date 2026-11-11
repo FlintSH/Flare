@@ -26,11 +26,15 @@ const refusals = {
   self: {
     changed: 'Account changed during update. Please try again.',
     emailTaken: 'Email already taken',
+    passphrase:
+      'This account signs in with a passphrase. Change the passphrase instead.',
   },
   // Administrators edit the copy of the account the Users list loaded.
   administrator: {
     changed: 'Account changed during update. Refresh the user and try again.',
     emailTaken: 'Email already exists',
+    passphrase:
+      'This account signs in with a passphrase that only its owner knows. An administrator cannot set a password for it. The owner can reset the passphrase by email.',
   },
 }
 
@@ -51,6 +55,8 @@ export interface AccountEditor {
  * - A change to the address, password or URL ID is refused when another
  *   request changed that field since `seen`, and a new password also when
  *   another request signed the account out since then.
+ * - A new password is refused for an account that has encryption keys: its
+ *   passphrase never reaches the server, and only a key rotation changes it.
  * - A new URL ID or vanity ID must not name another account as either kind
  *   of ID, and a new address must be free.
  * - A new address or password signs the account out everywhere.
@@ -71,6 +77,13 @@ export async function updateAccount<Select extends Prisma.UserSelect>(
   // Public IDs are claimed under the role lock, which goes before row locks.
   if (claimsIds) await lockRoleChanges(tx)
   const account = await lockEmailUser(tx, seen.id)
+  // An account that has keys never gets a password hash again
+  // (docs/e2ee-spec.md, sections 6.7 and 6.9). Checked with the row locked,
+  // so a key setup that finished a moment ago counts.
+  if (edit.password !== undefined && account.authPublicKey)
+    throw new HttpError(409, refuse.passphrase, {
+      body: { code: 'passphrase_account' },
+    })
   await editor.prove?.(account)
   if (
     (emailChanged && account.email !== seen.email) ||

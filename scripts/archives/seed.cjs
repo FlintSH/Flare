@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Public, disposable fixtures only. This guard deliberately excludes live databases.
 const { PrismaClient } = require('@prisma/client')
-const { hash } = require('bcryptjs')
+const { createAccountRecord } = require('../shared/passphrase-accounts.cjs')
 
 const database = new URL(process.env.DATABASE_URL)
 if (
@@ -68,9 +68,9 @@ async function seed() {
         id,
         name: id.endsWith('alex') ? 'Alex Morgan' : 'Jamie Rivera',
         email: `${id}@example.test`,
-        password: await hash('Archive-demo-only-2026!', 10),
+        // An account with keys: the fixture secret is its passphrase.
+        ...(await createAccountRecord('Archive-demo-only-2026!')).columns,
         urlId: id,
-        uploadToken: `${id}-disposable-fixture-token`,
       },
     })
   }

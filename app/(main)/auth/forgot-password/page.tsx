@@ -12,7 +12,7 @@ import { getEmailCapabilities } from '@/lib/email/config'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
-  title: 'Reset your password · Flare',
+  title: 'Reset your passphrase · Flare',
   robots: { index: false, follow: false },
   referrer: 'no-referrer' as const,
 }
@@ -31,13 +31,13 @@ export default async function ForgotPasswordPage() {
   if (recoveryEnabled === false)
     return (
       <AuthShell
-        title="Forgot your password?"
+        title="Forgot your passphrase?"
         description="Ask your administrator for help signing in."
       >
         <Alert variant="info" role="status">
           <Info aria-hidden="true" />
           <AlertDescription>
-            Email password recovery isn’t enabled on this instance.
+            Recovery by email isn’t enabled on this instance.
           </AlertDescription>
         </Alert>
         <Button asChild className="mt-6 h-11 w-full">
@@ -48,7 +48,7 @@ export default async function ForgotPasswordPage() {
 
   return (
     <AuthShell
-      title="Forgot your password?"
+      title="Forgot your passphrase?"
       description="Enter your account email and we will send a reset link if recovery is available for it."
     >
       <ForgotPasswordForm recoveryEnabled={recoveryEnabled} />

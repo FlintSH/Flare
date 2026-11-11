@@ -45,13 +45,13 @@ const features = [
   [
     'Share',
     'Screenshot tools',
-    'Download account-ready configurations for ShareX and iTake, or scripts for Flameshot, Spectacle, and Bash.',
+    'Create a configuration for ShareX, Flameshot, Spectacle, iTake or Bash. The flare-upload program encrypts each capture on your machine before it uploads.',
     '/guide/screenshot-tools',
   ],
   [
     'Organize',
     'Folders & subfolders',
-    'Give files a home, move them in bulk, and share direct public contents in a folder gallery.',
+    'Give files a home, move them in bulk, and share a folder with the folders inside it through one link. Folder names are encrypted.',
     '/guide/folders',
   ],
   [
@@ -87,13 +87,13 @@ const features = [
   [
     'Organize',
     'OCR',
-    'Extract text from images in the background for searching and automatic tagging.',
+    'Extract text from images for searching and automatic tagging: on the server for plain images, in your browser for encrypted ones.',
     '/guide/tags',
   ],
   [
     'Personalize',
     'Upload profiles',
-    'Reuse visibility, expiration, URL naming, tags, and share-page preferences across clients.',
+    'Reuse encryption, visibility, expiration, URL naming, tags, and share-page preferences across clients.',
     '/guide/upload-profiles',
   ],
   [
@@ -111,13 +111,31 @@ const features = [
   [
     'Personalize',
     'Your account',
-    'Manage avatar, password, personal theme, upload token, default expiration, and data export.',
+    'Manage avatar, passphrase, personal theme, tool configurations, default expiration, and data export.',
     '/guide/account',
+  ],
+  [
+    'Share',
+    'Encrypted files',
+    'Uploads are encrypted on your device by default, in the browser and from screenshot tools. The server stores ciphertext and the share link carries the key. Your browser makes thumbnails, reads image text, applies tag rules, searches, streams video, opens archives and builds your export.',
+    '/guide/encryption',
+  ],
+  [
+    'Share',
+    'Encrypt existing files',
+    'Files from before encryption stay plain until you choose. The server encrypts your private files, or all of them, without a download. Public files get a new link, and a file with a password is private until you set one again.',
+    '/guide/encryption#files-from-before-encryption',
+  ],
+  [
+    'Personalize',
+    'Passphrase & recovery phrase',
+    'Sign in with a passphrase that never leaves your browser, keep a 24-word recovery phrase, and unlock your encryption keys on each device.',
+    '/guide/passphrase',
   ],
   [
     'Personalize',
     'Two-factor authentication',
-    'Protect password sign-in with authenticator codes (2FA) and keep one-time recovery codes for a lost device.',
+    'Protect passphrase sign-in with authenticator codes (2FA) and keep one-time recovery codes for a lost device.',
     '/guide/security',
   ],
   [
@@ -241,7 +259,7 @@ const filtered = computed(() =>
       <a
         v-for="item in filtered"
         :key="item[1]"
-        :href="withBase(item[3] + '.html')"
+        :href="withBase(item[3].replace(/(#.*)?$/, '.html$1'))"
         class="feature-card"
         ><span class="eyebrow">{{ item[0] }}</span>
         <h3>{{ item[1] }} <span aria-hidden="true">↗</span></h3>

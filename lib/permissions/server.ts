@@ -284,7 +284,7 @@ export async function assertAccessibleAdministrator(
     !administrators.some(
       (user) =>
         Boolean(
-          (user.email && user.password) ||
+          (user.email && (user.password || user.authPublicKey)) ||
           (oidcPrefix && user.oidcSubject?.startsWith(oidcPrefix))
         ) && hasDurableEmailAccess(user, email)
     )

@@ -15,7 +15,11 @@ const mocks = vi.hoisted(() => ({
   applyPendingOcrTags: vi.fn(),
 }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { file: { findUnique: mocks.findUnique, update: mocks.update } },
+  prisma: {
+    file: { findUnique: mocks.findUnique, update: mocks.update },
+    // No sealed tag: no rule waits for the browser of the owner.
+    vaultTag: { findFirst: async () => null },
+  },
 }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: mocks.getStorageProvider,
@@ -125,7 +129,7 @@ describe('OCR audit lifecycle', () => {
         /private provider|private\/storage|recognized text/
       )
       expect(mocks.update).toHaveBeenLastCalledWith({
-        where: { id: 'file-1' },
+        where: { id: 'file-1', encrypted: false },
         data: { isOcrProcessed: true, ocrText: null, ocrConfidence: null },
       })
       expect(mocks.applyPendingOcrTags).not.toHaveBeenCalled()

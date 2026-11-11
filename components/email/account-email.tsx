@@ -5,7 +5,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { hasRecentSecurityProof } from '@/components/auth/security-api'
+import { PASSPHRASE_CONFIRMATION_NEEDED } from '@/components/profile/security/management-proof'
 import { PasskeyConfirmation } from '@/components/profile/security/passkey-confirmation'
+import { PassphraseConfirmation } from '@/components/profile/security/passphrase-confirmation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -61,8 +63,30 @@ export function AccountEmail({
   const needsPasskey =
     security?.passkeyRequired && !hasRecentSecurityProof(security)
   const requiresPassword = status.requiresPassword && !security?.passkeyRequired
+  // An account with encryption keys has no password to type. Its proof is a
+  // passphrase sign-in of the last five minutes.
+  const usesPassphrase = security?.hasPassphrase && !security.passkeyRequired
+  const needsPassphrase = usesPassphrase && !security.canUseRecentPassphrase
 
-  const passkeyConfirmation = needsPasskey ? (
+  const passkeyConfirmation = usesPassphrase ? (
+    needsPassphrase ? (
+      <PassphraseConfirmation
+        status={security}
+        busy={busy}
+        onBusyChange={setBusy}
+        idPrefix="email"
+        onConfirmed={async () => {
+          const result = await refreshSecurity()
+          if (result.error) throw result.error
+          setError('')
+        }}
+      />
+    ) : (
+      <p className="text-sm text-muted-foreground">
+        Your recent passphrase sign-in confirms your identity for this change.
+      </p>
+    )
+  ) : needsPasskey ? (
     <PasskeyConfirmation
       busy={busy}
       onBusyChange={setBusy}
@@ -105,6 +129,14 @@ export function AccountEmail({
           setError(
             'Confirm with a passkey again to continue. Your passkey confirmation lasts five minutes.'
           )
+          return
+        }
+        if (
+          result.data.hasPassphrase &&
+          !result.data.passkeyRequired &&
+          !result.data.canUseRecentPassphrase
+        ) {
+          setError(PASSPHRASE_CONFIRMATION_NEEDED)
           return
         }
       }
@@ -160,9 +192,11 @@ export function AccountEmail({
           <p className="text-sm text-muted-foreground">
             {security?.passkeyRequired
               ? 'Confirm your identity with a recent passkey or passkey recovery sign-in. We will send a link to verify that you own this address.'
-              : requiresPassword
-                ? 'Confirm your current password. We will send a link to verify that you own this address.'
-                : 'Confirm this address with an email link. You may need to sign in with SSO again if your last sign-in was more than a few minutes ago.'}
+              : usesPassphrase
+                ? 'Confirm your identity with your passphrase. We will send a link to verify that you own this address.'
+                : requiresPassword
+                  ? 'Confirm your current password. We will send a link to verify that you own this address.'
+                  : 'Confirm this address with an email link. You may need to sign in with SSO again if your last sign-in was more than a few minutes ago.'}
           </p>
           {requiresPassword && (
             <>
@@ -179,7 +213,7 @@ export function AccountEmail({
             </>
           )}
           {passkeyConfirmation}
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || !!needsPassphrase}>
             {busy ? 'Sending…' : 'Verify my email'}
           </Button>
         </form>
@@ -287,7 +321,7 @@ export function AccountEmail({
               ? 'We will send approval links to your current and new addresses.'
               : 'Your current email remains active until you confirm the new address.'}
           </p>
-          <Button type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy || !!needsPassphrase}>
             {busy ? 'Sending…' : 'Send confirmation'}
           </Button>
         </form>

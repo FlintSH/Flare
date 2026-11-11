@@ -8,13 +8,18 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const {
+  signInContext,
+  submitSignIn,
+} = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 45000 })
 const origin = process.env.FLARE_AUDIT_TEST_ORIGIN || 'http://localhost:3071'
 if (new URL(origin).hostname !== 'localhost')
   throw new Error('Use a disposable localhost instance.')
 const screenshots = process.env.FLARE_AUDIT_SCREENSHOTS
 const videos = process.env.FLARE_AUDIT_VIDEOS
-const password = 'Audit-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Audit-demo-only-2026!'
 const results = []
 
 async function api(
@@ -38,29 +43,26 @@ async function api(
   if (response.status() === 204) return null
   return response.json()
 }
-async function login(ctx, user = 'alex', suppliedPassword = password) {
-  const csrf = await api(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: `audit-demo-${user}@example.test`,
-        password: suppliedPassword,
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-      headers: { Origin: origin },
-    }
-  )
-  const result = await response.json()
-  if (suppliedPassword === password)
-    assert.ok(!result.url.includes('error='), 'Fixture sign-in failed')
-  else
-    assert.ok(
-      result.url.includes('error='),
-      'Invalid password should be rejected'
-    )
+/**
+ * A real sign-in through the form, with a page of its own: the address, then
+ * the passphrase. The session and the unlocked keys stay in the context.
+ */
+async function login(ctx, user = 'alex', suppliedPassphrase = passphrase) {
+  const account = {
+    origin,
+    email: `audit-demo-${user}@example.test`,
+    secret: suppliedPassphrase,
+  }
+  if (suppliedPassphrase === passphrase)
+    return signInContext(ctx, expect, account)
+  const page = await ctx.newPage()
+  await submitSignIn(page, expect, account)
+  await expect(
+    page.getByText('Invalid email or passphrase'),
+    'Invalid passphrase should be rejected'
+  ).toBeVisible()
+  await page.close()
+  assert.equal((await api(ctx, '/api/auth/session')).user, undefined)
 }
 async function context(browser, recorded = false, mobile = false) {
   const ctx = await browser.newContext({
@@ -123,7 +125,7 @@ async function sessionFlow(browser) {
   const third = await context(browser)
   const member = await context(browser)
   const failure = await context(browser)
-  await login(failure, 'alex', 'incorrect-public-demo-password')
+  await login(failure, 'alex', 'incorrect-public-demo-passphrase')
   for (const ctx of [admin, second, third]) await login(ctx)
   await login(member, 'jamie')
   const initial = await api(admin, '/api/profile/sessions')
@@ -347,7 +349,7 @@ async function auditFlow(browser) {
     (await api(admin, '/api/audit?limit=100')).events
   )
   assert.ok(
-    !serialized.includes(password) &&
+    !serialized.includes(passphrase) &&
       !serialized.includes('uploadToken') &&
       !serialized.includes('Public demonstration report')
   )

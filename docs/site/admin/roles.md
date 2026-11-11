@@ -201,7 +201,7 @@ Existing dashboard clients must replace scalar `role` values with `roleIds` on c
 
 ## Reproduce the permission checks locally
 
-Contributors can run the real browser/API regression script against an isolated local instance. Start Flare on `http://127.0.0.1:3060` (or set `FLARE_ROLES_TEST_ORIGIN` to another loopback origin), complete setup with the demonstration name **Alex**, email `alex@example.test`, and password `Roles-demo-only-2026!`. Use a disposable database and local storage; the script creates accounts, roles, tokens, and files and temporarily changes Everyone and edits instance settings. These credentials are public fixtures, never production credentials.
+Contributors can run the real browser/API regression script against an isolated local instance. Start Flare on `http://127.0.0.1:3060` (or set `FLARE_ROLES_TEST_ORIGIN` to another loopback origin), complete setup with the demonstration name **Alex**, email `alex@example.test`, and passphrase `Roles-demo-only-2026!`, saving the recovery phrase that setup shows. The accounts that the script creates get the same text as a temporary password, and their first sign-in goes through **Set up encryption** and keeps it as the passphrase. Use a disposable database and local storage; the script creates accounts, roles, tokens, and files and temporarily changes Everyone and edits instance settings. These credentials are public fixtures, never production credentials.
 
 From the repository root:
 

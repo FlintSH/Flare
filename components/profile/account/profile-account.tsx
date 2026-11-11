@@ -29,6 +29,7 @@ import { useSignOut } from '@/hooks/use-sign-out'
 import { useToast } from '@/hooks/use-toast'
 
 import { PasskeyConfirmation } from '../security/passkey-confirmation'
+import { PassphraseConfirmation } from '../security/passphrase-confirmation'
 import { checkProfileProof } from '../security/profile-proof'
 
 export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
@@ -306,7 +307,57 @@ export function ProfileAccount({ user, onUpdate }: ProfileAccountProps) {
                 emailChanged &&
                 security &&
                 !security.passkeyRequired &&
+                security.hasPassphrase &&
+                !recentProof &&
+                (security.canUseRecentPassphrase ? (
+                  <>
+                    <p className="text-sm text-muted-foreground">
+                      Your recent passphrase sign-in confirms your identity for
+                      this change.
+                    </p>
+                    {security.twoFactorEnabled && (
+                      <div className="space-y-2">
+                        <Label htmlFor="email-security-code">
+                          Authenticator or recovery code
+                        </Label>
+                        <Input
+                          id="email-security-code"
+                          ref={emailSecurityCodeRef}
+                          autoComplete="one-time-code"
+                          autoCapitalize="none"
+                          spellCheck={false}
+                          maxLength={RECOVERY_CODE_INPUT_LENGTH}
+                          placeholder="Enter an authenticator or recovery code"
+                          required
+                          disabled={isLoading}
+                          data-sensitive="true"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Use a code that has not signed you in. Each
+                          authenticator code works once.
+                        </p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <PassphraseConfirmation
+                    status={security}
+                    busy={isLoading}
+                    onBusyChange={setIsLoading}
+                    idPrefix="profile-email"
+                    onConfirmed={async () => {
+                      const result = await refreshSecurity()
+                      if (result.error) throw result.error
+                      setProofNotice(null)
+                    }}
+                  />
+                ))}
+              {!emailStatus?.enabled &&
+                emailChanged &&
+                security &&
+                !security.passkeyRequired &&
                 !security.hasPassword &&
+                !security.hasPassphrase &&
                 !recentProof &&
                 !security.canUseRecentSso && (
                   <div className="space-y-3 rounded-xl border bg-muted/30 p-4">

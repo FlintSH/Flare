@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { uploadLinks } from '@/lib/uploads/links'
 import { uploaderClients } from '@/lib/uploads/uploader-clients'
 import {
+  type ScriptTarget,
   bashScript,
   flameshotScript,
   spectacleScript,
@@ -39,6 +40,10 @@ printf '%s' "$CURL_RESPONSE"`,
   'notify-send': `printf '%s|%s\\n' "$1" "$2" >> "$LOG/notify"`,
   xsel: `cat > "$LOG/clipboard-xsel"`,
   'wl-copy': `cat > "$LOG/clipboard-wl-copy"`,
+  // Records its arguments and prints the link, as the program does.
+  'flare-upload': `printf '%s\\n' "$@" > "$LOG/flare-upload"
+[ -n "$HELPER_EXIT" ] && { echo "flare-upload: refused" >&2; exit "$HELPER_EXIT"; }
+printf '%s\\n' "$HELPER_LINK"`,
   flameshot: `printf 'PNG'`,
   spectacle: `printf '%s\\n' "$@" > "$LOG/spectacle"
 while [ $# -gt 0 ]; do
@@ -48,10 +53,19 @@ done`,
 }
 type Stub = keyof typeof stubs
 
-const target = {
-  uploadUrl: new URL('https://flare.test/api/files?profileId=screens'),
-  token: 'account-upload-token',
+const target: ScriptTarget = {
+  transport: 'request',
+  uploadUrl: 'https://flare.test/api/files?profileId=screens',
+  token: 'flr_configuration-token',
 }
+/** An encrypted profile: the script starts `flare-upload`. */
+const helperTarget: ScriptTarget = {
+  transport: 'helper',
+  origin: 'https://flare.test',
+  configFile: 'screens.json',
+}
+const encryptedLink =
+  'https://flare.test/alex/e_AAAAAAAAAAAAAAAAAAAAAA#S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2U'
 const links = uploadLinks(
   {
     id: 'file-id',
@@ -146,7 +160,7 @@ describe.skipIf(!Object.values(located).every(Boolean))(
           `Screenshot Uploaded|URL copied to clipboard: ${links.pageUrl}\n`
         )
         const curl = result.logged('curl')
-        expect(curl).toContain('Authorization: Bearer account-upload-token')
+        expect(curl).toContain('Authorization: Bearer flr_configuration-token')
         expect(curl).toContain(target.uploadUrl.toString())
         expect(curl).toMatch(/^file=@\/tmp\/.+\.png;type=image\/png$/m)
         expect(existsSync(sentFile(curl))).toBe(false)
@@ -300,6 +314,116 @@ describe.skipIf(!Object.values(located).every(Boolean))(
       expect(offline.stdout).toContain(
         'Upload failed: Network error or invalid URL'
       )
+    })
+
+    describe('for an encrypted profile', () => {
+      /** A home with the configuration where the script looks for it. */
+      function home() {
+        const directory = mkdtempSync(join(tmpdir(), 'flare-helper-home-'))
+        directories.push(directory)
+        const config = join(directory, '.config', 'flare-upload')
+        mkdirSync(config, { recursive: true })
+        writeFileSync(join(config, 'screens.json'), '{}')
+        return { directory, config: join(config, 'screens.json') }
+      }
+
+      it('the Flameshot script starts flare-upload and holds no token and no curl', () => {
+        const script = flameshotScript(helperTarget, {
+          ...uploaderClients.flameshot.defaults,
+        })
+        expect(script).not.toContain('curl')
+        expect(script).not.toContain('UPLOAD_TOKEN')
+        expect(script).not.toContain('Authorization')
+        expect(script).toContain('"flameshot" "flare-upload" "xsel"')
+
+        const { directory, config } = home()
+        const result = run(script, {
+          tools: ['flameshot', 'flare-upload', 'xsel', 'notify-send'],
+          env: { HOME: directory, HELPER_LINK: encryptedLink },
+        })
+        expect(result.status).toBe(0)
+        const [flag, path, file] = result.logged('flare-upload')!.split('\n')
+        expect([flag, path]).toEqual(['--config', config])
+        expect(file).toMatch(/^\/tmp\/flameshot-.+\.png$/)
+        // The capture is removed after the upload.
+        expect(existsSync(file)).toBe(false)
+        // The whole link, with the key after `#`, is what gets copied.
+        expect(result.logged('clipboard-xsel')).toBe(encryptedLink)
+        // A notification can stay in a history, so it does not show the key.
+        expect(result.logged('notify')).toBe(
+          'Screenshot Uploaded|Link copied to clipboard\n'
+        )
+      })
+
+      it('reports the exit code of flare-upload and copies nothing', () => {
+        const { directory } = home()
+        const result = run(
+          spectacleScript(helperTarget, {
+            ...uploaderClients.spectacle.defaults,
+            useWayland: true,
+          }),
+          {
+            tools: ['spectacle', 'flare-upload', 'wl-copy', 'notify-send'],
+            env: { HOME: directory, HELPER_EXIT: '3' },
+          }
+        )
+        expect(result.status).toBe(1)
+        expect(result.stdout).toContain(
+          'Upload failed: flare-upload exited with code 3'
+        )
+        expect(result.stderr).toContain('flare-upload: refused')
+        expect(result.logged('clipboard-wl-copy')).toBeUndefined()
+        expect(result.logged('notify')).toContain(
+          'Screenshot Upload Failed|flare-upload exited with code 3.'
+        )
+      })
+
+      it('asks for the configuration file when it is missing', () => {
+        const directory = mkdtempSync(join(tmpdir(), 'flare-helper-empty-'))
+        directories.push(directory)
+        const result = run(bashScript(helperTarget), {
+          tools: ['flare-upload'],
+          args: [join(directory, 'missing.txt')],
+          env: { HOME: directory },
+        })
+        expect(result.status).toBe(1)
+        expect(result.logged('flare-upload')).toBeUndefined()
+      })
+
+      it('the Bash script passes the file to flare-upload and honors FLARE_UPLOAD_CONFIG', () => {
+        const { directory, config } = home()
+        const notes = join(directory, 'notes.txt')
+        writeFileSync(notes, 'plain text\n')
+        const other = join(directory, 'other.json')
+        writeFileSync(other, '{}')
+        const script = bashScript(helperTarget)
+        expect(script).toContain('dependencies=("flare-upload")')
+
+        const result = run(script, {
+          tools: ['flare-upload', 'xsel'],
+          args: [notes],
+          env: { HOME: directory, HELPER_LINK: encryptedLink },
+        })
+        expect(result.status).toBe(0)
+        expect(result.logged('flare-upload')).toBe(
+          `--config\n${config}\n${notes}\n`
+        )
+        expect(result.stdout).toContain(`URL: ${encryptedLink}`)
+        expect(result.logged('clipboard-xsel')).toBe(encryptedLink)
+
+        const chosen = run(script, {
+          tools: ['flare-upload', 'xsel'],
+          args: [notes],
+          env: {
+            HOME: directory,
+            HELPER_LINK: encryptedLink,
+            FLARE_UPLOAD_CONFIG: other,
+          },
+        })
+        expect(chosen.logged('flare-upload')).toBe(
+          `--config\n${other}\n${notes}\n`
+        )
+      })
     })
   }
 )

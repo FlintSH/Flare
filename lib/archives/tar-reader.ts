@@ -1,13 +1,18 @@
 import { type ArchiveIndex, normalizeBrowsePath } from './archive-index'
-import { type ByteSource, truncatedArchive } from './byte-source'
-import { ArchiveError } from './errors'
+import { asciiBytes, joinBytes, latin1, sameBytes, utf8 } from './bytes'
+import { ArchiveError, truncatedArchive } from './errors'
+import type { RangeSource } from './range-source'
 import type { ArchiveEntryIssue } from './shared'
+
+// This reader also runs in the browser, over a decrypted file
+// (docs/e2ee-spec.md, section 12.3): no Node.js imports and no `Buffer`.
+type ByteSource = RangeSource
 
 /** Sequential TAR input that can jump over member data. */
 export interface TarInput {
   readonly position: number
   /** Exactly `length` bytes, or null at a clean end of input. */
-  read(length: number): Promise<Buffer | null>
+  read(length: number): Promise<Uint8Array | null>
   skip(length: number): Promise<void>
 }
 
@@ -25,8 +30,8 @@ export interface ScanContext {
   maxEntries: number
 }
 
-const USTAR = Buffer.from('ustar\0', 'latin1')
-const GNU = Buffer.from('ustar ', 'latin1')
+const USTAR = asciiBytes('ustar\0')
+const GNU = asciiBytes('ustar ')
 // Long names and PAX records are small; larger ones are hostile or damaged.
 const MAX_METADATA = 1024 * 1024
 
@@ -34,17 +39,20 @@ function damaged(message = 'This TAR archive is damaged or incomplete.') {
   return new ArchiveError(message)
 }
 
-function text(block: Buffer, start: number, length: number) {
+function text(block: Uint8Array, start: number, length: number) {
   const end = block.indexOf(0, start)
-  return block.toString(
-    'utf8',
+  return utf8(
+    block,
     start,
-    end < 0 || end > start + length ? start + length : end
+    Math.min(
+      block.length,
+      end < 0 || end > start + length ? start + length : end
+    )
   )
 }
 
 /** Octal ASCII, or GNU base-256 for values that do not fit. */
-export function tarNumber(block: Buffer, start: number, length: number) {
+export function tarNumber(block: Uint8Array, start: number, length: number) {
   const field = block.subarray(start, start + length)
   if (field[0] & 0x80) {
     if (field[0] !== 0x80) return null
@@ -60,14 +68,14 @@ export function tarNumber(block: Buffer, start: number, length: number) {
   let last = first
   while (last < field.length && field[last] !== 0x20 && field[last] !== 0)
     last++
-  const digits = field.toString('latin1', first, last)
+  const digits = latin1(field, first, last)
   if (!digits) return 0
   if (!/^[0-7]+$/.test(digits)) return null
   const value = parseInt(digits, 8)
   return Number.isSafeInteger(value) ? value : null
 }
 
-function checksumValid(block: Buffer) {
+function checksumValid(block: Uint8Array) {
   const expected = tarNumber(block, 148, 8)
   if (expected === null) return false
   let unsigned = 8 * 32
@@ -88,15 +96,22 @@ type PaxRecords = Map<string, string>
  * "=", which also keeps it linear: an accepted record is always longer than
  * the length field scanned to find it.
  */
-function paxRecords(data: Buffer) {
+function paxRecords(data: Uint8Array) {
   const records: PaxRecords = new Map()
   let offset = 0
   while (offset < data.length) {
     let space = data.indexOf(0x20, offset)
     if (space < 0) space = data.length
-    const length = parseInt(data.toString('utf8', offset, space), 10)
+    const length = parseInt(utf8(data, offset, space), 10)
     if (!length) break
-    const record = data.toString('utf8', space + 1, offset + length - 1)
+    const record = utf8(
+      data,
+      Math.min(data.length, space + 1),
+      Math.max(
+        Math.min(data.length, space + 1),
+        Math.min(data.length, offset + length - 1)
+      )
+    )
     const equals = record.indexOf('=')
     if (equals < 0) break
     records.set(record.slice(0, equals), record.slice(equals + 1))
@@ -149,8 +164,8 @@ export async function scanTar(
       let size = tarNumber(block, 124, 12)
       if (size === null || size < 0) throw damaged()
       const magic = block.subarray(257, 263)
-      const ustar = magic.equals(USTAR)
-      if (!ustar && !magic.equals(GNU)) index.legacyTar = true
+      const ustar = sameBytes(magic, USTAR)
+      if (!ustar && !sameBytes(magic, GNU)) index.legacyTar = true
       if (typeflag === 'x' || typeflag === 'g') {
         if (size > MAX_METADATA) throw damaged()
         const data = await input.read(padded(size))
@@ -272,11 +287,11 @@ export class SourceTarInput implements TarInput {
 /** TAR input over decompressed chunks; skipping still has to decompress. */
 export class ChunkTarInput implements TarInput {
   position = 0
-  private chunks: Buffer[] = []
+  private chunks: Uint8Array[] = []
   private buffered = 0
   private finished = false
 
-  constructor(private readonly chunksIn: AsyncIterator<Buffer>) {}
+  constructor(private readonly chunksIn: AsyncIterator<Uint8Array>) {}
 
   private async fill(length: number) {
     while (this.buffered < length && !this.finished) {
@@ -293,7 +308,7 @@ export class ChunkTarInput implements TarInput {
     await this.fill(length)
     if (!this.buffered && this.finished) return null
     if (this.buffered < length) throw truncatedArchive()
-    const parts: Buffer[] = []
+    const parts: Uint8Array[] = []
     let needed = length
     while (needed) {
       const chunk = this.chunks[0]
@@ -309,7 +324,7 @@ export class ChunkTarInput implements TarInput {
     }
     this.buffered -= length
     this.position += length
-    return parts.length === 1 ? parts[0] : Buffer.concat(parts, length)
+    return parts.length === 1 ? parts[0] : joinBytes(parts, length)
   }
 
   async skip(length: number) {

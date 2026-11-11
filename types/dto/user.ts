@@ -33,6 +33,11 @@ export interface UserResponse {
   urlId: string
   vanityId: string | null
   storageUsed: number
+  /**
+   * Listed accounts only: the account has encryption keys and signs in with
+   * a passphrase, so no password can be set for it.
+   */
+  hasPassphrase?: boolean
   /** Listed accounts only: who created the invite this account joined with. */
   invitedBy?: { id: string; name: string | null } | null
   _count: {

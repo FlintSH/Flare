@@ -2,39 +2,20 @@
 
 import { Button } from '@/components/ui/button'
 
-import { uploaderClients } from '@/lib/uploads/uploader-clients'
-
-import { ToolRow, type UploaderToolProps } from './tool-parts'
+import { ToolRow } from './tool-parts'
 import { useUploaderDownload } from './use-uploader-download'
 
-export function BashTool({ profileId, compact, disabled }: UploaderToolProps) {
-  const { download, isLoading } = useUploaderDownload('bash', {
+export function BashTool() {
+  const { download, ready, transport } = useUploaderDownload('bash', {
     ready: {
       title: 'Upload script ready',
-      description:
-        'Run the downloaded script with Bash and a file path. No token editing needed.',
+      description: 'Run the downloaded script with Bash and a file path.',
     },
     failed: {
       title: 'Error',
-      description: 'Failed to download bash upload script',
+      description: 'Failed to write the upload script',
     },
   })
-
-  const button = (
-    <Button
-      variant="outline"
-      size={compact ? 'sm' : 'default'}
-      onClick={() => void download({}, profileId)}
-      disabled={disabled || isLoading}
-    >
-      {compact
-        ? uploaderClients.bash.label
-        : isLoading
-          ? 'Downloading…'
-          : 'Download script'}
-    </Button>
-  )
-  if (compact) return button
 
   return (
     <ToolRow
@@ -46,9 +27,19 @@ export function BashTool({ profileId, compact, disabled }: UploaderToolProps) {
             bash &lt;script.sh&gt; &lt;file&gt;
           </code>{' '}
           with your downloaded script and the file to upload.
+          {transport === 'helper' &&
+            ' The script starts flare-upload, which you can also run on its own.'}
         </>
       }
-      action={button}
+      action={
+        <Button
+          variant="outline"
+          onClick={() => download({})}
+          disabled={!ready}
+        >
+          Download script
+        </Button>
+      }
     />
   )
 }

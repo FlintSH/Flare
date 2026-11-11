@@ -45,13 +45,16 @@ import { ImageLightbox } from '@/components/file/image-lightbox'
 import { FolderBrowser } from '@/components/folders/folder-browser'
 import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import { useAccountKeyState } from '@/components/providers/account-keys-provider'
 import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
+import { requestFileEncryption } from '@/lib/files/existing-client'
 import { fileTypeLabel } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
+import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import {
   LIBRARY_LISTS,
   libraryChanged,
@@ -68,17 +71,18 @@ import {
   librarySort,
   uploadHref,
 } from '@/lib/library/contract'
+import { searchIndex } from '@/lib/library/search-client'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
 
 import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
-import { useFileTimeline } from '@/hooks/use-file-timeline'
 import { useFolders } from '@/hooks/use-folders'
 import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { useImageGallery } from '@/hooks/use-image-gallery'
+import { useEncryptedTypes, useLibrary } from '@/hooks/use-library'
 import { usePermissions } from '@/hooks/use-permissions'
 import {
   RequestLifetimeProvider,
@@ -159,7 +163,12 @@ function FileLibrary({ scope }: { scope: string }) {
   // A library change, made here or anywhere else, reloads these files once;
   // the same change reloads the tag, folder and file type lists.
   useEffect(
-    () => onLibraryChange(() => setRefreshKey((value) => value + 1)),
+    () =>
+      onLibraryChange(() => {
+        setRefreshKey((value) => value + 1)
+        // The local search cache follows the same change.
+        requestMaintenance('index')
+      }),
     []
   )
   const refreshFiles = useCallback(() => void libraryChanged(client), [client])
@@ -169,6 +178,9 @@ function FileLibrary({ scope }: { scope: string }) {
     // Suggestions are optional; the library stays searchable without them.
     { retry: false }
   ).data?.types
+  // The server has no type for an encrypted file: this browser adds the
+  // ones it opened (docs/e2ee-spec.md, section 9.8).
+  const encryptedTypes = useEncryptedTypes()
   const [managingTags, setManagingTags] = useState(false)
   const [taggingFiles, setTaggingFiles] = useState<FileType[] | null>(null)
   const [movingFiles, setMovingFiles] = useState<FileType[] | null>(null)
@@ -218,7 +230,8 @@ function FileLibrary({ scope }: { scope: string }) {
   } = useFileFilters()
   const { position: anchorIndex, record: recordPosition } =
     useFileLibraryPosition(filters, pathname, urlQuery, refreshFiles, scope)
-  const library = useFileTimeline(filters, refreshKey, scope)
+  const library = useLibrary(filters, refreshKey, scope)
+  const keyState = useAccountKeyState()
   const selection = useFreshFileSelection(selectedFiles, [scope, filters])
   const openSelection = async (action: BatchAction) => {
     const { signal } = lifetime.current
@@ -230,6 +243,11 @@ function FileLibrary({ scope }: { scope: string }) {
       if (action === 'editTags') setTaggingFiles(fresh)
       if (action === 'move') setMovingFiles(fresh)
       if (action === 'createArchive') setCreatingArchive(fresh)
+      if (action === 'encrypt' && !requestFileEncryption(fresh))
+        toast({
+          title: 'Nothing to encrypt',
+          description: 'The selected files are encrypted already.',
+        })
     } catch (error) {
       if (signal.aborted) return
       toast({
@@ -394,7 +412,12 @@ function FileLibrary({ scope }: { scope: string }) {
             onSortChange={setSortBy}
             selectedTypes={filters.types}
             onTypesChange={setTypes}
-            fileTypes={Array.isArray(fileTypes) ? fileTypes : []}
+            fileTypes={[
+              ...new Set([
+                ...(Array.isArray(fileTypes) ? fileTypes : []),
+                ...encryptedTypes,
+              ]),
+            ].sort()}
             date={dateRangeValue}
             onDateChange={handleDateChange}
             groupBy={filters.groupBy}
@@ -479,6 +502,32 @@ function FileLibrary({ scope }: { scope: string }) {
             </Button>
           </div>
         )}
+        {/* A search covers plain and encrypted files in one list. It says
+            so only while it cannot yet: the keys are locked, or the browser
+            is still opening the names. */}
+        {(filters.search ||
+          filters.types.length > 0 ||
+          librarySort(filters.sortBy).field === 'name') &&
+          (keyState.status === 'locked' ? (
+            <p
+              className="mt-2 text-pretty text-xs text-muted-foreground"
+              data-encrypted-search-note="locked"
+            >
+              Unlock your keys to include encrypted files. The server cannot
+              read their names or types, so your browser searches them.
+            </p>
+          ) : library.client && library.index && !library.index.ready ? (
+            <p
+              role="status"
+              className="mt-2 text-pretty text-xs text-muted-foreground"
+              data-encrypted-search-note="opening"
+            >
+              Opening encrypted files
+              {library.index.total > 0 &&
+                ` · ${library.index.indexed.toLocaleString()} of ${library.index.total.toLocaleString()}`}
+              . More results can appear.
+            </p>
+          ) : null)}
         <FolderBrowser
           folders={folders}
           value={filters.folder ?? null}
@@ -662,12 +711,16 @@ function FileLibrary({ scope }: { scope: string }) {
                   setSelectedFiles((current) =>
                     current.filter((entry) => entry.id !== id)
                   )
+                  // Out of the local search cache at once.
+                  void searchIndex.drop([id]).catch(() => undefined)
                   refreshFiles()
                 }}
                 onUpdate={refreshFiles}
                 onPreview={open}
                 onBrowseArchive={
-                  isArchiveCandidate(file.name, file.mimeType)
+                  // The card of an encrypted file decides from its
+                  // decrypted name, which the server does not have.
+                  file.encrypted || isArchiveCandidate(file.name, file.mimeType)
                     ? () => setBrowsingArchive(file)
                     : undefined
                 }

@@ -30,6 +30,18 @@ If two links created at the same moment draw the same code, Flare gives the seco
 
 <Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created short link with copy and open controls" caption="Copy the new link directly, or open it to check the destination." />
 
+## Links to encrypted files cannot be shortened
+
+The link of an [encrypted file](./encryption#a-link-is-the-key) carries the file's key after `#`. A short link stores its target on the server as plain text, so shortening such a link would hand the key to the server. The form refuses it before sending anything and says why:
+
+> This link has an encryption key after #. A short link is stored on the server, so shortening it would give the server the key. Share the full link instead.
+
+<Screenshot src="/screenshots/encryption/short-link-refused.webp" alt="Short links form with an example link that has 43 characters after # and, below the field, the error This link has an encryption key after #" caption="The form refuses the link before it sends anything. The link in this picture is an example, not a real key." />
+
+A short link to the address without the part after `#` would work as a redirect, but the page it reaches cannot open the file. Share the full link.
+
+The same rule holds for links of password-protected encrypted files (`#p.` and a secret) and for the [API](/api/short-links), which answers `400` with the same sentence. A link with an ordinary fragment, such as `#installation`, can be shortened as before. The check looks at the form of the part after `#`, on any site: 43 letters, digits, `-` or `_`, alone or after a short prefix and a dot.
+
 ## Manage existing links
 
 Each row starts with the shareable `/u/…` path and its copy action. The original destination appears below it, so long addresses do not hide the link you want to share. Clicks and creation date have their own columns on wider screens and move below the destination on phones. The delete action stays separate at the row's right edge. Newer links appear first.

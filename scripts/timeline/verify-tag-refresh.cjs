@@ -11,6 +11,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 30_000 })
 const origin = process.env.FLARE_TIMELINE_TEST_ORIGIN || 'http://localhost:3064'
 const target = new URL(origin)
@@ -176,15 +177,12 @@ async function main() {
     )
   }
   try {
-    await page.goto(origin + '/auth/login?local=1')
-    await page
-      .getByLabel('Email address', { exact: true })
-      .fill('timeline-demo-alex@example.test')
-    await page
-      .getByLabel('Password', { exact: true })
-      .fill('Timeline-demo-only-2026!')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/dashboard')
+    // The seed gives the fixture account keys: the secret is its passphrase.
+    await signIn(page, expect, {
+      origin,
+      email: 'timeline-demo-alex@example.test',
+      secret: 'Timeline-demo-only-2026!',
+    })
     await ready(page)
     secondClient = await request.newContext({
       baseURL: origin,

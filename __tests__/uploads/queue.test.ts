@@ -97,7 +97,9 @@ describe('an upload queue', () => {
     await expect(batch).resolves.toEqual({
       uploaded: [response(first.file), response(second.file)],
     })
-    expect([first.options, second.options]).toEqual([options, options])
+    // Each file gets the batch's options and the signal that cancels it.
+    const sent = { ...options, signal: expect.any(AbortSignal) }
+    expect([first.options, second.options]).toEqual([sent, sent])
     expect(queue.getState()).toEqual({ files: [], uploading: false })
     expect(revoked).toEqual([preview])
   })

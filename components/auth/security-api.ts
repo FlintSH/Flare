@@ -9,6 +9,10 @@ export interface SecurityStatus {
   twoFactorEnabled: boolean
   recoveryCodesRemaining: number
   hasPassword: boolean
+  /** The account has encryption keys and signs in with a passphrase. */
+  hasPassphrase: boolean
+  /** A passphrase sign-in of the last five minutes stands in for a typed secret. */
+  canUseRecentPassphrase: boolean
   passkeys: AccountPasskey[]
   canUseRecentPasskey: boolean
   canUseRecentRecovery: boolean

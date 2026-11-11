@@ -9,6 +9,7 @@ export function uploadLinks(
     name: string
     mimeType: string
     size: number
+    encrypted?: boolean
   },
   user: { urlId: string; vanityId: string | null }
 ) {
@@ -19,6 +20,17 @@ export function uploadLinks(
     ),
     owner: user,
   })
+  // The server has no name and no type to send, and no link that opens the
+  // file: the client that encrypted it adds the key after `#`
+  // (docs/e2ee-spec.md, section 10.3).
+  if (file.encrypted)
+    return {
+      encrypted: true as const,
+      id: file.id,
+      url: urls.page,
+      pageUrl: urls.page,
+      size: Math.round(mbToBytes(file.size)),
+    }
   return {
     url: urls.page,
     pageUrl: urls.page,

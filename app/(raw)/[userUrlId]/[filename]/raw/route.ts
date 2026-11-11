@@ -15,6 +15,10 @@ export const GET = api(
   async (request, { params }: Context) => {
     const grant = await authorizeFile(request, await params, 'content')
     if (grant instanceof Response) return grant
+    // Nothing at this address can show an encrypted file: the bytes are
+    // ciphertext, and the key never reaches the server. The share page
+    // decrypts them in the browser (docs/e2ee-spec.md, section 11.3).
+    if (grant.file.encrypted) return new Response(null, { status: 404 })
     return serveFile(request, grant.file, {
       disposition: 'inline',
       sandbox: true,

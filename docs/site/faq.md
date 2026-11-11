@@ -20,6 +20,14 @@ No. Local storage is a good starting point for a single server. Mount a persiste
 
 No. A private file requires the signed-in owner with `files.read`, or a person with `content.read`. To share with a password, use a public file and add password protection. A folder share never lists private files.
 
+## Does Flare encrypt my files end to end?
+
+Yes, for new uploads. Your browser, or the [flare-upload program](./guide/screenshot-tools) that a screenshot tool runs, encrypts each file before it leaves your device, together with its name, type, tags, folder names, image text and thumbnail. The server stores ciphertext and never receives your [passphrase](./guide/passphrase) or a file key. A share link carries the key after the `#`, which a browser does not send to the server. Files from before the upgrade stay plain until you choose to [have them encrypted](./guide/encryption#files-from-before-encryption); the server held those in readable form, so encrypting them protects them from then on, not in old backups. Uploads through a [profile set to Plain](./guide/upload-profiles#encryption) are plain files that the operator of the server can read. [Encrypted and plain files](./guide/encryption) lists what the server still sees and what encryption does not protect against.
+
+## Can an administrator reset my passphrase?
+
+No. Flare never receives your passphrase, so nobody can set, read, or reset it for you. With email recovery enabled you can [choose a new one from an emailed link](./guide/passphrase#forgot-your-passphrase): with your 24-word recovery phrase you keep your keys, and without it the account gets new keys and its encrypted files cannot be opened again.
+
 ## Does deleting a folder delete its files?
 
 No. Files and subfolders move up a level; top-level files become unfiled. If the parent folder is shared, moved public files can become visible through that parent’s link. [Folder removal](./guide/folders).

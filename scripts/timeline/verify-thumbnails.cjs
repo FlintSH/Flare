@@ -9,6 +9,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
 const { cleanupThumbnailFixtures } = require('./thumbnail-cleanup.cjs')
 const expect = baseExpect.configure({ timeout: 45_000 })
 
@@ -48,15 +49,12 @@ async function login(browser, id) {
   })
   const page = await context.newPage()
   page.setDefaultTimeout(90_000)
-  await page.goto(origin + '/auth/login?local=1')
-  await page
-    .getByLabel('Email address', { exact: true })
-    .fill(`${id}@example.test`)
-  await page
-    .getByLabel('Password', { exact: true })
-    .fill('Timeline-demo-only-2026!')
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-  await page.waitForURL('**/dashboard')
+  // The seed gives the fixture accounts keys: the secret is their passphrase.
+  await signIn(page, expect, {
+    origin,
+    email: `${id}@example.test`,
+    secret: 'Timeline-demo-only-2026!',
+  })
   return { context, page }
 }
 

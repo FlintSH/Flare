@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { authorizeFile } from '@/lib/files/delivery'
 import { preflight } from '@/lib/http/cors'
 import { routes } from '@/lib/http/route'
+import { wireBytes } from '@/lib/library/sealed-fields'
 import { loggers } from '@/lib/logger'
 import { ocrQueue } from '@/lib/ocr'
 import { takeOcrRequest } from '@/lib/ocr/limits'
@@ -87,9 +88,24 @@ export const GET = api(async (request, { params }: Context) => {
     ocrText: true,
     ocrConfidence: true,
     ocrTagsPendingAt: true,
+    sealedData: { select: { sealedOcrText: true } },
   })
   if (grant instanceof Response) return grant
   const { file, session } = grant
+
+  // The server cannot read an encrypted image. It answers with the sealed
+  // text that the owner's browser stored, if there is one: a client that
+  // has the file key opens it, and one that finds none reads the image
+  // itself (docs/e2ee-spec.md, section 9.6.2).
+  if (file.encrypted)
+    return NextResponse.json(
+      {
+        success: true,
+        encrypted: true,
+        sealedOcrText: wireBytes(file.sealedData?.sealedOcrText),
+      },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    )
 
   // Checked after access, so a file the requester can't read stays hidden.
   if (!file.mimeType.startsWith('image/')) {

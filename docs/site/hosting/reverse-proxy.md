@@ -123,6 +123,10 @@ Flare reads `NEXTAUTH_URL` in one place. It must be an `http` or `https` URL wit
 
 Earlier builds read it seven ways. Account security accepted only the exact `NEXTAUTH_URL` origin and answered `503` while it was unset; account email also accepted the origin of the email public URL, and failed with an unrelated error when `NEXTAUTH_URL` wasn't a URL. Both now follow the rule above, and only passkeys need `NEXTAUTH_URL`. A value without `http://` or `https://` used to end up in upload links as written.
 
+## Pass request paths through unchanged
+
+Proxy Flare at the root of its hostname and pass each request path to it as the browser sent it. Do not add or strip a path prefix, and do not let the proxy decode and encode the path again. Account key changes, such as a passphrase change, are [signed requests](/api/account-keys#signed-requests): the browser signs the method, the path and the body, and Flare verifies them against the request it received. If the proxy changed the path, the two no longer match and those requests answer `400`. The Caddy and nginx examples above already pass paths through unchanged.
+
 ## CORS and proxies
 
 Configure cross-origin access with [`FLARE_CORS_ORIGINS`](./configuration#cross-origin-browser-access), not proxy rules. Flare answers preflight requests itself and sends CORS headers only on routes where named tokens or anonymous file reads apply. A proxy rule that adds `Access-Control-Allow-Origin` to every response would also expose session-only routes to the listed sites, and one added on top of Flare's produces two values, which browsers reject. Pass `OPTIONS` requests and the `Origin`, `Access-Control-Request-Method` and `Access-Control-Request-Headers` headers through unchanged, as the examples above do.
@@ -148,7 +152,63 @@ Flare sends these headers on every response. Pass them through unchanged rather 
 | `Strict-Transport-Security`  | `max-age=63072000; includeSubDomains; preload` |
 | `Cross-Origin-Opener-Policy` | `same-origin`                                  |
 
-Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Flare doesn't send a site-wide `Content-Security-Policy`. Adding one at the proxy can break pages that rely on inline scripts and styles, including the theme and administrator custom head HTML, and a proxy policy that replaces the file routes' header would remove their sandbox.
+Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Every page also sends a `Content-Security-Policy` with a per-response nonce, described next.
+
+### Content-Security-Policy
+
+Flare's browser code holds encryption keys, so every HTML page sends a policy that lets script come only from the application:
+
+```text
+default-src 'self';
+script-src 'self' 'nonce-<random>' 'strict-dynamic' 'wasm-unsafe-eval';
+style-src 'self' 'unsafe-inline' https: http:;
+img-src 'self' data: blob: https: http:;
+media-src 'self' blob: https: http:;
+font-src 'self' data: https: http:;
+connect-src 'self' https: http: ws: wss:;
+frame-src 'self' blob:;
+worker-src 'self' blob:;
+object-src 'none';
+base-uri 'self';
+frame-ancestors 'self'
+```
+
+- The nonce is new for every response. A script runs only if it carries it: Flare's own scripts, and each script of the administrator's [Custom HTML](/admin/appearance#custom-css-and-head-html). An injected inline script or inline event handler does not run.
+- `'wasm-unsafe-eval'` lets the browser compile the Argon2id module that stretches passphrases. It does not allow `eval` of text.
+- `blob:` and `data:` are where the page puts decrypted images, media and documents.
+- Images, media, fonts, styles and connections to other sites stay allowed, because storage, CDNs and Custom HTML use them and none of them can run script.
+
+What this means for a proxy:
+
+- **Do not cache HTML pages.** A cached page would repeat one nonce for many visitors. Flare's pages are rendered per request; keep any proxy cache to `/_next/static/` and file content.
+- **Do not rewrite page bodies** to inject scripts, such as a proxy-level analytics snippet or a "rocket loader" that rewrites script tags. The injected script has no nonce and is blocked. Put scripts in Custom HTML instead.
+- **Do not add a second `Content-Security-Policy`** at the proxy. Browsers enforce every policy they receive, so a proxy policy can only remove permissions, and one without the nonce blocks all of Flare's scripts. If your proxy sets one by default, turn that off for Flare. Do not replace the header on file content routes either: those send `sandbox`.
+- The API routes under `/api/` send no page policy. File content routes keep `Content-Security-Policy: sandbox`.
+
+Flare reads no policy from the environment and has no setting for it in this release.
+
+### The service worker for encrypted files
+
+Encrypted video, audio, PDF and downloads are decrypted by a service worker in the visitor's browser ([what it does](/guide/encryption#video-audio-and-downloads)). Its script is one file:
+
+```text
+/_next/static/service-worker/sw.js
+```
+
+Flare serves it with two headers that matter:
+
+| Header                    | Value                                                       | Why                                                                                                                           |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `Service-Worker-Allowed`  | `/`                                                         | A worker may control only pages under its script's own path unless this header names a wider scope. Flare's pages are at `/`. |
+| `Content-Security-Policy` | `default-src 'none'; connect-src 'self'; script-src 'self'` | The worker may fetch from your instance and nothing else, and runs no other script.                                           |
+
+What this means for a proxy:
+
+- **If the proxy or a CDN serves `/_next/static/` itself** (from a copy of the build, not by passing requests to Flare), it must send `Service-Worker-Allowed: /` for that file. Without it the browser refuses to register the worker. Nothing breaks for visitors: Flare falls back to decrypting whole files in memory, with [size limits for previews](/guide/encryption#video-audio-and-downloads). In nginx: `location = /_next/static/service-worker/sw.js { add_header Service-Worker-Allowed "/"; ... }`.
+- **Do not cache that file for long.** Flare sends `Cache-Control: public, max-age=0, must-revalidate` for it, unlike the hashed files next to it. Browsers check it for updates on their own; a proxy that pins an old copy keeps visitors on an old worker after an upgrade.
+- **Pass `Range` request headers and `206` answers through** for `/api/files/`. The worker reads ciphertext in byte ranges. A proxy that strips `Range`, or buffers and answers `200` with the whole file, makes every encrypted video fail its length check: the player shows an error and downloads fall back to memory.
+- Requests for `/_flare/local/...` never reach your proxy. The worker answers them inside the browser. If you see one in an access log, that browser had no worker at that moment; Flare answers it like any unknown page.
+- The worker needs a secure origin. Serve Flare over HTTPS. On plain HTTP (other than `localhost`) browsers have no service workers and Flare uses the fallback.
 
 `Cross-Origin-Opener-Policy: same-origin` means a Flare page and a page on another site never get a window reference to each other, even when one opens the other. Links between them still work. Builds before this header was added let a page that opened Flare in a new tab keep a reference to it, though Flare's own outgoing links already used `noopener`.
 

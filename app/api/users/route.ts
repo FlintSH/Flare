@@ -72,6 +72,8 @@ export const GET = api(async (request) => {
       urlId: true,
       vanityId: true,
       storageUsed: true,
+      // Read only to report whether the account has keys. Never returned.
+      authPublicKey: true,
       invite: { select: { creator: { select: { id: true, name: true } } } },
       _count: {
         select: {
@@ -95,8 +97,9 @@ export const GET = api(async (request) => {
   }
 
   return paginatedResponse<UserResponse[]>(
-    users.map(({ invite, ...user }) => ({
+    users.map(({ invite, authPublicKey, ...user }) => ({
       ...user,
+      hasPassphrase: Boolean(authPublicKey),
       roles: [
         ...user.roles.filter((role) => role.id !== everyone?.id),
         ...(everyone ? [everyone] : []),

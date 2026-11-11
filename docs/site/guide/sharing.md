@@ -22,7 +22,7 @@ Private files deliberately return a not-found response to people without access,
 
 The signed-in library is account-specific. When an open tab detects a different account or replacement browser session, it discards the previous files, selection, and dialogs before loading the current account's library. [Saved URL filters still apply](./library#change-accounts-or-sign-in-again); they do not grant access to the previous account's files.
 
-Flare is operated by your instance administrator. Private files and file passwords are access controls in the application; they do not provide end-to-end encryption from the server operator.
+Flare is operated by your instance administrator. For a **plain** file, private visibility and a file password are access controls in the application: the operator can read the file. An **encrypted** file is different: the server stores ciphertext, the key travels in the part of the link after `#`, and the table above decides only who may fetch that ciphertext. An account with `content.read` can fetch an encrypted file and cannot read it. See [Encrypted and plain files](./encryption).
 
 ## Activity visible to administrators
 
@@ -37,13 +37,21 @@ Flare records [instance audit events](/admin/audit) for application activity, in
 
 Test with a signed-out browser window if you want to see the recipient experience. As an owner, you bypass your own file's password prompt.
 
-Public files can be opened by anyone who obtains their URL, including someone a recipient forwards it to. Flare does not make your whole library public merely because an individual file is public. [Sharing a folder](./folders#share-a-folder) explicitly creates a listing of that folder's direct public files.
+For an encrypted file, **Copy link** gives a link whose last part, after `#`, is the file's key. Send the whole link. A recipient whose app cuts the link at `#` sees **This link is missing its key**; copy the link again and resend it. Nobody but you can do that: Flare never has the key.
+
+<Screenshot src="/screenshots/encryption/share-missing-key.webp" alt="Share page of an encrypted file opened without the part after the hash, saying This link is missing its key" caption="Without the part after #, the page can say only that the key is missing." />
+
+Public files can be opened by anyone who obtains their URL, including someone a recipient forwards it to. Flare does not make your whole library public merely because an individual file is public. [Sharing a folder](./folders#share-a-folder) explicitly creates a listing of the public files in that folder and in the folders inside it.
 
 ## Protect a link with a password
 
 Add a password in the upload form, or use **Files → file menu → Add password**. For an already protected file, **Manage password** lets you replace or remove it. Recipients open the link, enter the password in **File password**, and choose **Access file** to unlock the viewer. A wrong password keeps the file locked and shows a message under the field. The form sends the password as the page's `password` query parameter; if an address repeats it, Flare checks the first one, where earlier versions showed a server error. An account with `content.update`, such as an administrator, can also change a file's visibility and add, replace, or remove its password from **Users → More actions → View content** ([moderating files](/admin/users#moderate-files-and-shortened-links)).
 
 <Screenshot src="/screenshots/workspace/share-protected.png" alt="Password-protected share page asking a visitor to unlock the file" caption="A protected public file asks visitors for its password before showing the content." />
+
+These rules are for **plain** files. A password on an encrypted file works differently: it is part of the file's key, your browser checks its strength, the link changes when you set or change it, and the server performs no check and counts no attempts. Read [passwords on encrypted files](./encryption#passwords-on-encrypted-files) before relying on one.
+
+<Screenshot src="/screenshots/encryption/share-password.webp" alt="Share page of an encrypted file asking for the file password, with a note that it is checked in the browser" caption="An encrypted file's password is checked in the visitor's browser." />
 
 A new file password needs **at least 8 characters** and at most 72 bytes; most emoji and some accented characters use more than one byte. The forms explain the rule as you type and keep the save button disabled until it is met. Passwords set before this rule existed keep working until you change them.
 
@@ -103,7 +111,7 @@ Links work for signed-out visitors whatever the file is called. Earlier builds a
 
 Files uploaded by earlier builds can have link names that keep characters from the original filename, such as `My Report-1.PDF` or `notes.h#ml`. These links now escape `#`, `?`, `%`, and `\` in such names, so they reach the file: the library's **Open file** and **Copy link**; the file links in **Users → More actions → View content**; the share page's previews, video playback, password form, **Copy link**, **Copy text**, and **Open original**; and the addresses in social previews. Earlier builds wrote those characters as they were, so a link stopped at a `#` or `?`, broke at a `%`, or read a `\` as `/`. Spaces and other characters are written as your browser writes them, so other copied links read as before.
 
-Appending `/raw` requests the file content without the surrounding page. For video files, `/direct` is a helper that returns JSON containing a playback URL: a temporary signed storage URL on S3, or on local storage the file's `/raw` link, carrying the password you sent. It is not a general-purpose download route. Both check file access before returning a response. Appending one does not bypass private visibility or passwords. Use the page's **Download** action when you want to save a copy.
+Appending `/raw` requests the file content without the surrounding page. An encrypted file has no `/raw` or `/direct` address: both answer `404`, because nothing at such an address could show it. For video files, `/direct` is a helper that returns JSON containing a playback URL: a temporary signed storage URL on S3, or on local storage the file's `/raw` link, carrying the password you sent. It is not a general-purpose download route. Both check file access before returning a response. Appending one does not bypass private visibility or passwords. Use the page's **Download** action when you want to save a copy.
 
 On S3 storage, an authorized response can provide a temporary signed storage URL. Anyone who obtains that already-issued URL can use it until it expires, even if you subsequently change the Flare file's access settings. Changing visibility or a password affects new Flare access checks; it does not immediately revoke existing storage URLs.
 
@@ -161,5 +169,5 @@ Owners with `files.read` and accounts with `content.read` bypass file-password p
 :::
 
 ::: details Will disabling a folder link revoke the file links inside it?
-No. It stops that folder-share route. Individual public file links continue to work. Make individual files private or delete them if those links should stop working too.
+No. It stops that folder-share route, and your browser gives the folder new keys so the old link's key opens nothing. Individual public file links continue to work, including for a visitor who opened the shared page: that page gave them each listed file's key. Make individual files private or delete them if those links should stop working too.
 :::

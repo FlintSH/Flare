@@ -13,6 +13,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { signIn } = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 90_000 })
 const execFileAsync = promisify(execFile)
 
@@ -466,17 +467,16 @@ async function main() {
   try {
     const login = await context(browser)
     page = login.page
-    await page.goto(origin + '/auth/login?local=1')
-    await page
-      .getByLabel('Email address', { exact: true })
-      .fill('timeline-demo-alex@example.test')
-    await page
-      .getByLabel('Password', { exact: true })
-      .fill('Timeline-demo-only-2026!')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/dashboard')
+    // The seed gives the fixture account keys: the secret is its passphrase.
+    await signIn(page, expect, {
+      origin,
+      email: 'timeline-demo-alex@example.test',
+      secret: 'Timeline-demo-only-2026!',
+    })
     await ready(page)
-    const storageState = await login.ctx.storageState()
+    // With IndexedDB, so each later context is the same unlocked browser:
+    // the session cookie and the account keys that the sign-in opened.
+    const storageState = await login.ctx.storageState({ indexedDB: true })
     await login.ctx.close()
 
     const desktop = await context(browser, storageState, false, true)

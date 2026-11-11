@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -22,6 +22,14 @@ import {
 } from 'lucide-react'
 import { useDropzone } from 'react-dropzone'
 
+import {
+  EncryptionChoice,
+  type EncryptionMode,
+} from '@/components/encryption/encryption-choice'
+import {
+  FilePasswordStrength,
+  useFilePasswordStrength,
+} from '@/components/encryption/file-password'
 import {
   FilePasswordHint,
   filePasswordFieldProps,
@@ -47,11 +55,19 @@ import { folderPath } from '@/lib/folders/navigation'
 import { UNFILED, folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { UploadResponse } from '@/lib/uploads/client'
+import {
+  INITIAL_ENCRYPTION_CHOICE,
+  encryptionChoice,
+} from '@/lib/uploads/encryption-choice'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
 import { usePermissions } from '@/hooks/use-permissions'
-import { copyUploadLinks, useUploadQueue } from '@/hooks/use-upload-queue'
+import {
+  copyUploadLinks,
+  useUploadEncryption,
+  useUploadQueue,
+} from '@/hooks/use-upload-queue'
 
 // The form's text actions share one look, matching the upload profile
 // picker's "Manage profiles" link.
@@ -61,6 +77,8 @@ const textActionClassName =
 interface UploadFormProps {
   maxSize: number
   formattedMaxSize: string
+  /** The administrator forbids plain uploads, so the choice is not shown. */
+  plainUploadsForbidden?: boolean
   user: {
     defaultFileExpiration: $Enums.FileExpiration | null
     defaultFileExpirationAction: $Enums.ExpiryAction | null
@@ -70,6 +88,7 @@ interface UploadFormProps {
 export function UploadForm({
   maxSize,
   formattedMaxSize,
+  plainUploadsForbidden = false,
   user,
 }: UploadFormProps) {
   const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
@@ -93,9 +112,28 @@ export function UploadForm({
     remove,
     clear,
     upload,
+    cancel,
   } = useUploadQueue()
+  // What the dialog shows first follows the selected upload profile. The
+  // choice a person then makes is explicit and wins, until they select a
+  // different profile (docs/e2ee-spec.md, section 11.2).
+  const [choice, changeChoice] = useReducer(
+    encryptionChoice,
+    INITIAL_ENCRYPTION_CHOICE
+  )
+  const encryption = plainUploadsForbidden ? 'encrypted' : choice.mode
+  const encrypted = encryption === 'encrypted'
+  const keys = useUploadEncryption()
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>()
   const [password, setPassword] = useState('')
+  // An encrypted file's password is checked by zxcvbn in this browser. A
+  // plain file's password is checked by the server's own rule.
+  const passwordStrength = useFilePasswordStrength(password, encrypted)
+  const passwordProblem = encrypted
+    ? passwordStrength.problem
+    : password
+      ? filePasswordHint(password)
+      : null
   const [expiresAt, setExpiresAt] = useState<Date | null>()
   const [expiryAction, setExpiryAction] = useState<'DELETE' | 'SET_PRIVATE'>()
   const [profileId, setProfileId] = useState<string | null>()
@@ -121,20 +159,24 @@ export function UploadForm({
   const totalSize = files.reduce((total, { file }) => total + file.size, 0)
 
   const uploadQueued = async () => {
-    const batch = await upload({
-      profileId,
-      folderId,
-      visibility,
-      password,
-      expiresAt,
-      expiryAction,
-    })
+    const batch = await upload(
+      {
+        profileId,
+        folderId,
+        visibility,
+        password,
+        expiresAt,
+        expiryAction,
+      },
+      { plain: !encrypted }
+    )
     if (!batch) return
     if (batch.uploaded.length) {
       setCompleted((previous) => [...batch.uploaded, ...previous])
       setUploadError('')
     }
-    if (batch.failure) setUploadError(batch.failure.message)
+    if (batch.failure && !batch.failure.cancelled)
+      setUploadError(batch.failure.message)
   }
 
   const copyLinks = async (value: string) => {
@@ -260,13 +302,25 @@ export function UploadForm({
           value={profileId}
           onChange={setProfileId}
           disabled={isUploading}
+          onEncryptionChange={(mode) =>
+            changeChoice({ by: 'profile', mode, profileId })
+          }
           overrides={{
             visibility,
             expiresAt,
             expiryAction,
             password: Boolean(password),
-            passwordInvalid: Boolean(password && filePasswordHint(password)),
+            passwordInvalid: Boolean(passwordProblem),
           }}
+        />
+        <EncryptionChoice
+          value={encryption}
+          onChange={(mode: EncryptionMode) =>
+            changeChoice({ by: 'person', mode, profileId })
+          }
+          disabled={isUploading}
+          locked={keys.locked}
+          plainForbidden={plainUploadsForbidden}
         />
         {showFolders && (
           <div className="min-w-0 space-y-2">
@@ -320,7 +374,7 @@ export function UploadForm({
         )}
         <CreationOptions
           label={canShare ? 'Upload options' : 'Expiration options'}
-          error={password ? filePasswordHint(password) : null}
+          error={passwordProblem}
           passwordField="upload-password"
           customized={Boolean(
             visibility || password || expiresAt !== undefined
@@ -365,9 +419,33 @@ export function UploadForm({
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="Leave empty for no password"
-                {...filePasswordFieldProps('upload-password-hint', password)}
+                {...(encrypted
+                  ? {
+                      'aria-invalid': Boolean(
+                        password &&
+                        passwordStrength.strength?.acceptable === false
+                      ),
+                      'aria-describedby': 'upload-password-hint',
+                    }
+                  : filePasswordFieldProps('upload-password-hint', password))}
               />
-              <FilePasswordHint id="upload-password-hint" password={password} />
+              {/* The browser checks the password of an encrypted file, and
+                  the server never receives it (section 8.2). The server
+                  checks the password of a plain file by its own rule. */}
+              {encrypted ? (
+                <FilePasswordStrength
+                  id="upload-password-hint"
+                  password={password}
+                  strength={passwordStrength.strength}
+                  failed={passwordStrength.failed}
+                  empty="With a password, the link alone does not open the files. Flare never receives the password."
+                />
+              ) : (
+                <FilePasswordHint
+                  id="upload-password-hint"
+                  password={password}
+                />
+              )}
             </div>
           )}
           <div className="space-y-2">
@@ -447,7 +525,8 @@ export function UploadForm({
             isUploading ||
             unavailableFolder ||
             (!!folderId && foldersLoading) ||
-            Boolean(password && filePasswordHint(password))
+            Boolean(passwordProblem) ||
+            (encrypted && !keys.encryptFor)
           }
         >
           {isUploading ? (
@@ -456,11 +535,23 @@ export function UploadForm({
             <Upload className="h-4 w-4" />
           )}
           {isUploading
-            ? 'Uploading…'
+            ? encrypted
+              ? 'Encrypting and uploading…'
+              : 'Uploading…'
             : files.length
               ? `Upload ${files.length} ${files.length === 1 ? 'file' : 'files'}`
               : 'Upload files'}
         </Button>
+        {isUploading && (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={cancel}
+          >
+            Cancel upload
+          </Button>
+        )}
       </div>
 
       {completed.length > 0 && (

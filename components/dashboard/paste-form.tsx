@@ -1,11 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useReducer, useState } from 'react'
 
 import Link from 'next/link'
 
 import { AlertCircle, ArrowUpRight, Check, Copy, Loader2 } from 'lucide-react'
 
+import {
+  EncryptionChoice,
+  type EncryptionMode,
+} from '@/components/encryption/encryption-choice'
+import {
+  DERIVING_FILE_KEY,
+  FilePasswordStrength,
+  useFilePasswordStrength,
+} from '@/components/encryption/file-password'
 import {
   FilePasswordHint,
   filePasswordFieldProps,
@@ -28,11 +37,22 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { allows } from '@/lib/permissions/actions'
 import { uploadPaste } from '@/lib/uploads/client'
+import {
+  INITIAL_ENCRYPTION_CHOICE,
+  encryptionChoice,
+} from '@/lib/uploads/encryption-choice'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
+import { useUploadLibrary } from '@/hooks/use-upload-library'
+import { useUploadEncryption } from '@/hooks/use-upload-queue'
 
-export function PasteForm() {
+export function PasteForm({
+  plainUploadsForbidden = false,
+}: {
+  /** The administrator forbids plain uploads, so the choice is not shown. */
+  plainUploadsForbidden?: boolean
+}) {
   const [content, setContent] = useState('')
   const [filename, setFilename] = useState('')
   const canShare = allows(usePermissions().user, 'shareFiles')
@@ -41,6 +61,22 @@ export function PasteForm() {
     undefined
   )
   const [password, setPassword] = useState('')
+  // Shown first as the selected upload profile says; the choice made here
+  // wins (docs/e2ee-spec.md, section 11.2).
+  const [choice, changeChoice] = useReducer(
+    encryptionChoice,
+    INITIAL_ENCRYPTION_CHOICE
+  )
+  const encryption = plainUploadsForbidden ? 'encrypted' : choice.mode
+  const encrypted = encryption === 'encrypted'
+  const keys = useUploadEncryption()
+  const libraryFor = useUploadLibrary()
+  const passwordStrength = useFilePasswordStrength(password, encrypted)
+  const passwordProblem = encrypted
+    ? passwordStrength.problem
+    : password
+      ? filePasswordHint(password)
+      : null
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState<{
@@ -58,7 +94,11 @@ export function PasteForm() {
       setError('Add some text or code before creating your paste.')
       return
     }
-    if (password && filePasswordHint(password)) return
+    if (passwordProblem) return
+    if (encrypted && !keys.encryptFor) {
+      setError('Unlock your encryption keys to create an encrypted paste.')
+      return
+    }
     setIsSubmitting(true)
     setError('')
 
@@ -74,6 +114,13 @@ export function PasteForm() {
             ? visibility
             : undefined,
         password,
+        encryptFor: encrypted ? keys.encryptFor : undefined,
+        // The tag rules of the owner run in this browser on the name.
+        library: {
+          ...libraryFor({}),
+          // A paste is text: no thumbnail can be made for it.
+          thumbnail: async () => null,
+        },
       })
       const url = paste.pageUrl || paste.url
       setCreated({
@@ -223,12 +270,25 @@ export function PasteForm() {
               ? undefined
               : (visibility as 'PUBLIC' | 'PRIVATE'),
           password: Boolean(password),
-          passwordInvalid: Boolean(password && filePasswordHint(password)),
+          passwordInvalid: Boolean(passwordProblem),
         }}
+        onEncryptionChange={(mode) =>
+          changeChoice({ by: 'profile', mode, profileId })
+        }
+      />
+      <EncryptionChoice
+        value={encryption}
+        onChange={(mode: EncryptionMode) =>
+          changeChoice({ by: 'person', mode, profileId })
+        }
+        disabled={isSubmitting}
+        locked={keys.locked}
+        plainForbidden={plainUploadsForbidden}
+        noun="paste"
       />
       {canShare && (
         <CreationOptions
-          error={password ? filePasswordHint(password) : null}
+          error={passwordProblem}
           passwordField="paste-password"
           customized={Boolean(visibility !== 'inherit' || password)}
         >
@@ -269,9 +329,33 @@ export function PasteForm() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 disabled={isSubmitting}
-                {...filePasswordFieldProps('paste-password-hint', password)}
+                {...(encrypted
+                  ? {
+                      'aria-invalid': Boolean(
+                        password &&
+                        passwordStrength.strength?.acceptable === false
+                      ),
+                      'aria-describedby': 'paste-password-hint',
+                    }
+                  : filePasswordFieldProps('paste-password-hint', password))}
               />
-              <FilePasswordHint id="paste-password-hint" password={password} />
+              {/* The browser checks the password of an encrypted paste, and
+                  the server never receives it (section 8.2). The server
+                  checks the password of a plain one by its own rule. */}
+              {encrypted ? (
+                <FilePasswordStrength
+                  id="paste-password-hint"
+                  password={password}
+                  strength={passwordStrength.strength}
+                  failed={passwordStrength.failed}
+                  empty="With a password, the link alone does not open the paste. Flare never receives the password."
+                />
+              ) : (
+                <FilePasswordHint
+                  id="paste-password-hint"
+                  password={password}
+                />
+              )}
             </div>
           )}
         </CreationOptions>
@@ -288,11 +372,16 @@ export function PasteForm() {
         disabled={
           isSubmitting ||
           !content.trim() ||
-          Boolean(password && filePasswordHint(password))
+          Boolean(passwordProblem) ||
+          (encrypted && !keys.encryptFor)
         }
       >
         {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-        {isSubmitting ? 'Creating paste…' : 'Create paste'}
+        {isSubmitting
+          ? encrypted && password
+            ? DERIVING_FILE_KEY
+            : 'Creating paste…'
+          : 'Create paste'}
       </Button>
     </form>
   )

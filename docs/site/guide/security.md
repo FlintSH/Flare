@@ -1,23 +1,29 @@
 ---
 title: Two-factor authentication and passkeys
-description: Protect password sign-in with an authenticator app, save recovery codes, and add a passkey for your Flare account.
+description: Protect passphrase sign-in with an authenticator app, save recovery codes, and add a passkey for your Flare account.
 ---
 
 # Two-factor authentication and passkeys
 
-Open **Profile → Account** and choose the **Sign-in security** shortcut to manage your account's sign-in methods. On a phone, choose **Account** from the **Section** selector first. Two-factor authentication (2FA) adds an authenticator code after your password. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that password.
+Open **Profile → Account** and choose the **Sign-in security** shortcut to manage your account's sign-in methods. On a phone, choose **Account** from the **Section** selector first. Two-factor authentication (2FA) adds an authenticator code after your passphrase. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that passphrase.
+
+A second factor and a passkey decide who may sign in. Your [passphrase](./passphrase) is what opens your encryption keys, and neither of them replaces it: after a passkey sign-in Flare asks for the passphrase to unlock the keys, and a second factor gives no protection against someone who holds a copy of the server's database. [What the design does not protect](./passphrase#what-the-design-does-not-protect) lists these limits.
+
+::: info Some captures on this page predate passphrases
+They show the earlier sign-in card, with the email address and a password on one step, and a password field in confirmation dialogs. Sign-in now asks for the address first and the passphrase second, and the dialogs show **Confirm passphrase** instead. The other controls and every step below are unchanged. Current sign-in screens are in [Passphrase and recovery phrase](./passphrase).
+:::
 
 These controls belong to your account and remain available without the `profile.update` role permission. They do not change your role, make private files public, or replace the instance's email-verification policy. New accounts start with two-factor authentication off and no registered passkeys. **Require passkey to sign in** is off for new and existing accounts until you explicitly enable it; registering a passkey alone does not turn it on.
 
 Signing out or switching accounts resets the sign-in security controls and closes open setup or confirmation dialogs. Locally displayed setup details and recovery codes are cleared; save recovery codes before leaving the account. Reopen **Sign-in security** after signing in to load that account’s current methods and confirmation requirements. Switching accounts cannot undo a change already accepted by the server; sign back into the original account and check its result before retrying an uncertain change.
 
-When the passkey requirement is off, confirm security changes with your current password and, if enabled, an unused authenticator or authenticator recovery code. A passkey or authenticator-recovery sign-in within the last five minutes can confirm your identity instead. An SSO-only account needs a fresh SSO or passkey sign-in. When the requirement is on, security changes require a passkey or dedicated passkey-recovery sign-in within five minutes; a password, authenticator code, or SSO sign-in cannot replace that proof.
+When the passkey requirement is off, security changes need a passphrase sign-in from the last five minutes and, if enabled, an unused authenticator or authenticator recovery code. Your passphrase is never typed into these dialogs, because the server must not receive it: a dialog either says **Your recent passphrase sign-in confirms your identity for this change**, or shows **Confirm passphrase**, which [signs you in again in place](./passphrase#confirm-it-is-you-for-account-changes). A passkey or authenticator-recovery sign-in within the last five minutes can confirm your identity instead. An SSO-only account needs a fresh SSO or passkey sign-in. When the requirement is on, security changes require a passkey or dedicated passkey-recovery sign-in within five minutes; a passphrase, authenticator code, or SSO sign-in cannot replace that proof.
 
 Using **Confirm with a passkey** for the same account keeps the current security dialog open while refreshing your sign-in proof. Continue the action in that dialog after confirmation.
 
-Security dialogs and the password/basic email forms check that confirmation window again when you submit. If it has expired, they keep your edits and restore the required password/code fields or **Confirm with a passkey** prompt before sending the change. An SSO-only account using optional passkeys is asked to confirm with SSO again. Complete that confirmation, then submit again. If the confirmation requirements cannot be refreshed, the change stays unsent. [Updating your account](./account#change-your-password) describes the profile prompts.
+Security dialogs and the passphrase/basic email forms check that confirmation window again when you submit. If it has expired, they keep your edits and restore **Confirm passphrase**, the code field, or the **Confirm with a passkey** prompt before sending the change. An SSO-only account using optional passkeys is asked to confirm with SSO again. Complete that confirmation, then submit again. If the confirmation requirements cannot be refreshed, the change stays unsent. [Updating your account](./account#change-your-passphrase) describes the profile prompts.
 
-For example, if recent recovery proof expires while **Add a passkey** is open, its name stays in the dialog while the required password/code fields return. No enrollment starts until you complete that proof. The [reproducible expiry check](/contributing#security-browser-checks-and-demos) exercises this with real server requests and controlled session time.
+For example, if recent recovery proof expires while **Add a passkey** is open, its name stays in the dialog while **Confirm passphrase** and the code field return. No enrollment starts until you complete that proof. The [reproducible expiry check](/contributing#security-browser-checks-and-demos) exercises this with real server requests and controlled session time.
 
 <Screenshot src="/screenshots/security/security-overview.webp" alt="Sign-in security with authenticator setup and passkey registration controls, before either method is enabled" caption="Start in Profile → Account → Sign-in security. These screens use an isolated demonstration account." />
 
@@ -29,27 +35,27 @@ Choose **Active sessions** in the **Profile → Account** shortcuts to revoke an
 
 ## Choose your sign-in method
 
-| Method                                 | What you need                                                                    | When to use it                                                                                                  |
-| -------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Password                               | Your local Flare password.                                                       | A local account without two-factor authentication, while the passkey requirement is off.                        |
-| Password + authenticator               | Your password and a fresh six-digit code from your authenticator app.            | Regular password sign-in after enabling two-factor authentication, while the passkey requirement is off.        |
-| Password + authenticator recovery code | Your password and one unused code saved during authenticator setup.              | Your authenticator is unavailable and the passkey requirement is off. Each code works once.                     |
-| Passkey                                | A previously registered passkey and its device's verification prompt.            | Sign in without typing your password or a separate authenticator code.                                          |
-| Passkey recovery code                  | Your account email address and one dedicated code saved when requiring passkeys. | Emergency access when the passkey requirement is on and your passkeys are unavailable. No password is required. |
-| SSO                                    | The instance's identity provider and the provider's own security checks.         | An SSO account while the passkey requirement is off; configure MFA with that provider.                          |
+| Method                                   | What you need                                                                    | When to use it                                                                                                    |
+| ---------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Passphrase                               | Your local Flare passphrase.                                                     | A local account without two-factor authentication, while the passkey requirement is off.                          |
+| Passphrase + authenticator               | Your passphrase and a fresh six-digit code from your authenticator app.          | Regular passphrase sign-in after enabling two-factor authentication, while the passkey requirement is off.        |
+| Passphrase + authenticator recovery code | Your passphrase and one unused code saved during authenticator setup.            | Your authenticator is unavailable and the passkey requirement is off. Each code works once.                       |
+| Passkey                                  | A previously registered passkey and its device's verification prompt.            | Sign in without typing your passphrase or a separate authenticator code.                                          |
+| Passkey recovery code                    | Your account email address and one dedicated code saved when requiring passkeys. | Emergency access when the passkey requirement is on and your passkeys are unavailable. No passphrase is required. |
+| SSO                                      | The instance's identity provider and the provider's own security checks.         | An SSO account while the passkey requirement is off; configure MFA with that provider.                            |
 
-Passkey sign-in requires the device to verify you; it is a separate sign-in method, including for an account that has an authenticator. With **Require passkey to sign in** enabled, normal password and SSO sign-in stop working for that account. Keep a spare registered passkey and the dedicated emergency codes before relying on this setting.
+Passkey sign-in requires the device to verify you; it is a separate sign-in method, including for an account that has an authenticator. With **Require passkey to sign in** enabled, normal passphrase and SSO sign-in stop working for that account. Keep a spare registered passkey and the dedicated emergency codes before relying on this setting.
 
 ## Set up an authenticator
 
-For a local account that already has a password:
+For a local account that already has a passphrase:
 
 1. Open **Profile → Account → Sign-in security**.
 2. Under **Authenticator app**, choose **Set up authenticator**, complete the requested identity confirmation, then choose **Continue**.
 3. Scan the displayed QR code with your authenticator app, or enter the setup key manually. Keep the key private: anyone who has it can generate your codes.
 4. Enter the six-digit code currently displayed by your authenticator, then choose **Enable two-factor authentication**.
 5. Save the ten recovery codes somewhere you can access if you lose your authenticator. They are shown only once. Use **Copy codes** or **Download codes**, then select **I have saved my recovery codes somewhere safe.** and choose **Done**.
-6. Choose **Sign in again**. With the passkey requirement off, use your password and a new authenticator code. If you require passkeys, use a passkey or dedicated passkey recovery code; authenticator enrollment does not change that requirement. Enabling protection ends existing browser sessions.
+6. Choose **Sign in again**. With the passkey requirement off, use your passphrase and a new authenticator code. If you require passkeys, use a passkey or dedicated passkey recovery code; authenticator enrollment does not change that requirement. Enabling protection ends existing browser sessions.
 
 Setup is not enabled until Flare accepts the confirmation code. Setup expires after five minutes. If it expires, start it again and use the newly generated QR code/key. Remove any abandoned entry from your authenticator so you do not accidentally use its old codes.
 
@@ -57,35 +63,35 @@ Setup is not enabled until Flare accepts the confirmation code. Setup expires af
 
 <Screenshot src="/screenshots/security/recovery-codes.webp" alt="Recovery-code dialog with ten concealed codes, Copy codes, Download codes, a saved-confirmation checkbox, and a disabled Done button" caption="Save your codes before continuing. The codes in this real demonstration capture are redacted." />
 
-An SSO-only account uses the identity provider's MFA; Flare does not offer a local authenticator setup for an account without a local password. [SSO behavior](#sso-and-existing-integrations) explains how the sign-in methods interact.
+An SSO-only account uses the identity provider's MFA; Flare does not offer a local authenticator setup for an account without a local passphrase or password. [SSO behavior](#sso-and-existing-integrations) explains how the sign-in methods interact.
 
 ## Sign in with a code
 
-Enter your email address and password on the login page. If your account has two-factor authentication enabled, **Verify your identity** asks for the current authenticator code before sign-in completes.
+Enter your email address on the login page, choose **Continue**, and enter your passphrase. If your account has two-factor authentication enabled, **Verify your identity** asks for the current authenticator code before sign-in completes.
 
 Use the most recent six-digit code. A code that has already been accepted cannot be reused; wait for the next code when signing in again or confirming another sensitive change. Set your phone's date and time automatically if fresh codes fail. After too many attempts, wait 15 minutes before trying again.
 
-<Screenshot src="/screenshots/security/totp-login.webp" alt="Flare sign-in asks to verify identity with an authenticator code and offers Use a recovery code" caption="Your password is the first step. Enter a fresh authenticator code to finish signing in." />
+<Screenshot src="/screenshots/security/totp-login.webp" alt="Flare sign-in asks to verify identity with an authenticator code and offers Use a recovery code" caption="Your passphrase is the first step. Enter a fresh authenticator code to finish signing in." />
 
-If you return to the password step, enter your credentials again. An unfinished code prompt is not a signed-in session and cannot access your files.
+If you return to the passphrase step, enter your credentials again. An unfinished code prompt is not a signed-in session and cannot access your files.
 
 ## Recover when your authenticator is unavailable
 
-At **Verify your identity**, choose **Use a recovery code**. Enter one unused code from your saved set, with or without its hyphens and in any letter case. You still need your password; a recovery code alone does not sign you in.
+At **Verify your identity**, choose **Use a recovery code**. Enter one unused code from your saved set, with or without its hyphens and in any letter case. You still need your passphrase; a recovery code alone does not sign you in.
 
 This section describes **authenticator recovery codes**. They do not work for an account that requires passkeys. For that account, use the separate [passkey recovery flow](#recover-when-required-passkeys-are-unavailable) and its dedicated codes.
 
-<Screenshot src="/screenshots/security/recovery-login.webp" alt="Recovery sign-in asks for one saved recovery code and explains that each code works once" caption="Use a recovery code after your password when your authenticator is unavailable." />
+<Screenshot src="/screenshots/security/recovery-login.webp" alt="Recovery sign-in asks for one saved recovery code and explains that each code works once" caption="Use a recovery code after your passphrase when your authenticator is unavailable." />
 
-After a recovery-code sign-in, Flare accepts that recent sign-in as identity proof for **five minutes**. The confirmation dialog says **Your recent recovery code sign-in confirms your identity for this change.** Use this time to replace recovery codes, turn off and re-enroll a lost authenticator, or add a passkey. Even your last unused recovery code is enough to sign in and begin this repair; you do not need to spend a second code within that window. Complete the repair before that window ends when no other sign-in method is available. After five minutes, another fresh sign-in or the normal password-plus-code proof is required. If a recovery code was exposed, choose **Replace recovery codes** in **Sign-in security**, confirm your identity, and save the new set. Replacement invalidates every code in the old set and ends existing browser sessions.
+After a recovery-code sign-in, Flare accepts that recent sign-in as identity proof for **five minutes**. The confirmation dialog says **Your recent recovery code sign-in confirms your identity for this change.** Use this time to replace recovery codes, turn off and re-enroll a lost authenticator, or add a passkey. Even your last unused recovery code is enough to sign in and begin this repair; you do not need to spend a second code within that window. Complete the repair before that window ends when no other sign-in method is available. After five minutes, another fresh sign-in or the normal passphrase-plus-code proof is required. If a recovery code was exposed, choose **Replace recovery codes** in **Sign-in security**, confirm your identity, and save the new set. Replacement invalidates every code in the old set and ends existing browser sessions.
 
 <Screenshot src="/screenshots/security/recovery-repair.webp" alt="Replace recovery codes dialog accepts a recent recovery-code sign-in as identity proof and explains the five-minute confirmation window" caption="Repair access immediately after recovery sign-in. The recent verified sign-in lets you replace codes without spending another one." />
 
-**Turning off** two-factor authentication also requires identity confirmation. It removes the authenticator and invalidates its own recovery codes, then ends existing sessions. With the passkey requirement off, password sign-in no longer asks for an authenticator. If passkeys are required, that requirement and its dedicated recovery set remain in place: password and SSO sign-in stay blocked. Registered passkeys remain available in either case.
+**Turning off** two-factor authentication also requires identity confirmation. It removes the authenticator and invalidates its own recovery codes, then ends existing sessions. With the passkey requirement off, passphrase sign-in no longer asks for an authenticator. If passkeys are required, that requirement and its dedicated recovery set remain in place: passphrase and SSO sign-in stay blocked. Registered passkeys remain available in either case.
 
-To move to a replacement authenticator, first sign in with an available method, then choose **Turn off** and confirm with your password plus a fresh authenticator or unused recovery code, or a recent passkey or recovery-code sign-in. Sign in again, choose **Set up authenticator**, and complete setup on the new device. Save the new recovery set and test a new code before relying on that device.
+To move to a replacement authenticator, first sign in with an available method, then choose **Turn off** and confirm with a recent passphrase sign-in plus a fresh authenticator or unused recovery code, or a recent passkey or recovery-code sign-in. Sign in again, choose **Set up authenticator**, and complete setup on the new device. Save the new recovery set and test a new code before relying on that device.
 
-Password recovery by email changes your password; it does not remove two-factor authentication, registered passkeys, or a passkey requirement. If no permitted sign-in method or matching recovery code remains, contact your operator. The dashboard has no administrator button to bypass another account's factor or passkey requirement. Do not delete your account to troubleshoot sign-in.
+[Recovery by email](./passphrase#forgot-your-passphrase) changes your passphrase and your keys; it does not remove two-factor authentication, registered passkeys, or a passkey requirement. If no permitted sign-in method or matching recovery code remains, contact your operator. The dashboard has no administrator button to bypass another account's factor or passkey requirement. Do not delete your account to troubleshoot sign-in.
 
 <details>
 <summary>See the recovery controls at mobile width</summary>
@@ -113,17 +119,17 @@ You can save up to **10 passkeys**, each with a name of **1–64 characters**. U
 
 The browser's choice of devices and whether a passkey syncs between them depends on your platform and passkey provider. Flare stores the public credential, not the passkey's private key or your biometric data.
 
-Passkeys are tied to the instance's hostname. Use the same canonical address where you registered them. Before a hostname change, preserve dedicated passkey recovery codes if your account requires passkeys, or explicitly turn off the requirement while you still have a working passkey. Password/SSO fallback only works with that requirement off. Register new passkeys after moving to the new address.
+Passkeys are tied to the instance's hostname. Use the same canonical address where you registered them. Before a hostname change, preserve dedicated passkey recovery codes if your account requires passkeys, or explicitly turn off the requirement while you still have a working passkey. Passphrase/SSO fallback only works with that requirement off. Register new passkeys after moving to the new address.
 
 ## Require a passkey for sign-in
 
-[Watch activation, blocked password sign-in, emergency recovery, and explicit disable](/demos#require-a-passkey-and-recover-access) in the real application walkthrough.
+[Watch activation, blocked passphrase sign-in, emergency recovery, and explicit disable](/demos#require-a-passkey-and-recover-access) in the real application walkthrough.
 
-**Require passkey to sign in** is an optional account setting for both local-password and SSO-only accounts. Turning it on blocks all password sign-in, including authenticator and recovery-code combinations, and SSO. It retains those saved credentials and bindings; they become eligible again only after you explicitly turn the requirement off, subject to their normal security checks.
+**Require passkey to sign in** is an optional account setting for both local-passphrase and SSO-only accounts. Turning it on blocks all passphrase sign-in, including authenticator and recovery-code combinations, and SSO. It retains those saved credentials and bindings; they become eligible again only after you explicitly turn the requirement off, subject to their normal security checks.
 
 Before enabling it:
 
-1. Register a passkey and test **Sign in with a passkey**. A passkey confirmation within the last **five minutes** is required to enable the setting; a password or any recovery code cannot activate it. If prompted in your account, choose **Confirm with a passkey** and complete its device check.
+1. Register a passkey and test **Sign in with a passkey**. A passkey confirmation within the last **five minutes** is required to enable the setting; a passphrase or any recovery code cannot activate it. If prompted in your account, choose **Confirm with a passkey** and complete its device check.
 2. Ensure your account has an email address. The emergency recovery flow uses that address to identify your account, including for SSO-only accounts.
 3. Return to **Profile → Account → Sign-in security → Passkeys**, choose **Require passkey to sign in**, review the change, and confirm **Require passkey**.
 4. In **Save your passkey recovery codes**, save the ten codes shown once. Use **Copy codes** or **Download codes** (the file is `flare-passkey-recovery-codes.txt`), select **I have saved my recovery codes somewhere safe.**, then choose **Done**. These are a separate set from authenticator recovery codes.
@@ -131,25 +137,27 @@ Before enabling it:
 
 <Screenshot src="/screenshots/security/passkey-required.webp" alt="Require passkey to sign in confirmation explains that password, authenticator, and SSO sign-in will be blocked" caption="Enabling the requirement is a separate, explicit change after confirming a registered passkey." />
 
-Each dedicated recovery code can grant **full account sign-in using only your email address and that code**. No password or authenticator is requested. Keep them private and accessible separately from the device that holds your passkey; never put them in support messages, screenshots, or public files. Replacing the set invalidates all its previous codes.
+Each dedicated recovery code can grant **full account sign-in using only your email address and that code**. No passphrase or authenticator is requested. Keep them private and accessible separately from the device that holds your passkey; never put them in support messages, screenshots, or public files. Replacing the set invalidates all its previous codes.
 
-<Screenshot src="/screenshots/security/passkey-recovery-codes.webp" alt="Save your passkey recovery codes dialog with ten concealed dedicated codes, download and copy actions, and a saved-confirmation checkbox" caption="Save this dedicated set once. These codes grant emergency sign-in without a password; their values are concealed in the capture." />
+<Screenshot src="/screenshots/security/passkey-recovery-codes.webp" alt="Save your passkey recovery codes dialog with ten concealed dedicated codes, download and copy actions, and a saved-confirmation checkbox" caption="Save this dedicated set once. These codes grant emergency sign-in without a passphrase; their values are concealed in the capture." />
 
 Email verification and role permissions still apply after passkey or emergency recovery sign-in. API tokens and upload-tool credentials keep working under their existing permissions; this setting protects browser sign-in and does not revoke integrations.
 
-<Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Login rejects the account password and directs the user to a registered passkey or dedicated passkey recovery code" caption="A correct password cannot bypass the requirement. Resetting it does not restore password or SSO sign-in." />
+<Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Login rejects the account password and directs the user to a registered passkey or dedicated passkey recovery code" caption="A correct passphrase cannot bypass the requirement. Resetting it does not restore passphrase or SSO sign-in." />
+
+After that refusal the form returns to its first step, where **Sign in with a passkey** and **Use a passkey recovery code** are.
 
 ### Turn off the requirement or replace its codes
 
-Use a passkey or dedicated passkey-recovery sign-in within five minutes before changing the requirement or replacing its recovery set. A password, authenticator recovery code, or provider sign-in is insufficient. Choose **Replace passkey recovery codes → Replace codes** to replace the set, or **Allow other sign-in methods → Allow other methods** to turn the requirement off. Both changes end browser sessions. Save any replacement codes before signing in again.
+Use a passkey or dedicated passkey-recovery sign-in within five minutes before changing the requirement or replacing its recovery set. A passphrase, authenticator recovery code, or provider sign-in is insufficient. Choose **Replace passkey recovery codes → Replace codes** to replace the set, or **Allow other sign-in methods → Allow other methods** to turn the requirement off. Both changes end browser sessions. Save any replacement codes before signing in again.
 
-Turning the requirement off invalidates the dedicated passkey recovery set. It preserves registered passkeys, your password/provider binding, authenticator enrollment, and authenticator recovery codes. If local two-factor authentication was enabled, password sign-in asks for that authenticator or one of its own recovery codes again. Enabling the requirement later creates a fresh dedicated set.
+Turning the requirement off invalidates the dedicated passkey recovery set. It preserves registered passkeys, your passphrase/provider binding, authenticator enrollment, and authenticator recovery codes. If local two-factor authentication was enabled, passphrase sign-in asks for that authenticator or one of its own recovery codes again. Enabling the requirement later creates a fresh dedicated set.
 
-Flare refuses to turn it off if it cannot find a configured fallback: a local password with an account email, or the account's matching, enabled SSO provider with its required configuration and no local authenticator blocking SSO. A provider configuration check cannot prove that the provider is reachable or that you still have access. Test the fallback yourself. If disabling is refused, keep your dedicated codes, add a replacement passkey, or ask the operator to restore the configured provider.
+Flare refuses to turn it off if it cannot find a configured fallback: a local passphrase with an account email, or the account's matching, enabled SSO provider with its required configuration and no local authenticator blocking SSO. A provider configuration check cannot prove that the provider is reachable or that you still have access. Test the fallback yourself. If disabling is refused, keep your dedicated codes, add a replacement passkey, or ask the operator to restore the configured provider.
 
 ## Recover when required passkeys are unavailable
 
-On the login page, choose **Use a passkey recovery code**. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. This recovery option matches the email address without regard to capitalization. These codes also support SSO-only accounts. They do not require access to the email inbox, a password, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
+On the login page, choose **Use a passkey recovery code**. Enter your current account email address and one unused **Passkey recovery code**, then choose **Sign in with recovery code**. This recovery option matches the email address without regard to capitalization. These codes also support SSO-only accounts. They do not require access to the email inbox, a passphrase, or the identity provider; the address identifies the account and the code proves access. Authenticator recovery codes are not accepted here.
 
 If older accounts have addresses that differ only by capitalization, dedicated recovery refuses the ambiguous address without consuming the code. The sign-in error stays generic. Ask the operator to [resolve the address collision](/admin/users#account-sign-in-security), or use a registered passkey while that is investigated. Do not share your recovery code with the operator.
 
@@ -161,7 +169,7 @@ The code is consumed once and the passkey requirement stays on. The recovered se
 
 <Screenshot src="/screenshots/security/passkey-recovery-repair.webp" alt="Replace passkey recovery codes dialog accepts the recent dedicated recovery sign-in as proof for issuing a new set" caption="Repair access within five minutes of emergency sign-in. Replacing this set invalidates all older dedicated codes." />
 
-Register and test a replacement passkey, or replace the dedicated codes and save the new set, before relying on continued access. Adding a passkey or changing the recovery set ends browser sessions; sign in again with an available passkey or a new dedicated code. A successful emergency sign-in does not silently restore password or SSO fallback.
+Register and test a replacement passkey, or replace the dedicated codes and save the new set, before relying on continued access. Adding a passkey or changing the recovery set ends browser sessions; sign in again with an available passkey or a new dedicated code. A successful emergency sign-in does not silently restore passphrase or SSO fallback.
 
 <details>
 <summary>See required-passkey recovery at mobile width</summary>
@@ -179,29 +187,29 @@ The passkey list shows your saved names, creation date, and last use so you can 
 
 Before replacing a device, test a second method in a separate browser window. A spare registered passkey can restore access when your authenticator is unavailable.
 
-Even with the requirement off, removing the last passkey needs a configured password/email or matching enabled SSO fallback. Flare will refuse removal when neither remains configured; adding another passkey keeps a working device option available.
+Even with the requirement off, removing the last passkey needs a configured passphrase/email or matching enabled SSO fallback. Flare will refuse removal when neither remains configured; adding another passkey keeps a working device option available.
 
 ## SSO and existing integrations
 
-Flare does not add a local authenticator prompt after an SSO provider's sign-in. SSO-only accounts should enable MFA with their provider when using SSO. If an account has both a local password and a provider binding and then enables local two-factor authentication, use its password plus authenticator/recovery code or a registered passkey; the SSO path does not bypass that local protection. **Require passkey to sign in** blocks SSO for local and SSO-only accounts alike. Its dedicated recovery codes provide emergency access without the provider; only explicit disabling restores the SSO option.
+Flare does not add a local authenticator prompt after an SSO provider's sign-in. SSO-only accounts should enable MFA with their provider when using SSO. If an account has both a local passphrase and a provider binding and then enables local two-factor authentication, use its passphrase plus authenticator/recovery code or a registered passkey; the SSO path does not bypass that local protection. **Require passkey to sign in** blocks SSO for local and SSO-only accounts alike. Its dedicated recovery codes provide emergency access without the provider; only explicit disabling restores the SSO option.
 
-If the instance automatically redirects to SSO, open `/auth/login?local=1` for permitted password, passkey, or dedicated passkey recovery sign-in. Existing local accounts are not automatically linked to a matching provider email. See [the SSO guide](/admin/sso).
+If the instance automatically redirects to SSO, open `/auth/login?local=1` for permitted passphrase, passkey, or dedicated passkey recovery sign-in. Existing local accounts are not automatically linked to a matching provider email. See [the SSO guide](/admin/sso).
 
 [Named API tokens](/api/authentication) and the legacy upload credential remain independent credentials. Enabling two-factor authentication or using a passkey does not add an interactive prompt to your upload scripts, revoke their tokens, or expand their permissions. Review **Profile → Integrations** and rotate/revoke credentials you no longer use.
 
 ## Troubleshoot sign-in
 
-| What you see                                           | What to do                                                                                                                                                           |
-| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Authenticator codes keep failing                       | Use the code for this instance/account, enable automatic device time, and wait for a new code if the last one was already accepted.                                  |
-| Setup or a passkey prompt expired                      | Start the operation again; a previous challenge cannot be retried indefinitely.                                                                                      |
-| Recovery code rejected                                 | Choose a different unused code from the current set; old sets stop working after replacement.                                                                        |
-| Password or SSO rejected because a passkey is required | Use a registered passkey or the separate passkey recovery option. Resetting a password does not turn the requirement off.                                            |
-| Cannot remove the last passkey                         | Register another key first, or explicitly turn off the requirement after a recent passkey or dedicated recovery sign-in.                                             |
-| Cannot allow other sign-in methods                     | Keep the dedicated recovery codes and restore a configured password/email or matching enabled SSO fallback; test that method before relying on it.                   |
-| Browser cancelled passkey sign-in                      | Retry and choose the device/provider holding this instance's passkey, or use another sign-in method.                                                                 |
-| Passkeys unavailable on this address                   | Open the canonical HTTPS address; ask the operator to check `NEXTAUTH_URL` and the reverse proxy.                                                                    |
-| Email verification still required                      | Complete the [email-verification flow](./account#verify-your-email); a stronger sign-in method does not waive it.                                                    |
-| Sign-in stopped after an operator changed a secret     | Use a saved recovery code or passkey if available, and ask the operator to restore the correct authentication secret; it also protects stored authenticator secrets. |
+| What you see                                             | What to do                                                                                                                                                           |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authenticator codes keep failing                         | Use the code for this instance/account, enable automatic device time, and wait for a new code if the last one was already accepted.                                  |
+| Setup or a passkey prompt expired                        | Start the operation again; a previous challenge cannot be retried indefinitely.                                                                                      |
+| Recovery code rejected                                   | Choose a different unused code from the current set; old sets stop working after replacement.                                                                        |
+| Passphrase or SSO rejected because a passkey is required | Use a registered passkey or the separate passkey recovery option. Resetting a passphrase does not turn the requirement off.                                          |
+| Cannot remove the last passkey                           | Register another key first, or explicitly turn off the requirement after a recent passkey or dedicated recovery sign-in.                                             |
+| Cannot allow other sign-in methods                       | Keep the dedicated recovery codes and restore a configured passphrase/email or matching enabled SSO fallback; test that method before relying on it.                 |
+| Browser cancelled passkey sign-in                        | Retry and choose the device/provider holding this instance's passkey, or use another sign-in method.                                                                 |
+| Passkeys unavailable on this address                     | Open the canonical HTTPS address; ask the operator to check `NEXTAUTH_URL` and the reverse proxy.                                                                    |
+| Email verification still required                        | Complete the [email-verification flow](./account#verify-your-email); a stronger sign-in method does not waive it.                                                    |
+| Sign-in stopped after an operator changed a secret       | Use a saved recovery code or passkey if available, and ask the operator to restore the correct authentication secret; it also protects stored authenticator secrets. |
 
-Keep passwords, QR codes, setup keys, authenticator codes, both types of recovery codes, cookies, and reset links out of screenshots and support reports.
+Keep passphrases, QR codes, setup keys, authenticator codes, both types of recovery codes, cookies, and reset links out of screenshots and support reports.

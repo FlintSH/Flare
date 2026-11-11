@@ -111,15 +111,25 @@ export async function readJson(
   const { limit = JSON_BODY_LIMIT, signal } = schema
     ? options
     : ((schemaOrOptions as BodyOptions | undefined) ?? {})
+  const { value } = await readJsonBytes(request, { limit, signal })
+  return schema ? parseInput(schema, value) : value
+}
+
+/**
+ * The JSON body with the bytes it arrived as, for a route that also checks a
+ * signature over those bytes. The body is read once.
+ */
+export async function readJsonBytes(
+  request: Request,
+  { limit = JSON_BODY_LIMIT, signal }: BodyOptions = {}
+): Promise<{ bytes: Buffer; value: unknown }> {
   if (browserWrites.has(request)) assertMediaType(request, 'application/json')
-  const text = (await readBody(request, limit, signal)).toString('utf8')
-  let value: unknown
+  const bytes = await readBody(request, limit, signal)
   try {
-    value = JSON.parse(text)
+    return { bytes, value: JSON.parse(bytes.toString('utf8')) }
   } catch {
     throw new HttpError(400, 'Invalid JSON.')
   }
-  return schema ? parseInput(schema, value) : value
 }
 
 /** Room for the boundaries and part headers around one file in a multipart body. */

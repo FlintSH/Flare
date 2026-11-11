@@ -106,7 +106,7 @@ Attaching roles requires `users.roles` and follows role delegation: each role mu
 
 ## Register with an invite
 
-`POST /api/auth/register` accepts an optional `invite` string alongside `name`, `email`, and `password`. When registration is closed, a request without `invite` still returns `404` with an empty body. A request with `invite` is checked even when registration is open, so an unusable invite never silently creates an account without its roles.
+`POST /api/auth/register` accepts an optional `invite` string alongside `name`, `email`, and `account`, the [account record](./account-keys#changed-account-routes) that replaced `password`. When registration is closed, a request without `invite` still returns `404` with an empty body. A request with `invite` is checked even when registration is open, so an unusable invite never silently creates an account without its roles.
 
 The invite is used in the same transaction that creates the account. A rejected registration, such as a duplicate email address, does not use it up. Concurrent requests cannot exceed `maxUses`. Invite failures return `400`:
 

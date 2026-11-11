@@ -11,39 +11,30 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 
-import { uploaderClients } from '@/lib/uploads/uploader-clients'
-
-import { ToolRow, type UploaderToolProps } from './tool-parts'
+import { ToolRow } from './tool-parts'
 import { useUploaderDownload } from './use-uploader-download'
 
-export function ITakeTool({
-  profileId,
-  profileName,
-  compact,
-  disabled,
-}: UploaderToolProps) {
-  const { download, isLoading } = useUploaderDownload('itake', {
-    ready: {
-      title: 'iTake configuration ready',
-      description:
-        'Open the downloaded .itup file and confirm Import in iTake.',
-    },
-    failed: {
-      title: 'Download failed',
-      description:
-        'Could not download the iTake configuration. Please try again.',
-    },
-  })
-
+export function ITakeTool() {
+  const { download, ready, available, configuration } = useUploaderDownload(
+    'itake',
+    {
+      ready: {
+        title: 'iTake configuration ready',
+        description:
+          'Open the downloaded .itup file and confirm Import in iTake.',
+      },
+      failed: {
+        title: 'Download failed',
+        description: 'Could not write the iTake configuration.',
+      },
+    }
+  )
+  const profileName = configuration?.profile?.name
   const dialog = (
     <Dialog>
       <DialogTrigger asChild>
-        <Button
-          variant="outline"
-          size={compact ? 'sm' : 'default'}
-          disabled={disabled}
-        >
-          {compact ? uploaderClients.itake.label : 'Set up iTake'}
+        <Button variant="outline" disabled={!ready || !available}>
+          Set up iTake
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg">
@@ -88,29 +79,26 @@ export function ITakeTool({
           </li>
         </ol>
         <p className="text-xs text-muted-foreground">
-          {profileId
+          {profileName
             ? 'This config uses the selected upload profile.'
             : 'This config follows your default upload profile.'}{' '}
           Keep it private: it includes your upload token. If replacing a config,
           remove its old uploader in iTake first.
         </p>
         <DialogFooter>
-          <Button
-            onClick={() => void download({}, profileId)}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Downloading…' : 'Download config'}
-          </Button>
+          <Button onClick={() => download({})}>Download config</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
-  if (compact) return dialog
-
   return (
     <ToolRow
       title="iTake"
-      description="Screenshots and screen recording on macOS 15 or newer. Import a ready-to-use config to upload and copy links automatically."
+      description={
+        available
+          ? 'Screenshots and screen recording on macOS 15 or newer. Import a ready-to-use config to upload and copy links automatically.'
+          : 'Not available for an encrypted profile: an iTake uploader file describes one web request and cannot encrypt or start a program. Use a plain profile, or upload with flare-upload.'
+      }
       action={dialog}
     />
   )

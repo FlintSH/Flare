@@ -39,6 +39,13 @@ export const PUT = api(async (request) => {
   }
 
   if (body.newPassword) {
+    // The rotation route changes a passphrase (docs/e2ee-spec.md, section 6.7).
+    if (account.authPublicKey)
+      throw new HttpError(
+        409,
+        'This account signs in with a passphrase. Change the passphrase instead.',
+        { body: { code: 'passphrase_account' } }
+      )
     if (!body.currentPassword) {
       throw new HttpError(400, 'Current password is required')
     }

@@ -1,33 +1,86 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Flare file.ready event v1",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["version", "id", "type", "occurredAt", "data"],
-  "properties": {
-    "version": { "const": 1 },
-    "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
-    "type": { "const": "file.ready" },
-    "occurredAt": { "type": "string", "format": "date-time" },
-    "test": { "const": true },
-    "data": {
+  "title": "Flare file.ready event v2",
+  "description": "Flare sends version 2. Version 1 is described for deliveries that were queued before an upgrade: they keep the payload they were queued with.",
+  "oneOf": [{ "$ref": "#/$defs/v2" }, { "$ref": "#/$defs/v1" }],
+  "$defs": {
+    "v2": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "id",
-        "name",
-        "mimeType",
-        "sizeBytes",
-        "visibility",
-        "passwordProtected"
-      ],
+      "required": ["version", "id", "type", "occurredAt", "data"],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "name": { "type": "string" },
-        "mimeType": { "type": "string" },
-        "sizeBytes": { "type": "integer", "minimum": 0 },
-        "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
-        "passwordProtected": { "type": "boolean" }
+        "version": { "const": 2 },
+        "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
+        "type": { "const": "file.ready" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "test": { "const": true },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "encrypted",
+            "name",
+            "mimeType",
+            "sizeBytes",
+            "visibility",
+            "passwordProtected"
+          ],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "encrypted": { "type": "boolean" },
+            "name": { "type": ["string", "null"] },
+            "mimeType": { "type": ["string", "null"] },
+            "sizeBytes": { "type": "integer", "minimum": 0 },
+            "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
+            "passwordProtected": { "type": "boolean" }
+          },
+          "if": { "properties": { "encrypted": { "const": true } } },
+          "then": {
+            "properties": {
+              "name": { "type": "null" },
+              "mimeType": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "name": { "type": "string" },
+              "mimeType": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "id", "type", "occurredAt", "data"],
+      "properties": {
+        "version": { "const": 1 },
+        "id": { "type": "string", "pattern": "^(file\\.ready:|test:).+" },
+        "type": { "const": "file.ready" },
+        "occurredAt": { "type": "string", "format": "date-time" },
+        "test": { "const": true },
+        "data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "id",
+            "name",
+            "mimeType",
+            "sizeBytes",
+            "visibility",
+            "passwordProtected"
+          ],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "name": { "type": "string" },
+            "mimeType": { "type": "string" },
+            "sizeBytes": { "type": "integer", "minimum": 0 },
+            "visibility": { "enum": ["PUBLIC", "PRIVATE"] },
+            "passwordProtected": { "type": "boolean" }
+          }
+        }
       }
     }
   }

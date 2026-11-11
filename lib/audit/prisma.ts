@@ -398,17 +398,22 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
                 // A caller-filtered relation is not a complete assignment snapshot.
                 delete current.roles
               }
+              // A row that holds a sealed name now: the plain name it had
+              // before stays out of the event.
+              const fields = definition.sealed?.(current, data)
+                ? definition.fields.filter((field) => field !== 'name')
+                : definition.fields
               const details: Row = {
                 operation,
                 changedFields,
                 count,
-                before: snapshot(old, definition.fields),
+                before: snapshot(old, fields),
                 ...(old && !operation.startsWith('delete')
                   ? { beforeObserved: true }
                   : {}),
               }
               if (!operation.startsWith('delete')) {
-                details.after = snapshot(current, definition.fields)
+                details.after = snapshot(current, fields)
                 if (
                   definition.roles &&
                   data.roles &&
@@ -427,7 +432,9 @@ export function withPrismaAudit(base: PrismaClient): PrismaClient {
               )
               const name = definition.name
                 ? definition.name(current)
-                : current.name
+                : fields.includes('name') || !definition.fields.includes('name')
+                  ? current.name
+                  : undefined
               events.push({
                 action: `${definition.target}.${operation}`,
                 category: definition.category,

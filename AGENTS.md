@@ -6,6 +6,26 @@ that ships. Apply this requirement to **every feature and every commit that chan
 observable behavior**, including fixes, removals, defaults, limits, and permissions.
 Do not defer documentation to another task or release.
 
+## End-to-end encryption design
+
+Flare is moving to client-side encryption of files. The protocol is specified
+in [`docs/e2ee-spec.md`](docs/e2ee-spec.md). Read it before you change uploads,
+file serving, sharing, folders, tags, sign-in, account recovery, upload
+profiles, tokens, link previews, or anything that reads file bytes or file
+names on the server.
+
+- The spec is the source of truth for keys, formats and procedures. Do not
+  change a cryptographic detail in code without changing the spec in the same
+  commit.
+- Each section is labelled **AGREED**, **PROPOSED** or **OPEN**. Do not treat
+  a **PROPOSED** or **OPEN** section as a decision.
+- The server must never receive a passphrase, an account private key, a file
+  key or a share link fragment. A change that sends one of them to the server,
+  or writes one to a log, an audit record, a webhook or a URL query, is a bug.
+- Server features that need file content (link previews with content, server
+  OCR) apply to plain files only. For encrypted files the client does the
+  work: OCR, thumbnails, archives, search and export.
+
 ## Documentation location and boundaries
 
 - The public handbook lives in `docs/site/`, an independently built VitePress site.

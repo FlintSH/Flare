@@ -8,6 +8,7 @@ import { ProfileClientProps } from '@/types/components/profile'
 import { Database, Plug, Upload, UserPlus, UserRound } from 'lucide-react'
 
 import { PersonalAppearanceSettings } from '@/components/customization/personal-appearance-settings'
+import { ExistingFilesSettings } from '@/components/encryption/existing-files'
 import { IntegrationsPanel } from '@/components/integrations/integrations-panel'
 import { InviteManager } from '@/components/invites/invite-manager'
 import {
@@ -33,6 +34,7 @@ import {
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { usePreferenceSection } from '@/hooks/use-preference-section'
+import { useSecurityStatus } from '@/hooks/use-security-status'
 
 import { ProfileAccount } from './account'
 import { ProfileExport } from './export'
@@ -48,7 +50,7 @@ import { ProfileTools } from './tools'
 const sections = [
   {
     id: 'account',
-    hint: 'Identity, password, and theme',
+    hint: 'Identity, passphrase, and theme',
     title: 'Account',
     description:
       'Manage your identity, sign-in details, and workspace preference.',
@@ -96,6 +98,7 @@ export function ProfileClient({
   initialPreference,
 }: ProfileClientProps) {
   const { can, user: sessionUser } = usePermissions()
+  const { data: security } = useSecurityStatus()
   const router = useRouter()
   const [activeSection, setSection] = usePreferenceSection(
     PROFILE_SECTIONS,
@@ -111,7 +114,13 @@ export function ProfileClient({
     { title: 'Active sessions', anchor: 'active-sessions' },
     { title: 'Login history', anchor: 'login-history' },
     ...(can('profile.update')
-      ? [{ title: 'Password', anchor: 'password' }]
+      ? [
+          {
+            // The card below has this name for an account with keys.
+            title: security?.hasPassphrase ? 'Passphrase' : 'Password',
+            anchor: 'password',
+          },
+        ]
       : []),
     ...(can('appearance.personal')
       ? [{ title: 'Appearance', anchor: 'workspace-appearance' }]
@@ -213,9 +222,15 @@ export function ProfileClient({
             className="scroll-mt-28 outline-none"
           >
             <CardHeader>
-              <CardTitle>Change your password</CardTitle>
+              <CardTitle>
+                {security?.hasPassphrase
+                  ? 'Passphrase and recovery'
+                  : 'Change your password'}
+              </CardTitle>
               <CardDescription>
-                Use a strong password that you do not use elsewhere.
+                {security?.hasPassphrase
+                  ? 'Your passphrase signs you in and unlocks your encryption keys. Flare never receives it.'
+                  : 'Use a strong password that you do not use elsewhere.'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -241,9 +256,9 @@ export function ProfileClient({
               <CardHeader>
                 <CardTitle>Screenshot tools and scripts</CardTitle>
                 <CardDescription className="text-pretty">
-                  Choose your tool and download a ready-to-use configuration. It
-                  includes your upload token, so there is no API key to create
-                  or paste.
+                  Create a configuration for an upload profile, then download
+                  what each tool needs. Every configuration gets its own upload
+                  token, so there is no API key to create or paste.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -311,6 +326,7 @@ export function ProfileClient({
               />
             </CardContent>
           </Card>
+          <ExistingFilesSettings />
           {allows(sessionUser, 'exportAccount') && (
             <Card>
               <CardHeader>

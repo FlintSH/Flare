@@ -4,6 +4,7 @@ import { RefusedRequest, apiRequest } from '@/lib/client/request'
 
 import { ErrorState } from '../components/error-state'
 import { LoadingState } from '../components/loading-state'
+import { useMediaRecovery } from '../use-media-recovery'
 
 const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 
@@ -16,7 +17,6 @@ export function VideoViewer({
   lookupUrl: string
 }) {
   const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
-  const [failedUrl, setFailedUrl] = useState<string>()
 
   useEffect(() => {
     const controller = new AbortController()
@@ -47,7 +47,23 @@ export function VideoViewer({
     return <LoadingState message="Loading video…" />
   }
 
-  if (failedUrl === direct.url) {
+  return <VideoPlayer file={file} src={direct.url} />
+}
+
+/** A video at an address the page already has. */
+export function VideoPlayer({
+  file,
+  src,
+  recover,
+}: {
+  file: { name: string; mimeType: string }
+  src: string
+  /** Asks for a new `src` after a failure. True if one is on its way. */
+  recover?: (code: number | undefined) => boolean
+}) {
+  const { failed, onError, onLoadedMetadata } = useMediaRecovery(src, recover)
+
+  if (failed) {
     return <ErrorState error="This video couldn’t be played in your browser." />
   }
 
@@ -56,17 +72,18 @@ export function VideoViewer({
     // the card's full width.
     <div className="w-[56rem] min-w-0 max-w-full border-y border-border/60 bg-muted/60 dark:bg-muted/30">
       <video
-        src={direct.url}
+        src={src}
         controls
         aria-label={`${file.name} video player`}
-        onError={() => setFailedUrl(direct.url)}
+        onError={onError}
+        onLoadedMetadata={onLoadedMetadata}
         className="block max-h-[60vh] w-full object-contain focus-visible:outline-offset-[-2px]"
         controlsList="nodownload"
         preload="metadata"
         muted={false}
         playsInline
       >
-        <source src={direct.url} type={file.mimeType} />
+        <source src={src} type={file.mimeType} />
         Your browser does not support the video tag.
       </video>
     </div>

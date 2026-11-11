@@ -2,6 +2,7 @@ import { createWorker } from 'tesseract.js'
 
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { accountHasSealedTags } from '@/lib/files/library-records'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 import { applyPendingOcrTags } from '@/lib/tags/ocr'
@@ -41,15 +42,34 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
       data: { text, confidence },
     } = await worker.recognize(fileBuffer).finally(() => worker.terminate())
 
-    await prisma.file.update({
-      where: { id: fileId },
-      data: {
-        ocrText: text.trim(),
-        ocrConfidence: confidence,
-        isOcrProcessed: true,
-        ocrTagsPendingAt: new Date(),
-      },
-    })
+    // The server cannot read the rule of a sealed tag. A rule on image text
+    // waits for the browser of the owner (docs/e2ee-spec.md, section 9.7).
+    const sealedRules = file
+      ? await accountHasSealedTags(prisma, file.userId)
+      : false
+    // Only while the row is still the plain file that was read. The server
+    // can encrypt the file meanwhile (docs/e2ee-spec.md, section 14.2), and
+    // an encrypted row stores no plain text.
+    const stillPlain = await prisma.file
+      .update({
+        where: { id: fileId, encrypted: false, path: filePath },
+        data: {
+          ocrText: text.trim(),
+          ocrConfidence: confidence,
+          isOcrProcessed: true,
+          ocrTagsPendingAt: new Date(),
+          ...(sealedRules && { rulesPending: true, pendingAttempts: 0 }),
+        },
+      })
+      .then(() => true)
+      .catch((error: unknown) => {
+        if ((error as { code?: string }).code === 'P2025') return false
+        throw error
+      })
+    if (!stillPlain) {
+      target.targetName = undefined
+      return { success: false, error: 'The file changed during recognition' }
+    }
 
     // A failed attempt leaves durable work for the worker or the next OCR request.
     await applyPendingOcrTags(fileId)
@@ -78,14 +98,19 @@ export async function processImageOCRTask({ filePath, fileId }: OCRTask) {
       fileId,
     })
 
-    await prisma.file.update({
-      where: { id: fileId },
-      data: {
-        isOcrProcessed: true,
-        ocrText: null,
-        ocrConfidence: null,
-      },
-    })
+    await prisma.file
+      .update({
+        where: { id: fileId, encrypted: false },
+        data: {
+          isOcrProcessed: true,
+          ocrText: null,
+          ocrConfidence: null,
+        },
+      })
+      .catch((failure: unknown) => {
+        // The row is gone or encrypted: it has no plain text to reset.
+        if ((failure as { code?: string }).code !== 'P2025') throw failure
+      })
 
     return {
       success: false,

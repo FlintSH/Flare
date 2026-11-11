@@ -30,25 +30,45 @@ type ReadyFile = Pick<
   | 'uploadedAt'
   | 'visibility'
   | 'password'
+  | 'encrypted'
+  | 'passwordStanza'
 >
 type WebhookTransaction = Pick<
   Prisma.TransactionClient,
   'webhook' | 'webhookDelivery' | '$executeRaw'
 >
 
+/** The version of the `file.ready` event that Flare sends. */
+export const FILE_READY_VERSION = 2
+
+/** Whether a file has a password: a server password, or a password stanza for an encrypted file. */
+export function passwordProtected(file: {
+  password: string | null
+  passwordStanza: Uint8Array | null
+}) {
+  return Boolean(file.password) || Boolean(file.passwordStanza)
+}
+
+/**
+ * Version 2 of the event (docs/e2ee-spec.md, section 12.7). The server has
+ * no name and no type for an encrypted file, so both are null there and
+ * `sizeBytes` is the size of the ciphertext. A receiver that needs the name
+ * needs the file key, which the server cannot give.
+ */
 export function fileReadyPayload(file: Omit<ReadyFile, 'userId'>) {
   return {
-    version: 1,
+    version: FILE_READY_VERSION,
     id: `file.ready:${file.id}`,
     type: 'file.ready',
     occurredAt: file.uploadedAt.toISOString(),
     data: {
       id: file.id,
-      name: file.name,
-      mimeType: file.mimeType,
+      encrypted: file.encrypted,
+      name: file.encrypted ? null : file.name,
+      mimeType: file.encrypted ? null : file.mimeType,
       sizeBytes: Math.round(mbToBytes(file.size)),
       visibility: file.visibility,
-      passwordProtected: Boolean(file.password),
+      passwordProtected: passwordProtected(file),
     },
   }
 }
@@ -64,6 +84,8 @@ export function testEventPayload() {
       uploadedAt: new Date(),
       visibility: 'PUBLIC',
       password: null,
+      encrypted: false,
+      passwordStanza: null,
     }),
     id: `${TEST_EVENT_PREFIX}${randomUUID()}`,
     test: true,
@@ -285,14 +307,19 @@ export async function deliverWebhook(delivery: WebhookDelivery): Promise<void> {
       typeof data?.id === 'string'
         ? await prisma.file.findUnique({
             where: { id: data.id },
-            select: { userId: true, visibility: true, password: true },
+            select: {
+              userId: true,
+              visibility: true,
+              password: true,
+              passwordStanza: true,
+            },
           })
         : null
     if (
       !file ||
       file.userId !== current.webhook.userId ||
       file.visibility !== data?.visibility ||
-      Boolean(file.password) !== data?.passwordProtected
+      passwordProtected(file) !== data?.passwordProtected
     ) {
       await prisma.webhookDelivery.updateMany({
         where: ownership,

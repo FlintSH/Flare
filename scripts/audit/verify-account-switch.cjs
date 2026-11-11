@@ -9,6 +9,10 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const {
+  fillSignInForm,
+  signInContext,
+} = require('../shared/passphrase-accounts.cjs')
 
 const expect = baseExpect.configure({ timeout: 30000 })
 const origin = process.env.FLARE_AUDIT_TEST_ORIGIN || 'http://localhost:3071'
@@ -24,7 +28,8 @@ if (
 )
   throw new Error('Use the origin of a disposable localhost HTTP instance.')
 const screenshots = process.env.FLARE_AUDIT_SCREENSHOTS
-const password = 'Audit-demo-only-2026!'
+// The seed gives the fixture accounts keys: this is their passphrase.
+const passphrase = 'Audit-demo-only-2026!'
 const clientHeaders = (ip) => ({ 'x-real-ip': ip, 'x-forwarded-for': ip })
 
 async function api(ctx, route, method = 'GET', expected = 200) {
@@ -41,25 +46,11 @@ async function api(ctx, route, method = 'GET', expected = 200) {
 }
 
 async function initialLogin(ctx, person) {
-  const csrf = await api(ctx, '/api/auth/csrf')
-  const response = await ctx.request.post(
-    origin + '/api/auth/callback/credentials',
-    {
-      headers: { Origin: origin },
-      form: {
-        csrfToken: csrf.csrfToken,
-        email: `audit-demo-${person}@example.test`,
-        password,
-        json: 'true',
-        callbackUrl: origin + '/dashboard',
-      },
-    }
-  )
-  assert.equal(response.status(), 200)
-  assert.ok(
-    !(await response.json()).url.includes('error='),
-    'Fixture login failed'
-  )
+  await signInContext(ctx, expect, {
+    origin,
+    email: `audit-demo-${person}@example.test`,
+    secret: passphrase,
+  })
   const session = await api(ctx, '/api/auth/session')
   assert.equal(
     session.user?.id,
@@ -123,15 +114,11 @@ async function remotelyRevokeAndOpenLogin(
 
 async function loginForm(page, ctx, person, ip, sentinel) {
   await ctx.setExtraHTTPHeaders(clientHeaders(ip))
-  await page
-    .getByLabel('Email address', { exact: true })
-    .fill(`audit-demo-${person}@example.test`)
-  await page.getByLabel('Password', { exact: true }).fill(password)
-  await page
-    .locator('form')
-    .filter({ has: page.getByLabel('Password', { exact: true }) })
-    .locator('button[type="submit"]')
-    .click()
+  // The address, then the passphrase, in the document that is already open.
+  await fillSignInForm(page, expect, {
+    email: `audit-demo-${person}@example.test`,
+    secret: passphrase,
+  })
   await page.waitForURL((url) => url.pathname === '/dashboard')
   await expect(
     page.getByRole('navigation', { name: 'Main navigation' })

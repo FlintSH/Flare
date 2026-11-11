@@ -16,6 +16,7 @@ import {
   KeyRound,
   Link2,
   Lock,
+  LockKeyhole,
   LogOut,
   MoreVertical,
   Plus,
@@ -296,6 +297,11 @@ export function fileSettingsChanges(
   }
 }
 
+/** A moderator sees no name for an encrypted file: the server has none. */
+function accountFileName(file: Pick<AccountFile, 'name' | 'encrypted'>) {
+  return file.encrypted ? 'Encrypted file' : file.name
+}
+
 interface FileSettingsDialogProps {
   file: AccountFile | null
   isOpen: boolean
@@ -321,7 +327,10 @@ export function FileSettingsDialog({
           <DialogTitle>File settings</DialogTitle>
           <DialogDescription className="break-words">
             Update visibility and password protection for{' '}
-            <span className="font-medium text-foreground">{file?.name}</span>.
+            <span className="font-medium text-foreground">
+              {file && accountFileName(file)}
+            </span>
+            .
           </DialogDescription>
         </DialogHeader>
         {/* Mounted only while the dialog is open, so each opening starts
@@ -401,40 +410,54 @@ function FileSettingsFields({
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="password-protection">
-            {isProtected ? 'New password' : 'Password protection'}
-          </Label>
-          <Input
-            id="password-protection"
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            disabled={removePassword}
-            onChange={(e) => edit({ password: e.target.value })}
-            placeholder={
-              removePassword
-                ? 'The password is removed when you save'
-                : isProtected
-                  ? 'Leave empty to keep the current password'
-                  : 'Leave empty for no password'
-            }
-            {...filePasswordFieldProps('password-protection-hint', password)}
-          />
-          <FilePasswordHint id="password-protection-hint" password={password} />
-          {isProtected && (
-            <div className="flex items-center justify-between gap-4 pt-1">
-              <Label htmlFor="remove-password">Remove password</Label>
-              <Switch
-                id="remove-password"
-                checked={removePassword}
-                onCheckedChange={(checked) =>
-                  edit({ removePassword: checked, password: '' })
-                }
-              />
-            </div>
-          )}
-        </div>
+        {file.encrypted ? (
+          <p
+            className="text-pretty rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground"
+            data-encrypted-file-note=""
+          >
+            This file is encrypted. Its password is part of its key, so only its
+            owner can set or remove it. You can change its visibility or delete
+            it.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <Label htmlFor="password-protection">
+              {isProtected ? 'New password' : 'Password protection'}
+            </Label>
+            <Input
+              id="password-protection"
+              type="password"
+              autoComplete="new-password"
+              value={password}
+              disabled={removePassword}
+              onChange={(e) => edit({ password: e.target.value })}
+              placeholder={
+                removePassword
+                  ? 'The password is removed when you save'
+                  : isProtected
+                    ? 'Leave empty to keep the current password'
+                    : 'Leave empty for no password'
+              }
+              {...filePasswordFieldProps('password-protection-hint', password)}
+            />
+            <FilePasswordHint
+              id="password-protection-hint"
+              password={password}
+            />
+            {isProtected && (
+              <div className="flex items-center justify-between gap-4 pt-1">
+                <Label htmlFor="remove-password">Remove password</Label>
+                <Switch
+                  id="remove-password"
+                  checked={removePassword}
+                  onCheckedChange={(checked) =>
+                    edit({ removePassword: checked, password: '' })
+                  }
+                />
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <DialogFooter>
         <Button
@@ -714,6 +737,12 @@ export function UserList() {
 
   // A hairline keeps light screenshots from dissolving into the row.
   const getFilePreview = (file: AccountFile) => {
+    if (file.encrypted)
+      return (
+        <div className="flex h-10 w-10 items-center justify-center rounded-md border bg-muted/30 text-muted-foreground">
+          <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+        </div>
+      )
     if (file.mimeType.startsWith('image/')) {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
@@ -1245,10 +1274,31 @@ export function UserList() {
                       placeholder={`At least ${ACCOUNT_PASSWORD_MIN_LENGTH} characters`}
                       autoComplete="new-password"
                       required
+                      aria-describedby="password-help"
                     />
+                    <p
+                      id="password-help"
+                      className="text-xs text-muted-foreground"
+                    >
+                      A temporary password for the first sign-in. The person
+                      then chooses a passphrase, which replaces it.
+                    </p>
                   </div>
                 )}
-                {editingUser && (
+                {editingUser?.hasPassphrase && (
+                  <div className="space-y-1 rounded-xl border bg-muted/30 p-3 text-sm">
+                    <p className="font-medium">Passphrase</p>
+                    <p
+                      className="text-muted-foreground"
+                      data-user-passphrase-note=""
+                    >
+                      This account signs in with a passphrase that only its
+                      owner knows, so you cannot set one here. The owner can
+                      reset it from the sign-in page by email.
+                    </p>
+                  </div>
+                )}
+                {editingUser && !editingUser.hasPassphrase && (
                   <div className="space-y-2">
                     <Label htmlFor="newPassword">
                       New password{' '}
@@ -1272,7 +1322,8 @@ export function UserList() {
                       id="newPassword-help"
                       className="text-xs text-muted-foreground"
                     >
-                      Leave empty to keep the current password.
+                      Leave empty to keep the current password. This password
+                      works until the person signs in and chooses a passphrase.
                     </p>
                   </div>
                 )}
@@ -1541,10 +1592,13 @@ export function UserList() {
                                     href={fileUrls(file).page}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    title={file.name}
+                                    title={accountFileName(file)}
                                     className="block truncate rounded-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                                    data-encrypted-row={
+                                      file.encrypted ? '' : undefined
+                                    }
                                   >
-                                    {file.name}
+                                    {accountFileName(file)}
                                   </a>
                                   <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground md:hidden">
                                     <VisibilityBadge
@@ -1562,9 +1616,15 @@ export function UserList() {
                                 <TableCell className="hidden lg:table-cell">
                                   <span
                                     className="block truncate"
-                                    title={file.mimeType}
+                                    title={
+                                      file.encrypted
+                                        ? 'The server cannot read this file or its type'
+                                        : file.mimeType
+                                    }
                                   >
-                                    {file.mimeType}
+                                    {file.encrypted
+                                      ? 'Encrypted'
+                                      : file.mimeType}
                                   </span>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
@@ -1583,7 +1643,7 @@ export function UserList() {
                                         variant="ghost"
                                         size="icon"
                                         className="h-8 w-8"
-                                        aria-label={`Actions for ${file.name}`}
+                                        aria-label={`Actions for ${accountFileName(file)}`}
                                       >
                                         <MoreVertical className="h-4 w-4" />
                                       </Button>

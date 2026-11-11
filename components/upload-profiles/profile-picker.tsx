@@ -18,6 +18,7 @@ import { RefusedRequest } from '@/lib/client/request'
 import { allows } from '@/lib/permissions/actions'
 import {
   UPLOAD_DEFAULTS,
+  type UploadEncryption,
   type UploadProfileOptions,
   type UploadProfileView,
 } from '@/lib/uploads/schema'
@@ -35,6 +36,8 @@ export type ProfilesData = {
   accountOptions: UploadProfileOptions
   effective: Required<UploadProfileOptions>
   canShare: boolean
+  /** The administrator forbids plain uploads (docs/e2ee-spec.md, section 11.1). */
+  plainUploadsForbidden: boolean
 }
 
 /** The account query that holds the signed-in person's upload profiles. */
@@ -67,6 +70,7 @@ export function ProfilePicker({
   mode = 'upload',
   refreshKey = 0,
   onSnapshotChange,
+  onEncryptionChange,
   overrides,
 }: {
   value?: string | null
@@ -82,6 +86,12 @@ export function ProfilePicker({
       effectiveRevision: string
     } | null
   ) => void
+  /**
+   * The `encryption` setting of the selection, once the profiles are known
+   * and each time the selection changes. The upload dialog shows it first;
+   * the choice a person makes there wins (docs/e2ee-spec.md, section 11.2).
+   */
+  onEncryptionChange?: (encryption: UploadEncryption) => void
 }) {
   const { user, can } = usePermissions()
   const canManageProfiles = can('uploadProfiles.manage')
@@ -118,6 +128,10 @@ export function ProfilePicker({
       : value === undefined
         ? data?.effective
         : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
+  const selectedEncryption = data ? effective?.encryption : undefined
+  useEffect(() => {
+    if (selectedEncryption) onEncryptionChange?.(selectedEncryption)
+  }, [selectedEncryption, onEncryptionChange])
   const expiry =
     effective?.expiration === 'DISABLED'
       ? 'no expiry'

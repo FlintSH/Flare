@@ -20,10 +20,6 @@ import { Label } from '@/components/ui/label'
 
 import { LOCAL_SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { apiRequest } from '@/lib/client/request'
-import {
-  ACCOUNT_PASSWORD_MIN_LENGTH,
-  PASSWORD_MAX_BYTES,
-} from '@/lib/users/account-policy'
 
 import { AccountEmail, useAccountEmailStatus } from './account-email'
 import { fetchEmailCapabilities } from './api'
@@ -83,7 +79,7 @@ export function ForgotPasswordForm({
       setError(
         error instanceof Error
           ? error.message
-          : 'Unable to request a password reset.'
+          : 'Unable to request a reset link.'
       )
     } finally {
       setBusy(false)
@@ -106,6 +102,11 @@ export function ForgotPasswordForm({
               disabled={busy}
             />
           </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            The link lets you choose a new passphrase. Have your recovery phrase
+            ready: without it, files that the account encrypted cannot be opened
+            again.
+          </p>
           <Button className="h-11 w-full" type="submit" disabled={busy}>
             {busy ? 'Requesting…' : 'Send reset link'}
           </Button>
@@ -114,8 +115,8 @@ export function ForgotPasswordForm({
         <Alert variant="info" role="status">
           <Info aria-hidden="true" />
           <AlertDescription>
-            Email password recovery is not enabled on this instance. Contact
-            your administrator for help.
+            Recovery by email is not enabled on this instance. Contact your
+            administrator for help.
           </AlertDescription>
         </Alert>
       ) : (
@@ -135,108 +136,6 @@ export function ForgotPasswordForm({
           Back to sign in
         </Link>
       </AuthFooter>
-    </div>
-  )
-}
-
-export function ResetPasswordForm({ token }: { token: string }) {
-  const [busy, setBusy] = useState(false)
-  const [complete, setComplete] = useState(false)
-  const [error, setError] = useState('')
-  const [message, setMessage] = useState('')
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    const data = new FormData(event.currentTarget)
-    if (data.get('password') !== data.get('confirmPassword')) {
-      setError('Passwords do not match.')
-      return
-    }
-    setBusy(true)
-    setError('')
-    try {
-      const result = await apiRequest<{ message: string }>(
-        '/api/auth/email/reset',
-        { body: { token, password: data.get('password') } }
-      )
-      setComplete(true)
-      setMessage(
-        result.message || 'Password updated. Sign in with your new password.'
-      )
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : 'Unable to reset your password.'
-      )
-    } finally {
-      setBusy(false)
-    }
-  }
-  return (
-    <div className="space-y-5">
-      {!token ? (
-        <Alert variant="destructive">
-          <AlertCircle aria-hidden="true" />
-          <AlertDescription>
-            This reset link is incomplete. Request a new link below.
-          </AlertDescription>
-        </Alert>
-      ) : (
-        !complete && (
-          <form className="space-y-4" onSubmit={submit} aria-busy={busy}>
-            <div className="space-y-2">
-              <Label htmlFor="reset-password">New password</Label>
-              <Input
-                className="h-11"
-                id="reset-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-                maxLength={PASSWORD_MAX_BYTES}
-                required
-                disabled={busy}
-              />
-              <p className="text-sm text-muted-foreground">
-                Use at least {ACCOUNT_PASSWORD_MIN_LENGTH} characters.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="reset-confirm">Confirm new password</Label>
-              <Input
-                className="h-11"
-                id="reset-confirm"
-                name="confirmPassword"
-                type="password"
-                autoComplete="new-password"
-                minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
-                maxLength={PASSWORD_MAX_BYTES}
-                required
-                disabled={busy}
-              />
-            </div>
-            <Button className="h-11 w-full" type="submit" disabled={busy}>
-              {busy ? 'Updating…' : 'Reset password'}
-            </Button>
-          </form>
-        )
-      )}
-      <Feedback error={error} message={message} />
-      {complete ? (
-        <Button asChild className="h-11 w-full">
-          <Link href={LOCAL_SIGN_IN_PATH}>Sign in with your new password</Link>
-        </Button>
-      ) : (
-        <AuthFooter>
-          <Link href="/auth/forgot-password" className={authLinkClassName}>
-            Request a new reset link
-          </Link>
-          <span aria-hidden="true"> · </span>
-          <Link href={LOCAL_SIGN_IN_PATH} className={authLinkClassName}>
-            Back to sign in
-          </Link>
-        </AuthFooter>
-      )}
     </div>
   )
 }

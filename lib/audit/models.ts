@@ -30,6 +30,13 @@ export interface AuditedModel {
   details?: (row: Row, before: Row | undefined, operation: string) => Row
   /** Whether a write's data records a failed attempt, which makes its event a failure. */
   failed?: (data: Row) => boolean
+  /**
+   * Whether the write leaves a sealed name in the row (docs/e2ee-spec.md,
+   * sections 9.4.1 and 9.5). The plain name the row had before the write is
+   * then kept out of the event: the write exists to remove that name from
+   * the server.
+   */
+  sealed?: (row: Row, data: Row) => boolean
 }
 
 /** Values are compared only in memory; configuration values never enter the log. */
@@ -89,15 +96,23 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
     ],
     counters: ['views', 'downloads'],
   },
+  // Ciphertext that only a client opens; the file's own events cover it.
+  FileSealedData: null,
+  // A queue row with IDs and a state; the job writes its own audit record.
+  FileEncryptionJob: null,
   VaultFolder: {
     category: 'folders',
     target: 'folder',
     fields: ['id', 'name', 'userId', 'parentId'],
+    sealed: (row, data) =>
+      row.sealedFolderMetadata != null || data.sealedFolderMetadata != null,
   },
   VaultTag: {
     category: 'tags',
     target: 'tag',
     fields: ['id', 'name', 'userId'],
+    sealed: (row, data) =>
+      row.sealedTagMetadata != null || data.sealedTagMetadata != null,
   },
   VaultFileTag: {
     category: 'tags',

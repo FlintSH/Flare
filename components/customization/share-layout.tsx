@@ -4,6 +4,7 @@ import Link from 'next/link'
 
 import { ArrowLeft } from 'lucide-react'
 
+import { HistoryBackLink } from '@/components/folders/history-back-link'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -56,20 +57,32 @@ export function PublicHeader({ children }: { children?: ReactNode }) {
 export interface PublicBackLinkTarget {
   href: string
   label: string
+  /** The folder's address has a key after `#`: go back in history to keep it. */
+  history?: boolean
 }
 
+const backLinkClassName =
+  'inline-flex min-w-0 items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
 /** Returns a visitor to the shared folder they opened a file from. */
-export function PublicBackLink({ href, label }: PublicBackLinkTarget) {
+export function PublicBackLink({ href, label, history }: PublicBackLinkTarget) {
+  const content = (
+    <>
+      <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <span className="truncate">Back to {label}</span>
+    </>
+  )
   return (
     <div className="flex min-w-0">
-      <Link
-        href={href}
-        prefetch={false}
-        className="inline-flex min-w-0 items-center gap-1.5 rounded-md text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        <ArrowLeft className="h-4 w-4 shrink-0" aria-hidden="true" />
-        <span className="truncate">Back to {label}</span>
-      </Link>
+      {history ? (
+        <HistoryBackLink href={href} className={backLinkClassName}>
+          {content}
+        </HistoryBackLink>
+      ) : (
+        <Link href={href} prefetch={false} className={backLinkClassName}>
+          {content}
+        </Link>
+      )}
     </div>
   )
 }
@@ -87,7 +100,8 @@ export function ShareLayout({
 }: {
   appearance: AppearanceDocument
   style: ShareStyle
-  filename: string
+  /** The file's name, or a node that shows it once the browser decrypted it. */
+  filename: ReactNode
   size: string
   uploader: { name: string; image?: string }
   isMedia: boolean

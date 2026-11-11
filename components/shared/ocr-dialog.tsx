@@ -25,6 +25,10 @@ interface OcrDialogProps {
   notice?: string | null
   /** Shown with errors and notices when another attempt can help. */
   onRetry?: () => void
+  /** What the spinner waits for, when that takes more than a moment. */
+  loadingText?: string
+  /** A line under the text about where it was read. */
+  footnote?: string
 }
 
 export function OcrDialog({
@@ -37,6 +41,8 @@ export function OcrDialog({
   filename,
   notice,
   onRetry,
+  loadingText,
+  footnote,
 }: OcrDialogProps) {
   const { toast } = useToast()
 
@@ -65,12 +71,21 @@ export function OcrDialog({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>{dialogTitle}</DialogTitle>
+          {/* Room for the close button beside a long file name. */}
+          <DialogTitle className="break-words px-6 sm:pl-0">
+            {dialogTitle}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8">
+            <div
+              className="flex flex-col items-center justify-center gap-3 py-8"
+              role="status"
+            >
               <Icons.spinner className="h-6 w-6 animate-spin" />
+              {loadingText && (
+                <p className="text-sm text-muted-foreground">{loadingText}</p>
+              )}
             </div>
           ) : error ? (
             <div className="space-y-4">
@@ -136,6 +151,11 @@ export function OcrDialog({
                 Copy text
               </Button>
             </div>
+          )}
+          {footnote && !isLoading && !error && !notice && (
+            <p className="text-pretty text-xs text-muted-foreground">
+              {footnote}
+            </p>
           )}
         </div>
       </DialogContent>

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Public fixtures only. Never point this script at an existing application DB.
 const { PrismaClient } = require('@prisma/client')
-const { hash } = require('bcryptjs')
+const { createAccountRecord } = require('../shared/passphrase-accounts.cjs')
 
 const database = new URL(process.env.DATABASE_URL)
 if (
@@ -62,14 +62,14 @@ async function seed() {
         id,
         name,
         email: `${id}@example.test`,
-        password: await hash('Audit-demo-only-2026!', 10),
+        // An account with keys: the fixture secret is its passphrase.
+        ...(await createAccountRecord('Audit-demo-only-2026!')).columns,
         roles: {
           connect: {
             systemKey: id === 'audit-demo-alex' ? 'administrator' : 'everyone',
           },
         },
         urlId: id,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

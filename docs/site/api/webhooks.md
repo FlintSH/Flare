@@ -32,12 +32,13 @@ Flare currently emits one event type: **`file.ready`**, payload **version 1**. I
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "id": "file.ready:cm_example",
   "type": "file.ready",
   "occurredAt": "2026-09-20T12:00:00.000Z",
   "data": {
     "id": "cm_example",
+    "encrypted": false,
     "name": "screenshot.png",
     "mimeType": "image/png",
     "sizeBytes": 204800,
@@ -47,20 +48,61 @@ Flare currently emits one event type: **`file.ready`**, payload **version 1**. I
 }
 ```
 
-| Field                    | Meaning                                                                                    |
-| ------------------------ | ------------------------------------------------------------------------------------------ |
-| `version`                | Schema version; currently `1`.                                                             |
-| `id`                     | Stable event ID, normally `file.ready:` followed by the file ID. Use it for deduplication. |
-| `type`                   | `file.ready`.                                                                              |
-| `occurredAt`             | File upload time in ISO 8601 format; unchanged on retries.                                 |
-| `data.id`                | Flare's file record ID.                                                                    |
-| `data.name`              | File display name.                                                                         |
-| `data.mimeType`          | File MIME type.                                                                            |
-| `data.sizeBytes`         | Integer file size in bytes.                                                                |
-| `data.visibility`        | `PUBLIC` or `PRIVATE` at upload time.                                                      |
-| `data.passwordProtected` | Whether a password was set. The password itself is never included.                         |
+| Field                    | Meaning                                                                                                                     |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| `version`                | Schema version; currently `2`.                                                                                              |
+| `id`                     | Stable event ID, normally `file.ready:` followed by the file ID. Use it for deduplication.                                  |
+| `type`                   | `file.ready`.                                                                                                               |
+| `occurredAt`             | File upload time in ISO 8601 format; unchanged on retries.                                                                  |
+| `data.id`                | Flare's file record ID.                                                                                                     |
+| `data.encrypted`         | `true` when a browser encrypted the file before upload. `false` for a plain file, including every token upload.             |
+| `data.name`              | File display name. `null` for an encrypted file.                                                                            |
+| `data.mimeType`          | File MIME type. `null` for an encrypted file.                                                                               |
+| `data.sizeBytes`         | Integer file size in bytes. For an encrypted file this is the size of the ciphertext.                                       |
+| `data.visibility`        | `PUBLIC` or `PRIVATE` at upload time.                                                                                       |
+| `data.passwordProtected` | Whether a password was set: a server password for a plain file, a password stanza for an encrypted one. Never the password. |
 
 [Download the complete JSON Schema](/file-ready-event.schema.json). Optional OCR runs separately; `file.ready` does not mean that OCR is complete, and Flare does not emit a separate OCR-completion event.
+
+### Version 2
+
+Flare sends version 2 of `file.ready` for every file from the release that added [encrypted files](/guide/encryption). A receiver cannot choose a version: there is one payload per event.
+
+What changed from version 1:
+
+- `version` is `2`.
+- `data.encrypted` is new and always present.
+- `data.name` and `data.mimeType` can be `null`. They are `null` exactly when `data.encrypted` is `true`. The server stores no name and no type for an encrypted file, so it has nothing to send. A receiver that needs the name needs the file's key, which Flare never has.
+- `data.sizeBytes` of an encrypted file is the ciphertext size: the file size plus 26 bytes and 32 bytes for every 64 KiB.
+- `data.passwordProtected` also covers the password of an encrypted file.
+
+An encrypted file's event looks like this:
+
+```json
+{
+  "version": 2,
+  "id": "file.ready:cm_example",
+  "type": "file.ready",
+  "occurredAt": "2026-11-10T12:00:00.000Z",
+  "data": {
+    "id": "cm_example",
+    "encrypted": true,
+    "name": null,
+    "mimeType": null,
+    "sizeBytes": 204890,
+    "visibility": "PUBLIC",
+    "passwordProtected": false
+  }
+}
+```
+
+**Update your receiver before you upgrade Flare** if it validates payloads strictly:
+
+1. Accept `version: 2` and the `data.encrypted` field. The version 1 schema forbids unknown fields, so a validator built from it rejects every version 2 event.
+2. Handle `null` in `data.name` and `data.mimeType`. Code such as `data.name.endsWith('.png')` throws on an encrypted file.
+3. Do not try to fetch an encrypted file's content with the event's ID and expect a readable file: the bytes are ciphertext.
+
+Deliveries that were queued before the upgrade are sent with the version 1 payload they were queued with, so for a short time a receiver can get both. The [JSON Schema](/file-ready-event.schema.json) accepts both versions (`oneOf`), and signing, retries, ordering and deduplication are the same for both. Test deliveries use version 2 with a plain example file.
 
 The payload does not contain file contents, storage paths, share URLs, passwords, OCR text, user account details, or presigned URLs. It is a metadata notification, not a download credential. `files:read` can list metadata in your account, but named tokens do not unlock private file downloads.
 

@@ -55,7 +55,7 @@ suite('file timeline against disposable PostgreSQL', () => {
     await prisma.user.deleteMany()
     for (const id of ['timeline-owner', 'timeline-other'])
       await prisma.user.create({
-        data: { id, name: id, urlId: id, uploadToken: id },
+        data: { id, name: id, urlId: id },
       })
     authentication.userId = 'timeline-owner'
   })

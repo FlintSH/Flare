@@ -347,3 +347,18 @@ export function headElements(html: string): HeadElement[] {
   }
   return elements
 }
+
+/**
+ * A script of the "Custom head" setting gets the nonce of this response, so
+ * the page's script policy lets it run, also from another origin
+ * (docs/e2ee-spec.md, section 13.1). A nonce typed into the setting is
+ * replaced: only this response's nonce works.
+ */
+export function withScriptNonce(
+  element: HeadElement,
+  nonce: string | null
+): HeadElement {
+  if (element.tag !== 'script') return element
+  const { nonce: _typed, ...props } = element.props
+  return { ...element, props: nonce ? { ...props, nonce } : props }
+}

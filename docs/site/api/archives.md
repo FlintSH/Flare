@@ -239,6 +239,8 @@ console.log(result.data.folderId, result.data.fileCount, result.data.totalBytes)
 
 Example success: `{ "success": true, "data": { "folderId": "NEW_FOLDER_ID", "fileCount": 1, "totalBytes": 42 } }`. The new wrapper contains the preserved archive hierarchy. Extraction does not overwrite an existing destination or change the source archive. A failed operation does not publish a partial set of file records.
 
+The wrapper and the folders below it are created with plain names, from `name` and the archive's paths. For an account with keys the owner's browser seals them afterwards ([folders with keys](./files#folders-with-keys)), and `GET /api/folders` then returns them with an empty `name`. The `409` for a wrapper name that a sibling already has compares plain names only: the server cannot read a sealed name. The dashboard checks sealed siblings before it sends the request; an API client that needs distinct names must keep track itself.
+
 ## Create a new archive
 
 ```js
@@ -318,6 +320,8 @@ console.log(archiveResult.data.file)
 ```
 
 ## Limits and publication
+
+**Encrypted files.** These endpoints read stored bytes, and the stored bytes of an [encrypted file](/guide/encryption) are ciphertext. A request that names an encrypted file as an archive or as a source gets `400` with `The server cannot read an encrypted file. Open it in a browser, which lists, extracts and creates archives of encrypted files itself.` The browser does that work with the file's key and calls none of these endpoints for it: it reads byte ranges of `GET /api/files/{urlId}/{fileId}` and uploads new encrypted files through the upload endpoints. See [archives that are encrypted files](/guide/archives#archives-that-are-encrypted-files).
 
 Browsing accepts ZIP (stored and deflated members, ZIP64, and archives with a prepended self-extractor), ustar, PAX, and GNU TAR, TAR.GZ/TGZ, and GZIP, including concatenated GZIP members. RAR, 7z, and split archives are unsupported. Encrypted entries, links, special files, sparse files, unsafe paths, and unsupported compression are listed with an `issue` rather than rejecting the archive. A normal Flare password on an owned archive is independent of archive encryption and does not prevent owner access through these routes.
 

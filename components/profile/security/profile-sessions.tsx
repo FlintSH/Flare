@@ -78,6 +78,7 @@ function methodName(method: string) {
     (
       {
         credentials: 'Password',
+        passphrase: 'Passphrase',
         recovery: 'Authenticator recovery',
         passkey: 'Passkey',
         'passkey-recovery': 'Passkey recovery',
@@ -399,7 +400,7 @@ function AccountSessions({ scope }: { scope: SessionScope }) {
           <p className="text-xs text-muted-foreground">
             History starts when this feature is installed. A failed attempt
             means someone tried to sign in to your account; it does not prove
-            they had your password. Provider-side SSO failures and attempts
+            they had your passphrase. Provider-side SSO failures and attempts
             blocked by rate limits may not appear.
           </p>
         </CardContent>

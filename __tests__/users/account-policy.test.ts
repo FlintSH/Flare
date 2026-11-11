@@ -14,7 +14,6 @@ import { isUrlIdDraft, urlIdSchema } from '@/lib/users/public-id'
 const admin = {
   name: 'admin',
   email: 'admin@example.test',
-  password: 'long-enough-password',
 }
 
 function firstError(result: {
@@ -63,10 +62,6 @@ describe('account passwords', () => {
         UpdateProfileSchema.safeParse({ newPassword: password }),
     ],
     [
-      'setup',
-      (password: string) => setupAdminSchema.safeParse({ ...admin, password }),
-    ],
-    [
       'the shared rule',
       (password: string) => accountPasswordSchema.safeParse(password),
     ],
@@ -82,10 +77,7 @@ describe('account passwords', () => {
       )
   })
 
-  it('keep the wording each form already showed for a short password', () => {
-    expect(
-      firstError(setupAdminSchema.safeParse({ ...admin, password: 'short' }))
-    ).toBe('Password must be at least 8 characters')
+  it('keep the wording of the shared rule for a short password', () => {
     expect(firstError(accountPasswordSchema.safeParse('short'))).toBe(
       'Too small: expected string to have >=8 characters'
     )

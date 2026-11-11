@@ -123,7 +123,7 @@ A fresh request to `/api/avatars/{filename}` returns `404` for a key no longer r
 
 ## OIDC sign-in loops or rejects an account
 
-Use `/auth/login?local=1` to reach password sign-in as a local administrator. Check the configured issuer's discovery URL and the provider redirect URI, which must be `https://your-host/api/auth/callback/oidc`.
+Use `/auth/login?local=1` to reach passphrase sign-in as a local administrator. Check the configured issuer's discovery URL and the provider redirect URI, which must be `https://your-host/api/auth/callback/oidc`.
 
 An **account already exists** error does not mean a user can link it by matching an email address. Local accounts remain local; existing OIDC accounts remain tied to the original issuer and subject. With auto-provisioning disabled, a manually created account with the same email is not a linked identity. [OIDC behavior and error guide](/admin/sso).
 
@@ -131,7 +131,7 @@ An **account already exists** error does not mean a user can link it by matching
 
 Open Settings → Email and inspect delivery status and sanitized errors. A message accepted by SMTP may still be in spam or rejected later by the provider. Check provider logs, sender authorization, credentials, TLS mode, and DNS mail authentication.
 
-Missing recovery mail can also be expected: recovery requires a verified address on a local password account. The public form does not disclose whether an address is eligible. An old account's saved address is not automatically proof of mailbox ownership.
+Missing recovery mail can also be expected: recovery requires a verified address on a local account, one with a passphrase or with a password from before passphrases. The public form does not disclose whether an address is eligible. An old account's saved address is not automatically proof of mailbox ownership.
 
 If a managed field cannot be edited, its environment override is active. If decryption errors started after redeployment, restore the original encryption key. For policy lockout, see [email recovery](/admin/email#recover-from-an-email-lockout).
 
@@ -140,6 +140,18 @@ If a managed field cannot be edited, its environment override is active. If decr
 Inspect delivery history under Profile → Integrations. Confirm the receiver returns a successful HTTP status promptly, accepts the actual payload, and validates the signature using the original raw body. Check its public HTTPS reachability and DNS results from the server's network.
 
 Private IPs and HTTP are denied unless the operator explicitly enables `FLARE_WEBHOOK_ALLOW_PRIVATE_NETWORK=true`. Redirecting a webhook URL is not a substitute for setting its final destination. If all existing webhooks fail after a secret change, check the encryption key before changing receiver signatures. [API and webhook documentation](/api/).
+
+## Text is not read from encrypted images
+
+The owner's browser reads encrypted images, not the server, so server logs show nothing about it. Check in this order:
+
+1. **Automatic OCR is on** in Settings → General. With it off, only **Extract text (OCR)** on one image reads it.
+2. **The owner has opened Flare with their keys unlocked** since the upload. A file from a screenshot tool waits for that.
+3. **The recognition files load.** In the browser's network panel, `/api/ocr/…/worker.min.js`, a `tesseract-core…wasm.js` file and `eng.traineddata.gz` must answer `200` from your own origin. A `404` means the image was built without the `tesseract.js` or `@tesseract.js-data/eng` package; rebuild from the repository's lockfile.
+4. **Nothing strips the worker's policy.** The browser console reports a Content Security Policy error when a proxy replaced the `Content-Security-Policy` header of `/api/ocr/` responses with a stricter one. The header Flare sends there allows script and connections from its own origin and WebAssembly compilation, and nothing else.
+5. **The file is small enough and of a readable kind.** Browsers read PNG, JPEG, WebP, GIF and BMP images up to 25 MB.
+
+After three failed tries on one file, browsers stop retrying it by themselves. The console of the owner's browser logs each failure with the file's ID and the reason.
 
 ## OCR, expiration, or delivery jobs seem delayed
 
@@ -181,14 +193,34 @@ Include the installed release/channel and commit when shown, deployment method, 
 
 Remove passwords, database URLs containing credentials, API/upload tokens, webhook secrets, private file links, and recovery links before posting. Report reproducible issues through the [Flare issue tracker](https://github.com/FlintSH/Flare/issues) or ask the community in [Discord](https://discord.gg/mwVAjKwPus).
 
+## Passphrase sign-in and encryption keys
+
+The [passphrase guide](/guide/passphrase#troubleshooting) lists what users see. These are the causes on the server side.
+
+**Every passphrase is refused, for every account.** Sign-in itself needs nothing from the proxy. Check the server log for database errors and the [attempt limits](/api/account-keys#errors-and-throttling): 30 attempts per account and 100 per client address in 15 minutes, shared with password attempts. Behind a proxy that hides client addresses, every visitor shares one address limit; configure the [client address headers](/hosting/reverse-proxy#client-addresses-and-rate-limits).
+
+**Passphrase changes and recovery fail with `The request signature is not valid`, while sign-in works.** Those two requests are signed over their method, path, and body. A proxy that adds or strips a path prefix, or decodes and re-encodes the path, makes Flare verify other text than the browser signed. [Pass request paths through unchanged](/hosting/reverse-proxy#pass-request-paths-through-unchanged). A proxy or middleware that rewrites JSON bodies breaks them the same way.
+
+**The sign-in button stays on Deriving your keys.** The browser stretches the passphrase in a Web Worker with WebAssembly and 64 MiB of memory. A `Content-Security-Policy` added by your proxy must allow workers and WebAssembly from Flare's own origin (`worker-src 'self'`, and `'wasm-unsafe-eval'` in `script-src`). A browser with WebAssembly turned off cannot sign in with a passphrase.
+
+**The strength check could not load.** The word lists are separate script files under `/_next/static/`. Check that the proxy and any cache serve them, and that a deploy did not leave an old page pointing at files of a removed build; reloading the page fixes the second case.
+
+**Set up encryption keeps saying the sign-in is more than five minutes old.** The server compares the sign-in time with its own clock. Synchronize the clocks of every replica.
+
+**A user lost the passphrase.** You cannot set or read it. With recovery by email enabled and a verified address, the user [resets it from an emailed link](/guide/passphrase#forgot-your-passphrase), with the recovery phrase to keep access to encrypted files or without it to keep only the account. Without email recovery, enable it, or the account stays closed. An account that never set up keys still has a password, which **Users → Edit** can replace.
+
+**A user changed the passphrase and tools stopped uploading.** That is the design: new keys cancel every API token and the upload token from before encryption, and a configuration pins the old account key. The user [creates new configurations](/guide/screenshot-tools#create-a-configuration).
+
+**Screenshot tools answer `403` after an upgrade or a settings change.** The message names the reason. `plain_uploads_forbidden`: **Forbid plain uploads** is on, and configurations from before encryption can only send plain files. `profile_requires_encrypted` or `profile_requires_plain`: the tool does not match the Encryption setting of its upload profile. `token_predates_encryption`: an old token tried an encrypted upload. In each case the person creates a new configuration; see [old configurations](/guide/screenshot-tools#old-configurations).
+
 ## Authenticator and passkey sign-in
 
-For rejected authenticator codes, check the device's automatic time, the account/instance entry in the authenticator, and whether the code was already used. Rate limits and expired setup/challenge state require waiting or starting the action again. Use an unused recovery code or registered passkey if available. Password recovery and `FLARE_EMAIL_ENABLED=false` do not disable two-factor authentication.
+For rejected authenticator codes, check the device's automatic time, the account/instance entry in the authenticator, and whether the code was already used. Rate limits and expired setup/challenge state require waiting or starting the action again. Use an unused recovery code or registered passkey if available. Passphrase recovery by email and `FLARE_EMAIL_ENABLED=false` do not disable two-factor authentication.
 
 For passkeys, confirm the browser is using the canonical HTTPS origin in `NEXTAUTH_URL`, and that the passkey was registered on its hostname. The proxy must preserve the public origin. A renamed hostname needs newly registered passkeys; a production credential cannot be exercised on an unrelated local restore URL. Cancelling a device prompt is recoverable by retrying or choosing another method.
 
-If an account explicitly requires passkeys, correct passwords, authenticator codes, and SSO are intentionally rejected. Use a registered passkey or **Use a passkey recovery code** with the account's current email and an unused dedicated code. These codes are separate from password-plus-authenticator recovery codes and need no password. Successful emergency recovery keeps the requirement on and gives five minutes to add a key, replace the dedicated codes, or choose **Allow other sign-in methods**. Password reset, an administrator email/password edit, and `FLARE_EMAIL_ENABLED=false` do not remove the requirement. A last-key removal is refused while it remains enabled.
+If an account explicitly requires passkeys, correct passphrases, authenticator codes, and SSO are intentionally rejected. Use a registered passkey or **Use a passkey recovery code** with the account's current email and an unused dedicated code. These codes are separate from authenticator recovery codes and need no passphrase. Successful emergency recovery keeps the requirement on and gives five minutes to add a key, replace the dedicated codes, or choose **Allow other sign-in methods**. Password reset, an administrator email/password edit, and `FLARE_EMAIL_ENABLED=false` do not remove the requirement. A last-key removal is refused while it remains enabled.
 
 Dedicated recovery matches email addresses case-insensitively. If an unused dedicated code is rejected, check for legacy accounts whose addresses differ only by capitalization. An ambiguous address is rejected without spending the code; the public error does not disclose that collision. Follow the [administrator address-collision guidance](/admin/users#account-sign-in-security) to establish distinct addresses for the separate accounts. A working registered passkey remains an option while the collision is investigated.
 
-If a deployment made existing authenticators unreadable, restore the matching `NEXTAUTH_SECRET` rather than changing factor records ad hoc. A dedicated `FLARE_EMAIL_ENCRYPTION_KEY` does not recover authenticators encrypted under another session secret. Recovery hashes do not require that encryption key: use password plus an authenticator recovery code when the passkey requirement is off, or a dedicated passkey recovery code when it is on. A registered passkey also remains an option. Either eligible recovery sign-in supplies five minutes of fresh proof, so even the last matching code can begin repair without spending a second code. Re-enroll the authenticator under the intended stable key. If all permitted methods and matching recovery codes are lost, there is no dashboard bypass: investigate with the operator under your instance's account-recovery process. See the [user recovery guide](/guide/security#recover-when-required-passkeys-are-unavailable) and [operator migration guidance](./maintenance#two-factor-authentication-and-passkey-migration).
+If a deployment made existing authenticators unreadable, restore the matching `NEXTAUTH_SECRET` rather than changing factor records ad hoc. A dedicated `FLARE_EMAIL_ENCRYPTION_KEY` does not recover authenticators encrypted under another session secret. Recovery hashes do not require that encryption key: use the passphrase plus an authenticator recovery code when the passkey requirement is off, or a dedicated passkey recovery code when it is on. A registered passkey also remains an option. Either eligible recovery sign-in supplies five minutes of fresh proof, so even the last matching code can begin repair without spending a second code. Re-enroll the authenticator under the intended stable key. If all permitted methods and matching recovery codes are lost, there is no dashboard bypass: investigate with the operator under your instance's account-recovery process. See the [user recovery guide](/guide/security#recover-when-required-passkeys-are-unavailable) and [operator migration guidance](./maintenance#two-factor-authentication-and-passkey-migration).

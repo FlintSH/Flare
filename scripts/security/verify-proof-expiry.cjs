@@ -11,6 +11,7 @@ const {
   expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
 const sharp = require('../../docs/site/node_modules/sharp')
+const { submitSignIn } = require('../shared/passphrase-accounts.cjs')
 const expect = baseExpect.configure({ timeout: 15000 })
 
 const origin = process.env.FLARE_SECURITY_TEST_ORIGIN || 'http://localhost:3061'
@@ -21,8 +22,8 @@ if (target.hostname !== 'localhost' || target.protocol !== 'http:') {
   )
 }
 const secret = 'public-disposable-security-demo-secret-2026-only'
-const originalPassword = 'Security-demo-only-2026!'
-const replacementPassword = 'Security-demo-expiry-only-2026!'
+// The seed gives the fixture account keys: this is its passphrase.
+const passphrase = 'Security-demo-only-2026!'
 const originalEmail = 'security-demo-alex@example.test'
 const replacementEmail = 'security-demo-alex-expiry@example.test'
 const screenshotDirectory = process.env.FLARE_SECURITY_SCREENSHOTS
@@ -61,12 +62,14 @@ async function main() {
       )
       return response.json()
     }
-    async function login(email, password, code) {
+    async function login(email, code) {
       await context.clearCookies()
-      await page.goto(origin + '/auth/login?local=1')
-      await page.getByLabel('Email address', { exact: true }).fill(email)
-      await page.getByLabel('Password', { exact: true }).fill(password)
-      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+      const method = await submitSignIn(page, expect, {
+        origin,
+        email,
+        secret: passphrase,
+      })
+      assert.equal(method, 'passphrase', 'The fixture account has keys')
       if (code) {
         await page
           .getByRole('button', { name: 'Use a recovery code', exact: true })
@@ -108,10 +111,9 @@ async function main() {
       })
       await context.addCookies([{ ...cookie, value }])
       // This request verifies real server expiry without changing the mounted UI cache.
-      assert.equal(
-        (await api('/api/auth/security')).canUseRecentRecovery,
-        false
-      )
+      const status = await api('/api/auth/security')
+      assert.equal(status.canUseRecentRecovery, false)
+      assert.equal(status.canUseRecentPassphrase, false)
     }
     async function successfulSave(button) {
       const response = page.waitForResponse(
@@ -124,16 +126,15 @@ async function main() {
       await page.waitForURL('**/auth/login*')
     }
 
-    await login(originalEmail, originalPassword)
+    await login(originalEmail)
     const initial = await api('/api/auth/security')
     assert.equal(
       initial.twoFactorEnabled,
       false,
       'Run scripts/security/seed.cjs before this regression check'
     )
-    const setup = await api('/api/auth/security/totp/setup', {
-      password: originalPassword,
-    })
+    // The passphrase sign-in of a moment ago is the proof: no secret is sent.
+    const setup = await api('/api/auth/security/totp/setup', {})
     const enrollment = await api('/api/auth/security/totp/enable', {
       challengeId: setup.challengeId,
       code: new TOTP({
@@ -144,63 +145,18 @@ async function main() {
       }).generate(),
     })
 
-    await login(originalEmail, originalPassword, enrollment.recoveryCodes[0])
+    await login(originalEmail, enrollment.recoveryCodes[0])
     await profile()
-    const passwordForm = page.locator('#password form')
-    await expect(passwordForm).toContainText(
-      'Your recent recovery code sign-in'
-    )
+    // An account with keys has no password form to expire: its passphrase
+    // changes by key rotation, which is signed and needs no recent sign-in
+    // (scripts/e2ee/verify-ui.cjs covers it).
+    const passphraseCard = page.locator('#password')
+    await expect(passphraseCard).toContainText('Passphrase and recovery')
     await expect(
-      passwordForm.getByLabel('Authenticator or recovery code', { exact: true })
-    ).toHaveCount(0)
-    await passwordForm
-      .getByLabel('Current password', { exact: true })
-      .fill(originalPassword)
-    await passwordForm
-      .getByLabel('New password', { exact: true })
-      .fill(replacementPassword)
-    await passwordForm
-      .getByLabel('Confirm new password', { exact: true })
-      .fill(replacementPassword)
-    await expireExistingProof()
-    await passwordForm
-      .getByRole('button', { name: 'Update password', exact: true })
-      .click()
-    await expect(passwordForm.getByRole('alert')).toContainText(
-      'Enter an authenticator or recovery code to continue.'
-    )
-    await expect(
-      passwordForm.getByLabel('Authenticator or recovery code', { exact: true })
+      passphraseCard.getByRole('button', { name: 'Change passphrase' })
     ).toBeVisible()
-    assert.equal(
-      mutations.length,
-      0,
-      'Expired proof must reveal the code field before any password mutation'
-    )
-    await expect(
-      passwordForm.getByLabel('New password', { exact: true })
-    ).toHaveValue(replacementPassword)
-    if (screenshotDirectory) {
-      await mkdir(screenshotDirectory, { recursive: true })
-      const bytes = await page.locator('#password').screenshot({
-        animations: 'disabled',
-        maskColor: '#374151',
-        mask: [passwordForm.locator('input[type="password"]')],
-      })
-      await sharp(bytes)
-        .webp({ quality: 88 })
-        .toFile(path.join(screenshotDirectory, 'proof-expired.webp'))
-    }
-    await passwordForm
-      .getByLabel('Authenticator or recovery code', { exact: true })
-      .fill(enrollment.recoveryCodes[1])
-    await successfulSave(
-      passwordForm.getByRole('button', { name: 'Update password', exact: true })
-    )
-    assert.equal(mutations.length, 1)
+    await expect(passphraseCard.locator('input')).toHaveCount(0)
 
-    await login(originalEmail, replacementPassword, enrollment.recoveryCodes[2])
-    await profile()
     const accountForm = page
       .locator('form')
       .filter({ has: page.locator('#username') })
@@ -208,46 +164,64 @@ async function main() {
       .getByLabel('Email', { exact: true })
       .fill(replacementEmail)
     await expect(accountForm).toContainText('Your recent recovery code sign-in')
-    await expect(
-      accountForm.getByLabel('Current password', { exact: true })
-    ).toHaveCount(0)
+    const emailConfirmation = accountForm.locator(
+      '[data-passphrase-confirmation]'
+    )
+    await expect(emailConfirmation).toHaveCount(0)
     await expireExistingProof()
     await accountForm
       .getByRole('button', { name: 'Save changes', exact: true })
       .click()
-    await expect(accountForm.getByRole('alert')).toContainText(
-      'Enter your current password to continue.'
+    await expect(accountForm.getByRole('alert').first()).toContainText(
+      'Confirm your passphrase to continue.'
     )
+    await expect(emailConfirmation).toBeVisible()
     await expect(
-      accountForm.getByLabel('Current password', { exact: true })
-    ).toBeVisible()
-    await expect(
-      accountForm.getByLabel('Authenticator or recovery code', { exact: true })
+      emailConfirmation.getByLabel('Authenticator or recovery code', {
+        exact: true,
+      })
     ).toBeVisible()
     assert.equal(
       mutations.length,
-      1,
-      'Expired proof must reveal email proof fields before any email mutation'
+      0,
+      'Expired proof must reveal the passphrase confirmation before any email mutation'
     )
     await expect(accountForm.getByLabel('Email', { exact: true })).toHaveValue(
       replacementEmail
     )
-    await accountForm
-      .getByLabel('Current password', { exact: true })
-      .fill(replacementPassword)
-    await accountForm
+    if (screenshotDirectory) {
+      await mkdir(screenshotDirectory, { recursive: true })
+      const bytes = await accountForm.screenshot({
+        animations: 'disabled',
+        maskColor: '#374151',
+        mask: [emailConfirmation.locator('input')],
+      })
+      await sharp(bytes)
+        .webp({ quality: 88 })
+        .toFile(path.join(screenshotDirectory, 'proof-expired.webp'))
+    }
+    // The confirmation is a real passphrase sign-in in place. It spends the
+    // recovery code, and the session it leaves is the fresh proof.
+    await emailConfirmation
+      .getByLabel('Passphrase', { exact: true })
+      .fill(passphrase)
+    await emailConfirmation
       .getByLabel('Authenticator or recovery code', { exact: true })
-      .fill(enrollment.recoveryCodes[3])
+      .fill(enrollment.recoveryCodes[1])
+    await emailConfirmation
+      .getByRole('button', { name: 'Confirm passphrase', exact: true })
+      .click()
+    await expect(emailConfirmation).toHaveCount(0)
+    assert.equal(mutations.length, 0)
+    await expect(accountForm.getByLabel('Email', { exact: true })).toHaveValue(
+      replacementEmail
+    )
     await successfulSave(
       accountForm.getByRole('button', { name: 'Save changes', exact: true })
     )
-    assert.equal(mutations.length, 2)
+    assert.equal(mutations.length, 1)
 
-    await login(
-      replacementEmail,
-      replacementPassword,
-      enrollment.recoveryCodes[4]
-    )
+    await login(replacementEmail, enrollment.recoveryCodes[2])
     const optionalSecurity = await api('/api/auth/security')
     assert.equal(optionalSecurity.passkeyRequired, false)
     assert.equal(optionalSecurity.passkeysAvailable, true)
@@ -271,9 +245,8 @@ async function main() {
     const dialog = page.getByRole('dialog')
     const passkeyName = 'Proof expiry demonstration key'
     await expect(dialog).toContainText('Your recent recovery code sign-in')
-    await expect(
-      dialog.getByLabel('Current password', { exact: true })
-    ).toHaveCount(0)
+    const dialogConfirmation = dialog.locator('[data-passphrase-confirmation]')
+    await expect(dialogConfirmation).toHaveCount(0)
     await expect(
       dialog.getByLabel('Authenticator code', { exact: true })
     ).toHaveCount(0)
@@ -282,32 +255,37 @@ async function main() {
     await dialog
       .getByRole('button', { name: 'Create passkey', exact: true })
       .click()
-    await expect(dialog.getByRole('alert')).toContainText(
-      'Enter your current password to continue.'
+    await expect(dialog.getByRole('alert').first()).toContainText(
+      'Confirm your passphrase to continue.'
     )
+    await expect(dialogConfirmation).toBeVisible()
     await expect(
-      dialog.getByLabel('Current password', { exact: true })
-    ).toBeVisible()
-    await expect(
-      dialog.getByLabel('Authenticator code', { exact: true })
+      dialogConfirmation.getByLabel('Authenticator or recovery code', {
+        exact: true,
+      })
     ).toBeVisible()
     assert.equal(
       securityMutations.length,
       0,
-      'Expired dialog proof must restore password/code fields before any security mutation'
+      'Expired dialog proof must restore the passphrase confirmation before any security mutation'
     )
     await expect(
       dialog.getByLabel('Passkey name', { exact: true })
     ).toHaveValue(passkeyName)
-    await dialog
-      .getByLabel('Current password', { exact: true })
-      .fill(replacementPassword)
-    await dialog
-      .getByRole('button', { name: 'Use a recovery code', exact: true })
+    await dialogConfirmation
+      .getByLabel('Passphrase', { exact: true })
+      .fill(passphrase)
+    await dialogConfirmation
+      .getByLabel('Authenticator or recovery code', { exact: true })
+      .fill(enrollment.recoveryCodes[3])
+    await dialogConfirmation
+      .getByRole('button', { name: 'Confirm passphrase', exact: true })
       .click()
-    await dialog
-      .getByLabel('Recovery code', { exact: true })
-      .fill(enrollment.recoveryCodes[5])
+    await expect(dialogConfirmation).toHaveCount(0)
+    assert.equal(securityMutations.length, 0)
+    await expect(
+      dialog.getByLabel('Passkey name', { exact: true })
+    ).toHaveValue(passkeyName)
     const registrationResponses = Promise.all(
       [
         '/api/auth/security/passkeys/options',
@@ -336,18 +314,14 @@ async function main() {
       .getByRole('button', { name: 'Sign in again', exact: true })
       .click()
     await page.waitForURL('**/auth/login*')
-    await login(
-      replacementEmail,
-      replacementPassword,
-      enrollment.recoveryCodes[6]
-    )
+    await login(replacementEmail, enrollment.recoveryCodes[4])
     const savedSecurity = await api('/api/auth/security')
     assert.equal(savedSecurity.passkeyRequired, false)
     assert.ok(
       savedSecurity.passkeys.some((passkey) => passkey.name === passkeyName)
     )
     console.log(
-      'PASS: controlled proof expiry restores password/email/dialog proof fields before mutations; entered values survive and all three real retries succeed, including WebAuthn registration.'
+      'PASS: controlled proof expiry reveals the passphrase confirmation in the email form and the passkey dialog before any mutation; entered values survive, each real confirmation spends a recovery code, and both retries succeed, including WebAuthn registration. An account with keys has no password form to expire.'
     )
   } finally {
     await context.close()

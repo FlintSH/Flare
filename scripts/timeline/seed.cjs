@@ -5,6 +5,7 @@ const { mkdir, writeFile, link, unlink } = require('node:fs/promises')
 const path = require('node:path')
 const { PrismaClient } = require('@prisma/client')
 const { hash } = require('bcryptjs')
+const { createAccountRecord } = require('../shared/passphrase-accounts.cjs')
 const sharp = require('../../docs/site/node_modules/sharp')
 
 const database = new URL(process.env.DATABASE_URL)
@@ -98,7 +99,6 @@ async function main() {
   await prisma.user.deleteMany({
     where: { id: { in: [userId, otherUserId] } },
   })
-  const password = await hash('Timeline-demo-only-2026!', 10)
   for (const [id, name] of [
     [userId, 'Alex Morgan'],
     [otherUserId, 'Jamie Rivera'],
@@ -108,10 +108,10 @@ async function main() {
         id,
         name,
         email: `${id}@example.test`,
-        password,
+        // An account with keys: the fixture secret is its passphrase.
+        ...(await createAccountRecord('Timeline-demo-only-2026!')).columns,
         roles: { connect: { systemKey: 'administrator' } },
         urlId: id,
-        uploadToken: `${id}-public-disposable-upload-token`,
       },
     })
   }

@@ -90,13 +90,22 @@ export function verificationDeadline(
   return graceEndsAt
 }
 
+/**
+ * Whether a reset link can go to this account: it has a local sign-in
+ * secret, which is a password hash or, once it has keys, the public key of
+ * its passphrase. An account with neither signs in through SSO or a passkey
+ * only, and a link never gives it a local secret.
+ */
 export function canRecoverPassword(
-  user: EmailPolicyUser & { password: string | null },
+  user: EmailPolicyUser & {
+    password: string | null
+    authPublicKey: Uint8Array | null
+  },
   config: EmailConfig
 ) {
   return (
     emailLinkAvailable(config, 'reset') &&
-    Boolean(user.password) &&
+    Boolean(user.password || user.authPublicKey) &&
     hasVerifiedEmail(user, config)
   )
 }

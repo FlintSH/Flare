@@ -198,7 +198,7 @@ export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
 node scripts/timeline/verify-ui.cjs
 ```
 
-The demonstration account is `timeline-demo-alex@example.test` with the deliberately public password `Timeline-demo-only-2026!`. The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a hosted Meticulous run or a benchmark of production storage.
+The demonstration account is `timeline-demo-alex@example.test` with the deliberately public passphrase `Timeline-demo-only-2026!`; the seed creates both accounts [with keys](#how-the-browser-suites-sign-in). The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a hosted Meticulous run or a benchmark of production storage.
 
 The browser checks cover direct date jumps, bounded mounted cards and file requests, one shared height for cards and loading placeholders whether or not files have tags or a folder, no repeated folder label inside that folder, selection and archive inputs across scrolling, fresh bulk-tag membership after a real external API change, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure and the separate archive-input and current-tag membership regressions. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
 
@@ -292,7 +292,7 @@ node scripts/archives/seed.cjs
 node scripts/archives/verify-ui.cjs
 ```
 
-The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with password `Archive-demo-only-2026!`. The seed also raises the disposable instance's upload limit to 4 GB for the optional large-archive checks. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
+The public fixtures are `archive-demo-alex@example.test` and `archive-demo-jamie@example.test`, both with the passphrase `Archive-demo-only-2026!`; the seed creates them [with keys](#how-the-browser-suites-sign-in). The suite writes its destination folder and its tag to the database with plain names, as an installation from before encryption has them, because the server refuses a plain name from an account with keys; the browser seals them during the run, so the checks read folder names from the page. The seed also raises the disposable instance's upload limit to 4 GB for the optional large-archive checks. Reseed before repeating the browser suite. It verifies nested extraction, empty directories, exact downloaded content, unchanged originals, default private output, explicit profile visibility/tags/expiration, TAR.GZ creation, and ownership/session/origin failures. Shared reads separately check anonymous access, protected/private boundaries, body-only passwords on the archive routes, and exact entry downloads. It checks library dialogs and shared browsing at 390px wide and displays a real malformed-archive error. No remote storage provider is involved.
 
 Set `FLARE_ARCHIVE_SCREENSHOTS` and `FLARE_ARCHIVE_VIDEOS` to separate temporary output directories to capture evidence. The primary recordings are `archive-browse-extract.webm`, `archive-create.webm`, and `archive-share-browse.webm`; inspect generated screenshots and recordings before replacing sources in `docs/images/archives/` and `.github/assets/archives/`. The shared recording uses an anonymous, unprotected public archive. Protected-file checks produce separate stills; do not capture password values or credential-bearing URLs. Preserve written transcripts in [Demos](/demos), and keep failed or incidental recordings out of Git. `FLARE_ARCHIVE_TEST_ORIGIN` can override the default `http://localhost:3062`, but must remain a disposable HTTP `localhost` origin matching the running app's `NEXTAUTH_URL`.
 
@@ -354,24 +354,23 @@ node scripts/security/seed.cjs
 node scripts/security/verify-ui.cjs
 ```
 
-The fixture emails are `security-demo-alex@example.test` and `security-demo-jamie@example.test`; both use the deliberately public password `Security-demo-only-2026!`. The browser checks use real requests to enroll an authenticator, require a second factor at login, consume and reject reused authenticator recovery codes, replace codes, disable 2FA, register and use a passkey, rename/remove it, reject assertion replay and removed credentials, reject bearer/origin misuse, and invalidate old sessions. The required-passkey flow additionally blocks the correct password, refuses last-key removal, signs in with dedicated emergency codes without a password, rejects their reuse and replaced sets, and restores password sign-in only after an explicit disable operation. The ordinary browser run uses a 390 × 844 viewport for recovery and replacement flows. Recordings keep a stable desktop viewport; separate mobile stills use the same 390px width with extra height so the complete controls remain visible. A fresh TOTP time step may require waiting up to 30 seconds. Run the seed again before repeating the suite.
+The fixture emails are `security-demo-alex@example.test` and `security-demo-jamie@example.test`; both use the deliberately public passphrase `Security-demo-only-2026!`, and the seed creates them [with keys](#how-the-browser-suites-sign-in). The browser checks use real requests to enroll an authenticator, require a second factor at login, consume and reject reused authenticator recovery codes, replace codes, disable 2FA, register and use a passkey, rename/remove it, reject assertion replay and removed credentials, reject bearer/origin misuse, and invalidate old sessions. The required-passkey flow additionally blocks the correct passphrase, checks that the form then returns to the step with the passkey button, refuses last-key removal, signs in with dedicated emergency codes without a passphrase, rejects their reuse and replaced sets, and restores passphrase sign-in only after an explicit disable operation. A passkey or an emergency code gives the browser no secret, so each such sign-in ends with the keys locked: the script waits for the unlock prompt and chooses **Not now**. No dialog of this run asks for a password, because every change follows a sign-in of the last five minutes. The ordinary browser run uses a 390 × 844 viewport for recovery and replacement flows. Recordings keep a stable desktop viewport; separate mobile stills use the same 390px width with extra height so the complete controls remain visible. A fresh TOTP time step may require waiting up to 30 seconds. Run the seed again before repeating the suite.
 
 To refresh visual evidence, set `FLARE_SECURITY_SCREENSHOTS` to an output directory and `FLARE_SECURITY_VIDEOS` to a separate temporary directory before running the browser script. It captures screenshots as WebP and three completed walkthroughs as `two-factor-demo.webm`, `passkey-demo.webm`, and `passkey-required-demo.webm`. Secrets are hidden by capture-only CSS installed before application scripts: QR codes, manual keys, both recovery-code sets, and sensitive inputs never appear in recorded frames. The capture CSS does not alter the shipped UI. Inspect every resulting image and recording before replacing the canonical sources in `docs/images/security/` and `.github/assets/security/`. Include updated written transcripts in the guide and [demos](/demos). Keep temporary browser output and failed recordings out of Git.
 
-To check a recent sign-in expiring while password/email edits or an **Add a passkey** dialog remain open, run this separate regression after reseeding:
+To check a recent sign-in expiring while an email edit or an **Add a passkey** dialog remains open, run this separate regression after reseeding:
 
 ```sh
 node scripts/security/seed.cjs
 node scripts/security/verify-proof-expiry.cjs
 ```
 
-This check uses the exact public demonstration secret above and an HTTP `localhost` origin. It performs real authenticator enrollment and recovery sign-in, then adjusts only the demonstration session's authentication timestamp to just beyond five minutes. Server responses are real; elapsed time is controlled. It exercises three open forms:
+This check uses the exact public demonstration secret above and an HTTP `localhost` origin. It performs real authenticator enrollment and a passphrase sign-in with a recovery code, then adjusts only the demonstration session's authentication timestamp to just beyond five minutes. Server responses are real; elapsed time is controlled. An account with keys has no password form to expire: its passphrase changes by key rotation, which the [account key browser checks](#account-key-browser-checks) cover. The check confirms that the **Passphrase and recovery** card has no proof field, then exercises two open forms:
 
-1. Enter password changes, expire the recent recovery proof, submit, and verify the code prompt appears without a profile mutation. Complete the proof and verify the password change succeeds.
-2. Repeat for a plain email change, verifying the entered address remains and no update is sent before the restored proof fields are completed.
-3. Open **Add a passkey** and enter a name while recovery proof is fresh. Expire that proof while the dialog stays open. Verify the name remains, password/code controls appear, and no security mutation is sent. Complete the proof and the virtual authenticator's real WebAuthn registration, then verify the saved passkey retains its name.
+1. Enter a plain email change while the recovery proof is fresh, expire that proof, and submit. Verify that the passphrase confirmation appears with its code field, the entered address remains, and no profile update is sent. Confirm with the passphrase and an unused recovery code, which is a real sign-in in place, and verify that the change then succeeds.
+2. Open **Add a passkey** and enter a name while recovery proof is fresh. Expire that proof while the dialog stays open and submit. Verify that the passphrase confirmation appears, the name remains, and no security mutation is sent. Confirm with the passphrase and another recovery code, verify that the name is still there, then complete the virtual authenticator's real WebAuthn registration and verify that the saved passkey has that name.
 
-Optional `FLARE_SECURITY_SCREENSHOTS` output includes `proof-expired.webp` with password values masked. The check changes Alex's email/password and registers a passkey; reseed before another suite or demo run.
+Optional `FLARE_SECURITY_SCREENSHOTS` output includes `proof-expired.webp`, the account form with the passphrase confirmation open and its fields masked. The check changes Alex's email, spends five recovery codes, and registers a passkey; reseed before another suite or demo run.
 
 For the separate authentication database regression suite, create and migrate a disposable local database named exactly `flare_security_test_local` (or `flare_security_test_ci` for CI), then run:
 
@@ -382,6 +381,240 @@ pnpm exec vitest run __tests__/auth/security-database.test.ts
 ```
 
 Without that variable the database suite is skipped. The guard accepts only PostgreSQL URLs on `localhost` or `127.0.0.1`, using one of the two exact database names above and either no `schema` parameter or a single `schema=public`. Other URL query parameters are rejected. CI supplies its dedicated database. These tests cover atomic redemption for both code sets, stale-session fences, enrollment, encrypted secret handling, required-passkey transitions and fallback guards, and recovery for local and SSO-only accounts. They complement the browser ceremonies; neither substitutes for testing actual platform authenticators or a live identity provider.
+
+The account key and passphrase sign-in suite uses its own database, named exactly `flare_e2ee_test_local` (or `flare_e2ee_test_ci` for CI), because it deletes every account between tests:
+
+```sh
+export FLARE_E2EE_DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_test_local'
+DATABASE_URL="$FLARE_E2EE_DATABASE_URL" pnpm exec prisma migrate deploy
+pnpm exec vitest run __tests__/auth/e2ee-database.test.ts
+```
+
+Without that variable the suite is skipped. It calls the real route handlers and the real NextAuth authorizers against PostgreSQL and signs every proof with the `lib/e2ee` library, as a browser does. It covers the [account key contracts](/api/account-keys): the salt and challenge request for known and unknown identifiers, passphrase sign-in with its second factor and limits, unlock, key setup, rotation with one proof missing, the keyring, recovery, reset, and the password routes that refuse an account with keys. It skips Argon2id, whose input and output never reach the server; `__tests__/e2ee` covers it with the test vectors.
+
+### Account key browser checks
+
+`scripts/e2ee/verify-ui.cjs` drives the [passphrase flows](/guide/passphrase) in headless Chromium against a production build. Unlike the suites above it has no seed: it starts with first-run setup, so it needs an **empty** database. Use a disposable one, and a fresh one for every run:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_ui_local'
+export NEXTAUTH_URL='http://localhost:3091'
+export NEXTAUTH_SECRET='public-disposable-e2ee-ui-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3091
+```
+
+In another terminal, with the documentation dependencies installed for Playwright:
+
+```sh
+node scripts/e2ee/verify-ui.cjs
+```
+
+One run takes three to five minutes, most of it waiting for fresh authenticator time steps and for the 30-second pause between two emails to one address. It covers, with real requests:
+
+- first-run setup with a weak passphrase, a mismatch, the recovery phrase, and three wrong words typed back;
+- sign-out, sign-in with the address first, an unknown address, a wrong passphrase, and an address in upper case;
+- registration, with and without an invite link;
+- accounts that an administrator created with a temporary password: the password form, the closed dashboard, keeping a strong password, replacing a weak one;
+- unlock in a browser whose IndexedDB was deleted, and in a second tab;
+- an authenticator turned on through the real dialog, and the sign-in with its code;
+- showing the recovery phrase, and a passphrase change with a named API token that must stop working;
+- recovery with the recovery phrase and reset without it, both from links that a local SMTP sink inside the script receives;
+- the administrator's user dialog and the sign-in history;
+- a passkey registered with the recent passphrase sign-in as proof, and the sign-in with it: a session, an empty key store, the locked notice, the unlock prompt opening by itself, a wrong passphrase, the right one, and a second tab;
+- the passkey requirement: the right passphrase refused with the form back at the passkey step, a passkey recovery code that signs in once and leaves the browser locked until the passphrase unlocks it, and passphrase sign-in again after the requirement is turned off;
+- SSO for a new account, which can open only key setup, has no password to keep, and must choose a strong passphrase and save a recovery phrase, and SSO for that account afterwards, which ends locked with the unlock prompt and asks for the passphrase in an identity check.
+
+After every unlock it reads the IndexedDB record and compares it with keys that the script derives from the recovery phrase with its own code: the account private key, and the old keys of the keyring after a rotation, a recovery, and a reset.
+
+**The run fails if any request carried a secret.** It records every request of every page, about 3,400 of them, and searches each URL, header set, and body for every passphrase and recovery phrase of the run and for the hexadecimal, base64url, and base64 forms of `root_entropy`, the account, exchange, and keyring keys, and of `passphrase_root`, `auth_private_key`, and `wrap_key` for every passphrase with every salt that appeared. The script derives those values again with `hash-wasm`, `@noble/hashes`, and `@scure/bip39` directly, not with the application bundle. One request is allowed to carry a secret, because it always did: the password sign-in of an account that has no keys yet may carry that account's password, until the password becomes a passphrase. The search finds those, which shows that it can fail.
+
+Two steps fake a server answer, and their results say `SIMULATED`:
+
+- Key setup with a sign-in older than five minutes gets a fabricated `403` with `recent_sign_in_required`, so the run does not wait five minutes. Set `FLARE_E2EE_REAL_STALE=true` to wait for the real answer.
+- The identity check after the five-minute window gets a status answer with `canUseRecentPassphrase` set to `false`. The confirmation that follows is a real passphrase sign-in.
+
+The database suite above covers both rules on the server.
+
+Two stand-ins replace things that a script cannot hold. Both are named in the results:
+
+- **The passkey device** is Chromium's virtual authenticator. Registration and sign-in are real WebAuthn ceremonies against the server. No native biometric prompt is shown or tested.
+- **The identity provider** is `scripts/e2ee/oidc-issuer.cjs`, an OpenID Connect issuer that the script starts on a loopback port and turns on in the instance's SSO settings for the two SSO steps. It serves discovery, the authorization code flow with PKCE, RS256 ID tokens signed with a key made at start, JWKS, and userinfo, and has no sign-in page: it answers as the person the script named. Flare's side of the flow is real. It says nothing about a particular provider, its claims, or its availability. It takes any free loopback port, and so does the suite's SMTP sink; `FLARE_E2EE_OIDC_PORT` and `FLARE_E2EE_SMTP_PORT` give them fixed ones.
+
+Set `FLARE_E2EE_SCREENSHOTS` to a temporary directory to capture each screen and state as PNG, `FLARE_E2EE_VIEWPORT=mobile` for a 390×844 viewport, and `FLARE_E2EE_THEME=light` for the light theme. Every file name carries its viewport and theme. Set `FLARE_E2EE_CONCEAL=true` to hide the words of every recovery phrase with capture-only CSS, which is how the images under `docs/images/encryption/` and the refreshed setup and invite images were made; the passphrase fields are masked by the browser. Inspect each image before replacing a canonical source. The script prints how long each key derivation took, measured from the request before it to the request after it. `FLARE_E2EE_TEST_ORIGIN` selects another `localhost` origin.
+
+The client key layer has unit tests that need no database:
+
+```sh
+pnpm exec vitest run __tests__/e2ee/client
+```
+
+They check Argon2id through WebAssembly against the real-parameter vector and the other passphrase vectors of `lib/e2ee/vectors/v1.json` and against the pure JavaScript implementation, the state machine of the key store, the signed request against the server's verifier, rotation and recovery material, and the strength check.
+
+### Encrypted library browser checks
+
+`scripts/e2ee/verify-library.cjs` drives the library features of encrypted files in headless Chromium against a production build: conversion of plain folders and tags at the first unlock, folders with keys, a shared folder link opened signed out, stop sharing, moving and deleting folders, sealed tags and rules, files left as a script client leaves them, thumbnails, text recognition in the browser, search with the local cache, sign-out, key rotation with the stanza migration and the new key pairs of folders that no link shares, and a reset. It uses the same recording proxy as the check below, on other ports and its own database:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_library_local'
+export NEXTAUTH_URL='http://localhost:3096'
+export NEXTAUTH_SECRET='public-disposable-e2ee-library-demo-secret-2026'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3095
+```
+
+In another terminal with the same `DATABASE_URL`, run:
+
+```sh
+node scripts/e2ee/verify-library.cjs
+```
+
+The run needs a database that it starts empty: create it again before each run. At the end it opens every record with independent code and fails if any request held an account, file or folder private key, a link secret or fragment, a passphrase or file password, the name of an encrypted file, a folder name, a tag name or rule, or text read from an image. It also fails if any page or worker asked a site other than the instance, which covers the recognition worker, its WebAssembly core and its language data, and it reads the browser's origin private file system to check that the search cache holds no plaintext and is gone after sign-out.
+
+It simulates one thing: a script client's upload is an ordinary browser upload whose flags are then set and whose sealed records are deleted in the database, because token uploads of encrypted files are a later change. The reset uses a reset link that the script writes to the database in place of an email. `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as below, and the video thumbnail needs the same `ffmpeg`. A mobile capture is the 390×844 screen; when the page is longer, a second image whose name ends in `-full` shows all of it, taken with a screen that tall because the library only renders the rows on screen.
+
+The database-backed unit suites of these features read `FLARE_LIBRARY_DATABASE_URL`, a disposable database named `flare_library_test_local` or `flare_library_test_ci`. The cipher tests in `__tests__/e2ee/file.test.ts` run with a 30-second limit for each test: they encrypt and decrypt megabytes several times with ciphers in JavaScript, which takes more than the default 5 seconds on a shared CI runner.
+
+### Existing files browser checks
+
+`scripts/e2ee/verify-migration.cjs` drives the migration of an account from before encryption in headless Chromium against a production build. Its seed writes an account with a password, a plain folder, a plain tag and six plain files (private, public, with a server-side password, in a folder with a tag, an image with text, a paste and a video) straight into the database and into local storage. The run signs in with the password, sets up keys, checks the one-time question with its table and its default, lets the server encrypt the private files, and checks storage, the database, the library, thumbnails and search. It then encrypts everything from **Profile → Your data** and checks that the old public link answers "not found", that a new link from the library opens signed out, that the password file is private until a password is set again, and the **Encrypt** action in a file's menu and in the selection bar.
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_migration_local'
+export NEXTAUTH_URL='http://localhost:3097'
+export NEXTAUTH_SECRET='public-disposable-e2ee-migration-demo-secret-2026'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3097 > /tmp/flare-migration.log 2>&1
+```
+
+In another terminal with the same `DATABASE_URL`, in the same checkout, run:
+
+```sh
+FLARE_E2EE_MIGRATION_LOG=/tmp/flare-migration.log node scripts/e2ee/verify-migration.cjs
+```
+
+The application must run in the checkout that the script runs in: the seed writes the plain files under `uploads/`, where local storage reads them. At the end the script opens every account stanza with independent code to learn each `file_key` that the server made, and fails if a key is in any request, any answer or the application log, or if the name of an encrypted file is in an answer after the encryption or in the log or the database. `FLARE_E2EE_MIGRATION_ORIGIN` names another origin, and `FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT` and `FLARE_E2EE_THEME` work as for the other suites.
+
+The database-backed unit suite of the server job reads `FLARE_EXISTING_FILES_DATABASE_URL`, a disposable database named `flare_existing_files_test_local` or `flare_existing_files_test_ci`. It covers the file format with the browser's own open functions, a stop at each step of an attempt, two workers, a deletion and an edit during the job, a key rotation during the job, quota, folders and tags that are not converted, and the three routes.
+
+### Encrypted file browser checks
+
+`scripts/e2ee/verify-files.cjs` drives [encrypted files](/guide/encryption) in headless Chromium against a production build: upload, library, download, share pages, passwords, pastes, link previews, hostile content, the moderator view, short links and the page script policy. It seeds two accounts with keys into a disposable database named exactly `flare_e2ee_files_local` and removes them at the next run.
+
+The browser does not talk to the application directly. The script starts a small recording proxy on port 3094 and forwards to the application on port 3093, so `NEXTAUTH_URL` names the proxy:
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_files_local'
+export NEXTAUTH_URL='http://localhost:3094'
+export NEXTAUTH_SECRET='public-disposable-e2ee-files-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3093
+```
+
+In another terminal, with the same `DATABASE_URL` and the documentation dependencies installed for Playwright:
+
+```sh
+node scripts/e2ee/verify-files.cjs
+```
+
+`FLARE_E2EE_FILES_ORIGIN` and `FLARE_E2EE_FILES_UPSTREAM` select other loopback addresses. The run uploads real files through the real forms, an 11 MiB file among them, and reads the application's own `uploads/` directory to check what was stored. Nothing is stubbed.
+
+The proxy keeps the request target, headers and body of every request as they arrived. At the end the script opens each file's records with independent code (`@noble/*`, not the application bundle), derives every key the browser made, and fails if any request holds a file key, a key derived from one, a link secret, the account private key, the passphrase, a file password, a link fragment, plaintext of an encrypted file, or its file name. It also fails if any request target contains `#`. The same search must find the one plain upload's name and bytes, which proves that it can find something.
+
+What the run cannot show: the PDF preview in a sandboxed frame, because Chromium does not open PDFs there (with a service worker Chromium shows the PDF from a local address, which the media suite below checks); the video scenario needs an `ffmpeg` with `libvpx` to make its fixture (`FLARE_FFMPEG` names one) and is reported as skipped without it; and it does not test S3 storage.
+
+`FLARE_E2EE_SCREENSHOTS` names a directory for captures, `FLARE_E2EE_VIEWPORT=mobile` and `FLARE_E2EE_THEME=light` choose the variant, and `FLARE_E2EE_DEBUG` names a directory for a picture of each page when a run fails. Handbook images in `docs/images/encryption/` come from the desktop dark captures; inspect each before replacing a source image. Every secret in the script is a public fixture.
+
+### Script upload checks
+
+`scripts/e2ee/verify-script-upload.cjs` runs the real [`flare-upload`](/guide/screenshot-tools) program against a production build, with a disposable database named exactly `flare_e2ee_script_local`. Build the program first, then start the application as for the encrypted file checks:
+
+```sh
+(cd clients/flare-upload && cargo build --release)
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_script_local'
+export NEXTAUTH_URL='http://localhost:3094'
+export NEXTAUTH_SECRET='public-disposable-e2ee-script-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3093
+```
+
+In another terminal, with the same `DATABASE_URL`:
+
+```sh
+node scripts/e2ee/verify-script-upload.cjs
+```
+
+`FLARE_SCRIPT_UPLOAD_ORIGIN` and `FLARE_SCRIPT_UPLOAD_UPSTREAM` select other loopback addresses, and `FLARE_UPLOAD_BINARY` another build of the program. The browser and the program both go through the script's recording proxy.
+
+The run signs in, makes each configuration in the Upload tools card the way a person does, and starts the program with the downloaded files. It covers a small file in one request, a 9 MiB file through the chunked route, a password link, a plain profile, both profile mismatches, **Forbid plain uploads** with every plain path refused, the old upload token (a plain upload, the warning, the revocation), a configuration that pins a different account key, and what the program refuses before it sends anything. It opens each printed link signed out and checks that the image renders, the large file downloads byte for byte, and the password link asks for its password. At the end it fails if any recorded request, from the browser or from the program, holds the name or content of an encrypted file, a file key, a link secret, the file password, the account private key, or a link fragment.
+
+`FLARE_E2EE_SCREENSHOTS`, `FLARE_E2EE_VIEWPORT`, `FLARE_E2EE_THEME` and `FLARE_E2EE_DEBUG` work as in the encrypted file checks. `FLARE_E2EE_HANDBOOK` names a directory that receives the handbook images of the Upload tools card, the ShareX steps, the profile editor, the Encryption setting and the upload form (desktop dark run only); inspect each before replacing a source image under `docs/images/`.
+
+What the run cannot show: ShareX itself, any Windows or macOS behavior of the program, and a key rotation through the passphrase form. The rotation case uses a configuration with the key of a different account, which the server treats the same way. The program has its own tests, `cargo test` in `clients/flare-upload`, which check every shared test vector it implements and run it against a mock server.
+
+### Encrypted media, archive and export browser checks
+
+`scripts/e2ee/verify-media.cjs` drives what encrypted files do with their content: video and audio from a local address of the [service worker](/guide/encryption#video-audio-and-downloads), streamed downloads, PDF, [archives](/guide/archives#archives-that-are-encrypted-files), the [account export](/guide/account#an-account-with-encrypted-files), pastes and short links. An extraction is checked with independent code: the suite opens the sealed names of the new folders and compares each extracted file with its archive entry. It uses a production build, a disposable database named exactly `flare_e2ee_media_local`, and the same recording proxy as the suite above, on ports 3294 (the browser's origin) and 3293 (the application):
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_e2ee_media_local'
+export NEXTAUTH_URL='http://localhost:3294'
+export NEXTAUTH_SECRET='public-disposable-e2ee-media-demo-secret-2026-only'
+pnpm exec prisma migrate deploy
+pnpm build
+pnpm exec next start -H 127.0.0.1 -p 3293
+```
+
+```sh
+node scripts/e2ee/verify-media.cjs
+```
+
+`FLARE_E2EE_MEDIA_ORIGIN` and `FLARE_E2EE_MEDIA_UPSTREAM` select other loopback addresses. The origin must be `localhost`: browsers give service workers only to secure origins and to `localhost`. The suite launches the full Chromium (`channel: 'chromium'`), because the headless shell has no PDF viewer.
+
+What it checks, each against real requests:
+
+- A 36 MiB video plays for a signed-out visitor after a few percent of the ciphertext was asked for, and a seek to 80% plays without the bytes before it. The proxy counts the bytes of every `Range` request, and every range must start and end at a stored chunk border.
+- The service worker is stopped through the DevTools protocol (`ServiceWorker.stopAllWorkers`), and the same player goes on from a part it had not fetched.
+- The navigation attack: the suite registers local addresses for an HTML file and an SVG file with script, under false types, and opens them as a tab, a frame, an image and a fetch. No script may run.
+- Sign-out drops the worker's keys. A browser context with service workers blocked uses the fallback.
+- A streamed download and the export are compared with the originals by SHA-256. A file cut at a chunk border must be refused.
+- Archives: list, open, extract and create for ZIP, and list and open for TAR, TAR.GZ and GZIP, as the owner and as a signed-out visitor. A hostile ZIP must be listed and not extracted.
+- The search for secrets of the suite above, extended with the names and texts inside archives and with local address tokens. No request for `/_flare/local/` may reach the server.
+
+The video and audio fixtures need an `ffmpeg` with `libvpx` and `libopus` (`FLARE_FFMPEG` names one). They are made once and kept in `FLARE_E2EE_MEDIA_FIXTURES`. Without one, those scenarios are reported as skipped. `FLARE_E2EE_MEDIA_ONLY=archives,export` runs chosen scenarios after the uploads; the names are `video`, `audio`, `password`, `attack`, `signout`, `fallback`, `download`, `pdf`, `truncated`, `archives`, `export`, `paste` and `shortlinks`. The screenshot, viewport, theme and debug variables are those of the suite above.
+
+What the run cannot show: Firefox and Safari, whose PDF preview and service worker behavior differ; the native save dialog of the File System Access API, which the suite replaces with a file handle of its own; and S3 storage.
+
+`scripts/e2ee/measure-library.cjs` measures a large library. It writes one account with 20,000 encrypted file records into the database named `flare_e2ee_measure_local` (`FLARE_E2EE_MEASURE_FILES` changes the number), made with the application's own `lib/e2ee` so that the browser opens each one, a tenth of the images with sealed image text. Then it signs in with Playwright against the application at `FLARE_E2EE_MEASURE_ORIGIN` (default `http://localhost:3295`) and prints the time until the first files show, the requests and bytes of the first sync, the time until the oldest file can be found on the first and on a later visit, the size of the cache in the browser, the time of twelve searches, and the memory of all browser processes. It stores no file content: nothing it measures reads content.
+
+`scripts/e2ee/measure-argon2.cjs` needs no application and no database. It runs Argon2id with the parameters of protocol version 1 and the WebAssembly code of the browser client in headless Chromium, five times for each slowdown of the page's processor in `FLARE_E2EE_ARGON2_RATES` (default `1,2,4,6`). A slowdown is an estimate of a slower device, not a measurement on one. The results of both scripts are in [the implementation plan](https://github.com/FlintSH/Flare/blob/main/docs/e2ee-implementation-plan.md#measurements).
+
+`scripts/e2ee/measure-media.cjs` measures large files: the time to upload and download one, the time to seek in a long video, the ciphertext bytes the seek asked for, and the peak memory of every browser process. It needs a database named `flare_e2ee_measure_local`, the application on port 3295 with `NEXTAUTH_URL=http://localhost:3296`, and the files to use in `FLARE_E2EE_MEASURE_FILE` and `FLARE_E2EE_MEASURE_VIDEO`. It signs in with Playwright and then drives a second Chromium without it: Playwright turns on the DevTools Network domain, which makes Chromium keep every request body in memory, so a browser under Playwright shows gigabytes more than a person's browser uses during an upload.
+
+### State that only the browser has
+
+A dashboard page reaches the browser after its placeholder, and by then the browser has often read the account keys and loaded shared lists. A component that renders from that state during its first render gives markup that differs from the server's, React builds that part of the page again, and what a person selected in it meanwhile is lost. Read such state through the hooks that give the server's value for that first render and the real value in the next one: `useAccountKeys` and `useAccountKeyState` for the keys, `useAccountQuery` for account data, `useHydrated` for anything else. A store that a component reads with `useSyncExternalStore` needs a server snapshot that is its initial state, not its current one (`searchIndex.getServerState`, `libraryMaintenance.getServerState`).
+
+### How the browser suites sign in
+
+Every browser suite under `scripts/` signs in the way a person does: the address, **Continue**, then the passphrase. `scripts/shared/passphrase-accounts.cjs` holds what they share.
+
+- **Seeded accounts have keys.** `scripts/security`, `scripts/audit`, `scripts/invites`, `scripts/archives`, and `scripts/timeline` each write their fixture accounts straight into the disposable database. Their seeds call `createAccountRecord`, which makes an account record for the fixture passphrase in Node with the primitive libraries directly (`hash-wasm`, `@noble/hashes`, `@noble/ciphers`, `@noble/curves`, `@scure/bip39`), not with the application bundle. A record that it got wrong cannot sign in or unlock, so every run checks it against the real server and the real browser client. Seeding takes about a second longer per account, for Argon2id.
+- **Sign-in goes through the form.** `signIn` opens `/auth/login`, fills both steps, and waits for the dashboard. Suites that used to post a password to the sign-in route now call `signInContext`, which does the same in a page of its own and closes it: the session cookie and the unlocked keys stay in the browser context, so the pages opened next show no unlock prompt.
+- **Accounts that an administrator creates** still start with a temporary password. `scripts/roles` and `scripts/navigation` create theirs through `POST /api/users`, and `signIn` takes each through **Set up encryption** on its first sign-in: it keeps the password as the passphrase when the form offers that, then saves the recovery phrase.
+- **Dashboard pages arrive in two steps.** The dashboard sends a placeholder first and the page after it, and React attaches its handlers a moment later. A file that a script selects before that, or a choice that it makes, is lost. `pageReady` waits until the page is attached; the suites call it after they open the upload or the paste form. `openCreationOptions` opens **Upload options** or **Sharing options** before a script uses the visibility or the password field, and `showFolders` opens the **Folders** or **Subfolders** list of the library.
+- **New accounts** (`scripts/invites`) fill the passphrase fields and call `saveRecoveryPhrase`, which reads the 24 words, ticks the acknowledgement, and types back the three words that the form asks for.
+- **A copied session needs the key store.** A suite that opens further contexts from one sign-in passes `storageState({ indexedDB: true })`, as `scripts/archives` and `scripts/timeline` do. Without IndexedDB the copy is signed in but locked, and the unlock prompt opens over the page.
+- **A sign-in without a passphrase ends locked.** After a passkey or a passkey recovery code, `dismissUnlockPrompt` waits for the locked notice and the prompt, then chooses **Not now**.
+
+::: warning Captures from before passphrases
+The suites pass again, but their images and recordings were not captured again. Screenshots and recordings under `docs/images/security/`, `docs/images/audit/`, and `.github/assets/` that show a sign-in card, a **Current password** confirmation, or a password change predate passphrases. Refresh them with each suite's screenshot and video variables as described in its section, and inspect every capture, before relying on them as evidence of the current forms. Captures of the invite suite hide the words of a recovery phrase with capture-only CSS.
+:::
 
 ## Sessions and audit browser checks and demos
 
@@ -410,7 +643,7 @@ node scripts/audit/seed.cjs
 node scripts/audit/verify-ui.cjs
 ```
 
-The deliberately public fixture password is `Audit-demo-only-2026!`. The accounts are **Alex Morgan** (`audit-demo-alex@example.test`, administrator), **Jamie Rivera** (`audit-demo-jamie@example.test`), and **Casey Chen** (`audit-demo-casey@example.test`). Use `FLARE_AUDIT_TEST_ORIGIN` to select another `localhost` application origin; its default is `http://localhost:3071`. The audit scripts use the documentation Playwright installation and launch the Chromium that `npx playwright install chromium` downloaded; unlike the invite, navigation, and role checks, they ignore `PW_CHROMIUM_EXECUTABLE_PATH`. Install Chromium's required system libraries on a new Linux host.
+The deliberately public fixture passphrase is `Audit-demo-only-2026!`; the seed creates the accounts [with keys](#how-the-browser-suites-sign-in). The accounts are **Alex Morgan** (`audit-demo-alex@example.test`, administrator), **Jamie Rivera** (`audit-demo-jamie@example.test`), and **Casey Chen** (`audit-demo-casey@example.test`). Use `FLARE_AUDIT_TEST_ORIGIN` to select another `localhost` application origin; its default is `http://localhost:3071`. The audit scripts use the documentation Playwright installation and launch the Chromium that `npx playwright install chromium` downloaded; unlike the invite, navigation, and role checks, they ignore `PW_CHROMIUM_EXECUTABLE_PATH`. Install Chromium's required system libraries on a new Linux host.
 
 Run the seed before repeating the browser checks. When every check passes, the script prints a `PASS:` line for each flow and exits with status 0; otherwise it prints the error and exits with status 1. The workflow performs real account/file/security operations and OCR of a generated receipt test image, verifies that recognized text is absent from audit details, leaves demonstration evidence for inspection, and should run only against its disposable server. Discard its database and upload directory after verification. API examples in [sessions and audit contracts](/api/activity) can be executed in an authenticated console on this same instance.
 
@@ -495,9 +728,9 @@ node scripts/invites/seed.cjs
 node scripts/invites/verify-ui.cjs
 ```
 
-The deliberately public fixture password is `Invite-demo-only-2026!`. The accounts are **Alex Morgan** (`invite-demo-alex@example.test`, administrator) and **Jamie Rivera** (`invite-demo-jamie@example.test`, Everyone only). Use `FLARE_INVITES_TEST_ORIGIN` to select another `localhost` origin; the default is `http://localhost:3073`. The script uses the documentation Playwright installation and accepts `PW_CHROMIUM_EXECUTABLE_PATH`. On a Linux host without Chromium's system libraries, install them with `npx playwright install-deps chromium` as a machine administrator.
+The deliberately public fixture passphrase is `Invite-demo-only-2026!`; the seed creates the accounts [with keys](#how-the-browser-suites-sign-in). The accounts are **Alex Morgan** (`invite-demo-alex@example.test`, administrator) and **Jamie Rivera** (`invite-demo-jamie@example.test`, Everyone only). Use `FLARE_INVITES_TEST_ORIGIN` to select another `localhost` origin; the default is `http://localhost:3073`. The script uses the documentation Playwright installation and accepts `PW_CHROMIUM_EXECUTABLE_PATH`. On a Linux host without Chromium's system libraries, install them with `npx playwright install-deps chromium` as a machine administrator.
 
-The script turns on **Let everyone create invites** through Settings, creates a Moderator invite in **Users → Invites** (checking the Administrator warning), registers Sam Rivera in a signed-out browser, and confirms that the spent link shows **Invite unavailable** and that closed registration still hides the ordinary sign-up page. As Jamie, it creates invites within the member limits, verifies the API rejects unlimited uses and non-expiring links, and registers Priya Shah on a phone-sized screen. As Alex, it revokes one of Jamie's invites, turns the switch off to confirm member invites pause, checks **Invited by** in the accounts list, the Invitations permission group in Roles, and the `invites` audit category, and verifies that audit events contain no tokens. Registration is rate-limited per client address, so each fixture browser sends a different reserved documentation address in `X-Forwarded-For`; these are not real visitors.
+The script turns on **Let everyone create invites** through Settings, creates a Moderator invite in **Users → Invites** (checking the Administrator warning), registers Sam Rivera in a signed-out browser (a passphrase, then the recovery phrase with three of its words typed back), and confirms that the spent link shows **Invite unavailable** and that closed registration still hides the ordinary sign-up page. As Jamie, it creates invites within the member limits, verifies the API rejects unlimited uses and non-expiring links, and registers Priya Shah on a phone-sized screen. As Alex, it revokes one of Jamie's invites, turns the switch off to confirm member invites pause, checks **Invited by** in the accounts list, the Invitations permission group in Roles, and the `invites` audit category, and verifies that audit events contain no tokens. Registration is rate-limited per client address, so each fixture browser sends a different reserved documentation address in `X-Forwarded-For`; these are not real visitors.
 
 Capture screenshots and videos in separate runs, reseeding before each. Set only `FLARE_INVITES_SCREENSHOTS` to a temporary directory for the thirteen desktop/mobile stills; for the recording pass, leave it unset and set only `FLARE_INVITES_VIDEOS`, which records `admin-invite.webm`, `join-with-invite.webm`, and `member-invites.webm` with visible typing. Both modes blur the one-time invite link field; review every frame anyway for tokens, credentials, and private data. Then replace the canonical sources under `docs/images/invites/` and `.github/assets/invites/` and update the transcripts on the demos page. Discard the database afterward.
 
@@ -515,7 +748,7 @@ Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the polic
 
 ## Navigation browser checks
 
-The [dashboard bar](/guide/#find-your-way-around) follows each account's permissions. `scripts/navigation/verify-ui.cjs` checks the real bar on the same disposable instance as the [role regression scripts](/admin/roles#reproduce-the-permission-checks-locally): Flare on `http://127.0.0.1:3060`, set up with the name **Alex**, the email `alex@example.test`, and the public fixture password `Roles-demo-only-2026!`. Everyone must keep its default grants. Run it after the role scripts finish, not alongside them:
+The [dashboard bar](/guide/#find-your-way-around) follows each account's permissions. `scripts/navigation/verify-ui.cjs` checks the real bar on the same disposable instance as the [role regression scripts](/admin/roles#reproduce-the-permission-checks-locally): Flare on `http://127.0.0.1:3060`, set up with the name **Alex**, the email `alex@example.test`, and the public fixture passphrase `Roles-demo-only-2026!`. Everyone must keep its default grants. Run it after the role scripts finish, not alongside them:
 
 ```sh
 node scripts/navigation/verify-ui.cjs
@@ -523,11 +756,11 @@ node scripts/navigation/verify-ui.cjs
 
 As Alex, the script checks the four places, the **Admin** menu's pages, order, and hints, one-click switching while the menu is open, the current-page markers on **Roles**, keyboard use (Enter, arrow keys, End, and Escape returning focus to **Admin**), the account menu, the 900-pixel breakpoint, and the phone sheet with its **Admin** and **Account** groups. It then creates two roles and three accounts: one with **View users** and **View audit log** gets an **Admin** menu of two, whose **Users** hint leaves out invites, one with only **View audit log** gets a plain **Audit log** link, and a member with neither gets the full bar from 768 pixels and an account menu that opens **Profile** and signs out. axe checks the bar and every open menu or sheet for serious WCAG 2.1 AA problems, and browser runtime errors fail the run. The script removes its roles and accounts when it finishes, including after a failure.
 
-`FLARE_NAVIGATION_TEST_ORIGIN` selects another loopback origin, `FLARE_NAVIGATION_PASSWORD` another fixture password, and `PW_CHROMIUM_EXECUTABLE_PATH` an installed Chromium. Set `FLARE_NAVIGATION_SCREENSHOTS` to a temporary directory, with a production build running, to capture `admin-menu.webp`, `account-menu.webp`, and `mobile-sheet.webp` for `docs/images/navigation/`, along with three images for review only. Captures use twice the pixel density, so the menus stay legible when the handbook scales them down. Inspect them before replacing the canonical copies.
+`FLARE_NAVIGATION_TEST_ORIGIN` selects another loopback origin, `FLARE_NAVIGATION_PASSWORD` another fixture passphrase (the script also gives it to the accounts it creates as their temporary password, which their first sign-in keeps as the passphrase), and `PW_CHROMIUM_EXECUTABLE_PATH` an installed Chromium. Set `FLARE_NAVIGATION_SCREENSHOTS` to a temporary directory, with a production build running, to capture `admin-menu.webp`, `account-menu.webp`, and `mobile-sheet.webp` for `docs/images/navigation/`, along with three images for review only. Captures use twice the pixel density, so the menus stay legible when the handbook scales them down. Inspect them before replacing the canonical copies.
 
 ## Workspace interaction regression
 
-`scripts/ui-hillclimb/verify-ui.cjs` checks the shared controls and creation flows against a populated disposable local instance. Prepare a `.test` administrator session, a member named **Sam Okafor**, at least one uploaded file and folder, and the default roles. Keep its Playwright storage state outside Git. The script refuses non-local origins and an administrator without a `.test` email.
+`scripts/ui-hillclimb/verify-ui.cjs` checks the shared controls and creation flows against a populated disposable local instance. Prepare a `.test` administrator session, a member named **Sam Okafor**, at least one uploaded file and folder, and the default roles. Keep its Playwright storage state outside Git. The script refuses non-local origins and an administrator without a `.test` email. Save the storage state with `indexedDB: true`, so that the account's unlocked encryption keys come with the session: without them the upload and paste steps stop at **Unlock**. The **Password** shortcut of the profile is named **Passphrase** for an account with keys, and the script accepts both.
 
 ```sh
 FLARE_HILLCLIMB_ORIGIN=http://localhost:3195 \

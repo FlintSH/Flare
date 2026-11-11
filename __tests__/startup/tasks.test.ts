@@ -19,6 +19,7 @@ for (const [path, name] of [
   ['@/lib/audit/retention', 'startAuditRetentionWorker'],
   ['@/lib/auth/security/worker', 'startSecurityCleanupWorker'],
   ['@/lib/email/worker', 'startMailWorker'],
+  ['@/lib/files/existing-worker', 'startFileEncryptionWorker'],
   ['@/lib/integrations/worker', 'startWebhookWorker'],
   ['@/lib/storage/deletion-worker', 'startStorageDeletionWorker'],
   ['@/lib/tags/worker', 'startOcrTagWorker'],
@@ -33,6 +34,7 @@ for (const [path, name] of [
 
 const workers = [
   'startAuditRetentionWorker',
+  'startFileEncryptionWorker',
   'startMailWorker',
   'startOcrTagWorker',
   'startSecurityCleanupWorker',

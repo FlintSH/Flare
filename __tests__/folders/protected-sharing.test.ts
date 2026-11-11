@@ -11,6 +11,7 @@ import { getSharedFolder } from '@/lib/folders/shared'
 
 const mocks = vi.hoisted(() => ({
   folder: vi.fn(),
+  files: vi.fn(),
   file: vi.fn(),
   session: vi.fn(),
   redirect: vi.fn((url: string): never => {
@@ -23,8 +24,16 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
-    vaultFolder: { findUnique: mocks.folder },
-    file: { findFirst: mocks.file },
+    vaultFolder: {
+      findUnique: mocks.folder,
+      findFirst: async () => null,
+      findMany: async () => [],
+    },
+    file: {
+      findFirst: mocks.file,
+      findMany: mocks.files,
+      count: async () => 1,
+    },
   },
 }))
 vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
@@ -70,17 +79,28 @@ const file = {
   password: passwordHash,
   userId: 'owner-id',
   visibility: 'PUBLIC' as const,
+  folderId: 'folder-id',
+  encrypted: false,
+}
+/** The folder that the link shares: one from before encryption, with a plain name. */
+const sharedFolder = {
+  id: 'folder-id',
+  name: 'Marketing assets',
+  parentId: null,
+  userId: 'owner-id',
+  folderPublicKey: null,
+  sealedFolderMetadata: null,
+  parentFolderStanza: null,
+  parentStanzaPublicKey: null,
+  rekeyPending: false,
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.session.mockResolvedValue(null)
   mocks.file.mockResolvedValue(file)
-  mocks.folder.mockResolvedValue({
-    name: 'Marketing assets',
-    files: [file],
-    _count: { files: 1 },
-  })
+  mocks.folder.mockResolvedValue(sharedFolder)
+  mocks.files.mockResolvedValue([file])
 })
 
 function openFile(providedPassword?: string | string[], shareToken = token) {
@@ -145,17 +165,26 @@ describe('protected shared-folder links', () => {
     }
   )
 
-  it('rechecks the active share token, direct membership, and PUBLIC visibility before checking access', async () => {
+  it('rechecks the active share token, membership, and PUBLIC visibility before checking access', async () => {
     await openFile()
     expect(mocks.file).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
           id: fileId,
           visibility: 'PUBLIC',
-          folder: { shareToken: token },
+          folderId: { not: null },
         },
       })
     )
+    expect(mocks.folder).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { shareToken: token } })
+    )
+    // A file in a folder that this link does not share is not found.
+    mocks.file.mockResolvedValueOnce({ folderId: 'another-folder' })
+    await expect(openFile(password)).rejects.toThrow('NOT_FOUND')
+    // Neither is a file whose folder link was disabled or replaced.
+    mocks.folder.mockResolvedValueOnce(null)
+    await expect(openFile(password)).rejects.toThrow('NOT_FOUND')
     mocks.file.mockResolvedValueOnce(null)
     // Even a correct password is insufficient if the file has moved, become
     // private, or the folder's link was disabled or replaced.
@@ -218,11 +247,7 @@ describe('protected shared-folder links', () => {
   })
 
   it('preserves canonical links for files deliberately published without a password', async () => {
-    mocks.folder.mockResolvedValueOnce({
-      name: 'Marketing assets',
-      files: [{ ...file, password: null }],
-      _count: { files: 1 },
-    })
+    mocks.files.mockResolvedValueOnce([{ ...file, password: null }])
     const data = await getSharedFolder(token)
     expect(data!.files[0]).toMatchObject({
       name: file.name,
@@ -236,11 +261,9 @@ describe('protected shared-folder links', () => {
     // Earlier builds could keep the original name in a file's URL.
     const urlPath = '/recipient-slug/Q&A notes #2.png'
     const page = '/recipient-slug/Q&A%20notes%20%232.png'
-    mocks.folder.mockResolvedValueOnce({
-      name: 'Marketing assets',
-      files: [{ ...file, urlPath, mimeType: 'image/png', password: null }],
-      _count: { files: 1 },
-    })
+    mocks.files.mockResolvedValueOnce([
+      { ...file, urlPath, mimeType: 'image/png', password: null },
+    ])
     const html = renderToStaticMarkup(
       await SharedFolderPage({
         params: Promise.resolve({ token }),
@@ -253,7 +276,7 @@ describe('protected shared-folder links', () => {
       'src="/recipient-slug/Q&amp;A%20notes%20%232.png/raw"'
     )
 
-    mocks.file.mockResolvedValueOnce({ ...file, urlPath })
+    mocks.file.mockResolvedValue({ ...file, urlPath })
     await expect(openFile(password)).rejects.toThrow('REDIRECT:')
     const destination = new URL(
       mocks.redirect.mock.calls[0][0],

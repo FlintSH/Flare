@@ -17,8 +17,11 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 2. Enter your text or code in **Content**. The character count groups thousands with commas, such as `12,345`, in every browser language.
 3. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
 4. If your role has `uploadProfiles.manage`, review **Upload profile** or keep the current default. Its summary shows the effective visibility, password status, expiration action, and filename behavior. Without that permission, your saved upload defaults apply automatically and the profile picker is hidden.
-5. Open **Sharing options** to override visibility or add a password, if your role can share. Leave it closed to use the saved defaults.
-6. Choose **Create paste**.
+5. Keep **Encryption** on **Encrypted**, or choose **Plain** if the paste's link must show its text in previews on other sites.
+6. Open **Sharing options** to override visibility or add a password, if your role can share. Leave it closed to use the saved defaults.
+7. Choose **Create paste**.
+
+A paste is a file, so it is encrypted in your browser by default like any upload: the server stores neither its text nor its filename, and the share link carries the key after `#`. Your keys must be unlocked. See [Encrypted and plain files](./encryption). An encrypted paste is limited to 10 MB.
 
 Whitespace-only content cannot be submitted. While the request is running, the controls are disabled to avoid duplicate submissions.
 
@@ -45,6 +48,25 @@ Flare reads the last extension, in any case: `notes.MD` is Markdown and `report.
 Markdown pastes wrap long lines to fit the screen, so they stay readable on a phone. Code, logs and other plain text keep their line breaks and scroll sideways, so columns stay aligned; the bottom edge fades while more lines follow.
 
 The viewer is read-only. HTML and Markdown shown as text/code are not a hosted website or a collaborative editor. If you need to revise the content, create a new paste and distribute its new link; the paste form does not edit an existing file.
+
+### What the viewer does for an encrypted paste
+
+An encrypted paste is decrypted in the visitor's browser, and the viewer works as for a plain one, with one exception:
+
+| Feature                      | Encrypted paste                                                                                                                                                                              |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Syntax highlighting          | Works. The language comes from the filename, which the browser decrypts with the text.                                                                                                       |
+| **Copy text**                | Works. It copies the decrypted text.                                                                                                                                                         |
+| **Download**                 | Works. The file is saved under its real name.                                                                                                                                                |
+| **Copy link**                | Works. The link carries the key after `#`.                                                                                                                                                   |
+| **Open original** (raw view) | Not available. The raw address shows what the server stores, and for an encrypted paste that is ciphertext. The page has no such button and says so under its actions; `/raw` answers `404`. |
+| Editing                      | Not available for any paste. The viewer is read-only: create a new paste.                                                                                                                    |
+| Preview size                 | Up to 1 MB of text is shown. A larger paste is offered as a download.                                                                                                                        |
+| Link previews on other sites | Generic: the instance name and "Encrypted file". Choose **Plain** when a preview must show the text.                                                                                         |
+
+Markup in an encrypted paste is never run. An `.html` or `.svg` paste is shown as source text, like every other paste.
+
+<Screenshot src="/screenshots/encryption/paste-view.webp" alt="Share page of the encrypted paste release-plan-private.js with highlighted JavaScript, line numbers, and the buttons Download, Copy link and Copy text, and no Open original button" caption="An encrypted paste, decrypted and highlighted in the visitor's browser." />
 
 ::: tip Review content before making it public
 Logs and configuration snippets can contain passwords, access tokens, email addresses, or internal URLs. The public setting permits anyone with the link to read them. Choose your intended visibility before creating the paste.

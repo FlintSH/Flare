@@ -1,6 +1,6 @@
 ---
 title: Tags and automatic organization
-description: Label related files, tag a selection in bulk, and automatically organize uploads by filename or extracted image text.
+description: Label related files, tag a selection in bulk, and automatically organize uploads by filename or extracted image text. Tag names and rules are encrypted, and rules run in your browser.
 ---
 
 # Tags and automatic organization
@@ -9,7 +9,17 @@ Viewing tags in your library uses `files.read`. Creating tags/rules and applying
 
 Tags let a file belong to several topics without duplicating or moving it. A screenshot might have **Website**, **Bug report**, and **Release 2** tags while staying in its project folder.
 
-Tags, automatic matching rules, and tag names belong to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs. People with `audit.read` can see recorded tag names, IDs, and change metadata in the [instance audit log](/admin/audit); account organization is not hidden from that administrative history.
+Tags, automatic matching rules, and tag names belong to your account. They are not listed on public file pages or shared folders, and they do not change file access or URLs.
+
+## Tag names and rules are encrypted
+
+Your browser seals each tag's name and rule with a key from your account key. The server stores the sealed record and the links between tags and files. It knows how many tags you have, which file has which tag, and that you removed a tag from a file by hand. It does not know a tag's name, or whether it has a rule.
+
+- **Your keys must be unlocked to create or edit tags and to see their names.** While they are locked, tags show as **Encrypted tag**. Filtering by a tag still works, because the filter uses the tag's ID.
+- **Tags you had before this release are converted the first time you unlock.** Your browser seals each name and rule and the server deletes the plain ones. Tags keep their IDs, so files, upload profiles and bookmarked filters keep working.
+- **Your browser refuses a second tag with the same name.** The server cannot compare sealed names. Two browsers saving the same name at the same moment can both succeed; delete one of the tags.
+- People with `audit.read` see tag IDs and change metadata in the [instance audit log](/admin/audit), not names. When your browser encrypts a tag from before encryption, Flare also removes its name from the audit records it wrote earlier. Database backups made before that still hold it.
+- An API request cannot create or change a tag for an account that has keys. See the [API reference](../api/files#tags-with-keys).
 
 <Screenshot src="/screenshots/timeline/library-desktop.webp" alt="The continuous file library with tags shown beneath individual file previews" caption="Labels add context to your library without changing where a file lives." />
 
@@ -57,10 +67,19 @@ Deleting a tag also removes its matching rule. Disabling a rule without deleting
 
 In the tag editor, enable **Add automatically**, select a source, and enter a phrase. Each tag can have a rule that looks for a literal phrase in one source:
 
-| Source             | When it runs                                                 | Example                                                          |
-| ------------------ | ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| **File name**      | When a new upload is saved, using its original display name. | Match `invoice` to tag `invoice-september.pdf`.                  |
-| **Extracted text** | After OCR extracts text from an image.                       | Match `Order number` to tag a screenshot containing that phrase. |
+| Source             | When it runs                                                          | Example                                                          |
+| ------------------ | --------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| **File name**      | In your browser, when you upload, using the file's original name.     | Match `invoice` to tag `invoice-september.pdf`.                  |
+| **Extracted text** | In your browser, after the text of an image is read or first arrives. | Match `Order number` to tag a screenshot containing that phrase. |
+
+### Rules run in your browser
+
+A rule is sealed, so the server cannot read it, and the name and text of an encrypted file are sealed too. Only your browser has all of them, so your browser applies the rules. This is a change: the server used to apply them the moment an upload arrived.
+
+- **Uploads from this browser** are tagged as they upload. The upload request carries the IDs of the tags that matched, never the rule.
+- **Uploads from a screenshot tool, a script or another device without your keys** are tagged the next time you open Flare with your keys unlocked. Until then the file is in your library without its automatic tags. A status at the edge of the page reads **Finishing new files** while your browser catches up.
+- **Plain files** follow the same rule. The server can read a plain file's name, but not your rule, so your browser tags plain files as well.
+- If Flare stays open in a tab, it looks for new files to tag about once a minute and whenever you return to the tab.
 
 Matching ignores capitalization. Punctuation is literal: `invoice-2026` looks for that phrase, and `*.png` does not mean “all PNG files.” Rules do not use wildcards, regular expressions, or an external AI service.
 
@@ -80,6 +99,8 @@ Create **Support request** with an **Extracted text** rule for `ticket number`. 
 
 Saving a rule affects new uploads or newly extracted text. To include older files, save the rule, then choose **Apply rule to existing files…** in its editor.
 
+Your browser does this work. It reads the names and the saved image text of your plain files from the server, opens the names and text of your encrypted files with your keys, matches the rule, and tells the server which files get the tag. The rule's text is not sent. For a library of tens of thousands of files this takes a while; keep the dialog open until it reports how many files were tagged.
+
 For extracted-text rules, this checks text already saved by OCR. It does not start OCR across every image in your library. Extract text from an older image first if it has no saved OCR result.
 
 ### Keep manual control
@@ -88,7 +109,7 @@ Removing an automatically assigned tag from a file is remembered. Background wor
 
 Changing or turning off a rule does not remove tags already assigned. If you want to reorganize old files, adjust their labels explicitly.
 
-If automatic tagging temporarily fails after OCR, Flare keeps the extracted text and retries the pending tag work in the background about a minute later, including after a restart. Opening the saved extracted text also retries pending tags without repeating OCR.
+If your browser cannot finish the work on a file, for example because the connection drops, the file stays marked and your browser tries again the next time it looks. After three failed tries Flare stops retrying that file by itself; choose **Apply rule to existing files…** to tag it once the cause is fixed.
 
 ## Apply tags with an upload profile
 
@@ -100,4 +121,4 @@ Exported recipes include the selected tags' account-specific IDs. A recipe conta
 
 ## When a tag does not appear
 
-Check the rule's source and phrase, then the timing. Filename rules apply to new uploads; older files need **Apply rule to existing files…**. Extracted-text rules require completed OCR, which supports images rather than PDFs. Also check whether you previously removed that tag from the file: Flare honors that manual choice.
+Check the rule's source and phrase, then the timing. Filename rules apply to new uploads; older files need **Apply rule to existing files…**. A file from a screenshot tool gets its tags when you next open Flare with your keys unlocked, not when it arrives. Extracted-text rules require completed OCR, which supports images rather than PDFs. Also check whether you previously removed that tag from the file: Flare honors that manual choice.

@@ -172,7 +172,8 @@ async function main() {
       ['Sign-in security', 'sign-in-security'],
       ['Active sessions', 'active-sessions'],
       ['Login history', 'login-history'],
-      ['Password', 'password'],
+      // An account with encryption keys has a passphrase in place of a password.
+      [/^(Password|Passphrase)$/, 'password'],
       ['Appearance', 'workspace-appearance'],
     ]) {
       await page.getByRole('link', { name: label, exact: true }).focus()

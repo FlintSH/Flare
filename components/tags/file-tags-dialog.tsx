@@ -17,7 +17,9 @@ import {
 import { Input } from '@/components/ui/input'
 
 import { apiRequest } from '@/lib/client/request'
+import { displayFileName } from '@/lib/files/display-name'
 import { nameKey, normalizeName } from '@/lib/library/names'
+import { tagRequestBody } from '@/lib/tags/client'
 import { TAG_NAME_MAX_LENGTH } from '@/lib/tags/schema'
 import type { TagView } from '@/lib/tags/schema'
 import { cn } from '@/lib/utils'
@@ -38,7 +40,7 @@ export function FileTagsDialog({
   onChanged: (files: FileType[]) => void
 }) {
   const lifetime = useRequestLifetime()
-  const { tags, loading, error: loadError, reload, changed } = useTags()
+  const { tags, keys, loading, error: loadError, reload, changed } = useTags()
   const memberships = useFileTagMemberships(files.map((file) => file.id))
   const [search, setSearch] = useState('')
   const [busy, setBusy] = useState(false)
@@ -90,13 +92,20 @@ export function FileTagsDialog({
     setError('')
     try {
       const key = nameKey(normalizeName(search))
-      const tag =
-        tags.find((tag) => nameKey(tag.name) === key) ??
-        (await apiRequest<TagView>('/api/tags', {
-          body: { name: search.trim() },
+      const tag = tags.find((tag) => nameKey(tag.name) === key) ?? {
+        ...(await apiRequest<TagView>('/api/tags', {
+          // Sealed in this browser for an account that has keys.
+          body: tagRequestBody({
+            fields: { name: search, ruleSource: null, ruleText: null },
+            tags,
+            keys,
+          }),
           signal,
           fallback: TAG_REQUEST_FAILED,
-        }))
+        })),
+        // The answer of the server has no name for a sealed tag.
+        name: normalizeName(search),
+      }
       if (signal.aborted) return
       void reload()
       await update(tag, 'add')
@@ -129,7 +138,7 @@ export function FileTagsDialog({
               <>
                 Add or remove tags for{' '}
                 <span className="font-medium text-foreground">
-                  {files[0].name}
+                  {displayFileName(files[0])}
                 </span>
                 .
               </>

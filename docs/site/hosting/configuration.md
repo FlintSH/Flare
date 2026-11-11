@@ -107,6 +107,8 @@ These belong to the app runtime or build tooling, rather than saved instance con
 | `METICULOUS_BACKEND_RECORDER_MODE`       | `replay` enables the backend replay path used by visual tests                                               |
 | `VERCEL_ENV`                             | A platform marker; `preview` enables recording eligibility when a recording token is present                |
 
+`FLARE_UPLOAD_CONFIG`, `FLARE_UPLOAD_TOKEN`, `FLARE_UPLOAD_ORIGIN` and `FLARE_UPLOAD_PASSWORD` are not server settings. The [flare-upload](/guide/screenshot-tools#install-flare-upload) program reads them on a person's own machine, and the scripts that Flare writes for an encrypted profile use `FLARE_UPLOAD_CONFIG`. Setting them on the server does nothing.
+
 The Dockerfile also sets Corepack/pnpm installation variables (`COREPACK_ENABLE_DOWNLOAD_PROMPT`, `COREPACK_HOME`, `pnpm_config_verify_deps_before_run`, and `HUSKY`) to make its packaged runtime work: the startup script's pnpm commands use the pnpm release and dependencies built into the image and never start an install. They are not Flare feature controls. Earlier images set `npm_config_verify_deps_before_run`, which pnpm 11 ignores, so each of those commands first compared the installed dependencies with the lockfile and would have tried to install them had they differed. Build identity arguments `FLARE_RELEASE_CHANNEL` and `FLARE_COMMIT_SHA` are baked into the official image by release workflows.
 
 Meticulous's hosted CI workflow has been retired. Its recorder variables and disposable test image remain available for [local visual testing](/contributing#local-visual-testing-with-meticulous); ordinary production recording still requires explicit opt-in and a recording token. `METICULOUS_API_TOKEN` authenticates the optional CLI, not Flare's server or users, and is no longer required as a repository Actions secret.
@@ -139,7 +141,7 @@ Every variable in the following tables also accepts a `_FILE` variant. For examp
 | ------------------------------------------ | --------- | ------------------------------------------------------------------------------ |
 | `FLARE_EMAIL_RECOVERY_ENABLED`             | `false`   | Password recovery for verified local accounts                                  |
 | `FLARE_EMAIL_RECOVERY_TOKEN_MINUTES`       | `30`      | `5`–`120` minutes                                                              |
-| `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN` | `false`   | Rotate the legacy upload token after a successful password reset               |
+| `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN` | `false`   | Revoke the upload token from before encryption after a successful reset        |
 | `FLARE_EMAIL_VERIFICATION_MODE`            | `off`     | `off`, `optional`, `new_users`, `all_users`                                    |
 | `FLARE_EMAIL_VERIFICATION_GRACE_DAYS`      | `7`       | `0`–`90` days for existing users when all-user enforcement is activated        |
 | `FLARE_EMAIL_VERIFICATION_ADMIN_CREATED`   | `inherit` | `inherit` or `exempt` for accounts created by administrators                   |
@@ -174,7 +176,7 @@ Policy activation timestamps and the internal applied-mode marker are server-own
 | `FLARE_EMAIL_BRANDING_SUPPORT_ADDRESS`      | Empty                            |
 | `FLARE_EMAIL_BRANDING_SUBJECT_PREFIX`       | Empty                            |
 | `FLARE_EMAIL_BRANDING_VERIFICATION_SUBJECT` | `Verify your email address`      |
-| `FLARE_EMAIL_BRANDING_RESET_SUBJECT`        | `Reset your password`            |
+| `FLARE_EMAIL_BRANDING_RESET_SUBJECT`        | `Reset your passphrase`          |
 | `FLARE_EMAIL_BRANDING_CHANGE_SUBJECT`       | `Confirm your new email address` |
 | `FLARE_EMAIL_BRANDING_INTRO_TEXT`           | Empty                            |
 
@@ -190,6 +192,7 @@ These defaults describe a new instance before your setup choices. Existing insta
 | Invite member limits            | 5 active invites per person; 1 use per invite; 30-day longest expiry  | [Invite links](/admin/users#set-member-limits)                    |
 | Let everyone create invites     | Off; stored as the Everyone role's `invites.create` grant             | [Invite links](/admin/users#choose-who-can-invite)                |
 | Background OCR                  | Enabled                                                               | [General settings](/admin/#general)                               |
+| Forbid plain uploads            | Off: people can choose a plain upload                                 | [Access settings](/admin/#forbid-plain-uploads)                   |
 | Credits footer                  | Shown                                                                 | [Appearance](/admin/appearance)                                   |
 | Storage provider                | Local                                                                 | [Storage](/hosting/storage)                                       |
 | S3 credentials / endpoint       | Empty; force path style off                                           | [S3](/hosting/storage#s3-compatible-storage)                      |
@@ -308,11 +311,13 @@ Account-specific settings are stored separately from the instance configuration:
 
 ## Test-only database variables
 
-The repository's integration suites use explicit disposable databases: `FLARE_ROLES_DATABASE_URL`, `FLARE_AVATAR_DATABASE_URL`, `FLARE_AUDIT_DATABASE_URL`, `FLARE_SECURITY_DATABASE_URL`, `FLARE_SETUP_DATABASE_URL`, `FLARE_FOLDERS_DATABASE_URL`, `FLARE_TAGS_DATABASE_URL`, `FLARE_CUSTOMIZATION_DATABASE_URL`, `FLARE_EMAIL_AUTH_DATABASE_URL`, `FLARE_EMAIL_DELIVERY_DATABASE_URL`, `FLARE_EMAIL_CONFIG_DATABASE_URL`, `FLARE_INVITES_DATABASE_URL`, `FLARE_TIMELINE_DATABASE_URL`, `FLARE_ARCHIVE_DATABASE_URL`, and `FLARE_EXPIRY_DATABASE_URL`. They are not production connection settings. These tests delete fixtures; never point them at an application database. The [permission/avatar test recipe](/contributing#database-permission-and-avatar-regression-tests) explains the separate database-name requirements and how to avoid accidentally skipping either suite.
+The repository's integration suites use explicit disposable databases: `FLARE_ROLES_DATABASE_URL`, `FLARE_AVATAR_DATABASE_URL`, `FLARE_AUDIT_DATABASE_URL`, `FLARE_SECURITY_DATABASE_URL`, `FLARE_SETUP_DATABASE_URL`, `FLARE_FOLDERS_DATABASE_URL`, `FLARE_TAGS_DATABASE_URL`, `FLARE_CUSTOMIZATION_DATABASE_URL`, `FLARE_EMAIL_AUTH_DATABASE_URL`, `FLARE_EMAIL_DELIVERY_DATABASE_URL`, `FLARE_EMAIL_CONFIG_DATABASE_URL`, `FLARE_INVITES_DATABASE_URL`, `FLARE_TIMELINE_DATABASE_URL`, `FLARE_ARCHIVE_DATABASE_URL`, `FLARE_EXPIRY_DATABASE_URL`, and `FLARE_E2EE_DATABASE_URL`. They are not production connection settings. These tests delete fixtures; never point them at an application database. The [permission/avatar test recipe](/contributing#database-permission-and-avatar-regression-tests) explains the separate database-name requirements and how to avoid accidentally skipping either suite.
 
 The real role browser/API checks use `FLARE_ROLES_TEST_ORIGIN` (default `http://127.0.0.1:3060`) and optionally `PW_CHROMIUM_EXECUTABLE_PATH`. These are local test-runner inputs, not server configuration. The runner accepts only loopback hosts and changes its disposable fixtures; follow the [role testing recipe](/admin/roles#reproduce-the-permission-checks-locally).
 
 The authentication database suite accepts only `flare_security_test_local` or `flare_security_test_ci` on `localhost` or `127.0.0.1`. Its connection URL must omit `schema` or provide one `schema=public` parameter; suffix names, other schemas, duplicate schema parameters, and any other URL query parameters are rejected. Follow the [security test recipe](/contributing#security-browser-checks-and-demos).
+
+The account key suite accepts only `flare_e2ee_test_local` or `flare_e2ee_test_ci` on `localhost` or `127.0.0.1`, with no URL query parameters. It deletes every account in that database. Follow the [same recipe](/contributing#security-browser-checks-and-demos).
 
 The [security browser demo](/contributing#security-browser-checks-and-demos) uses `FLARE_SECURITY_TEST_ORIGIN` (default `http://localhost:3061`), `FLARE_SECURITY_SCREENSHOTS` (optional output directory), and `FLARE_SECURITY_VIDEOS` (optional recording directory). These are test-runner inputs, not server features. Its seed script only accepts a PostgreSQL database named exactly `flare_auth_demo` on `localhost` or `127.0.0.1`, with `schema` omitted or set once to `public`. Names with suffixes, other schemas, duplicate schema parameters, and all other URL query parameters are rejected. The script resets its public demonstration accounts and security rate counters.
 

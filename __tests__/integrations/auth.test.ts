@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   token: vi.fn(),
   user: vi.fn(),
+  userUpdateMany: vi.fn(),
   update: vi.fn(),
   policy: vi.fn(),
 }))
@@ -15,7 +16,7 @@ vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     apiToken: { findUnique: mocks.token, update: mocks.update },
-    user: { findUnique: mocks.user },
+    user: { findUnique: mocks.user, updateMany: mocks.userUpdateMany },
     role: {
       findUnique: vi.fn(async () => ({
         id: 'everyone',
@@ -38,6 +39,7 @@ const token = {
   id: 'token-1',
   scopes: ['files:upload'],
   profileId: 'profile-1',
+  predatesEncryption: false,
   revokedAt: null,
   expiresAt: null,
   user: {
@@ -64,12 +66,18 @@ beforeEach(() => {
       storedTokens.get(where.hash) ?? null
   )
   mocks.user.mockImplementation(
-    async ({ where }: { where: { id?: string; uploadToken?: string } }) =>
-      where.id === token.user.id || where.uploadToken === legacyToken
-        ? token.user
+    async ({ where }: { where: { id?: string; uploadTokenHash?: string } }) =>
+      where.id === token.user.id ||
+      where.uploadTokenHash === hashApiToken(legacyToken)
+        ? {
+            ...token.user,
+            uploadTokenHash: hashApiToken(legacyToken),
+            uploadTokenUsedAt: null,
+          }
         : null
   )
   mocks.update.mockResolvedValue({})
+  mocks.userUpdateMany.mockResolvedValue({ count: 1 })
   mocks.policy.mockReturnValue(false)
   mocks.session.mockResolvedValue(null)
 })
@@ -90,6 +98,7 @@ describe('named bearer authentication', () => {
       id: 'token-1',
       scopes: ['files:upload'],
       profileId: 'profile-1',
+      predatesEncryption: false,
     })
     expect(user).not.toHaveProperty('password')
     // The token owner's access, not an empty one for an unknown account.
@@ -151,6 +160,76 @@ describe('named bearer authentication', () => {
       expect(mocks.token).not.toHaveBeenCalled()
     }
   )
+  it('finds the legacy token by its hash and never by the token itself', async () => {
+    const result = await getAuthenticatedUser(
+      request('/api/files', 'POST', `Bearer ${legacyToken}`)
+    )
+    expect(result?.credential).toBe('upload-token')
+    expect(result?.apiToken).toBeUndefined()
+    // The hash columns stay inside the lookup.
+    expect(result).not.toHaveProperty('uploadTokenHash')
+    expect(result).not.toHaveProperty('uploadTokenUsedAt')
+    const where = mocks.user.mock.calls[0][0].where
+    expect(where).toEqual({ uploadTokenHash: hashApiToken(legacyToken) })
+    expect(JSON.stringify(mocks.user.mock.calls)).not.toContain(legacyToken)
+    // The use is recorded, by the hash, for the warning in the application.
+    expect(mocks.userUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', uploadTokenHash: hashApiToken(legacyToken) },
+      data: { uploadTokenUsedAt: expect.any(Date) },
+    })
+  })
+  it('records a legacy token use at most once an hour, and a failed write does not refuse the request', async () => {
+    const stored = (usedAt: Date) =>
+      mocks.user.mockResolvedValue({
+        ...token.user,
+        uploadTokenHash: hashApiToken(legacyToken),
+        uploadTokenUsedAt: usedAt,
+      })
+    stored(new Date(Date.now() - 60_000))
+    const legacy = () =>
+      getAuthenticatedUser(
+        request('/api/files', 'POST', `Bearer ${legacyToken}`)
+      )
+    expect((await legacy())?.id).toBe('user-1')
+    expect(mocks.userUpdateMany).not.toHaveBeenCalled()
+    stored(new Date(Date.now() - 2 * 3_600_000))
+    mocks.userUpdateMany.mockRejectedValue(new Error('database is busy'))
+    expect((await legacy())?.id).toBe('user-1')
+    expect(mocks.userUpdateMany).toHaveBeenCalledOnce()
+  })
+  it('refuses a token that is not the stored one, and a revoked legacy token', async () => {
+    expect(
+      await getAuthenticatedUser(
+        request('/api/files', 'POST', 'Bearer legacy-mixedcasetoken')
+      )
+    ).toBeNull()
+    // A row that the index returned with a different hash is not trusted.
+    mocks.user.mockResolvedValue({
+      ...token.user,
+      uploadTokenHash: hashApiToken('another token'),
+      uploadTokenUsedAt: null,
+    })
+    expect(
+      await getAuthenticatedUser(
+        request('/api/files', 'POST', `Bearer ${legacyToken}`)
+      )
+    ).toBeNull()
+    mocks.user.mockResolvedValue({
+      ...token.user,
+      uploadTokenHash: null,
+      uploadTokenUsedAt: null,
+    })
+    expect(
+      await getAuthenticatedUser(
+        request('/api/files', 'POST', `Bearer ${legacyToken}`)
+      )
+    ).toBeNull()
+  })
+  it('marks a named token from before encryption', async () => {
+    mocks.token.mockResolvedValue({ ...token, predatesEncryption: true })
+    const user = await getAuthenticatedUser(request('/api/files'))
+    expect(user?.apiToken?.predatesEncryption).toBe(true)
+  })
   it.each(['Basic flr_test', 'Bearerflr_test', 'Bearer', 'Bearer\tflr_test'])(
     'does not treat the malformed or unrelated header %s as bearer authentication',
     async (authorization) => {

@@ -14,6 +14,9 @@ const { advanced, passThrough, nothing } = vi.hoisted(() => ({
   nothing: () => null,
 }))
 
+vi.mock('next/headers', () => ({
+  headers: async () => new Headers({ 'x-nonce': 'dGVzdC1ub25jZS0xMjM0NTY=' }),
+}))
 vi.mock('next/font/local', () => ({
   default: () => ({ variable: 'inter-variable', className: 'inter' }),
 }))
@@ -199,8 +202,10 @@ describe('custom code on the page', () => {
       '<meta name="google-site-verification" content="abc"><script>window.ready = true</script>'
     advanced.customCSS = '.a { background: url(data:image/png;base64,AAAA) }'
     const html = renderToStaticMarkup(await CustomHead({}))
+    // The script gets the nonce of the response, so the page's script
+    // policy lets it run (docs/e2ee-spec.md, section 13.1).
     expect(html).toBe(
-      '<meta name="google-site-verification" content="abc"/><script>window.ready = true</script><style id="custom-css" data-custom-css="true">.a { background: url(data:image/png;base64,AAAA) !important }</style>'
+      '<meta name="google-site-verification" content="abc"/><script nonce="dGVzdC1ub25jZS0xMjM0NTY=">window.ready = true</script><style id="custom-css" data-custom-css="true">.a { background: url(data:image/png;base64,AAAA) !important }</style>'
     )
     expect(await CustomHead({ recovery: true })).toBeNull()
   })

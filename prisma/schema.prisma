@@ -23,6 +23,15 @@ model User {
   avatarStoragePath           String?
   avatarStorageTarget         Json?
   password                    String?
+  // End-to-end encryption account record (docs/e2ee-spec.md, section 5.3).
+  // All four key fields are set together or not at all. wrappedRoot and
+  // sealedKeyring are stored with their record_version byte.
+  accountPublicKey            Bytes?
+  passphraseSalt              Bytes?
+  authPublicKey               Bytes?
+  wrappedRoot                 Bytes?
+  sealedKeyring               Bytes?
+  e2eeProtocolVersion         Int?
   totpSecret                  String?
   totpLastCounter             Int?
   passkeys                    Passkey[]
@@ -43,7 +52,17 @@ model User {
   oidcSubject                 String?               @unique
   vanityId                    String?               @unique
   urlId                       String                @unique
-  uploadToken                 String                @unique
+  /// SHA-256 of the account upload token from before end-to-end encryption.
+  /// Flare never has the token itself. Null once the user revokes it, and for
+  /// each account created after the upgrade (docs/e2ee-spec.md, section 14.4).
+  uploadTokenHash             String?               @unique
+  /// When an upload last used that token, to the hour.
+  uploadTokenUsedAt           DateTime?
+  /// Which files from before end-to-end encryption the server encrypts for
+  /// this account: `none`, `private` or `all`. Null until the account
+  /// answered the question (docs/e2ee-spec.md, section 14.2).
+  existingFilesChoice         String?
+  existingFilesChoiceAt       DateTime?
   randomizeFileUrls           Boolean               @default(false)
   files                       File[]
   vaultFolders                VaultFolder[]
@@ -116,17 +135,17 @@ model AuthRateLimit {
 }
 
 model BrowserSession {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   sessionVersion Int
   authMethod     String
   ipAddress      String?
   userAgent      String?
-  createdAt      DateTime @default(now())
-  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
   expiresAt      DateTime
   revokedAt      DateTime?
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt, expiresAt])
   @@index([expiresAt])
@@ -234,49 +253,138 @@ model EmailRateLimit {
 }
 
 model File {
-  id               String         @id @default(cuid())
-  name             String
-  urlPath          String         @unique
-  mimeType         String
-  size             Float
-  visibility       FileVisibility @default(PUBLIC)
-  uploadedAt       DateTime       @default(now())
-  userId           String
-  path             String
-  storageTarget    Json?
-  isOcrProcessed   Boolean        @default(false)
-  ocrText          String?
-  password         String?
-  isPaste          Boolean        @default(false)
-  ocrConfidence    Float?
-  ocrTagsPendingAt DateTime?
-  views            Int            @default(0)
-  downloads        Int            @default(0)
-  uploadOptions    Json           @default("{}")
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tags             VaultFileTag[]
-  folderId         String?        @map("vaultFolderId")
-  folder           VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  id                     String          @id @default(cuid())
+  name                   String
+  urlPath                String          @unique
+  mimeType               String
+  size                   Float
+  visibility             FileVisibility  @default(PUBLIC)
+  uploadedAt             DateTime        @default(now())
+  userId                 String
+  path                   String
+  storageTarget          Json?
+  isOcrProcessed         Boolean         @default(false)
+  ocrText                String?
+  password               String?
+  isPaste                Boolean         @default(false)
+  ocrConfidence          Float?
+  ocrTagsPendingAt       DateTime?
+  views                  Int             @default(0)
+  downloads              Int             @default(0)
+  uploadOptions          Json            @default("{}")
+  // End-to-end encryption (docs/e2ee-spec.md, sections 7 to 9). An encrypted
+  // file stores no name and no type: `name` is empty and `mimeType` is
+  // application/octet-stream. `header` is the 26-byte file header. The
+  // sealed record and the stanzas are stored with their record_version byte.
+  // `stanzaAccountPublicKey` is the account public key that `accountStanza`
+  // is for (section 8.3.4).
+  encrypted              Boolean         @default(false)
+  header                 Bytes?
+  sealedMetadata         Bytes?
+  accountStanza          Bytes?
+  stanzaAccountPublicKey Bytes?
+  passwordStanza         Bytes?
+  // Library features of encrypted files (sections 8.4.3, 9.7, 9.8 and 6.9).
+  // `folderStanza` is a folder_file_stanza, or a folder_link_secret_stanza
+  // when the file has a password stanza, for the folder key in
+  // `folderStanzaPublicKey`. A database trigger drops it when the file
+  // becomes private or leaves its folder. `syncSeq` moves on whenever a
+  // value that the local search cache keeps changes (a trigger sets it).
+  // `unreadable` marks a file whose account stanza no key of the account
+  // opens, after a reset without the mnemonic.
+  folderStanza           Bytes?
+  folderStanzaPublicKey  Bytes?
+  rulesPending           Boolean         @default(false)
+  ocrPending             Boolean         @default(false)
+  thumbnailPending       Boolean         @default(false)
+  pendingAttempts        Int             @default(0)
+  unreadable             Boolean         @default(false)
+  syncSeq                Int             @default(autoincrement())
+  // Set when the server encrypted a file that had a server-side password
+  // (section 14.2): the visibility that the file had. The server cannot make
+  // a password stanza, so such a file is private until its owner stores a
+  // password stanza or sets its visibility.
+  passwordPendingFrom    FileVisibility?
+  sealedData             FileSealedData?
+  user                   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tags                   VaultFileTag[]
+  folderId               String?         @map("vaultFolderId")
+  folder                 VaultFolder?    @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
+  @@index([userId, syncSeq])
+}
+
+// The sealed records of an encrypted file that only its lists do not need:
+// the text of an image (section 9.6.1) and the thumbnail (section 12.1).
+// Both are ciphertext with their record_version byte.
+model FileSealedData {
+  fileId          String @id
+  sealedOcrText   Bytes?
+  sealedThumbnail Bytes?
+  file            File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+}
+
+// One plain file that the server encrypts for its owner (docs/e2ee-spec.md,
+// section 14.2). The row is also the journal of the ciphertext object that
+// the running attempt writes: `ciphertextPath` is recorded before the first
+// byte reaches storage, so a later attempt can remove what a stopped one
+// left. It has no foreign keys on purpose: that record must survive the
+// deletion of the file or of the account. `errorCode` is one of a fixed list
+// of codes. No column holds a file name.
+model FileEncryptionJob {
+  id               String    @id @default(cuid())
+  userId           String
+  fileId           String    @unique
+  // pending, processing, failed or done.
+  status           String    @default("pending")
+  // Only while the file is private and has no server-side password.
+  onlyIfPrivate    Boolean   @default(false)
+  attempts         Int       @default(0)
+  availableAt      DateTime  @default(now())
+  leaseId          String?
+  leaseUntil       DateTime?
+  ciphertextPath   String?
+  ciphertextTarget Json?
+  errorCode        String?
+  // For a finished job: encrypted, skipped or gone.
+  result           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  finishedAt       DateTime?
+
+  @@index([status, availableAt])
+  @@index([userId, status, availableAt])
+  @@index([leaseUntil])
 }
 
 // Independent of retired Folder tables: folders organize existing files without
 // changing their storage paths, links, tags, or visibility.
 model VaultFolder {
-  id             String        @id @default(cuid())
-  userId         String
-  name           String
-  normalizedName String
-  parentId       String?
-  shareToken     String?       @unique
-  createdAt      DateTime      @default(now())
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent         VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
-  children       VaultFolder[] @relation("FolderTree")
-  files          File[]
+  id                     String        @id @default(cuid())
+  userId                 String
+  name                   String
+  normalizedName         String
+  parentId               String?
+  shareToken             String?       @unique
+  // Folder keys (docs/e2ee-spec.md, section 8.4.2). A folder that has keys
+  // stores no name: `name` is empty and `normalizedName` is `/sealed/{id}`.
+  // `parentStanzaPublicKey` is the parent key that `parentFolderStanza` is
+  // for. `rekeyPending` is set when sharing stops, until the owner's browser
+  // replaces the key pair (section 9.4.5).
+  folderPublicKey        Bytes?
+  sealedFolderMetadata   Bytes?
+  sealedFolderPrivateKey Bytes?
+  parentFolderStanza     Bytes?
+  parentStanzaPublicKey  Bytes?
+  rekeyPending           Boolean       @default(false)
+  createdAt              DateTime      @default(now())
+  user                   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent                 VaultFolder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: NoAction)
+  children               VaultFolder[] @relation("FolderTree")
+  files                  File[]
 
   // Root names are also unique through a partial index in the migration.
   @@unique([userId, parentId, normalizedName])
@@ -286,15 +394,19 @@ model VaultFolder {
 // Separate tables from the retired folder feature, whose tables may still
 // exist on upgraded installations. Tags never change file paths or visibility.
 model VaultTag {
-  id             String         @id @default(cuid())
-  userId         String
-  name           String
-  normalizedName String
-  ruleSource     String?
-  ruleText       String?
-  createdAt      DateTime       @default(now())
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  files          VaultFileTag[]
+  id                String         @id @default(cuid())
+  userId            String
+  name              String
+  normalizedName    String
+  ruleSource        String?
+  ruleText          String?
+  // The name and the rule, sealed with the owner's tag_key (section 9.5.2).
+  // A tag that has it stores no name and no rule: `name` is empty,
+  // `normalizedName` is `/sealed/{id}` and both rule columns are null.
+  sealedTagMetadata Bytes?
+  createdAt         DateTime       @default(now())
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files             VaultFileTag[]
 
   @@unique([userId, normalizedName])
 }
@@ -324,17 +436,20 @@ model UploadProfile {
 }
 
 model ApiToken {
-  id         String    @id @default(cuid())
-  userId     String
-  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name       String
-  hash       String    @unique
-  scopes     String[]
-  profileId  String?
-  expiresAt  DateTime?
-  revokedAt  DateTime?
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  hash               String    @unique
+  scopes             String[]
+  profileId          String?
+  expiresAt          DateTime?
+  revokedAt          DateTime?
+  lastUsedAt         DateTime?
+  createdAt          DateTime  @default(now())
+  /// Issued before end-to-end encryption. Its uploads are plain files,
+  /// whatever its upload profile says (docs/e2ee-spec.md, section 14.4).
+  predatesEncryption Boolean   @default(false)
 
   @@index([userId])
 }

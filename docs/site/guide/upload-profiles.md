@@ -36,6 +36,7 @@ Fields not explicitly set by a starter still inherit your account or instance de
 
 | Option          | Values                                                | What it changes                                                   |
 | --------------- | ----------------------------------------------------- | ----------------------------------------------------------------- |
+| Encryption      | Encrypted, Plain                                      | Whether tools must encrypt. See [Encryption](#encryption).        |
 | Visibility      | Inherit, Public, Private                              | Who can open new uploads.                                         |
 | Expiration      | Inherit, none, one hour, one day, one week, one month | A relative lifetime calculated when the upload starts.            |
 | When it expires | Inherit, Delete file, Make private                    | Whether expiration removes the stored file or keeps it privately. |
@@ -44,6 +45,28 @@ Fields not explicitly set by a starter still inherit your account or instance de
 | Tags            | Your selected tags                                    | Organizational labels applied to new uploads.                     |
 
 Passwords and folder destinations are chosen separately for individual uploads. They are not stored in profiles. A random URL name is not an access restriction: choose private visibility or password protection when access should be restricted.
+
+### Encryption
+
+Every profile has an **Encryption** setting with two values. It has no **Inherit**: a profile that does not say **Plain** is **Encrypted**, and so is every profile from before this setting existed.
+
+| Value                   | Uploads with a token for this profile                                                                                 | In the upload dialog             |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| **Encrypted** (default) | Must be encrypted, with the [flare-upload](./screenshot-tools#how-a-tool-uploads) program. A plain upload is refused. | **Encrypted** is selected first. |
+| **Plain**               | Must be plain. The server can read the files, and links can show the content in a preview on other sites.             | **Plain** is selected first.     |
+
+<Screenshot src="/screenshots/customization/upload-profile-encryption.png" alt="The profile editor with the Encryption setting above Visibility and Expiration, and a line that explains what Encrypted means for tools and link previews" caption="Encryption is the first choice of a profile. The line below it says what the selected value means." />
+
+An encrypted file shows only a [generic preview](./encryption#choose-encrypted-or-plain) on other sites. Choose **Plain** for a profile whose links must show their content in chats, such as a screenshot profile for a public channel.
+
+The two columns work differently on purpose:
+
+- **A tool has no dialog**, so its profile decides. Flare refuses an encrypted upload to a Plain profile and a plain upload to an Encrypted one, with a message that names the setting. This stops a wrong configuration from uploading plain files by mistake. A token that selects no profile follows your default profile, or **Encrypted** if you have none.
+- **In the browser, your choice in the upload dialog wins.** The profile only decides which choice the dialog shows first when you select it. A choice you make stays until you select a different profile, also if you made it while the page was still loading your profiles. Dropping files onto the dashboard has no dialog and always encrypts.
+
+Two exceptions: a tool configuration [from before encryption](./screenshot-tools#old-configurations) always uploads plain files, whatever the profile says. And if your administrator [forbids plain uploads](/admin/#forbid-plain-uploads), **Plain** cannot be selected for a profile, uploads through a profile that is already Plain are refused, and the upload dialog shows no choice.
+
+Changing a profile's Encryption setting breaks the tool configurations made for it: the server then refuses what they send. [Create a new configuration](./screenshot-tools#create-a-configuration) for each tool afterwards.
 
 ## Understand the order of settings
 
@@ -86,9 +109,9 @@ The vanity path is account-wide and is separate from profiles. Changing or clear
 
 ## Connect a saved profile to a tool
 
-On a saved profile, use **Use this profile in your tools** to download a configuration or script for ShareX, Bash, Flameshot, Spectacle, or iTake. The file includes your account upload token and selects that profile automatically. ShareX and Bash download at once. Flameshot, Spectacle, and iTake open the same setup dialog as the general [screenshot tools](./screenshot-tools), so you can choose Wayland support, a screen recording, or any other option for the profile. The buttons appear only when your role has both `files.upload` and `tokens.manage`, like the general tools.
+A tool uploads through a profile with a configuration of its own. In **Screenshot tools and scripts**, choose the profile under **Upload profile** and select **Create configuration**. Flare makes a new upload token bound to that profile and writes the files for [flare-upload, ShareX, Flameshot, Spectacle, iTake and Bash](./screenshot-tools). The saved profile's editor links there under **Use this profile in your tools**; the link appears only when your role has both `files.upload` and `tokens.manage`. Earlier versions had a row of download buttons in the editor, which wrote the account upload token into each file. Flare no longer has that token.
 
-Downloads from the general **Screenshot tools and scripts** section use your account's default behavior instead. This is useful if you want changing your default profile to change how those tools upload.
+Choose **Follow my default profile** instead when changing your default profile should change how the tool uploads. If the new default has a different Encryption setting, the tool's uploads are refused until you create a new configuration.
 
 For custom integrations, a [named API token](../api/authentication) can be bound to a profile. A bound token cannot select another profile or override its upload settings. Deleting that profile makes uploads with the bound token fail until the integration is reconfigured.
 

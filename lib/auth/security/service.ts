@@ -89,8 +89,9 @@ export function assertRecentPasskeyProof(
 /**
  * Proves that the person changing an account is its owner, now. An account
  * that requires passkeys proves it with a recent passkey or passkey recovery
- * code sign-in; any other with its password, or with a recent SSO sign-in when
- * it has no password.
+ * code sign-in; any other with its password, with a recent passphrase sign-in
+ * when it has encryption keys, or with a recent SSO sign-in when it has no
+ * local secret.
  *
  * Security changes also ask for the `secondFactor`: the authenticator code
  * when the account has one, used up in `tx` with the account row locked. For
@@ -119,6 +120,22 @@ export async function assertFreshIdentity(
   if (user.password) {
     if (!proof.password || !(await compare(proof.password, user.password)))
       throw new SecurityError('Confirm your current password to continue.')
+    if (options.secondFactor)
+      await consumeSecondFactor(options.tx, user, proof.code)
+    return
+  }
+  if (user.authPublicKey) {
+    // The passphrase never reaches the server, so no request can carry it as
+    // proof. A recent passphrase sign-in is the proof, as a recent SSO
+    // sign-in is for an account without a local secret. The authenticator
+    // code is still used up for a security change.
+    if (
+      !recentAuthentication(session, 'passphrase') &&
+      !recentAuthentication(session, 'recovery')
+    )
+      throw new SecurityError(
+        `Sign in again with your passphrase, then retry within ${RECENT_PROOF_WINDOW}.`
+      )
     if (options.secondFactor)
       await consumeSecondFactor(options.tx, user, proof.code)
     return
@@ -230,7 +247,7 @@ export async function setupTotp(session: Session, proof: SecurityProof) {
       secondFactor: true,
       tx,
     })
-    if (!user.password)
+    if (!user.password && !user.authPublicKey)
       throw new SecurityError(
         'Authenticator setup requires an existing local password. Manage SSO authentication with your identity provider.'
       )

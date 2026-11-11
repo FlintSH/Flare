@@ -52,7 +52,7 @@ suite('file expiry against disposable PostgreSQL', () => {
     await prisma.auditEvent.deleteMany()
     await prisma.user.deleteMany()
     await prisma.user.create({
-      data: { id: owner, name: owner, urlId: owner, uploadToken: owner },
+      data: { id: owner, name: owner, urlId: owner },
     })
   })
 

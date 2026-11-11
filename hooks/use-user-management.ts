@@ -15,6 +15,8 @@ export interface User {
   urlId: string
   vanityId: string | null
   storageUsed: number
+  /** The account has encryption keys: its passphrase cannot be set by anyone else. */
+  hasPassphrase?: boolean
   invitedBy?: { id: string; name: string | null } | null
   _count: {
     files: number

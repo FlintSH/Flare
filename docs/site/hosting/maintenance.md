@@ -155,6 +155,124 @@ After migration, sign in as an existing administrator, inspect **Admin → Roles
 
 Rollback requires the recorded old image plus its matching pre-upgrade database and file backup. An older image cannot use the removed role enum's replacement schema; changing the image alone is insufficient. [Follow the restore and rollback instructions](#rollback).
 
+### Account key migration
+
+Migration `20261110000000_e2ee_account_keys` adds six nullable columns to `User` for the [account record](/api/account-keys#what-the-server-stores) of end-to-end encryption: two public keys, a salt, a protocol version, and two sealed values that only the account's owner can open. It also adds a check constraint: an account has the whole record or none of it, and an account that has it has no password hash. Normal image startup applies the migration; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive, needs no backfill and no new environment variable, and changes no existing account. Each account keeps its password until its owner sets up keys after signing in, which deletes the hash.
+
+**What people see after the upgrade.** Sign-in asks for the email address first. An existing account then gets a **Password** field, signs in as before, and lands on **Set up encryption**, which it must finish before anything else in Flare opens: keep the password as the passphrase if it passes the strength check or choose a new one, then save a 24-word recovery phrase. An account that signs in with a passkey or SSO chooses a passphrase the same way after its next sign-in. Accounts migrate one by one, whenever their owners next sign in, and an account that never comes back keeps its password and has no keys. Tell people before the upgrade, in these words or your own:
+
+- The passphrase replaces the password, and nobody can reset it for them. You cannot either.
+- The recovery phrase is the only way back in with their encrypted files if they forget it. They should store it offline.
+- Screenshot tools and API tokens keep working through the upgrade. A later passphrase change cancels them.
+
+[Passphrase and recovery phrase](/guide/passphrase) is the page for users. The account keys are what [encrypted files](#encrypted-files-migration) are encrypted to.
+
+**Set up encryption needs a sign-in from the last five minutes**, measured by the server's clock. Keep the clocks of every replica synchronized, as for the other [recent sign-in checks](/admin/users#account-sign-in-security).
+
+**Custom clients and scripts that sign in.** Registration and first-run setup no longer accept a password, and password sign-in stops for each account when it sets up its keys. The repository's own browser check suites under `scripts/` that signed in through the old one-step form need the same change; `scripts/e2ee/verify-ui.cjs` drives the new flows.
+
+The sealed values and public keys are part of the database, so database backups contain them. A person who has a backup cannot sign in with it, but can test passphrases against it offline, on their own hardware and without Flare's attempt limits. Only the strength of each passphrase and the cost of Argon2id stand in the way, and an account's second factor does not help there. Protect backups as before, and note that restoring a backup from before a passphrase change brings back the old passphrase and the named tokens and upload token that the change cancelled.
+
+Fake salts for unknown sign-in addresses come from `NEXTAUTH_SECRET`. Changing that secret changes them, which lets an observer who recorded earlier answers tell which addresses have no account. It affects nothing else here: no account key depends on `NEXTAUTH_SECRET`.
+
+Keep the reverse proxy [passing request paths through unchanged](/hosting/reverse-proxy#pass-request-paths-through-unchanged); passphrase changes depend on it.
+
+### Encrypted files migration
+
+Migration `20261111000000_e2ee_encrypted_files` adds six columns to `File`: `encrypted` (false for every existing file), the 26-byte file `header`, `sealedMetadata`, `accountStanza`, `stanzaAccountPublicKey`, and `passwordStanza`. A check constraint requires an encrypted row to have its records, an empty `name`, the type `application/octet-stream`, no password hash and no OCR text, and a plain row to have none of the records. The migration only adds columns: it does not touch existing files, their addresses, or their stored objects, and it needs no downtime beyond the usual `migrate deploy`.
+
+**What changes for people.** Uploads made in the browser are encrypted by default from this release on. Existing files stay plain until their owner chooses to have them encrypted; see the [existing files migration](#existing-files-migration). Each person needs their [account keys](#account-key-migration) set up and unlocked to upload. Uploads from screenshot tool configurations and API tokens made before the upgrade stay plain and need no change; see the [upload token migration](#upload-token-migration) for what new configurations do. [Encrypted and plain files](/guide/encryption) is the page for users, including its limits.
+
+### Encrypted library migration
+
+Migration `20261112000000_e2ee_library` adds what the library features of encrypted files store: columns, two triggers and one table. It changes no value of an existing row, but the new `syncSeq` column gets a number for every file, so PostgreSQL rewrites the `File` table and holds it locked while it does. The check constraints of this migration and of the one before it read the whole table under the same lock. On a large instance plan a short maintenance window for `migrate deploy`.
+
+Stop every process of the old release before you migrate. The [upload token migration](#upload-token-migration) removes a column that the old release reads on every request, so an old process that still runs after it fails to sign anyone in. A rolling deployment across these migrations is not possible.
+
+| Table            | Added                                                                                                                                                                                                |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VaultFolder`    | `folderPublicKey`, `sealedFolderMetadata`, `sealedFolderPrivateKey`, `parentFolderStanza`, `parentStanzaPublicKey`, `rekeyPending`. A folder with keys has an empty `name`.                          |
+| `VaultTag`       | `sealedTagMetadata`. A sealed tag has an empty `name` and no rule columns.                                                                                                                           |
+| `File`           | `folderStanza`, `folderStanzaPublicKey`, `rulesPending`, `ocrPending`, `thumbnailPending`, `pendingAttempts`, `unreadable`, and `syncSeq`, a sequence number that moves when a listed value changes. |
+| `FileSealedData` | New. One row per encrypted file that has a sealed thumbnail or sealed image text.                                                                                                                    |
+
+Folder and tag names are not rewritten by the migration. Each person's browser seals their own names the first time they unlock their keys after the upgrade, and the server then deletes the plain name in that request. Accounts that never return keep plain names. Do not script a bulk change of `VaultFolder.name` or `VaultTag.name`: a check constraint ties an empty name to its sealed record.
+
+A trigger on `File` deletes a folder stanza when a file becomes private or changes folder, whoever makes the change, and moves `syncSeq`. A trigger on `VaultFileTag` and `FileSealedData` moves `syncSeq` when a file's tags or image text change. Nothing reads `syncSeq` but the browsers' local search cache, which also repairs itself when it disagrees with the server, so a restore from backup needs no extra step.
+
+**What changes for you.**
+
+- **Text recognition for encrypted images runs in browsers.** Flare serves the tesseract.js worker, its WebAssembly core and the English language data itself, under `/api/ocr/`, from the `tesseract.js` and `@tesseract.js-data/eng` packages in the image. No browser contacts another site for them, and they are public files that need no session. If a proxy or CDN in front of Flare rewrites response headers, keep the `Content-Security-Policy` header of these responses: the recognition worker takes its policy from it. Server OCR for plain images still downloads its language data from a public CDN the first time it runs, as before.
+- **The database is larger per encrypted file.** A sealed thumbnail is typically 5 to 40 KB and at most 256 KB, and sealed image text is the size of the text plus 57 bytes. Both are in `FileSealedData`, not in storage.
+- **Storage holds ciphertext for encrypted files.** The object key is `uploads/{urlId}/{uuid}/{fileId}`, with a random file ID and no filename. A stored object starts with the 8 bytes `FLAREE2E`. You cannot inspect, scan, deduplicate or thumbnail these objects, and neither can antivirus or DLP tooling that reads the bucket.
+- **Back up the database and the storage together.** An encrypted object is useless without its `File` row, which holds the sealed name and the stanza that carries its key, and without the owner's account record. A storage-only restore yields unnamed ciphertext. Restore both from the same point in time.
+- **You cannot recover an encrypted file for a user.** If they lose their passphrase and their recovery phrase, their encrypted files are unreadable for everyone. Plain files are unaffected.
+- **Webhooks send version 2 of `file.ready`** for every file. See the [webhook change](/api/webhooks#version-2). Deliveries queued before the upgrade keep the version 1 payload they were queued with.
+- **A page script policy is now sent.** Review your proxy against [Content-Security-Policy](/hosting/reverse-proxy#content-security-policy): a proxy that caches HTML, injects scripts, or adds its own policy needs changing.
+- **Quotas count ciphertext**, which is the file size plus 26 bytes and 32 bytes per 64 KiB: about 0.05% more.
+
+Rolling back to a build before this migration leaves encrypted rows that the older build would serve as nameless binary files. Delete or keep them knowingly; do not roll back the migration itself while such rows exist.
+
+### Existing files migration
+
+Migration `20261114000000_e2ee_existing_files` adds what the encryption of files from before this release needs. It only adds columns and one table and touches no existing row: no file changes until its owner chooses.
+
+| Table               | What the migration adds                                                                                                                                   |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`              | `existingFilesChoice` (`none`, `private` or `all`, null until the person answered) and `existingFilesChoiceAt`.                                           |
+| `File`              | `passwordPendingFrom`: set on a file that had a server-side password when the server encrypted it. It holds the visibility the file had.                  |
+| `FileEncryptionJob` | New. One row per file that waits for encryption or is being encrypted, with the IDs of the file and the account, a state, an error code and no file name. |
+
+**Who starts it.** Each person does, for their own files, after they [set up their keys](#account-key-migration). The question covers the plain files from before this release, which Flare recognizes by upload options without an `encryption` setting; a file uploaded as plain afterwards is encrypted only when its owner asks for that file. Encrypting a file needs that person's public key and their decision about links and passwords, so an administrator cannot start it for someone else, and no setting starts it for the whole instance. An account that never signs in again has no keys and keeps its plain files.
+
+**What the server does for one file.** It reads the stored object as a stream, encrypts it, and writes the ciphertext to a new object next to it. It checks that it read every byte of the stored object, then reads the new object back and decrypts it to check the length and a hash of the content. Then one database transaction points the file at the ciphertext, replaces the name, the type and the image text with sealed records, and queues the deletion of the old object. The old object is deleted right after that commit. A stop at any point leaves the file readable: before the commit it is the plain file it was, and after it the encrypted file. What a stopped attempt wrote is removed by [account storage cleanup](#account-storage-cleanup), which is also what deletes the old object if the process stops between the commit and the deletion.
+
+Plan for this:
+
+- **Free storage for one file at a time.** While a file is encrypted, its plaintext and its ciphertext both exist. Two files are in progress at most across all app processes, so keep free space for your two largest files. The ciphertext is 26 bytes plus 32 bytes per 64 KiB larger than the file, about 0.05%. A quota never stops the encryption of a file that is already stored, so an account at its limit ends slightly above it.
+- **Load.** Each file is read twice and written once, and encrypted and decrypted on one CPU core inside the app process. Expect one core busy and steady storage traffic while a large library is converted. The worker polls every **5 seconds**, runs **2 files at a time** in total, and gives each account a turn. A job has a **2-minute lease**, renewed every 30 seconds; a failed attempt is retried after 30 seconds and then 60 seconds, and after **3 attempts** the file is listed for its owner with a retry button. For an image of at most 25 MiB the server also makes the 480-pixel WebP thumbnail with `sharp` during the job, so browsers do not download every image again. `sharp` is an optional dependency; where it is not installed, thumbnails are made later by the owner's browser.
+- **S3.** The ciphertext is a new object with a new key, uploaded in parts, and the old object is deleted with the credentials Flare already has. Bucket versioning keeps the old plaintext version: expire noncurrent versions or delete them after the migration.
+- **Old backups contain the plaintext.** Every database backup and every storage backup or snapshot from before a file was encrypted still holds its name, its content and its image text. Encrypting the live copy does not change them. After people have converted their files, take a new consistent backup, verify a restore, and then delete or replace the old backups, snapshots and replicas. Until you do, the files are only as private as those copies.
+- **What the server keeps of a converted file.** The name is removed from the file's row, from its queued expiry job, from its earlier audit records and from its `file.ready` webhook deliveries. Resized copies of public images that the image optimizer cached in `.next/cache/images` are deleted. Requests that your reverse proxy or CDN logged or cached before the conversion are yours to expire.
+- **The server read the files already.** This migration encrypts files that the server stored as plaintext, some of them for years. It protects them from now on. It cannot show that nobody read or copied them before, and you should not tell people that it does.
+
+**What people see.** After they have keys, Flare asks them one time which existing files to encrypt. See [files from before encryption](/guide/encryption#files-from-before-encryption) for the choices. A public file gets a new address when it is encrypted, and its old link answers 404 like an address that never existed. A file with a server-side password is encrypted without one and made private until its owner sets a password again, because the server has only a hash of the old password.
+
+**Check what is left.** Count plain files per account without reading a name:
+
+```sh
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT "userId", count(*) AS plain_files, round(sum(size)::numeric, 1) AS megabytes FROM "File" WHERE encrypted = false GROUP BY "userId" ORDER BY plain_files DESC;'
+
+docker compose exec -T db psql -U flare -d flare -c \
+  'SELECT status, coalesce(result, "errorCode", $$-$$) AS detail, count(*) AS files FROM "FileEncryptionJob" GROUP BY 1, 2 ORDER BY 1, 2;'
+```
+
+The first query lists accounts that still have plain files: people who chose to keep public or password files plain, people who have not answered, accounts that never came back, and uploads from old tool configurations, which stay plain. The second shows the queue. `pending` with `library_not_ready` waits for the owner's browser to convert their folders and tags, which happens the next time they open Flare with their keys unlocked. `failed` rows carry one of `source_missing` (the stored object is gone: check storage), `storage_read_failed`, `storage_write_failed`, `verification_failed`, `account_keys_missing` or `internal_error`. A failed file is still the plain file it was. The `file-encryption` log component names files by ID only. Finished jobs are removed after 7 days. To confirm that no plaintext object is left in storage for converted files, also check that [pending cleanup](#inspect-pending-cleanup) is empty.
+
+Rolling back to an earlier build does not turn converted files back into plain files. Nothing can: the server does not have their keys.
+
+### Upload token migration
+
+Migration `20261113000000_e2ee_upload_tokens` changes how upload credentials are stored. It runs with the usual `migrate deploy` and needs no downtime beyond it.
+
+- **The account upload token becomes a hash.** `User.uploadToken` held each account's token as plain text. The migration writes its SHA-256 to `User.uploadTokenHash`, the same form as a named API token, and drops the plain column. A person who copies the database after the upgrade can no longer upload as each user. Installed ShareX, iTake, Flameshot, Spectacle and Bash configurations keep authenticating: they hold the token, and Flare compares its hash.
+- **The token cannot be shown again.** `GET` and `POST /api/profile/upload-token` are removed, and so is the **Manual setup and upload token** section of the profile. Nothing can return the token after the migration. `User.uploadTokenUsedAt` records, to the hour, when an old configuration last uploaded, for the warning people see.
+- **Existing named tokens are marked.** `ApiToken.predatesEncryption` is `true` for every token that existed at the migration and `false` for each new one. A marked token, like the account upload token, belongs to a tool that cannot encrypt: its uploads stay plain files, whatever its upload profile says.
+- **New accounts get no upload token.** A tool gets a named token with the configuration its owner creates.
+
+**What changes for people.** Their tools keep uploading plain files, and **Profile → Uploads** shows a warning until they [create new configurations and revoke the old token](/guide/screenshot-tools#old-configurations). Encrypted uploads from a tool need the [flare-upload](/guide/screenshot-tools#install-flare-upload) program, which people download from the releases page of Flare. Upload profiles gain an **Encryption** setting. Every existing profile reads as **Encrypted**: that decides what a new tool configuration must send and what the upload dialog shows first, and it does not change what marked tokens may send.
+
+**What changes for you.**
+
+- **Old backups still hold the tokens in plain text.** A database backup from before this migration contains every account upload token, and those tokens keep working until each person revokes theirs. Replace or delete old backups as you already must for [plain files](#encrypted-files-migration), and ask people to revoke their old token once their tools are moved.
+- **Integrations that read the token break.** Anything that called `GET /api/profile/upload-token` to fetch a credential, or `POST` to rotate it, now gets `404`. The generated-configuration routes `/api/profile/sharex`, `/itake`, `/flameshot`, `/spectacle` and `/bash` are removed too: the browser writes those files, because the server no longer has a token to put in them. Use a [named token](/api/authentication).
+- **New named tokens upload encrypted files by default.** A plain upload with a token created after the upgrade is refused unless the token's upload profile is set to **Plain**. Tokens from before the upgrade are not affected. See [the rules](/api/files#which-uploads-a-token-may-send).
+- **"Rotate upload tokens after a password reset"** in Settings → Email, and `FLARE_EMAIL_RECOVERY_ROTATE_UPLOAD_TOKEN`, now revoke the old token without issuing a new one.
+- **You can forbid plain uploads** for the instance in [Settings → Access](/admin/#forbid-plain-uploads). It is off after the upgrade. Turning it on stops every old configuration at once.
+
+Rolling back to a build before this migration is not possible without restoring the database: the plain tokens no longer exist, so the older build could not authenticate any upload tool.
+
 ### Invite links migration
 
 Migrations `20261011010000_invites` and `20261011020000_invite_member_index` add the `Invite` table, its role join table, and an optional, indexed `User.inviteId` reference. The index keeps invite lists and account deletion from scanning every account. Normal image startup applies both; source deployments run `npx prisma migrate deploy` before starting the updated app. It is additive: existing accounts, roles, registration settings, and integrations are unchanged, and no data backfill or new environment variable is required.
@@ -258,7 +376,7 @@ The dependency refresh retains Next.js 15, React 18, Prisma 6, and Tailwind 3. I
 - [Folders](/guide/folders) and [tags](/guide/tags) are optional ways to organize your library. Folders start unshared, and tags stay private to your account. A shared folder lists only its direct public files; it does not publish private files or subfolders.
 - **Copy link** now always copies the plain share-page URL. The old **Copy format** preference has been removed. Upload responses use that same URL for `url`, `pageUrl`, and `copyText`; clients that need raw bytes or direct downloads should use `rawUrl` or `downloadUrl` explicitly. Review custom clients that relied on Markdown or HTML in `copyText`.
 - Changing your URL ID now updates public file URLs while preserving the storage paths used to read, download, and delete existing files. Links using the previous ID may stop working; copy the current link again. The fix does not automatically repair files affected by an earlier failed change. Restore those files from a matching backup if needed.
-- Screenshot tools can be configured directly from **Profile → Uploads → Screenshot tools and scripts**. [macOS setup with iTake](/guide/screenshot-tools#itake-on-macos) is available alongside the existing tools.
+- Screenshot tools can be configured directly from **Profile → Uploads → Screenshot tools and scripts**. [macOS setup with iTake](/guide/screenshot-tools#macos) is available alongside the existing tools.
 
 After updating, test a new upload, a copied link, an existing download, and any screenshot-tool integration you use. Review a shared folder while signed out before distributing its link.
 
@@ -407,6 +525,7 @@ Background work runs inside the application. Each process starts these workers w
 | [Audit retention](../admin/audit#retention-and-operational-limits), only with `FLARE_AUDIT_RETENTION_DAYS` set | 1 minute after start, then hourly | `audit-retention`  |
 | [Account storage cleanup](#account-storage-cleanup)                                                            | Every 5 seconds                   | `storage-cleanup`  |
 | [File expiry](#file-expiry-jobs)                                                                               | Every 5 seconds                   | `file-expiry`      |
+| [Encryption of existing files](#existing-files-migration)                                                      | Every 5 seconds                   | `file-encryption`  |
 | [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
 | [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
 | [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
