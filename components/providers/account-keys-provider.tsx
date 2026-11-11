@@ -32,6 +32,8 @@ import { forgetThumbnails } from '@/lib/e2ee/client/thumbnails'
 import { wipe } from '@/lib/e2ee/primitives'
 import { endSearchSession } from '@/lib/library/search-client'
 
+import { useHydrated } from '@/hooks/use-hydrated'
+
 /** Where an account without keys chooses its passphrase. */
 export const KEY_SETUP_PATH = '/auth/encryption'
 
@@ -225,12 +227,20 @@ export function AccountKeysProvider({
 /**
  * The account keys of this browser. Later phases read
  * `state.status === 'unlocked'` and `state.keys` to encrypt and decrypt.
+ *
+ * A part of a page can arrive from the server after the keys of this
+ * browser are read: the dashboard sends a placeholder first. While React
+ * attaches such a part to the markup of the server, a component gets the
+ * state that the server rendered with, `loading`, and the real state in the
+ * render after it. Otherwise the two would differ, and React would throw
+ * the markup away and build the part again.
  */
 export function useAccountKeys(): AccountKeysContext {
   const context = useContext(Context)
+  const hydrated = useHydrated()
   if (!context)
     throw new Error('useAccountKeys must be used inside AccountKeysProvider')
-  return context
+  return hydrated ? context : { ...context, state: INITIAL_ACCOUNT_KEY_STATE }
 }
 
 /**
@@ -239,5 +249,6 @@ export function useAccountKeys(): AccountKeysContext {
  * read the state: a plain file needs no key at all.
  */
 export function useAccountKeyState(): AccountKeyState {
-  return useContext(Context)?.state ?? INITIAL_ACCOUNT_KEY_STATE
+  const state = useContext(Context)?.state ?? INITIAL_ACCOUNT_KEY_STATE
+  return useHydrated() ? state : INITIAL_ACCOUNT_KEY_STATE
 }

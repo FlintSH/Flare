@@ -18,6 +18,8 @@ import { useSession } from 'next-auth/react'
 
 import { apiRequest } from '@/lib/client/request'
 
+import { useHydrated } from '@/hooks/use-hydrated'
+
 /** The signed-in account and this browser's session with it. */
 export interface SessionScope {
   userId: string
@@ -115,13 +117,34 @@ export function useAccountQuery<T>(
   }: AccountQueryOptions<T> = {}
 ) {
   const scope = useSessionScope()
-  return useQuery({
+  const query = useQuery({
     ...options,
     ...ACCOUNT_DATA,
     queryKey: accountKey(name, scope, path, ...key),
     queryFn: ({ signal }) => apiRequest<T>(path, { signal, fallback, whole }),
     enabled: !!scope && enabled,
   })
+  // A part of a page can arrive from the server after another part has
+  // read this data already: the dashboard sends a placeholder first. The
+  // server rendered that part without data. While React attaches it to the
+  // server's markup, it gets the same, and the data in the render after
+  // it. Otherwise the two would differ, React would build the part again,
+  // and what a person typed or selected in it meanwhile would be lost.
+  // The server itself renders with what its own cache holds, which is
+  // nothing in the application.
+  const hydrated = useHydrated()
+  if (hydrated || query.data === undefined || typeof window === 'undefined')
+    return query
+  return {
+    ...query,
+    data: undefined,
+    error: null,
+    status: 'pending',
+    isPending: true,
+    isLoading: true,
+    isSuccess: false,
+    isError: false,
+  } as unknown as typeof query
 }
 
 /** Reads every open query of this name again; resolves once they have loaded. */

@@ -76,7 +76,7 @@ export function useClientView(filters: LibraryFilters): boolean {
   const index = useSyncExternalStore(
     searchIndex.subscribe,
     searchIndex.getState,
-    searchIndex.getState
+    searchIndex.getServerState
   )
   // The worker starts when the keys unlock. Until it has started, the view
   // waits for it: the server's answer alone would put every encrypted file
@@ -93,7 +93,7 @@ function useIndexVersion() {
   const index = useSyncExternalStore(
     searchIndex.subscribe,
     searchIndex.getState,
-    searchIndex.getState
+    searchIndex.getServerState
   )
   const [version, setVersion] = useState(index.version)
   const latest = useRef(index.version)

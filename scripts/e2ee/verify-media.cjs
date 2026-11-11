@@ -882,6 +882,7 @@ async function chooseFiles(page, list) {
 
 async function uploadEncrypted(page, list, { password } = {}) {
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
     'data-encryption-choice',
     'encrypted'
@@ -1004,6 +1005,7 @@ async function testUploads(alex) {
   Object.assign(uploaded, await uploadEncrypted(page, large))
   // One plain file: the search at the end must be able to find something.
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await page.getByRole('radio', { name: /Plain/ }).check()
   await chooseFiles(page, [PLAIN])
   await page.getByRole('button', { name: /^Upload 1 file$/ }).click()
@@ -2669,6 +2671,7 @@ async function testPaste(browser, alex) {
   extraPlaintext.set(PASTE.name, 'the name of an encrypted paste')
   extraPlaintext.set(PASTE.marker, 'plaintext of an encrypted paste')
   await page.goto(`${origin}/dashboard/paste`)
+  await shared.pageReady(page)
   await page.locator('#content').fill(PASTE.text)
   await page.locator('#filename').fill(PASTE.name)
   // Encrypted without a choice by the person.

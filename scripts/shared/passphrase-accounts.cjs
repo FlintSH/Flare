@@ -337,6 +337,42 @@ async function openCreationOptions(page) {
     await options.locator('summary').click()
 }
 
+/**
+ * Shows the folders of the library at the level that is open. They are
+ * behind a control that starts closed, named "Folders" or "Subfolders" with
+ * their number, and the library remembers its state for each account. Waits
+ * for the control, so the folders must exist at this level.
+ */
+async function showFolders(page, expect) {
+  const toggle = page
+    .getByRole('navigation', { name: 'File library', exact: true })
+    .getByRole('button', { name: /^(Folders|Subfolders) \d+$/ })
+  await expect(toggle).toBeVisible()
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true')
+    await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+}
+
+/**
+ * Waits until the page of the dashboard can be used. The dashboard sends a
+ * placeholder first and the page after it, and React attaches its handlers
+ * to that page a moment later. A file that a test selects before that, or a
+ * choice that it makes, is lost: the element exists, and nothing listens.
+ * React writes a property on each element that it has attached.
+ */
+async function pageReady(page) {
+  await page.waitForFunction(() => {
+    if (document.querySelector('div[hidden][id^="S:"]')) return false
+    const control = document.querySelector(
+      '#main-content input, #main-content textarea, #main-content button'
+    )
+    return (
+      !!control &&
+      Object.keys(control).some((key) => key.startsWith('__reactProps$'))
+    )
+  })
+}
+
 module.exports = {
   completeKeySetup,
   createAccountRecord,
@@ -344,7 +380,9 @@ module.exports = {
   fillSignInForm,
   keysOfMnemonic,
   openCreationOptions,
+  pageReady,
   saveRecoveryPhrase,
+  showFolders,
   signIn,
   signInContext,
   storedKeys,

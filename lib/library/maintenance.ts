@@ -175,6 +175,8 @@ export function createMaintenance<Keys>(
       }
     },
     getState: () => state,
+    /** What the server renders with, and what a part of a page gets while React attaches it. */
+    getServerState: () => IDLE,
     request,
     /** Starts with the keys of the unlocked account. Stops what ran for other keys. */
     start(nextKeys: Keys, jobs: readonly MaintenanceJob[] = MAINTENANCE_JOBS) {

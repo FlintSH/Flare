@@ -77,6 +77,8 @@ export const searchIndex = {
     }
   },
   getState: () => state,
+  /** What the server renders with, and what a part of a page gets while React attaches it. */
+  getServerState: () => STOPPED,
 
   /** Starts the worker for these keys. Does nothing if it runs for them already. */
   start(keys: StoredAccountKeys) {

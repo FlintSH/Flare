@@ -31,7 +31,7 @@ export function LibraryMaintenance() {
   const state = useSyncExternalStore(
     libraryMaintenance.subscribe,
     libraryMaintenance.getState,
-    libraryMaintenance.getState
+    libraryMaintenance.getServerState
   )
 
   useEffect(() => {

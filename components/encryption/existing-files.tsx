@@ -484,7 +484,7 @@ export function ExistingFiles() {
   const maintenance = useSyncExternalStore(
     libraryMaintenance.subscribe,
     libraryMaintenance.getState,
-    libraryMaintenance.getState
+    libraryMaintenance.getServerState
   )
   const [later, setLater] = useState(false)
   useEffect(() => {

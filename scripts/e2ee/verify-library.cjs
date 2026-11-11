@@ -787,6 +787,7 @@ async function upload(
   await page.goto(
     `${origin}/dashboard/upload${folder ? `?folder=${folder}` : ''}`
   )
+  await shared.pageReady(page)
   await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
     'data-encryption-choice',
     'encrypted'
@@ -843,7 +844,9 @@ const card = (page, name) =>
     .first()
 
 async function openFolder(page, name) {
+  await shared.showFolders(page, expect)
   await page
+    .getByRole('region', { name: /^(Folders|Subfolders)$/ })
     .getByRole('button', { name: `Open folder ${name}`, exact: true })
     .click()
 }
@@ -889,6 +892,7 @@ async function testConversion(alex, seeded) {
   assert.deepEqual([tag.ruleSource, tag.ruleText], [null, null])
   assert.ok(tag.sealedTagMetadata.length > 57)
   // The same folder and the same tag still show their names, opened here.
+  await shared.showFolders(page, expect)
   await expect(
     page.getByRole('button', {
       name: `Open folder ${FOLDERS.other}`,
@@ -940,6 +944,7 @@ async function testFolders(browser, alex) {
   assert.equal(child.parentFolderStanza.length, 97)
   // A second folder with the same name here is refused in the browser.
   await page.goto(`${origin}/dashboard?folder=${ids.top}`)
+  await shared.showFolders(page, expect)
   await expect(
     page.getByRole('button', {
       name: `Open folder ${FOLDERS.child}`,
@@ -1860,6 +1865,7 @@ async function testRotation(browser, alex, cacheOf) {
   await page.goto(`${origin}/dashboard`)
   // The cards of the files in a folder have a button with the same name,
   // so the folder itself is looked for in the list of folders.
+  await shared.showFolders(page, expect)
   await expect(
     page.getByRole('region', { name: 'Folders' }).getByRole('button', {
       name: `Open folder ${FOLDERS.top}`,
@@ -2061,6 +2067,7 @@ async function testReset(browser, alex) {
   )
   await shot(reset, 'unreadable-files')
   // The folders and tags are usable again under placeholder names, with new keys.
+  await shared.showFolders(reset, expect)
   await expect(
     reset.getByRole('button', { name: /^Open folder Folder / }).first()
   ).toBeVisible()

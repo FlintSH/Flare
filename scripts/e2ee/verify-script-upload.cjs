@@ -475,6 +475,12 @@ const TOOLS = '/dashboard/profile?section=uploads'
 
 async function openTools(page) {
   await page.goto(origin + TOOLS)
+  // The dashboard sends a placeholder first and the page after it. For a
+  // moment the document holds the page a second time, hidden, until the
+  // browser puts it in the place of the placeholder.
+  await page.waitForFunction(
+    () => !document.querySelector('div[hidden][id^="S:"]')
+  )
   const card = page.locator('#upload-tools')
   await expect(card.locator('[data-upload-tools]')).toBeVisible()
   return card
@@ -1008,6 +1014,7 @@ async function testForbidPlain(browser, alex, configs) {
 
   // The upload dialog shows no plain choice.
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   const choice = page.locator('[data-encryption-choice]')
   await expect(choice).toHaveAttribute('data-plain-forbidden', 'true')
   await expect(choice).toContainText(
@@ -1022,6 +1029,7 @@ async function testForbidPlain(browser, alex, configs) {
     'encryption/upload-encrypted-only.png'
   )
   await page.goto(`${origin}/dashboard/paste`)
+  await shared.pageReady(page)
   await expect(page.locator('[data-plain-forbidden]')).toBeVisible()
   await expect(page.getByRole('radio', { name: /Plain/ })).toHaveCount(0)
   // The profile editor says so, and the tools card too.
@@ -1044,6 +1052,7 @@ async function testForbidPlain(browser, alex, configs) {
     settings: { general: { encryption: { forbidPlainUploads: false } } },
   })
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await expect(page.getByRole('radio', { name: /Plain/ })).toHaveCount(1)
   const allowed = await run(configs.plain, [
     '--name',
@@ -1060,6 +1069,7 @@ async function testForbidPlain(browser, alex, configs) {
 async function testDialogFollowsProfile(alex) {
   const { page } = alex
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   const choice = page.locator('[data-encryption-choice]')
   await expect(choice).toHaveAttribute('data-encryption-choice', 'encrypted')
   await page.locator('#upload-profile').click()

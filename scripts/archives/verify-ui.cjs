@@ -456,12 +456,14 @@ async function browseAndExtract(browser, state, fixture) {
   await expect(subfolders).toHaveAttribute('aria-expanded', 'false')
   await subfolders.click()
   await expect(subfolders).toHaveAttribute('aria-expanded', 'true')
-  const guide = page
-    .getByRole('region', { name: 'Subfolders', exact: true })
-    .getByRole('button', { name: 'Open folder guide', exact: true })
+  const list = page.getByRole('region', { name: 'Subfolders', exact: true })
+  const guide = list.getByRole('button', {
+    name: 'Open folder guide',
+    exact: true,
+  })
   await expect(guide).toBeVisible()
   await expect(
-    subfolders.getByRole('button', { name: 'Open folder empty', exact: true })
+    list.getByRole('button', { name: 'Open folder empty', exact: true })
   ).toBeVisible()
   await shot(page, 'extracted-folder')
   await guide.click()

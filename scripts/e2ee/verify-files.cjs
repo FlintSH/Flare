@@ -683,6 +683,7 @@ async function chooseFiles(page, list) {
 
 async function uploadEncrypted(page, list, { visibility, password } = {}) {
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
     'data-encryption-choice',
     'encrypted'
@@ -726,6 +727,7 @@ async function uploadEncrypted(page, list, { visibility, password } = {}) {
 async function testUpload(alex) {
   const { page } = alex
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await expect(
     page.getByText('Encrypted in this browser before upload.')
   ).toBeVisible()
@@ -757,6 +759,8 @@ async function testUpload(alex) {
   await shot(page, 'upload-complete')
 
   await page.goto(`${origin}/dashboard/upload`)
+
+  await shared.pageReady(page)
   await chooseFiles(page, [fixtures.large])
   await page.getByRole('button', { name: /^Upload 1 file$/ }).click()
   await expect(
@@ -956,6 +960,7 @@ async function testLibrary(alex, keys) {
     await expect(page.getByText(name, { exact: true })).toHaveCount(0)
   await shot(page, 'library-locked')
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await expect(
     page.getByText(
       'Your encryption keys are locked in this browser. Unlock them to'
@@ -1259,6 +1264,7 @@ async function testPrivate(browser, alex) {
 async function testPaste(browser, alex) {
   const { page } = alex
   await page.goto(`${origin}/dashboard/paste`)
+  await shared.pageReady(page)
   await page.locator('#content').fill(PASTE.text)
   await page.locator('#filename').fill(PASTE.name)
   await expect(page.locator('[data-encryption-choice]')).toHaveAttribute(
@@ -1295,6 +1301,7 @@ async function testPaste(browser, alex) {
 async function testPlain(browser, alex) {
   const { page } = alex
   await page.goto(`${origin}/dashboard/upload`)
+  await shared.pageReady(page)
   await page.getByRole('radio', { name: /Plain/ }).check()
   await chooseFiles(page, [PLAIN])
   await page.getByRole('button', { name: /^Upload 1 file$/ }).click()
@@ -1483,8 +1490,15 @@ async function testModerator(browser) {
   assert.equal(records.accountStanza, undefined)
   assert.ok(records.header && records.sealedMetadata)
   await page.goto(`${origin}/dashboard/users`)
+  // The users list keeps this action in the menu of the account.
   await page
     .getByRole('button', {
+      name: `More actions for ${accounts.alex.name}`,
+      exact: true,
+    })
+    .click()
+  await page
+    .getByRole('menuitem', {
       name: `View content for ${accounts.alex.name}`,
       exact: true,
     })

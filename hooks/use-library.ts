@@ -35,7 +35,7 @@ export function useEncryptedTypes(): string[] {
   const index = useSyncExternalStore(
     searchIndex.subscribe,
     searchIndex.getState,
-    searchIndex.getState
+    searchIndex.getServerState
   )
   const [types, setTypes] = useState<string[]>([])
   const ready = index.status === 'ready' && !index.stopped

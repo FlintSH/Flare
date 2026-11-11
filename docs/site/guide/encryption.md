@@ -137,7 +137,7 @@ An encrypted ZIP, TAR, TAR.GZ or GZIP file can be browsed, extracted and created
 
 ## What your browser does instead
 
-The server cannot read an encrypted file, so the features that need its content run in your browser. They work while your keys are unlocked.
+The server cannot read an encrypted file, so the features that need its content run in your browser. They work while your keys are unlocked. Right after a page opens, an encrypted file can show as opening for a moment: the page arrives before your browser has read its keys, and the names appear as soon as it has.
 
 | Feature                | How it works for an encrypted file                                                                                                                                            |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
