@@ -8,16 +8,22 @@ if (new URL(origin).hostname !== 'localhost')
 ;(async () => {
   const browser = await chromium.launch({ headless: true })
   try {
-    const page = await browser.newPage()
-    await page.goto(`${origin}/auth/login`)
-    await page
-      .getByLabel('Email address', { exact: true })
-      .fill('timeline-demo-alex@example.test')
-    await page
-      .getByLabel('Password', { exact: true })
-      .fill('Timeline-demo-only-2026!')
-    await page.getByRole('button', { name: 'Sign in', exact: true }).click()
-    await page.waitForURL('**/dashboard')
+    const page = await browser.newPage({
+      storageState: process.env.FLARE_TIMELINE_STORAGE_STATE,
+    })
+    if (!process.env.FLARE_TIMELINE_STORAGE_STATE) {
+      await page.goto(`${origin}/auth/login`)
+      await page
+        .getByLabel('Email address', { exact: true })
+        .fill('timeline-demo-alex@example.test')
+      await page
+        .getByLabel('Password', { exact: true })
+        .fill('Timeline-demo-only-2026!')
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+      await page.waitForURL('**/dashboard')
+    } else {
+      await page.goto(`${origin}/dashboard`)
+    }
     for (const width of [320, 390, 640, 768, 1024, 1100, 1280, 1440]) {
       await page.setViewportSize({ width, height: 900 })
       const list = page.getByRole('list', { name: 'Your files', exact: true })
@@ -33,12 +39,17 @@ if (new URL(origin).hostname !== 'localhost')
           '[aria-label="Find and filter files"]'
         )
         const row = list.querySelector('[data-row] > .grid')
-        const rail = document.querySelector('[role="slider"]')
+        const rail = [...document.querySelectorAll('[role="slider"]')].find(
+          (el) => el.getBoundingClientRect().width > 0
+        )
+        const nav = document.querySelector('header > .relative > div')
         return {
           left: list.getBoundingClientRect().left,
           right: list.getBoundingClientRect().right,
           panelLeft: panel.getBoundingClientRect().left,
           panelRight: panel.getBoundingClientRect().right,
+          navLeft: nav.getBoundingClientRect().left,
+          navRight: nav.getBoundingClientRect().right,
           columns: getComputedStyle(row).gridTemplateColumns.split(' ').length,
           railLeft: rail?.getBoundingClientRect().left ?? Infinity,
           overflow: document.documentElement.scrollWidth > innerWidth,
@@ -50,6 +61,8 @@ if (new URL(origin).hostname !== 'localhost')
         geometry.right <= geometry.railLeft,
         'Date rail must not intercept cards'
       )
+      assert(Math.abs(geometry.left - geometry.navLeft) < 1)
+      assert(Math.abs(geometry.right - geometry.navRight) < 1)
       assert(!geometry.overflow)
       if (width < 640) {
         assert.equal(geometry.columns, 2)
@@ -71,8 +84,18 @@ if (new URL(origin).hostname !== 'localhost')
     await page.locator('[data-file-index="11999"]').waitFor()
     await page.setViewportSize({ width: 390, height: 844 })
     await page.locator('[data-file-index="11999"]').waitFor()
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.getByRole('button', { name: 'Browse by date' }).click()
+    await rail.press('End')
+    await page.locator('[data-file-index="11999"]').waitFor()
+    assert(await rail.isVisible())
+    const sliderBox = await rail.boundingBox()
+    assert(sliderBox.y >= 0 && sliderBox.y + sliderBox.height <= 844)
     await rail.press('Home')
     await page.locator('[data-file-index="0"]').waitFor()
+    await page.keyboard.press('Escape')
+    await page.getByRole('dialog').waitFor({ state: 'hidden' })
+    assert.equal(await page.locator('input[type=range]').isVisible(), false)
     console.log('PASS date navigation and resize at end of library')
   } finally {
     await browser.close()

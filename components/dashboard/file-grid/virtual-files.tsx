@@ -43,6 +43,7 @@ interface VirtualFilesProps {
   renderFile: (file: FileType) => ReactNode
   onVisibleFiles: (files: FileType[], firstIndex: number) => void
   onRefresh: () => void
+  dateControlsRef: RefObject<HTMLDivElement | null>
   selectionBarRef: RefObject<HTMLDivElement | null>
 }
 
@@ -54,6 +55,7 @@ export function VirtualFiles({
   onVisibleFiles,
   onRefresh,
   selectionBarRef,
+  dateControlsRef,
 }: VirtualFilesProps) {
   'use no memo'
   // TanStack exposes a mutable instance. Compiler memoization would freeze its
@@ -415,6 +417,26 @@ export function VirtualFiles({
             ? 'Loading files'
             : `Showing files near ${firstIndex + 1} of ${timeline!.total}`}
       </div>
+      {chronological && layout.rowCount > 3 && (
+        <DateRail
+          controlsRef={dateControlsRef}
+          label={label}
+          firstLabel={bucketLabel(
+            timeline!.buckets[0],
+            'year',
+            timeline!.timezone
+          )}
+          lastLabel={bucketLabel(
+            timeline!.buckets[timeline!.buckets.length - 1],
+            'year',
+            timeline!.timezone
+          )}
+          row={(firstRow?.index ?? 0) + windowStart}
+          rowCount={layout.rowCount}
+          scrolling={virtualizer.isScrolling}
+          onSeek={seek}
+        />
+      )}
       <div
         ref={container}
         role="list"
@@ -494,25 +516,6 @@ export function VirtualFiles({
           </div>,
           document.body
         )}
-      {chronological && layout.rowCount > 3 && (
-        <DateRail
-          label={label}
-          firstLabel={bucketLabel(
-            timeline!.buckets[0],
-            'year',
-            timeline!.timezone
-          )}
-          lastLabel={bucketLabel(
-            timeline!.buckets[timeline!.buckets.length - 1],
-            'year',
-            timeline!.timezone
-          )}
-          row={(firstRow?.index ?? 0) + windowStart}
-          rowCount={layout.rowCount}
-          scrolling={virtualizer.isScrolling}
-          onSeek={seek}
-        />
-      )}
       <p className="py-6 text-center text-xs text-muted-foreground">
         {timeline!.total.toLocaleString()}{' '}
         {timeline!.total === 1 ? 'file' : 'files'} ·{' '}

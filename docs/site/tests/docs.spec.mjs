@@ -78,7 +78,7 @@ test('continuous library guide and its real recording are discoverable', async (
   for (const name of [
     'library-desktop',
     'library-date-jump',
-    'library-mobile',
+    'after-390',
     'library-account-switch',
     'library-selection',
     'library-image-viewer',

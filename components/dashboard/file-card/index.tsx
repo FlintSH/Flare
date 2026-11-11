@@ -588,7 +588,7 @@ export function FileCard({
           </div>
         )}
       </div>
-      <div className="border-t border-border/40 p-3">
+      <div className="border-t border-border/40 p-2.5 sm:p-3">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 sm:flex-nowrap">
           <Link
             prefetch={false}
@@ -650,7 +650,7 @@ export function FileCard({
                 </span>
               ))}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-3">
+          <div className="ml-auto hidden shrink-0 items-center gap-3 sm:flex">
             <span
               className="inline-flex items-center gap-1"
               aria-label={`${file.views} views`}

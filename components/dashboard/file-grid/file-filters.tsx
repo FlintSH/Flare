@@ -51,6 +51,7 @@ import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { useHydrated } from '@/hooks/use-hydrated'
 
 interface FileFiltersProps {
+  dateControl?: ReactNode
   tagFilter?: ReactNode
   hasTagFilter?: boolean
   sortBy: SortOption
@@ -79,6 +80,7 @@ const visibilityIcons = {
 } satisfies Record<VisibilityFilter, unknown>
 
 export const FileFilters = memo(function FileFilters({
+  dateControl,
   tagFilter,
   hasTagFilter = false,
   sortBy,
@@ -139,6 +141,7 @@ export const FileFilters = memo(function FileFilters({
           )}
         />
       </Button>
+      {dateControl}
       <div
         id={controlsId}
         className={cn(

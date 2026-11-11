@@ -25,7 +25,7 @@ Scroll normally with your mouse, trackpad, or touch screen. More files load as y
 
 Flare keeps cards and nearby file data in a limited window around your position. Returning to an earlier part of a large library may briefly show loading placeholders while those files load again. The file count describes the whole filtered result, not just the cards currently on screen. Your browser's Find command only searches rendered content; use the library's search field to find files anywhere in your account.
 
-With **Newest first** or **Oldest first**, a slim date rail on the right helps you stay oriented. Its date label appears while you scroll, hover, or focus it, then recedes when you finish. On wide screens the rail stays faintly visible in the page margin; on tablets and phones, where it would sit over the content, it appears only while you scroll or use it. Click or drag along the rail to jump through the matching upload history. Flare loads files near your destination without first downloading every file you passed.
+With **Newest first** or **Oldest first**, a slim date rail on the right helps you stay oriented. Its date label appears while you scroll, hover, or focus it, then recedes when you finish. On wide screens the rail stays faintly visible in the page margin. Choose **Dates** beside **Sort & filters** on phones, or **Browse by date** on tablets, to open a date dialog. Drag the horizontal slider or use its arrow keys to jump, then close the dialog to browse those files. The dialog stays in place while the library moves to your date. The control stays out of the cards, leaving the gallery and search panel aligned with the navbar. Click or drag along the rail to jump through the matching upload history. Flare loads files near your destination without first downloading every file you passed.
 
 For very large libraries, the browser's own scrollbar follows the section you are browsing and extends as you continue. The date rail always covers the full matching history, so use it to jump straight to a distant date.
 
@@ -38,7 +38,7 @@ The date rail follows the files matching your current filters. Size, view-count,
 Resizing the window or rotating your device keeps the file you were browsing in view, including deep in a large library. Its position within a row can change as the number or width of columns changes; your search, folder, filters, and date grouping stay selected.
 
 <div style="max-width: 390px; margin-inline: auto">
-<Screenshot src="/screenshots/timeline/library-mobile.webp" alt="The continuous file library on a narrow mobile screen with readable file cards and a date rail at the right edge" caption="The same library supports ordinary touch scrolling and date navigation on mobile." />
+<Screenshot src="/screenshots/image-gallery/after-390.png" alt="The continuous file library on a phone with two compact columns and a Dates control beside Sort and filters" caption="The same library supports ordinary touch scrolling and date navigation on mobile." />
 </div>
 
 Watch the [recorded library walkthrough](/demos#browse-a-large-library) for a real scroll and date jump using demonstration files.
@@ -53,9 +53,7 @@ Filters in the page address remain bookmark settings. If an old folder or tag fi
 
 <Screenshot src="/screenshots/timeline/library-account-switch.webp" alt="The original library tab after signing in as Jamie in another tab, showing Jamie's 97 demonstration files with no previous selection or archive dialog" caption="A real account switch loads the new account's library in the original tab. These filenames and images are disposable demonstration data." />
 
-The gallery uses two compact columns on phones and adds columns as the available content width grows, up to four. Cards align with both edges of the search panel, with a shared gutter for the date rail. Phone cards keep the filename, size, and visibility in view; the upload-age badge appears on wider screens. Tap an image preview to inspect it at full size. Existing files and saved filters need no migration.
-
-<Screenshot src="/screenshots/image-gallery/after-390.png" alt="Two compact columns of demonstration images below the collapsed Sort and filters toolbar on a phone" caption="Phone browsing keeps search simple and fits two previews across each row." />
+The gallery uses two compact columns on phones and adds columns as the available content width grows, up to four. Cards and the search panel share the navbar’s content width. Date navigation uses a separate control on narrower screens, without reserving space beside the cards. Phone cards keep the filename, size, visibility, and any tags in view. View/download counters stay on wider cards; the upload-age badge appears on wider screens. Tap an image preview to inspect it at full size. Existing files and saved filters need no migration.
 
 ## Search and narrow the results
 
