@@ -25,6 +25,7 @@ import {
   Save,
   Settings2,
   ShieldCheck,
+  Trash2,
   Upload,
   XCircle,
 } from 'lucide-react'
@@ -167,6 +168,8 @@ export function InstanceSettings({
   const [faviconPreviewUrl, setFaviconPreviewUrl] = useState<string | null>(
     null
   )
+  // Remove marks the saved favicon for removal; saving deletes it.
+  const [faviconRemoval, setFaviconRemoval] = useState(false)
 
   const [cssEditorOpen, setCssEditorOpen] = useState(false)
   const [htmlEditorOpen, setHtmlEditorOpen] = useState(false)
@@ -183,6 +186,7 @@ export function InstanceSettings({
   const hasChanges =
     !deepEqual(savedConfig, workingConfig) ||
     pendingFaviconFile !== null ||
+    faviconRemoval ||
     inviteAccessChanged
 
   function changedFields(previous: unknown, next: unknown): unknown {
@@ -201,14 +205,27 @@ export function InstanceSettings({
     let saved = savedConfig
     try {
       setIsSaving(true)
-      if (pendingFaviconFile) {
-        const formData = new FormData()
-        formData.append('file', pendingFaviconFile)
-        // The upload saved the icon's new address; record it, never send it.
-        const { url: favicon } = await apiRequest<{ url: string }>(
-          '/api/settings/favicon',
-          { body: formData, fallback: 'Failed to upload favicon', whole: true }
-        )
+      if (pendingFaviconFile || faviconRemoval) {
+        // The upload or removal saved the favicon's address; record it, never
+        // send it.
+        let favicon: string | null = null
+        if (pendingFaviconFile) {
+          const formData = new FormData()
+          formData.append('file', pendingFaviconFile)
+          ;({ url: favicon } = await apiRequest<{ url: string }>(
+            '/api/settings/favicon',
+            {
+              body: formData,
+              fallback: 'Failed to upload favicon',
+              whole: true,
+            }
+          ))
+        } else {
+          await apiRequest('/api/settings/favicon', {
+            method: 'DELETE',
+            fallback: 'Failed to remove favicon',
+          })
+        }
         const withFavicon = (config: FlareConfig): FlareConfig => ({
           ...config,
           settings: {
@@ -222,6 +239,7 @@ export function InstanceSettings({
         setWorkingConfig(withFavicon)
         setPendingFaviconFile(null)
         setFaviconPreviewUrl(null)
+        setFaviconRemoval(false)
       }
       const settings = changedFields(saved.settings, snapshot.settings)
       if (settings !== undefined) {
@@ -283,6 +301,7 @@ export function InstanceSettings({
     }
 
     setPendingFaviconFile(null)
+    setFaviconRemoval(false)
 
     setWorkingConfig(structuredClone(savedConfig))
     setEveryoneCanInvite(savedEveryoneCanInvite)
@@ -383,9 +402,14 @@ export function InstanceSettings({
   }
 
   const hasFaviconChanged = useCallback(() => {
-    return pendingFaviconFile !== null
-  }, [pendingFaviconFile])
+    return pendingFaviconFile !== null || faviconRemoval
+  }, [pendingFaviconFile, faviconRemoval])
   const savedFavicon = faviconUrl(workingConfig.settings.appearance.favicon)
+  const shownFavicon = isSafeUrl(faviconPreviewUrl)
+    ? DOMPurify.sanitize(faviconPreviewUrl)
+    : faviconRemoval
+      ? null
+      : savedFavicon
 
   const getFieldClasses = (
     section: keyof FlareConfig['settings'],
@@ -475,7 +499,7 @@ export function InstanceSettings({
         'dirty' in section &&
         section.dirty &&
         (section.id !== 'appearance' ||
-          pendingFaviconFile ||
+          hasFaviconChanged() ||
           !deepEqual(
             savedConfig.settings.advanced,
             workingConfig.settings.advanced
@@ -1644,35 +1668,53 @@ export function InstanceSettings({
                   <div className="space-y-1.5">
                     <CardTitle>Favicon</CardTitle>
                     <CardDescription className="text-pretty">
-                      Upload a custom favicon for your instance.
+                      Upload a custom favicon for your instance, or remove it to
+                      use Flare&apos;s icon.
                     </CardDescription>
                   </div>
                   {hasFaviconChanged() && <ChangeIndicator />}
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
+                  <div className="flex min-h-11 items-center justify-between gap-3 rounded-lg border bg-muted/20 px-3 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <img
+                        src={shownFavicon ?? '/icon.svg'}
+                        alt=""
+                        className="h-6 w-6 shrink-0"
+                      />
+                      <span className="truncate text-sm text-muted-foreground">
+                        {faviconPreviewUrl
+                          ? 'New favicon (unsaved)'
+                          : faviconRemoval
+                            ? 'Flare icon (unsaved)'
+                            : savedFavicon
+                              ? 'Current favicon'
+                              : 'Flare icon'}
+                      </span>
+                    </div>
+                    {shownFavicon && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={isSaving}
+                        aria-label="Remove favicon"
+                        onClick={() => {
+                          if (faviconPreviewUrl)
+                            URL.revokeObjectURL(faviconPreviewUrl)
+                          setFaviconPreviewUrl(null)
+                          setPendingFaviconFile(null)
+                          setFaviconRemoval(savedFavicon !== null)
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
                   <div>
                     <div className="flex items-center justify-center w-full">
                       <label className="relative flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-control bg-muted/20 transition-colors hover:border-primary hover:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background">
-                        {(savedFavicon || faviconPreviewUrl) && (
-                          <div className="absolute top-4 left-4">
-                            <div className="flex items-center gap-2 p-2 bg-background/80 backdrop-blur-sm rounded-lg">
-                              <img
-                                src={
-                                  isSafeUrl(faviconPreviewUrl)
-                                    ? DOMPurify.sanitize(faviconPreviewUrl)
-                                    : (savedFavicon ?? undefined)
-                                }
-                                alt="Favicon"
-                                className="w-6 h-6"
-                              />
-                              <span className="text-sm text-muted-foreground">
-                                {faviconPreviewUrl
-                                  ? 'New favicon (unsaved)'
-                                  : 'Current favicon'}
-                              </span>
-                            </div>
-                          </div>
-                        )}
                         <div className="flex flex-col items-center justify-center pt-5 pb-6">
                           <Upload className="h-8 w-8 mb-2 text-muted-foreground" />
                           <p className="text-pretty text-sm text-muted-foreground">
@@ -1690,6 +1732,8 @@ export function InstanceSettings({
                           accept={FAVICON_TYPE}
                           onChange={async (e) => {
                             const file = e.target.files?.[0]
+                            // Lets the same file be chosen again after Remove.
+                            e.target.value = ''
                             if (!file) return
 
                             const problem = faviconProblem(file)
@@ -1711,6 +1755,7 @@ export function InstanceSettings({
                               setFaviconPreviewUrl(previewUrl)
 
                               setPendingFaviconFile(file)
+                              setFaviconRemoval(false)
 
                               toast({
                                 title: 'Favicon changed',
@@ -1930,7 +1975,7 @@ export function InstanceSettings({
             role="status"
             tone="unsaved"
             title="You have unsaved instance settings"
-            description={`${changedSettingsGroups.join(', ')}${pendingFaviconFile ? ' · Favicon' : ''}`}
+            description={`${changedSettingsGroups.join(', ')}${hasFaviconChanged() ? ' · Favicon' : ''}`}
             className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20"
           >
             <Button

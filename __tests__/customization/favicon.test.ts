@@ -1,5 +1,8 @@
 import { GET as serve } from '@/app/api/favicon/route'
-import { POST as save } from '@/app/api/settings/favicon/route'
+import {
+  DELETE as remove,
+  POST as save,
+} from '@/app/api/settings/favicon/route'
 import { generateMetadata } from '@/app/layout'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
@@ -189,16 +192,50 @@ describe('favicon upload, serving and page links', () => {
     expect(none.status).toBe(404)
   })
 
-  it('still redirects to the object when storage gives it an address', async () => {
+  it('sends the bytes itself even when storage could give the object an address', async () => {
+    await provider.uploadFile(png, 'uploads/favicon.png', 'image/png')
     state.favicon = `/api/favicon?v=${version(png)}`
-    vi.spyOn(provider, 'getPublicUrl').mockResolvedValue(
-      'https://bucket.example.test/favicon.png?X-Amz-Signature=abc'
-    )
+    const publicUrl = vi
+      .spyOn(provider, 'getPublicUrl')
+      .mockResolvedValue(
+        'https://bucket.example.test/favicon.png?X-Amz-Signature=abc'
+      )
     const response = await fetchIcon(state.favicon)
-    expect(response.status).toBe(307)
-    expect(response.headers.get('location')).toBe(
-      'https://bucket.example.test/favicon.png?X-Amz-Signature=abc'
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe(
+      'public, max-age=31536000, immutable'
     )
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(png)
+    expect(publicUrl).not.toHaveBeenCalled()
+  })
+
+  it("removes the favicon, so pages link Flare's icon again", async () => {
+    const { url } = await (await upload(png)).json()
+    const removal = (headers?: HeadersInit) =>
+      remove(
+        new Request('http://localhost/api/settings/favicon', {
+          method: 'DELETE',
+          headers,
+        })
+      )
+
+    expect((await removal({ Origin: 'https://attacker.test' })).status).toBe(
+      403
+    )
+    expect(state.favicon).toBe(url)
+
+    const response = await removal({ Origin: 'http://localhost' })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ url: null })
+    expect(state.favicon).toBeNull()
+    await expect(stored()).rejects.toMatchObject({ code: 'ENOENT' })
+    expect((await fetchIcon(url)).status).toBe(404)
+    expect((await generateMetadata()).icons).toEqual({
+      icon: { url: '/icon.svg', type: 'image/svg+xml' },
+    })
+
+    // Removing again, with nothing stored, still succeeds.
+    expect((await removal()).status).toBe(200)
   })
 
   it('refuses other origins, non-form bodies and uploads breaking the control rules before storing anything', async () => {
@@ -284,14 +321,16 @@ describe('favicon upload, serving and page links', () => {
     await expect(stored()).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
-  it('links pages to the favicon saved now, not one saved earlier in the process', async () => {
+  it("links pages only to the favicon saved now, never alongside Flare's icon", async () => {
+    // Given both, browsers picked differently, so a custom favicon showed
+    // in some browsers only.
     const svg = { url: '/icon.svg', type: 'image/svg+xml' }
-    expect((await generateMetadata()).icons).toEqual({ icon: [svg] })
+    expect((await generateMetadata()).icons).toEqual({ icon: svg })
     state.favicon = `/api/favicon?v=${version(png)}`
     expect((await generateMetadata()).icons).toEqual({
-      icon: [{ url: state.favicon, type: 'image/png', sizes: '32x32' }, svg],
+      icon: { url: state.favicon, type: 'image/png' },
     })
     state.favicon = null
-    expect((await generateMetadata()).icons).toEqual({ icon: [svg] })
+    expect((await generateMetadata()).icons).toEqual({ icon: svg })
   })
 })

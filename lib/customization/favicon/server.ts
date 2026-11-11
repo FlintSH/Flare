@@ -1,5 +1,3 @@
-import { NextResponse } from 'next/server'
-
 import { createHash } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { buffer } from 'node:stream/consumers'
@@ -31,16 +29,30 @@ export async function saveFavicon(png: Buffer): Promise<string> {
 }
 
 /**
+ * Stops linking the favicon, so pages fall back to Flare's own icon, then
+ * removes the stored image. Removing a favicon that isn't there is no error.
+ */
+export async function removeFavicon(): Promise<void> {
+  await updateConfig({ settings: { appearance: { favicon: null } } })
+  const storage = await getStorageProvider()
+  try {
+    await storage.deleteFile(KEY)
+  } catch (error) {
+    if (!isMissingObject(error)) throw error
+  }
+}
+
+/**
  * A response may be cached for a year only when the requested version is the
  * hash of the bytes it sends, so neither an address saved by an earlier
  * version nor a request racing an upload can keep an old icon cached.
+ * Flare sends the bytes itself, whatever the storage, so the icon gets this
+ * caching and loads even where the storage address isn't reachable.
  */
 export async function faviconResponse(request: Request): Promise<Response> {
   if (!faviconUrl((await getConfig()).settings.appearance.favicon))
     return new Response(null, { status: 404 })
   const storage = await getStorageProvider()
-  const publicUrl = await storage.getPublicUrl(KEY)
-  if (publicUrl) return NextResponse.redirect(publicUrl)
   let icon: Buffer | Readable
   try {
     // Earlier versions accepted any size; stream those instead of buffering.
