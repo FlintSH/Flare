@@ -36,8 +36,10 @@ export function FolderOption({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0',
-        selected && 'bg-primary/10 text-primary'
+        'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&>svg]:h-4 [&>svg]:w-4 [&>svg]:shrink-0',
+        selected
+          ? 'bg-primary/10 text-primary'
+          : 'hover:bg-accent hover:text-accent-foreground'
       )}
     >
       {icon}
