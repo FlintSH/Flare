@@ -27,7 +27,37 @@ vi.mock('@/lib/auth', () => ({
     user: { id: 'manager', permissions: ['appearance.manage'] },
   }),
 }))
-vi.mock('@/lib/database/prisma', () => ({ prisma: {} }))
+// Transactions hold the favicon lock until they end, as PostgreSQL's
+// transaction-scoped advisory lock does.
+const faviconLock = vi.hoisted(() => {
+  let tail = Promise.resolve()
+  return {
+    acquire() {
+      let release!: () => void
+      const previous = tail
+      tail = new Promise<void>((resolve) => (release = resolve))
+      return previous.then(() => release)
+    },
+  }
+})
+vi.mock('@/lib/database/prisma', () => ({
+  prisma: {
+    $transaction: async (
+      run: (tx: { hold: (release: () => void) => void }) => Promise<unknown>
+    ) => {
+      const held: (() => void)[] = []
+      try {
+        return await run({ hold: (release) => held.push(release) })
+      } finally {
+        held.forEach((release) => release())
+      }
+    },
+  },
+}))
+vi.mock('@/lib/database/locks', () => ({
+  lockFavicon: async (tx: { hold: (release: () => void) => void }) =>
+    tx.hold(await faviconLock.acquire()),
+}))
 vi.mock('@/lib/audit', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/audit')>()),
   auditRequest: (
@@ -43,9 +73,10 @@ vi.mock('@/lib/config', () => ({
   getConfigOrDefaults: async () => ({
     settings: { appearance: { favicon: state.favicon } },
   }),
-  updateConfig: async (update: {
-    settings: { appearance: { favicon: string } }
-  }) => {
+  applyConfigUpdate: async (
+    _tx: unknown,
+    update: { settings: { appearance: { favicon: string | null } } }
+  ) => {
     state.favicon = update.settings.appearance.favicon
   },
 }))
@@ -319,6 +350,36 @@ describe('favicon upload, serving and page links', () => {
     }
     expect(state.favicon).toBeNull()
     await expect(stored()).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('never deletes an upload saved while a removal runs', async () => {
+    await upload(png)
+    let finishDelete!: () => void
+    const deleting = new Promise<void>((resolve) => (finishDelete = resolve))
+    const deleteFile = provider.deleteFile.bind(provider)
+    vi.spyOn(provider, 'deleteFile').mockImplementation(async (path) => {
+      await deleting
+      await deleteFile(path)
+    })
+    const writes = vi.spyOn(provider, 'uploadFile')
+
+    const removal = remove(
+      new Request('http://localhost/api/settings/favicon', {
+        method: 'DELETE',
+      })
+    )
+    await vi.waitFor(() => expect(provider.deleteFile).toHaveBeenCalled())
+    const replacement = upload(otherPng)
+    // The upload waits for the removal instead of writing under it.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(writes).not.toHaveBeenCalled()
+    finishDelete()
+
+    expect((await removal).status).toBe(200)
+    const { url } = await (await replacement).json()
+    expect(state.favicon).toBe(url)
+    expect(await stored()).toEqual(otherPng)
+    expect((await fetchIcon(url)).status).toBe(200)
   })
 
   it("links pages only to the favicon saved now, never alongside Flare's icon", async () => {

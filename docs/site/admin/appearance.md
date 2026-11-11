@@ -123,7 +123,7 @@ Flare accepts the upload only from its own pages, as a `multipart/form-data` req
 
 <Screenshot src="/screenshots/customization/appearance-favicon.png" alt="The Favicon card in Settings, Appearance, showing the current custom favicon with a Remove button above the Upload favicon drop zone" caption="The current favicon, with Remove to go back to Flare's icon." />
 
-To go back to Flare's own icon, choose **Remove** beside the favicon, then **Save settings**. The row then shows **Flare icon (unsaved)** until you save, and **Discard** keeps the current favicon. Saving stops pages linking the custom icon and deletes `uploads/favicon.png` from storage. Earlier versions had no way to remove a favicon; only a new upload replaced it.
+To go back to Flare's own icon, choose **Remove** beside the favicon, then **Save settings**. The row then shows **Flare icon (unsaved)** until you save, and **Discard** keeps the current favicon. Saving stops pages linking the custom icon and deletes `uploads/favicon.png` from storage. Uploads and removals apply one at a time, so when one administrator removes the favicon while another uploads one, the upload saved last stays in place with its image. Earlier versions had no way to remove a favicon; only a new upload replaced it.
 
 Pages link only one icon: the custom favicon when there is one, otherwise Flare's icon. Earlier versions linked both, and browsers chose between them differently, so a custom favicon showed in some browsers and Flare's icon in others. If a browser still shows the old icon after an upgrade, reload the page; some browsers keep a tab icon until the page is loaded again. Pages that link no icon, such as an image or PDF opened on its own, get the custom favicon from `/favicon.ico`.
 

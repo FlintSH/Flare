@@ -13,6 +13,15 @@ export async function lockUploadSession(tx: Tx, uploadId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`flare-upload:${uploadId}`}, 0))`
 }
 
+/**
+ * The stored favicon, across its storage write and its settings write, so a
+ * removal never deletes the bytes of an upload saved meanwhile. Takes no
+ * other lock; the settings write after it takes the settings lock.
+ */
+export async function lockFavicon(tx: Tx) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347215)`
+}
+
 /** Instance settings writers, and anything that must see settings unchanged. */
 export async function lockSettings(tx: Tx) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(721150092)`

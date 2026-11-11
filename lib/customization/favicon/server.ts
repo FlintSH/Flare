@@ -2,7 +2,9 @@ import { createHash } from 'node:crypto'
 import { Readable } from 'node:stream'
 import { buffer } from 'node:stream/consumers'
 
-import { getConfig, updateConfig } from '@/lib/config'
+import { applyConfigUpdate, getConfig } from '@/lib/config'
+import { lockFavicon } from '@/lib/database/locks'
+import { prisma } from '@/lib/database/prisma'
 import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 
@@ -19,27 +21,37 @@ function contentVersion(bytes: Buffer) {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16)
 }
 
+// Long enough for a slow storage write of the largest allowed favicon.
+const WRITE_TIMEOUT = { timeout: 30_000, maxWait: 30_000 }
+
 /** Returns the address pages now link to. */
 export async function saveFavicon(png: Buffer): Promise<string> {
   const storage = await getStorageProvider()
-  await storage.uploadFile(png, KEY, FAVICON_TYPE)
   const url = faviconAddress(contentVersion(png))
-  await updateConfig({ settings: { appearance: { favicon: url } } })
+  await prisma.$transaction(async (tx) => {
+    await lockFavicon(tx)
+    await storage.uploadFile(png, KEY, FAVICON_TYPE)
+    await applyConfigUpdate(tx, { settings: { appearance: { favicon: url } } })
+  }, WRITE_TIMEOUT)
   return url
 }
 
 /**
  * Stops linking the favicon, so pages fall back to Flare's own icon, then
  * removes the stored image. Removing a favicon that isn't there is no error.
+ * Uploads wait for a removal to finish, so it never deletes their bytes.
  */
 export async function removeFavicon(): Promise<void> {
-  await updateConfig({ settings: { appearance: { favicon: null } } })
   const storage = await getStorageProvider()
-  try {
-    await storage.deleteFile(KEY)
-  } catch (error) {
-    if (!isMissingObject(error)) throw error
-  }
+  await prisma.$transaction(async (tx) => {
+    await lockFavicon(tx)
+    await applyConfigUpdate(tx, { settings: { appearance: { favicon: null } } })
+    try {
+      await storage.deleteFile(KEY)
+    } catch (error) {
+      if (!isMissingObject(error)) throw error
+    }
+  }, WRITE_TIMEOUT)
 }
 
 /**
