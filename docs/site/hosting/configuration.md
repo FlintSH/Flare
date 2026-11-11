@@ -178,7 +178,7 @@ Text is escaped into Flare's HTML and plain-text messages. These settings are no
 
 ## Settings stored in the database
 
-These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades.
+These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades. The complete untouched original classic color palette is recognized when configuration is read and resolves to the current higher-contrast dark defaults, including in the Settings controls. Customized classic palettes and published studio palettes keep their saved colors. No environment variable or database migration is needed; see [appearance administration](../admin/appearance) for reset and preset controls.
 
 | Setting                         | Default                                                               | Guide                                                             |
 | ------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |

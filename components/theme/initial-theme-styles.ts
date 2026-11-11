@@ -1,5 +1,8 @@
 import { DEFAULT_CONFIG, type FlareConfig } from '@/lib/config'
-import { legacyColors } from '@/lib/customization/legacy-appearance'
+import {
+  defaultClassicColors,
+  legacyColors,
+} from '@/lib/customization/legacy-appearance'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 import { themeStyles } from '@/lib/customization/theme'
 
@@ -12,7 +15,10 @@ export function initialThemeStyles(
   // This string is raw <style> content: only validated names and HSL values.
   const customColors = {
     ...DEFAULT_CONFIG.settings.appearance.customColors,
-    ...(!recovery && legacyColors(config.settings.appearance.customColors)),
+    ...(!recovery &&
+      defaultClassicColors(
+        legacyColors(config.settings.appearance.customColors)
+      )),
   }
   const appearance = recovery
     ? {

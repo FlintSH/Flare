@@ -29,6 +29,16 @@ The preference is stored with your account, so it follows you when you sign in o
 
 Your personal setting changes the dashboard. Public share pages retain the instance's brand and public appearance behavior.
 
+## Default dark-mode contrast
+
+The default dark theme keeps Flare's navy and slate palette with a darker page canvas, raised cards, lighter menus, clearer separators and brighter secondary text. Hovered items have their own fill so they stand out from the surface behind them. These changes apply across the workspace and public pages that use the default palette.
+
+Existing installations using the complete original classic palette receive these colors automatically when pages reload. Empty classic palettes use the new defaults too. A customized classic palette or a published studio palette keeps its saved colors. Administrators can adjust those colors in [instance appearance](../admin/appearance); personal mode preferences continue to choose light or dark within the instance's palette.
+
+<Screenshot src="/screenshots/dark-contrast/library-desktop.webp" alt="Default dark-mode file library with raised slate panels, bright secondary text and visible filter outlines against a deep navy page" caption="The default dark palette separates panels and controls from the page without changing the layout." />
+
+<Screenshot src="/screenshots/dark-contrast/folder-mobile.webp" alt="New folder dialog on a phone, showing a lighter slate surface, readable description and outlined folder-name field over the dimmed navy library" caption="Dialogs sit above the page with a lighter surface and a visible keyboard focus ring." />
+
 ## What your administrator controls
 
 The instance may have its own name, tagline, light/dark logos, and footer, as well as custom colors, typeface, background, and corner radius. These choices appear across the workspace and public pages.

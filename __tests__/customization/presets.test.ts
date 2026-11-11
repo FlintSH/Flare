@@ -23,6 +23,28 @@ function contrast(a: string, b: string) {
 }
 
 describe('palette presets', () => {
+  it('keeps default text readable on raised and hovered dark surfaces', () => {
+    for (const surface of [
+      'background',
+      'card',
+      'popover',
+      'secondary',
+      'muted',
+      'accent',
+    ] as const) {
+      expect(
+        contrast(DARK_PALETTE.foreground, DARK_PALETTE[surface])
+      ).toBeGreaterThan(4.5)
+      expect(
+        contrast(DARK_PALETTE.mutedForeground, DARK_PALETTE[surface])
+      ).toBeGreaterThan(4.5)
+    }
+    expect(contrast(DARK_PALETTE.border, DARK_PALETTE.card)).toBeGreaterThan(3)
+    expect(
+      contrast(DARK_PALETTE.popover, DARK_PALETTE.background)
+    ).toBeGreaterThan(1.8)
+  })
+
   it('keeps Midnight on the default palettes, with the accent as focus ring', () => {
     expect(presetPalettes(PALETTE_PRESETS.midnight)).toEqual({
       light: { ...LIGHT_PALETTE, ring: LIGHT_PALETTE.primary },
@@ -30,42 +52,36 @@ describe('palette presets', () => {
     })
   })
 
-  it.each(Object.entries(PALETTE_PRESETS))(
-    'gives %s valid palettes with neutrals in its own hue',
-    (_name, preset) => {
-      const { light, dark } = presetPalettes(preset)
-      expect(paletteSchema.safeParse(light).success).toBe(true)
-      expect(paletteSchema.safeParse(dark).success).toBe(true)
-      expect(light.primary).toBe(preset.lightAccent)
-      expect(dark.primary).toBe(preset.accent)
-      for (const key of [
-        'secondary',
-        'muted',
-        'accent',
-        'border',
-        'input',
-      ] as const)
-        expect(dark[key]).toBe(preset.line)
-      expect(dark.mutedForeground).toBe(preset.mutedForeground)
-    }
-  )
+  it.each(
+    Object.entries(PALETTE_PRESETS).filter(([name]) => name !== 'midnight')
+  )('gives %s valid palettes with neutrals in its own hue', (_name, preset) => {
+    const { light, dark } = presetPalettes(preset)
+    expect(paletteSchema.safeParse(light).success).toBe(true)
+    expect(paletteSchema.safeParse(dark).success).toBe(true)
+    expect(light.primary).toBe(preset.lightAccent)
+    expect(dark.primary).toBe(preset.accent)
+    for (const key of [
+      'secondary',
+      'muted',
+      'accent',
+      'border',
+      'input',
+    ] as const)
+      expect(dark[key]).toBe(preset.line)
+    expect(dark.mutedForeground).toBe(preset.mutedForeground)
+  })
 
-  it.each(Object.entries(PALETTE_PRESETS))(
-    'keeps %s secondary text readable and its lines quiet',
-    (_name, preset) => {
-      const { dark } = presetPalettes(preset)
-      expect(contrast(dark.mutedForeground, dark.background)).toBeGreaterThan(
-        6.5
-      )
-      // Secondary text also sits on the secondary and muted fills (tabs,
-      // badges), which take the line colour.
-      expect(contrast(dark.mutedForeground, dark.secondary)).toBeGreaterThan(
-        4.5
-      )
-      expect(contrast(dark.foreground, dark.background)).toBeGreaterThan(15)
-      const line = contrast(dark.border, dark.background)
-      expect(line).toBeGreaterThan(1.3)
-      expect(line).toBeLessThan(1.8)
-    }
-  )
+  it.each(
+    Object.entries(PALETTE_PRESETS).filter(([name]) => name !== 'midnight')
+  )('keeps %s secondary text readable and its lines quiet', (_name, preset) => {
+    const { dark } = presetPalettes(preset)
+    expect(contrast(dark.mutedForeground, dark.background)).toBeGreaterThan(6.5)
+    // Secondary text also sits on the secondary and muted fills (tabs,
+    // badges), which take the line colour.
+    expect(contrast(dark.mutedForeground, dark.secondary)).toBeGreaterThan(4.5)
+    expect(contrast(dark.foreground, dark.background)).toBeGreaterThan(15)
+    const line = contrast(dark.border, dark.background)
+    expect(line).toBeGreaterThan(1.3)
+    expect(line).toBeLessThan(1.8)
+  })
 })

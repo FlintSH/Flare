@@ -38,9 +38,9 @@ export function themeStyles(document: AppearanceDocument): string {
       .map(([key, value]) => `${key}:${value}`)
       .join(';')
   // With the studio palette off, Flare keeps its original look in both modes:
-  // the legacy dark colors and the default light palette. A light palette
+  // the classic dark colors and the default light palette. A light palette
   // saved in the studio (for example by trying a preset) only applies once the
-  // studio palette is on. Never replace the legacy dark palette here.
+  // studio palette is on. Classic dark defaults are resolved by initialThemeStyles.
   if (!theme.enabled) return `.light{${declarations(LIGHT_PALETTE)}}`
   const font =
     theme.font === 'mono'

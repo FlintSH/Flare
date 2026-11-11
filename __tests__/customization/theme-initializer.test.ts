@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 
 import { initialThemeStyles } from '@/components/theme/initial-theme-styles'
 
-import { DEFAULT_CONFIG } from '@/lib/config'
+import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
+import {
+  CLASSIC_PALETTE,
+  ORIGINAL_CLASSIC_PALETTE,
+} from '@/lib/customization/legacy-appearance'
 import { LIGHT_PALETTE } from '@/lib/customization/schema'
 import { paletteVariables } from '@/lib/customization/theme'
 
@@ -18,6 +22,25 @@ function declarations(css: string, selector: string) {
 }
 
 describe('initial server-rendered theme', () => {
+  it('upgrades a saved untouched classic palette but retains a customized palette', () => {
+    const config = structuredClone(DEFAULT_CONFIG)
+    config.settings.appearance.customColors = { ...ORIGINAL_CLASSIC_PALETTE }
+    expect(configSchema.parse(config).settings.appearance.customColors).toEqual(
+      CLASSIC_PALETTE
+    )
+    expect(initialThemeStyles(config)).toContain(
+      `--card: ${CLASSIC_PALETTE.card};`
+    )
+    config.settings.appearance.customColors.primary = '120 50% 50%'
+    expect(
+      configSchema.parse(config).settings.appearance.customColors.card
+    ).toBe(ORIGINAL_CLASSIC_PALETTE.card)
+    expect(initialThemeStyles(config)).toContain(
+      `--card: ${ORIGINAL_CLASSIC_PALETTE.card};`
+    )
+    expect(initialThemeStyles(config)).toContain('--primary: 120 50% 50%;')
+  })
+
   it('keeps every original Flare HSL token after setup saved an empty palette', () => {
     const fresh = structuredClone(DEFAULT_CONFIG)
     const completed = structuredClone(DEFAULT_CONFIG)
@@ -46,7 +69,7 @@ describe('initial server-rendered theme', () => {
     expect(css).toContain('--primary: 120 50% 50%;')
     expect(css).toContain('--background: 222.2 84% 4.9%;')
     expect(css).toContain('--foreground: 210 40% 98%;')
-    expect(css).toContain('--input: 217.2 32.6% 17.5%;')
+    expect(css).toContain('--input: 215.4 16.3% 46.9%;')
     expect(css).not.toContain('.dark{')
   })
 

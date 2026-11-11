@@ -51,6 +51,12 @@ export function presetPalettes(preset: PalettePreset): {
   light: Palette
   dark: Palette
 } {
+  if (preset === PALETTE_PRESETS.midnight) {
+    return {
+      light: { ...LIGHT_PALETTE, ring: LIGHT_PALETTE.primary },
+      dark: { ...DARK_PALETTE, ring: DARK_PALETTE.primary },
+    }
+  }
   return {
     light: {
       ...LIGHT_PALETTE,
