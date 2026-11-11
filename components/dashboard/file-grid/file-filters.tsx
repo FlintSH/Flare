@@ -3,6 +3,7 @@ import { Fragment, type ReactNode, memo, useId, useState } from 'react'
 import { format } from 'date-fns'
 import {
   Calendar as CalendarIcon,
+  Check,
   ChevronDown,
   Eye,
   Filter,
@@ -23,6 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { Input } from '@/components/ui/input'
 import {
   Popover,
   PopoverContent,
@@ -97,6 +99,8 @@ export const FileFilters = memo(function FileFilters({
   const hydrated = useHydrated()
   const [expanded, setExpanded] = useState(false)
   const controlsId = useId()
+  const [typeSearch, setTypeSearch] = useState('')
+  const typeQuery = typeSearch.trim().toLowerCase()
   const activeCount =
     Number(hasTagFilter) +
     selectedTypes.length +
@@ -105,6 +109,11 @@ export const FileFilters = memo(function FileFilters({
     Number(groupBy !== 'none')
   const fileTypesByCategory = [...new Set([...fileTypes, ...selectedTypes])]
     .sort()
+    .filter(
+      (type) =>
+        type.toLowerCase().includes(typeQuery) ||
+        fileTypeLabel(type).toLowerCase().includes(typeQuery)
+    )
     .reduce(
       (groups, type) => {
         ;(groups[fileTypeGroup(type)] ||= []).push(type)
@@ -112,6 +121,13 @@ export const FileFilters = memo(function FileFilters({
       },
       {} as Record<string, string[]>
     )
+  const typeCategories = [
+    'Images',
+    'Videos',
+    'Audio',
+    'Documents',
+    'Other files',
+  ].filter((category) => fileTypesByCategory[category]?.length)
   // Every trigger shows the same fill while its menu is open.
   const filterClass =
     'relative h-10 min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:w-auto sm:justify-between'
@@ -213,8 +229,12 @@ export const FileFilters = memo(function FileFilters({
             })}
           </DropdownMenuContent>
         </DropdownMenu>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <Popover
+          onOpenChange={(open) => {
+            if (!open) setTypeSearch('')
+          }}
+        >
+          <PopoverTrigger asChild>
             <Button
               variant="outline"
               aria-label="File type"
@@ -232,59 +252,67 @@ export const FileFilters = memo(function FileFilters({
                 </span>
               )}
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-64">
-            <DropdownMenuLabel>Filter by file type</DropdownMenuLabel>
-            {/* Only the list scrolls, so its fade never reaches the menu's
-              border and the heading stays in view. */}
-            {/* Not a tab stop of its own: the menu's arrow keys move through
-              the items, and the fade mask would hide its focus ring. A click
-              on a heading focuses the list itself, where those keys don't
-              work, so focus goes back to the menu. */}
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-64 p-1">
+            <div className="px-2 py-1.5 text-sm font-semibold">
+              Filter by file type
+            </div>
+            <Input
+              aria-label="Find a file type"
+              placeholder="Find a file type…"
+              value={typeSearch}
+              onChange={(event) => setTypeSearch(event.target.value)}
+              className="mb-2 h-9"
+            />
             <div
               ref={scrollFadeRef}
-              tabIndex={-1}
-              onFocus={(event) => {
-                if (event.target === event.currentTarget)
-                  event.currentTarget
-                    .closest<HTMLElement>('[role="menu"]')
-                    ?.focus()
-              }}
+              role="group"
+              aria-label="Filter files by type"
               className="scroll-fade max-h-72 overflow-y-auto overscroll-contain outline-none"
             >
-              {Object.entries(fileTypesByCategory).map(([category, types]) => (
+              {typeCategories.map((category) => (
                 <Fragment key={category}>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                  <div className="-mx-1 my-1 h-px bg-muted" />
+                  <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
                     {category}
-                  </DropdownMenuLabel>
-                  {types.map((type) => (
-                    <DropdownMenuCheckboxItem
+                  </div>
+                  {fileTypesByCategory[category].map((type) => (
+                    <button
+                      data-flare-control
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                       key={type}
                       title={type}
-                      checked={selectedTypes.includes(type)}
-                      onSelect={(event) => event.preventDefault()}
-                      onCheckedChange={(checked) =>
+                      aria-pressed={selectedTypes.includes(type)}
+                      onClick={() =>
                         onTypesChange(
-                          checked
+                          !selectedTypes.includes(type)
                             ? [...selectedTypes, type]
                             : selectedTypes.filter((item) => item !== type)
                         )
                       }
                     >
+                      <Check
+                        className={cn(
+                          'h-4 w-4 shrink-0',
+                          !selectedTypes.includes(type) && 'invisible'
+                        )}
+                      />
                       <span className="truncate">{fileTypeLabel(type)}</span>
-                    </DropdownMenuCheckboxItem>
+                    </button>
                   ))}
                 </Fragment>
               ))}
               {Object.keys(fileTypesByCategory).length === 0 && (
                 <p className="px-2 py-3 text-sm text-muted-foreground">
-                  File types appear after your first upload.
+                  {typeQuery
+                    ? 'No matching file types.'
+                    : 'File types appear after your first upload.'}
                 </p>
               )}
             </div>
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </PopoverContent>
+        </Popover>
         <Popover>
           <PopoverTrigger asChild>
             <Button
