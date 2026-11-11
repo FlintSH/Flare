@@ -70,7 +70,7 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## See your roles
 
-**Profile → Account → Your roles** shows your current role badges. Everyone applies automatically. Additional roles add permissions; a role name or color alone does not describe its authority. Ask the instance administrator to review a missing capability in [Roles](/admin/roles).
+**Profile → Account** shows your current role badges beneath the account settings, after appearance preferences. Everyone applies automatically. Additional roles add permissions; a role name or color alone does not describe its authority. Ask the instance administrator to review a missing capability in [Roles](/admin/roles).
 
 ## Update your name and avatar
 
@@ -180,7 +180,9 @@ Inspect the archive and open important files before deleting their originals. A 
 
 **Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
 
-**Profile → Integrations** contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
+**Profile → Integrations** opens **New token** and **Add webhook** forms in modal dialogs, keeping the connection lists in place. Cancel or close a dialog to discard an unfinished connection; errors stay in the dialog so you can correct them. After creating a connection, copy its one-time secret from the message on the integrations page.
+
+This section contains [named API tokens](../api/authentication), [webhooks](../api/webhooks), and delivery history. Use separate named tokens when different custom tools need independent permissions or revocation. While **Integrations** is the open section of Profile and its browser tab is visible, the page reloads its lists every five seconds, so delivery statuses update on their own. An error from a failed reload clears when a later one succeeds. Earlier versions kept reloading every five seconds after you switched to another section of Profile, and kept showing an error after the next reload succeeded. Tokens and webhooks belong to your account, including when the account has Administrator. Removing `tokens.manage` blocks credential management but does not revoke existing tokens; their current operation permissions still decide what they can do.
 
 ## Invite people
 

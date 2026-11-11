@@ -14,15 +14,17 @@ Open **Profile → Uploads** to manage profiles. [Try the upload-options lab](/d
 ## Create your first profile
 
 1. Open **Profile → Uploads**.
-2. Start a new profile or select a starter.
+2. Choose **New profile** or a starter to open the profile editor in a modal dialog.
 3. Give it a clear name.
 4. Choose the values you want the profile to control. Leave other fields on **Inherit**.
 5. Choose **Save profile**. It becomes available once the profile has a name and, for a saved profile, once you change something.
 6. Choose **Make default** if it should apply when an upload does not explicitly select another profile.
 
+The editor stays open after saving so you can choose **Make default** or download a tool configuration. Choose **Close** when finished. Closing before saving discards your unfinished changes; reopening a saved profile loads its saved settings. Selecting a saved profile or importing a recipe also opens this editor. Deleting a profile closes the editor and returns keyboard focus to **New profile**.
+
 The built-in starters are starting points you can review and edit:
 
-<Screenshot src="/screenshots/handbook/upload-profiles.webp" alt="Current upload profile editor with the Public screenshots starter selected and a Tags selector" caption="The Public screenshots starter explicitly chooses public visibility, random names, and Minimal layout. Other choices inherit your defaults." />
+<Screenshot src="/screenshots/handbook/upload-profiles-modal.webp" alt="Upload profile modal with the Temporary clips starter selected and a Tags selector" caption="The Temporary clips starter opens in a modal with public visibility, a one-hour expiration, and Make private selected. Scroll inside the modal on smaller screens." />
 
 | Starter                | Explicit choices                                                   |
 | ---------------------- | ------------------------------------------------------------------ |

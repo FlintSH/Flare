@@ -17,6 +17,13 @@ import { MetaLine } from '@/components/shared/meta-line'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -171,15 +178,21 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     error: tagsError,
     reload: reloadTags,
   } = useTags()
+  const [editorOpen, setEditorOpen] = useState(false)
   const [editing, setEditing] = useState<UploadProfileView | null>(null)
   const [name, setName] = useState('')
   const [options, setOptions] = useState<UploadProfileOptions>({})
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [tagSearch, setTagSearch] = useState('')
+  const editorTrigger = useRef<HTMLElement | null>(null)
+  const newProfileTrigger = useRef<HTMLButtonElement | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const refresh = useAccountRefresh(UPLOAD_PROFILES)
   const choose = (profile: UploadProfileView | null) => {
+    if (!editorOpen)
+      editorTrigger.current = document.activeElement as HTMLElement
+    setEditorOpen(true)
     setEditing(profile)
     setName(profile?.name || '')
     setOptions(profile?.options || {})
@@ -263,7 +276,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
             <Upload />
             Import recipe
           </Button>
-          <Button onClick={() => choose(null)}>
+          <Button ref={newProfileTrigger} onClick={() => choose(null)}>
             <Plus />
             New profile
           </Button>
@@ -301,7 +314,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
           })
         }}
       />
-      {(message || error) && (
+      {((message && !editorOpen) || error) && (
         <Alert variant="destructive">
           <AlertCircle aria-hidden="true" />
           <AlertDescription>{message || error}</AlertDescription>
@@ -312,8 +325,8 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
           Loading upload profiles…
         </p>
       )}
-      <div className="grid gap-6 xl:grid-cols-[minmax(200px,0.8fr)_minmax(0,1.5fr)]">
-        <div className="min-w-0 space-y-6">
+      <div className="space-y-6">
+        <div className="grid min-w-0 gap-6 md:grid-cols-2">
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
               <CardHeading className="font-semibold leading-none tracking-tight">
@@ -407,6 +420,9 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                     'bg-muted/30 hover:bg-muted/60'
                   )}
                   onClick={() => {
+                    editorTrigger.current =
+                      document.activeElement as HTMLElement
+                    setEditorOpen(true)
                     setEditing(null)
                     setName(starter.name)
                     setOptions(starter.options)
@@ -424,273 +440,312 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
             </CardContent>
           </Card>
         </div>
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardHeading className="font-semibold leading-none tracking-tight">
-              {editing ? 'Edit profile' : 'Create a profile'}
-            </CardHeading>
-            <p className="text-pretty text-sm text-muted-foreground">
-              “Inherit” follows your account or instance settings. Changes apply
-              to future uploads.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="profile-name">Profile name</Label>
-              <Input
-                id="profile-name"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder="My screenshots"
-                maxLength={PROFILE_NAME_MAX_LENGTH}
-              />
-            </div>
-            <div className="grid gap-5 sm:grid-cols-2">
-              {controls.map((control) => (
-                <div key={control.key} className="space-y-2">
-                  <Label htmlFor={`profile-${control.key}`}>
-                    {control.label}
-                  </Label>
-                  <Select
-                    value={
-                      options[control.key] === undefined
-                        ? 'inherit'
-                        : String(options[control.key])
-                    }
-                    onValueChange={(value) =>
-                      setOptions((current) => {
-                        const next = { ...current }
-                        if (value === 'inherit') delete next[control.key]
-                        else
-                          Object.assign(next, {
-                            [control.key]:
-                              control.key === 'randomizeFileUrls'
-                                ? value === 'true'
-                                : value,
-                          })
-                        return next
-                      })
-                    }
-                  >
-                    <SelectTrigger id={`profile-${control.key}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="inherit">Inherit</SelectItem>
-                      {control.choices.map(([value, label]) => (
-                        <SelectItem value={value} key={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
+        <Dialog
+          open={editorOpen}
+          onOpenChange={(open) => {
+            if (!busy) {
+              setEditorOpen(open)
+              setMessage('')
+            }
+          }}
+        >
+          <DialogContent
+            showCloseButton={!busy}
+            className="max-w-2xl"
+            onCloseAutoFocus={(event) => {
+              if (editorTrigger.current?.isConnected) {
+                event.preventDefault()
+                editorTrigger.current.focus()
+              }
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {editing ? 'Edit profile' : 'Create a profile'}
+              </DialogTitle>
+              <DialogDescription>
+                “Inherit” follows your account or instance settings. Changes
+                apply to future uploads.
+              </DialogDescription>
+            </DialogHeader>
+            {message && (
+              <p role="alert" className="text-sm text-destructive">
+                {message}
+              </p>
+            )}
+            <div className="space-y-6">
               <div className="space-y-2">
-                <Label htmlFor="profile-tags">Tags</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button
-                      type="button"
-                      id="profile-tags"
-                      className={tagTriggerClassName}
+                <Label htmlFor="profile-name">Profile name</Label>
+                <Input
+                  id="profile-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="My screenshots"
+                  maxLength={PROFILE_NAME_MAX_LENGTH}
+                />
+              </div>
+              <div className="grid gap-5 sm:grid-cols-2">
+                {controls.map((control) => (
+                  <div key={control.key} className="space-y-2">
+                    <Label htmlFor={`profile-${control.key}`}>
+                      {control.label}
+                    </Label>
+                    <Select
+                      value={
+                        options[control.key] === undefined
+                          ? 'inherit'
+                          : String(options[control.key])
+                      }
+                      onValueChange={(value) =>
+                        setOptions((current) => {
+                          const next = { ...current }
+                          if (value === 'inherit') delete next[control.key]
+                          else
+                            Object.assign(next, {
+                              [control.key]:
+                                control.key === 'randomizeFileUrls'
+                                  ? value === 'true'
+                                  : value,
+                            })
+                          return next
+                        })
+                      }
                     >
-                      <span className="truncate">
-                        {options.tagIds?.length
-                          ? tags
-                              .filter((tag) => options.tagIds?.includes(tag.id))
-                              .map((tag) => tag.name)
-                              .join(', ') || `${options.tagIds.length} selected`
-                          : 'No tags'}
-                      </span>
-                      <ChevronDown
-                        className="h-4 w-4 shrink-0 opacity-50"
-                        aria-hidden="true"
+                      <SelectTrigger id={`profile-${control.key}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="inherit">Inherit</SelectItem>
+                        {control.choices.map(([value, label]) => (
+                          <SelectItem value={value} key={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+                <div className="space-y-2">
+                  <Label htmlFor="profile-tags">Tags</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        type="button"
+                        id="profile-tags"
+                        className={tagTriggerClassName}
+                      >
+                        <span className="truncate">
+                          {options.tagIds?.length
+                            ? tags
+                                .filter((tag) =>
+                                  options.tagIds?.includes(tag.id)
+                                )
+                                .map((tag) => tag.name)
+                                .join(', ') ||
+                              `${options.tagIds.length} selected`
+                            : 'No tags'}
+                        </span>
+                        <ChevronDown
+                          className="h-4 w-4 shrink-0 opacity-50"
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-72 p-2">
+                      <Input
+                        aria-label="Find a tag"
+                        placeholder="Find a tag…"
+                        value={tagSearch}
+                        onChange={(event) => setTagSearch(event.target.value)}
+                        className="mb-2"
                       />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent align="start" className="w-72 p-2">
-                    <Input
-                      aria-label="Find a tag"
-                      placeholder="Find a tag…"
-                      value={tagSearch}
-                      onChange={(event) => setTagSearch(event.target.value)}
-                      className="mb-2"
-                    />
-                    <div
-                      ref={scrollFadeRef}
-                      className="scroll-fade max-h-52 overflow-y-auto"
-                    >
-                      {tagsLoading ? (
-                        <p
-                          className="p-2 text-sm text-muted-foreground"
-                          role="status"
-                        >
-                          Loading tags…
-                        </p>
-                      ) : tagsError ? (
-                        <div className="p-2 text-sm">
-                          <p role="alert">Couldn’t load tags.</p>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => void reloadTags()}
+                      <div
+                        ref={scrollFadeRef}
+                        className="scroll-fade max-h-52 overflow-y-auto"
+                      >
+                        {tagsLoading ? (
+                          <p
+                            className="p-2 text-sm text-muted-foreground"
+                            role="status"
                           >
-                            Try again
-                          </Button>
-                        </div>
-                      ) : tags.length === 0 ? (
-                        <p className="p-2 text-sm text-muted-foreground">
-                          Create a tag in your vault, then choose it here.
-                        </p>
-                      ) : tags.filter((tag) =>
-                          tag.name
-                            .toLowerCase()
-                            .includes(tagSearch.toLowerCase())
-                        ).length === 0 ? (
-                        <p className="p-2 text-sm text-muted-foreground">
-                          No tags found.
-                        </p>
-                      ) : (
-                        tags
-                          .filter((tag) =>
+                            Loading tags…
+                          </p>
+                        ) : tagsError ? (
+                          <div className="p-2 text-sm">
+                            <p role="alert">Couldn’t load tags.</p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void reloadTags()}
+                            >
+                              Try again
+                            </Button>
+                          </div>
+                        ) : tags.length === 0 ? (
+                          <p className="p-2 text-sm text-muted-foreground">
+                            Create a tag in your vault, then choose it here.
+                          </p>
+                        ) : tags.filter((tag) =>
                             tag.name
                               .toLowerCase()
                               .includes(tagSearch.toLowerCase())
-                          )
-                          .map((tag) => {
-                            const selected =
-                              options.tagIds?.includes(tag.id) ?? false
-                            return (
-                              <label
-                                key={tag.id}
-                                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selected}
-                                  disabled={
-                                    !selected &&
-                                    (options.tagIds?.length ?? 0) >=
-                                      PROFILE_TAG_LIMIT
-                                  }
-                                  onChange={() =>
-                                    setOptions((current) => ({
-                                      ...current,
-                                      tagIds: selected
-                                        ? current.tagIds?.filter(
-                                            (id) => id !== tag.id
-                                          )
-                                        : [...(current.tagIds ?? []), tag.id],
-                                    }))
-                                  }
-                                />
-                                <span className="min-w-0 break-words">
-                                  {tag.name}
-                                </span>
-                              </label>
+                          ).length === 0 ? (
+                          <p className="p-2 text-sm text-muted-foreground">
+                            No tags found.
+                          </p>
+                        ) : (
+                          tags
+                            .filter((tag) =>
+                              tag.name
+                                .toLowerCase()
+                                .includes(tagSearch.toLowerCase())
                             )
-                          })
+                            .map((tag) => {
+                              const selected =
+                                options.tagIds?.includes(tag.id) ?? false
+                              return (
+                                <label
+                                  key={tag.id}
+                                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm hover:bg-muted/60"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={selected}
+                                    disabled={
+                                      !selected &&
+                                      (options.tagIds?.length ?? 0) >=
+                                        PROFILE_TAG_LIMIT
+                                    }
+                                    onChange={() =>
+                                      setOptions((current) => ({
+                                        ...current,
+                                        tagIds: selected
+                                          ? current.tagIds?.filter(
+                                              (id) => id !== tag.id
+                                            )
+                                          : [...(current.tagIds ?? []), tag.id],
+                                      }))
+                                    }
+                                  />
+                                  <span className="min-w-0 break-words">
+                                    {tag.name}
+                                  </span>
+                                </label>
+                              )
+                            })
+                        )}
+                      </div>
+                      {(options.tagIds?.length ?? 0) > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mt-2 w-full border-t"
+                          onClick={() =>
+                            setOptions((current) => ({
+                              ...current,
+                              tagIds: [],
+                            }))
+                          }
+                        >
+                          Clear tags
+                        </Button>
                       )}
-                    </div>
-                    {(options.tagIds?.length ?? 0) > 0 && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="mt-2 w-full border-t"
-                        onClick={() =>
-                          setOptions((current) => ({ ...current, tagIds: [] }))
-                        }
-                      >
-                        Clear tags
-                      </Button>
-                    )}
-                  </PopoverContent>
-                </Popover>
-                <p className="text-pretty text-xs text-muted-foreground">
-                  Add these tags to every file uploaded with this profile.
-                </p>
-              </div>
-            </div>
-            <p className="text-pretty text-xs text-muted-foreground">
-              Passwords are set on individual uploads. Recipes contain
-              preferences only and never include account credentials. Tags in a
-              recipe belong to this account.
-            </p>
-            {/* Form actions: the primary at the end on wider screens; full
-                width and on top on phones, like dialog footers. */}
-            <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
-              {editing && (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="text-destructive hover:bg-danger/10 hover:text-destructive"
-                    aria-label="Delete profile"
-                    disabled={busy}
-                    onClick={() =>
-                      void perform(async () => {
-                        await request(
-                          `/api/upload-profiles/${editing.id}`,
-                          'DELETE'
-                        )
-                        choose(null)
-                        toast({
-                          title: 'Profile deleted',
-                          description: 'Existing files are unchanged.',
-                        })
-                      })
-                    }
-                  >
-                    <Trash2 />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-auto sm:flex-none"
-                    asChild
-                  >
-                    <a href={`/api/upload-profiles/${editing.id}/export`}>
-                      <Download />
-                      Export
-                    </a>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="flex-auto sm:flex-none"
-                    disabled={busy || data?.defaultProfileId === editing.id}
-                    onClick={() =>
-                      void perform(async () => {
-                        await request('/api/upload-profiles/default', 'PUT', {
-                          profileId: editing.id,
-                        })
-                        toast({ title: 'Default profile updated' })
-                      })
-                    }
-                  >
-                    <Star />
-                    {data?.defaultProfileId === editing.id
-                      ? 'Default profile'
-                      : 'Make default'}
-                  </Button>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-pretty text-xs text-muted-foreground">
+                    Add these tags to every file uploaded with this profile.
+                  </p>
                 </div>
+              </div>
+              <p className="text-pretty text-xs text-muted-foreground">
+                Passwords are set on individual uploads. Recipes contain
+                preferences only and never include account credentials. Tags in
+                a recipe belong to this account.
+              </p>
+              {/* Form actions: the primary at the end on wider screens; full
+                width and on top on phones, like dialog footers. */}
+              <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
+                {editing && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="text-destructive hover:bg-danger/10 hover:text-destructive"
+                      aria-label="Delete profile"
+                      disabled={busy}
+                      onClick={() =>
+                        void perform(async () => {
+                          await request(
+                            `/api/upload-profiles/${editing.id}`,
+                            'DELETE'
+                          )
+                          editorTrigger.current = newProfileTrigger.current
+                          setEditorOpen(false)
+                          setEditing(null)
+                          toast({
+                            title: 'Profile deleted',
+                            description: 'Existing files are unchanged.',
+                          })
+                        })
+                      }
+                    >
+                      <Trash2 />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-auto sm:flex-none"
+                      asChild
+                    >
+                      <a href={`/api/upload-profiles/${editing.id}/export`}>
+                        <Download />
+                        Export
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-auto sm:flex-none"
+                      disabled={busy || data?.defaultProfileId === editing.id}
+                      onClick={() =>
+                        void perform(async () => {
+                          await request('/api/upload-profiles/default', 'PUT', {
+                            profileId: editing.id,
+                          })
+                          toast({ title: 'Default profile updated' })
+                        })
+                      }
+                    >
+                      <Star />
+                      {data?.defaultProfileId === editing.id
+                        ? 'Default profile'
+                        : 'Make default'}
+                    </Button>
+                  </div>
+                )}
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={() => void save()}
+                  disabled={busy || !name.trim() || unchanged}
+                >
+                  {busy ? 'Saving…' : 'Save profile'}
+                </Button>
+                <Button
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => setEditorOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+              {editing && (
+                <ProfileToolDownloads
+                  profileId={editing.id}
+                  profileName={editing.name}
+                  disabled={busy}
+                />
               )}
-              <Button
-                className="w-full sm:w-auto"
-                onClick={() => void save()}
-                disabled={busy || !name.trim() || unchanged}
-              >
-                {busy ? 'Saving…' : 'Save profile'}
-              </Button>
             </div>
-            {editing && (
-              <ProfileToolDownloads
-                profileId={editing.id}
-                profileName={editing.name}
-                disabled={busy}
-              />
-            )}
-          </CardContent>
-        </Card>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   )

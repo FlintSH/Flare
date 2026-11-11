@@ -7,7 +7,7 @@ description: Turn text and code into shareable files with upload profiles, passw
 
 Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain files owned by your account and follow its sharing, storage, size, and expiration policies. Your [roles](/admin/roles) can enable ordinary uploads without enabling paste creation.
 
-**Paste** saves text directly into Flare without first creating a file on your device. Use it for code snippets, configuration examples, logs, notes, and small text handoffs. A paste becomes a file in your library with the same access controls as other uploads.
+**Paste** saves text directly into Flare without first creating a file on your device. The editor and options use the full dashboard content width, matching the file library. Use it for code snippets, configuration examples, logs, notes, and small text handoffs. A paste becomes a file in your library with the same access controls as other uploads.
 
 <Screenshot src="/screenshots/workspace/paste.png" alt="Paste form starting with content and filename, followed by an upload profile and collapsed sharing options" caption="Paste your content, choose its sharing settings, and create a link." />
 

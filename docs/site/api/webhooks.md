@@ -14,7 +14,7 @@ Webhooks belong to individual accounts. A destination receives events for its ow
 ## Connect a receiver
 
 1. Make your receiver reachable at an HTTPS URL, such as `https://automation.example.com/flare`.
-2. Open **Profile → Integrations** in Flare and create a webhook with a recognizable name and the receiver URL.
+2. Open **Profile → Integrations** in Flare and choose **Add webhook**. In the dialog, enter a recognizable connection name and the receiver URL, then choose **Connect webhook**. If saving fails, correct the error in the dialog and retry.
 3. Save the one-time `whsec_…` signing secret in your receiver's secret store.
 4. Configure the receiver to verify signatures and timestamps before processing events.
 5. Send a test from Flare. Check both your receiver's logs and Flare's delivery history.

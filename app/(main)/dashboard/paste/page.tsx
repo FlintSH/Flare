@@ -13,7 +13,7 @@ export default async function PastePage() {
         title="Create a paste"
         description="Share text or code, with syntax highlighting from the file extension."
       />
-      <div className={`${pagePanelClassName} max-w-4xl`}>
+      <div className={pagePanelClassName}>
         <PasteForm />
       </div>
     </div>

@@ -9,9 +9,9 @@ With `tokens.manage`, create one named API token for each script or service in *
 
 ## Create a token
 
-1. Choose a name of 1–80 characters. Use the name to identify the machine, service, or purpose.
+1. In **Profile → Integrations**, choose **New token** to open the creation dialog. Choose a name of 1–80 characters. Use the name to identify the machine, service, or purpose.
 2. Select one or more scopes from the table below. The form offers a scope only while your role allows at least one of its operations, as listed in [Scopes and account roles](#scopes-and-account-roles). For example, `urls:write` appears with either `links.create` or `links.delete`.
-3. Optionally select an expiration in the future. Without an expiration, the token remains active until revoked.
+3. Review **Expires after**, which starts at **90 days**. Choose 30 days, 90 days, 1 year, or Never; Never keeps the token active until revoked.
 4. If it uploads files, optionally bind it to one of your saved upload profiles.
 5. Create the token and save the displayed `flr_…` secret in your tool's secret store.
 

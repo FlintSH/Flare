@@ -175,18 +175,6 @@ export function ProfileClient({
             </a>
           ))}
         </nav>
-        <Card>
-          <CardHeader>
-            <CardTitle>Your roles</CardTitle>
-            <CardDescription>
-              Your access combines Everyone with the roles assigned to you.
-              Contact an administrator to request changes.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RoleBadges roles={user.roles} />
-          </CardContent>
-        </Card>
         <PermissionGate permission="profile.update">
           <Card
             id="profile-identity"
@@ -232,6 +220,11 @@ export function ProfileClient({
             <PersonalAppearanceSettings initialPreference={initialPreference} />
           </div>
         </PermissionGate>
+        <div className="space-y-2 border-t pt-4 text-sm text-muted-foreground">
+          <p>Your access combines Everyone with your assigned roles.</p>
+          <RoleBadges roles={user.roles} />
+          <p>Contact an administrator to request access changes.</p>
+        </div>
       </PreferencesPanel>
 
       <PreferencesPanel active={displayedSection === 'uploads'}>
@@ -285,7 +278,7 @@ export function ProfileClient({
 
       <PreferencesPanel active={displayedSection === 'invites'}>
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="p-4 sm:p-6">
             <InviteManager context="profile" />
           </CardContent>
         </Card>
