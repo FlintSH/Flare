@@ -102,7 +102,7 @@ Image cards show previews for public images and for your private or password-pro
 
 <Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
 
-Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence. The viewer's header shows the image's name and upload date; once you move to another image, it also shows that image's place in the sequence, such as **12 of 40**.
+Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence. The viewer's header shows the image's name and upload date; once you move to another image, it also shows that image's place in the sequence, such as **12 of 40**. On narrow screens, long names and labels are shortened with an ellipsis so they stay clear of the header controls.
 
 | Action                 | How                                        |
 | ---------------------- | ------------------------------------------ |
@@ -113,7 +113,7 @@ Open an image preview to browse it in the full-screen viewer. The image sequence
 | Close                  | Choose the close button or press Escape.   |
 | Download               | Use the download control when available.   |
 
-The top-right **Copy link** control copies the current image’s share-page URL. **Open share page** takes you to that page in the same tab; browser Back returns to the library. These actions do not change visibility or remove password protection. If copying fails (for example, clipboard access is blocked), open the share page and copy the address from your browser.
+The top-right **Copy link** control copies the current image’s share-page URL. Like **Copy link** on file cards, it appears only for roles with `files.share`; earlier builds showed it in the viewer to every role. **Open share page** takes you to that page in the same tab for every role; browser Back returns to the library. These actions do not change visibility or remove password protection. If copying fails (for example, clipboard access is blocked), open the share page and copy the address from your browser.
 
 If an image disappears from the filtered results while you browse, Flare may ask you to choose another image. If a next image fails to load, check your connection and retry.
 

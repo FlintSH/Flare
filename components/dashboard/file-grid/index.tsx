@@ -779,6 +779,7 @@ function FileLibrary({ scope }: { scope: string }) {
               ? `${gallery.pagination.offset + gallery.index + 1} of ${gallery.pagination.total}`
               : gallery.files[gallery.index].name
           }
+          canCopyLink={allows(user, 'shareFiles')}
         />
       )}
     </div>

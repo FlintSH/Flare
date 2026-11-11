@@ -47,6 +47,8 @@ interface ImageLightboxProps {
   onNext?: () => void
   navigationPending?: boolean
   positionLabel?: string
+  /** Offer Copy link; the library passes the viewer's `files.share` permission. */
+  canCopyLink?: boolean
 }
 
 const controlClass =
@@ -65,6 +67,7 @@ export function ImageLightbox({
   onNext,
   navigationPending = false,
   positionLabel,
+  canCopyLink = false,
 }: ImageLightboxProps) {
   const { toast } = useToast()
   const [opener] = useState(() =>
@@ -150,53 +153,53 @@ export function ImageLightbox({
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <span className="shrink-0 whitespace-nowrap">
+                <span className="min-w-0 truncate">
                   {positionLabel || `${index + 1} of ${images.length}`}
                 </span>
                 {current.subtitle && (
-                  <span className="truncate border-l border-white/20 pl-2">
+                  <span className="min-w-0 truncate border-l border-white/20 pl-2">
                     {current.subtitle}
                   </span>
                 )}
               </div>
             </div>
+            {current.shareUrl && canCopyLink && (
+              <button
+                type="button"
+                className={controlClass}
+                aria-label="Copy link"
+                title="Copy link"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(
+                      new URL(current.shareUrl!, window.location.origin).href
+                    )
+                    toast({
+                      title: 'Link copied',
+                      description: 'Your file is ready to share.',
+                    })
+                  } catch {
+                    toast({
+                      title: 'Couldn’t copy the link',
+                      description:
+                        'Open the share page and copy its address from your browser.',
+                      variant: 'destructive',
+                    })
+                  }
+                }}
+              >
+                <Link className="h-5 w-5" />
+              </button>
+            )}
             {current.shareUrl && (
-              <>
-                <button
-                  type="button"
-                  className={controlClass}
-                  aria-label="Copy link"
-                  title="Copy link"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(
-                        new URL(current.shareUrl!, window.location.origin).href
-                      )
-                      toast({
-                        title: 'Link copied',
-                        description: 'Your file is ready to share.',
-                      })
-                    } catch {
-                      toast({
-                        title: 'Couldn’t copy the link',
-                        description:
-                          'Open the share page and copy its address from your browser.',
-                        variant: 'destructive',
-                      })
-                    }
-                  }}
-                >
-                  <Link className="h-5 w-5" />
-                </button>
-                <a
-                  className={controlClass}
-                  href={current.shareUrl}
-                  aria-label="Open share page"
-                  title="Open share page"
-                >
-                  <ExternalLink className="h-5 w-5" />
-                </a>
-              </>
+              <a
+                className={controlClass}
+                href={current.shareUrl}
+                aria-label="Open share page"
+                title="Open share page"
+              >
+                <ExternalLink className="h-5 w-5" />
+              </a>
             )}
             {current.downloadUrl && (
               <a
