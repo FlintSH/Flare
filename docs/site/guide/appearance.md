@@ -31,13 +31,13 @@ Your personal setting changes the dashboard. Public share pages retain the insta
 
 ## Default dark-mode contrast
 
-The default dark theme keeps Flare's navy and slate palette with a darker page canvas, raised cards, lighter menus, clearer separators and brighter secondary text. Hovered items have their own fill so they stand out from the surface behind them. These changes apply across the workspace and public pages that use the default palette.
+The default dark theme keeps Flare's navy palette but separates its layers: the page is the darkest navy, cards and panels sit one step lighter, and dialogs and menus one step above that, so each layer reads clearly without turning grey or bright. Borders, field outlines and secondary text are clearer, and hovered items have their own fill on panels and in menus. These changes apply across the workspace and public pages that use the default palette.
 
 Existing installations using the complete original classic palette receive these colors automatically when pages reload. Empty classic palettes use the new defaults too. A customized classic palette or a published studio palette keeps its saved colors. Administrators can adjust those colors in [instance appearance](../admin/appearance); personal mode preferences continue to choose light or dark within the instance's palette.
 
-<Screenshot src="/screenshots/dark-contrast/library-desktop.webp" alt="Default dark-mode file library with raised slate panels, bright secondary text and visible filter outlines against a deep navy page" caption="The default dark palette separates panels and controls from the page without changing the layout." />
+<Screenshot src="/screenshots/dark-contrast/library-desktop.webp" alt="Default dark-mode file library: navy panels and file cards a step lighter than the deep navy page, with outlined search and filter controls" caption="The default dark palette separates panels and controls from the page without changing the layout." />
 
-<Screenshot src="/screenshots/dark-contrast/folder-mobile.webp" alt="New folder dialog on a phone, showing a lighter slate surface, readable description and outlined folder-name field over the dimmed navy library" caption="Dialogs sit above the page with a lighter surface and a visible keyboard focus ring." />
+<Screenshot src="/screenshots/dark-contrast/folder-mobile.webp" alt="New folder dialog on a phone: a dark navy surface a step above the dimmed library, with a readable description and an outlined folder-name field" caption="Dialogs sit one step above the page in the same navy, with a visible keyboard focus ring." />
 
 ## What your administrator controls
 

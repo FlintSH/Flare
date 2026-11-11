@@ -35,14 +35,14 @@ export const ORIGINAL_CLASSIC_PALETTE = {
 /** Distinct canvas, raised surfaces, hover fills and separators in the default navy palette. */
 export const CLASSIC_PALETTE = {
   ...ORIGINAL_CLASSIC_PALETTE,
-  card: '222.2 47.4% 11.2%',
-  popover: '215.3 25% 26.7%',
-  secondary: '215.3 25% 26.7%',
-  muted: '217.2 32.6% 17.5%',
-  mutedForeground: '212.7 26.8% 83.9%',
-  accent: '215.3 19.3% 34.5%',
-  border: '215.4 16.3% 46.9%',
-  input: '215.4 16.3% 46.9%',
+  card: '221.5 52% 9.8%',
+  popover: '221.2 42.1% 14.9%',
+  secondary: '217.9 34.5% 21.6%',
+  muted: '220.6 37.3% 16.3%',
+  mutedForeground: '216.4 23.4% 72.4%',
+  accent: '218.2 31.9% 27.1%',
+  border: '218 29.9% 26.9%',
+  input: '216.6 26.1% 30.8%',
 }
 
 /** Upgrade only the complete untouched classic palette; never rewrite custom colors. */

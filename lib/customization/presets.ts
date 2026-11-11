@@ -11,18 +11,21 @@ export interface PalettePreset {
   line: string
   /** Dark secondary text. */
   mutedForeground: string
+  /** Use the default layered dark palette instead of deriving flat neutrals. */
+  defaultDark?: boolean
 }
 
-// The dark neutrals keep the default palette's contrast steps (lines about
-// 1.4:1 against the page, secondary text about 7:1) in each page's own hue,
-// so a violet, teal or warm page doesn't get slate borders and fields.
+// Midnight is the default dark palette. The other presets keep quiet lines
+// (about 1.4:1 against the page) and secondary text about 7:1 in each page's
+// own hue, so a violet, teal or warm page doesn't get slate borders and fields.
 export const PALETTE_PRESETS = {
   midnight: {
     accent: '#f8fafc',
     lightAccent: '#0f172a',
     background: '#020817',
-    line: '#1e293b',
-    mutedForeground: '#94a3b8',
+    line: '#303f59',
+    mutedForeground: '#a8b5c9',
+    defaultDark: true,
   },
   orbit: {
     accent: '#a78bfa',
@@ -51,7 +54,8 @@ export function presetPalettes(preset: PalettePreset): {
   light: Palette
   dark: Palette
 } {
-  if (preset === PALETTE_PRESETS.midnight) {
+  // A flag, not identity: the studio and setup spread presets into new objects.
+  if (preset.defaultDark) {
     return {
       light: { ...LIGHT_PALETTE, ring: LIGHT_PALETTE.primary },
       dark: { ...DARK_PALETTE, ring: DARK_PALETTE.primary },

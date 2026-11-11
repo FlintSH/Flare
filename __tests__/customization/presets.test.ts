@@ -39,17 +39,30 @@ describe('palette presets', () => {
         contrast(DARK_PALETTE.mutedForeground, DARK_PALETTE[surface])
       ).toBeGreaterThan(4.5)
     }
-    expect(contrast(DARK_PALETTE.border, DARK_PALETTE.card)).toBeGreaterThan(3)
-    expect(
-      contrast(DARK_PALETTE.popover, DARK_PALETTE.background)
-    ).toBeGreaterThan(1.8)
+  })
+
+  it('steps default dark surfaces up from the page without glaring overlays', () => {
+    const { background, card, popover, accent, border } = DARK_PALETTE
+    expect(luminance(card)).toBeGreaterThan(luminance(background))
+    expect(luminance(popover)).toBeGreaterThan(luminance(card))
+    // Hover fills must show on dialogs and menus, not only on panels.
+    expect(contrast(accent, popover)).toBeGreaterThan(1.2)
+    expect(contrast(border, card)).toBeGreaterThan(1.5)
+    // Dialogs and menus stay dark navy rather than a light slate sheet.
+    const lift = contrast(popover, background)
+    expect(lift).toBeGreaterThan(1.15)
+    expect(lift).toBeLessThan(1.5)
   })
 
   it('keeps Midnight on the default palettes, with the accent as focus ring', () => {
-    expect(presetPalettes(PALETTE_PRESETS.midnight)).toEqual({
+    const expected = {
       light: { ...LIGHT_PALETTE, ring: LIGHT_PALETTE.primary },
       dark: { ...DARK_PALETTE, ring: DARK_PALETTE.primary },
-    })
+    }
+    expect(presetPalettes(PALETTE_PRESETS.midnight)).toEqual(expected)
+    // The studio and setup pass copies with extra display fields.
+    const studioCopy = { name: 'Midnight', ...PALETTE_PRESETS.midnight }
+    expect(presetPalettes(studioCopy)).toEqual(expected)
   })
 
   it.each(

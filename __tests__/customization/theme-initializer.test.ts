@@ -69,7 +69,7 @@ describe('initial server-rendered theme', () => {
     expect(css).toContain('--primary: 120 50% 50%;')
     expect(css).toContain('--background: 222.2 84% 4.9%;')
     expect(css).toContain('--foreground: 210 40% 98%;')
-    expect(css).toContain('--input: 215.4 16.3% 46.9%;')
+    expect(css).toContain('--input: 216.6 26.1% 30.8%;')
     expect(css).not.toContain('.dark{')
   })
 
