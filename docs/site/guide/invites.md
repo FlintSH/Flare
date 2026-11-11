@@ -16,7 +16,7 @@ If **Profile → Invites** is missing, your roles do not include Create invites.
 
 ## Create an invite link
 
-1. Open **Profile → Invites** and choose **Create invite**. People who manage accounts can use **Users → Invites** instead; it creates the same kind of link.
+1. Open **Profile → Invites** and choose **Create invite** in the padded **Invite people** card to open the creation dialog. People who manage accounts can use **Users → Invites** instead; it creates the same kind of link.
 2. Optionally add a **Note** such as “For Sam” so you recognize the link later. Only you and people who manage all invites see it. The person you invite never sees the note.
 3. Choose **Uses**: how many accounts the link can create. Choose **1 person** unless you are deliberately inviting a group.
 4. Choose **Expires after**. A shorter lifetime limits the damage if the link is forwarded.

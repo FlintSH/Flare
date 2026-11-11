@@ -7,7 +7,7 @@ description: Upload from your browser, manage a queue, choose access and expirat
 
 Uploading requires `files.upload`, including drag-and-drop, screenshot tools, and chunked uploads. Role changes apply on the next request; an existing upload credential cannot bypass them. Revoking a [named API token](/api/authentication#rotate-or-revoke-a-token), or reaching its expiry, also stops an upload it is still sending: when the file has arrived, Flare refuses it and keeps none of it. Sharing changes use `files.share`. Without that permission, new uploads are private even if a profile or request selected public visibility; you can still upload when `files.upload` is granted. Existing public links stay public until explicitly changed. If Upload is unavailable, ask the instance administrator to review your [roles](/admin/roles).
 
-Use **Upload** when you want to review settings before sending files. For quick uploads with your saved defaults, drop files onto another dashboard page or use a [screenshot tool](./screenshot-tools).
+Use **Upload** when you want to review settings before sending files. Its form uses the full dashboard content width, matching the file library. For quick uploads with your saved defaults, drop files onto another dashboard page or use a [screenshot tool](./screenshot-tools).
 
 <Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area, effective upload settings, and collapsed Upload options" caption="The upload page brings file selection and sharing choices into one flow." />
 

@@ -19,7 +19,7 @@ Everyone initially includes folder permissions; an administrator can restrict th
 
 1. Open **Files**. On a phone with existing folders, expand **Folders** (or **Subfolders**) first, then choose **New folder**. Otherwise choose **New folder** beside the scope controls.
 2. Give it a name and save.
-3. Choose **Folders** and its count, then open the folder to see its direct files. Choose **Subfolders** to browse its children.
+3. Choose **Folders** and its count, then open the folder to see its direct files. Choose **Subfolders** to browse its children. Expanded folder cards sit below the dropdown with space between them.
 4. Choose **New folder** inside it to create a subfolder, or **Upload here** to add files.
 
 Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Flare trims the ends of a name and saves each run of spaces as one space; unlike a tag name, a folder name can't contain a tab or line break. Names must be distinct within the same parent, ignoring letter case, so `Photos` and `photos` can't share a parent. The same name can be useful in separate projects. Folders that [archive extraction](./archives#extract-into-your-library) creates follow the same rules.

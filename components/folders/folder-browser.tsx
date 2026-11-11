@@ -331,7 +331,7 @@ export function FolderBrowser({
               aria-label={current ? 'Subfolders' : 'Folders'}
               hidden={!expanded}
               className={cn(
-                'mt-3 max-h-64 gap-2 overflow-y-auto rounded-lg p-1 -m-1 sm:grid-cols-2 lg:grid-cols-3',
+                'mt-3 -mx-1 -mb-1 max-h-64 gap-2 overflow-y-auto rounded-lg p-1 sm:grid-cols-2 lg:grid-cols-3',
                 expanded && 'grid'
               )}
             >

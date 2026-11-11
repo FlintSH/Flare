@@ -27,6 +27,14 @@ import {
   CardDescription,
   CardHeader,
 } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
@@ -186,6 +194,7 @@ export function IntegrationsPanel({
         setSecret({ value: result.secret, kind: result.secretKind ?? '' })
         setCopied(false)
         setForm(null)
+        setSelectedScopes([])
       }
       setNotice(message)
       await refresh()
@@ -288,7 +297,7 @@ export function IntegrationsPanel({
           downloads with your upload token included. No API key setup needed.
         </Tip>
       )}
-      {error && (
+      {error && !form && (
         <Alert variant="destructive">
           <AlertCircle aria-hidden="true" />
           <AlertDescription>{error}</AlertDescription>
@@ -335,370 +344,428 @@ export function IntegrationsPanel({
       )}
       <div className="grid gap-6 xl:grid-cols-2">
         <PermissionGate permission="tokens.manage">
-          <Card className="min-w-0">
-            <CardHeader className={cardHeaderRow}>
-              <div className="min-w-0 space-y-1.5">
-                <h2 className={cardTitle}>API tokens</h2>
-                <CardDescription>
-                  Optional keys for custom apps and scripts that need specific
-                  permissions, an expiration date, or separate revocation.
-                </CardDescription>
-              </div>
-              {/* Peer card actions share the outline style. */}
-              <Button
-                variant="outline"
-                className="shrink-0 self-start"
-                onClick={() => setForm(form === 'token' ? null : 'token')}
-              >
-                <Plus />
-                New token
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {form === 'token' && (
-                <form
-                  onSubmit={createToken}
-                  className="space-y-4 rounded-xl border bg-muted/30 p-4"
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="token-name">Connection name</Label>
-                    <Input
-                      id="token-name"
-                      name="name"
-                      placeholder="My automation script"
-                      required
-                      maxLength={CONNECTION_NAME_MAX_LENGTH}
-                    />
-                  </div>
-                  <fieldset className="space-y-2">
-                    <legend className="mb-2 text-sm font-medium">
-                      Allowed actions
-                    </legend>
-                    {API_SCOPE_CATALOG.filter(({ scope }) =>
-                      scopeUsable(scope, can)
-                    ).map(({ scope: value, label, description }) => (
-                      <label
-                        key={value}
-                        className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-0.5"
-                          checked={selectedScopes.includes(value)}
-                          onChange={(event) =>
-                            setSelectedScopes(
-                              event.target.checked
-                                ? [...selectedScopes, value]
-                                : selectedScopes.filter(
-                                    (scope) => scope !== value
-                                  )
-                            )
-                          }
-                        />
-                        <span>
-                          <span className="block text-sm font-medium">
-                            {label}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {description}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </fieldset>
-                  <div className="space-y-2">
-                    <Label htmlFor="token-profile">Upload profile</Label>
-                    <NativeSelect
-                      id="token-profile"
-                      name="profileId"
-                      disabled={!selectedScopes.includes('files:upload')}
-                    >
-                      <option value="">No profile binding</option>
-                      {data?.profiles.map((profile) => (
-                        <option key={profile.id} value={profile.id}>
-                          {profile.name}
-                        </option>
-                      ))}
-                    </NativeSelect>
-                    <p className="text-xs text-muted-foreground">
-                      Bind an uploader to a profile to keep its upload defaults
-                      consistent.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="token-expiry">Expires after</Label>
-                    <NativeSelect
-                      id="token-expiry"
-                      name="days"
-                      defaultValue="90"
-                    >
-                      <option value="30">30 days</option>
-                      <option value="90">90 days</option>
-                      <option value="365">1 year</option>
-                      <option value="0">Never</option>
-                    </NativeSelect>
-                  </div>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setForm(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      type="submit"
-                      disabled={busy || !selectedScopes.length}
-                    >
-                      Create token
-                    </Button>
-                  </div>
-                </form>
-              )}
-              {/* Each token is an inset, like each webhook beside it. */}
-              <div className="space-y-3">
-                {!data && (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Loading tokens…
-                  </p>
-                )}
-                {data?.tokens.length === 0 && (
-                  <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                    No API tokens yet. Built-in tool downloads work without one.
-                  </p>
-                )}
-                {data?.tokens.map((token) => {
-                  const tokenScopes = token.scopes.filter((scope) =>
-                    scopeUsable(scope, can)
-                  )
-                  return (
-                    <div
-                      key={token.id}
-                      className="rounded-xl border bg-muted/30 p-4"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <h3 className="truncate text-sm font-medium">
-                            {token.name}
-                          </h3>
-                          <MetaLine
-                            className="mt-1 text-xs text-muted-foreground"
-                            items={[
-                              {
-                                key: 'use',
-                                text: token.revokedAt
-                                  ? 'Revoked'
-                                  : token.expiresAt &&
-                                      new Date(token.expiresAt) <= new Date()
-                                    ? 'Expired'
-                                    : token.lastUsedAt
-                                      ? `Used ${new Date(token.lastUsedAt).toLocaleDateString()}`
-                                      : 'Not used yet',
-                              },
-                              ...(!token.revokedAt && token.expiresAt
-                                ? [
-                                    {
-                                      key: 'expires',
-                                      text: `Expires ${new Date(token.expiresAt).toLocaleDateString()}`,
-                                    },
-                                  ]
-                                : []),
-                            ]}
-                          />
-                        </div>
-                        {!token.revokedAt && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="shrink-0 text-destructive hover:bg-danger/10 hover:text-destructive"
-                            disabled={busy}
-                            onClick={() =>
-                              void run(
-                                { action: 'revoke-token', id: token.id },
-                                'Token revoked.'
+          <Dialog
+            open={form === 'token'}
+            onOpenChange={(open) => {
+              if (busy) return
+              setForm(open ? 'token' : null)
+              setError('')
+              setSelectedScopes([])
+            }}
+          >
+            <Card className="min-w-0">
+              <CardHeader className={cardHeaderRow}>
+                <div className="min-w-0 space-y-1.5">
+                  <h2 className={cardTitle}>API tokens</h2>
+                  <CardDescription>
+                    Optional keys for custom apps and scripts that need specific
+                    permissions, an expiration date, or separate revocation.
+                  </CardDescription>
+                </div>
+                {/* Peer card actions share the outline style. */}
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="shrink-0 self-start"
+                    disabled={busy}
+                  >
+                    <Plus />
+                    New token
+                  </Button>
+                </DialogTrigger>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <DialogContent showCloseButton={!busy}>
+                  <DialogHeader>
+                    <DialogTitle>New API token</DialogTitle>
+                    <DialogDescription>
+                      Choose the actions your custom app can perform and when
+                      its token expires.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle aria-hidden="true" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  <form onSubmit={createToken} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="token-name">Connection name</Label>
+                      <Input
+                        id="token-name"
+                        name="name"
+                        placeholder="My automation script"
+                        required
+                        maxLength={CONNECTION_NAME_MAX_LENGTH}
+                      />
+                    </div>
+                    <fieldset className="space-y-2">
+                      <legend className="mb-2 text-sm font-medium">
+                        Allowed actions
+                      </legend>
+                      {API_SCOPE_CATALOG.filter(({ scope }) =>
+                        scopeUsable(scope, can)
+                      ).map(({ scope: value, label, description }) => (
+                        <label
+                          key={value}
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={selectedScopes.includes(value)}
+                            onChange={(event) =>
+                              setSelectedScopes(
+                                event.target.checked
+                                  ? [...selectedScopes, value]
+                                  : selectedScopes.filter(
+                                      (scope) => scope !== value
+                                    )
                               )
                             }
-                          >
-                            Revoke
-                          </Button>
-                        )}
-                      </div>
-                      {(tokenScopes.length > 0 || token.profileId) && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {tokenScopes.map((scope) => (
-                            <Badge key={scope}>
-                              {API_SCOPE_CATALOG.find(
-                                (entry) => entry.scope === scope
-                              )?.label || scope}
-                            </Badge>
-                          ))}
-                          {/* The bound profile is a different kind of chip
-                              from the permissions: outlined, with an icon. */}
-                          {token.profileId && (
-                            <Badge variant="outline">
-                              <SlidersHorizontal aria-hidden="true" />
-                              <span className="sr-only">Upload profile: </span>
-                              {data.profiles.find(
-                                (profile) => profile.id === token.profileId
-                              )?.name || 'Bound profile unavailable'}
-                            </Badge>
+                          />
+                          <span>
+                            <span className="block text-sm font-medium">
+                              {label}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {description}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </fieldset>
+                    <div className="space-y-2">
+                      <Label htmlFor="token-profile">Upload profile</Label>
+                      <NativeSelect
+                        id="token-profile"
+                        name="profileId"
+                        disabled={!selectedScopes.includes('files:upload')}
+                      >
+                        <option value="">No profile binding</option>
+                        {data?.profiles.map((profile) => (
+                          <option key={profile.id} value={profile.id}>
+                            {profile.name}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                      <p className="text-xs text-muted-foreground">
+                        Bind an uploader to a profile to keep its upload
+                        defaults consistent.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="token-expiry">Expires after</Label>
+                      <NativeSelect
+                        id="token-expiry"
+                        name="days"
+                        defaultValue="90"
+                      >
+                        <option value="30">30 days</option>
+                        <option value="90">90 days</option>
+                        <option value="365">1 year</option>
+                        <option value="0">Never</option>
+                      </NativeSelect>
+                    </div>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          setForm(null)
+                          setError('')
+                          setSelectedScopes([])
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="submit"
+                        disabled={busy || !selectedScopes.length}
+                      >
+                        Create token
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+                {/* Each token is an inset, like each webhook beside it. */}
+                <div className="space-y-3">
+                  {!data && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Loading tokens…
+                    </p>
+                  )}
+                  {data?.tokens.length === 0 && (
+                    <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      No API tokens yet. Built-in tool downloads work without
+                      one.
+                    </p>
+                  )}
+                  {data?.tokens.map((token) => {
+                    const tokenScopes = token.scopes.filter((scope) =>
+                      scopeUsable(scope, can)
+                    )
+                    return (
+                      <div
+                        key={token.id}
+                        className="rounded-xl border bg-muted/30 p-4"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <h3 className="truncate text-sm font-medium">
+                              {token.name}
+                            </h3>
+                            <MetaLine
+                              className="mt-1 text-xs text-muted-foreground"
+                              items={[
+                                {
+                                  key: 'use',
+                                  text: token.revokedAt
+                                    ? 'Revoked'
+                                    : token.expiresAt &&
+                                        new Date(token.expiresAt) <= new Date()
+                                      ? 'Expired'
+                                      : token.lastUsedAt
+                                        ? `Used ${new Date(token.lastUsedAt).toLocaleDateString()}`
+                                        : 'Not used yet',
+                                },
+                                ...(!token.revokedAt && token.expiresAt
+                                  ? [
+                                      {
+                                        key: 'expires',
+                                        text: `Expires ${new Date(token.expiresAt).toLocaleDateString()}`,
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
+                          </div>
+                          {!token.revokedAt && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="shrink-0 text-destructive hover:bg-danger/10 hover:text-destructive"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(
+                                  { action: 'revoke-token', id: token.id },
+                                  'Token revoked.'
+                                )
+                              }
+                            >
+                              Revoke
+                            </Button>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </CardContent>
-          </Card>
+                        {(tokenScopes.length > 0 || token.profileId) && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {tokenScopes.map((scope) => (
+                              <Badge key={scope}>
+                                {API_SCOPE_CATALOG.find(
+                                  (entry) => entry.scope === scope
+                                )?.label || scope}
+                              </Badge>
+                            ))}
+                            {/* The bound profile is a different kind of chip
+                              from the permissions: outlined, with an icon. */}
+                            {token.profileId && (
+                              <Badge variant="outline">
+                                <SlidersHorizontal aria-hidden="true" />
+                                <span className="sr-only">
+                                  Upload profile:{' '}
+                                </span>
+                                {data.profiles.find(
+                                  (profile) => profile.id === token.profileId
+                                )?.name || 'Bound profile unavailable'}
+                              </Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </Dialog>
         </PermissionGate>
         <PermissionGate permission="webhooks.manage">
-          <Card className="min-w-0">
-            <CardHeader className={cardHeaderRow}>
-              <div className="min-w-0 space-y-1.5">
-                <h2 className={cardTitle}>Webhooks</h2>
-                <CardDescription>
-                  Tell your other tools when a file is ready. Connect
-                  automations, notifications, and your own services.
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                className="shrink-0 self-start"
-                onClick={() => setForm(form === 'webhook' ? null : 'webhook')}
-              >
-                <Plus />
-                Add webhook
-              </Button>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {form === 'webhook' && (
-                <form
-                  onSubmit={createHook}
-                  className="space-y-4 rounded-xl border bg-muted/30 p-4"
-                >
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-name">Connection name</Label>
-                    <Input
-                      id="webhook-name"
-                      name="name"
-                      placeholder="My automation server"
-                      required
-                      maxLength={CONNECTION_NAME_MAX_LENGTH}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="webhook-url">Receiver URL</Label>
-                    <Input
-                      id="webhook-url"
-                      name="url"
-                      type="url"
-                      placeholder="https://automation.example.com/flare"
-                      required
-                      maxLength={WEBHOOK_URL_MAX_LENGTH}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Your receiver gets signed file metadata when your uploads
-                      finish. File contents and passwords are never included.
-                    </p>
-                  </div>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setForm(null)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={busy}>
-                      Connect webhook
-                    </Button>
-                  </div>
-                </form>
-              )}
-              <div className="space-y-3">
-                {!data && (
-                  <p role="status" className="text-sm text-muted-foreground">
-                    Loading webhooks…
-                  </p>
-                )}
-                {data?.webhooks.length === 0 && (
-                  <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-                    Connect a receiver to start automating your uploads.
-                  </p>
-                )}
-                {data?.webhooks.map((hook) => (
-                  <div
-                    key={hook.id}
-                    className="rounded-xl border bg-muted/30 p-4"
+          <Dialog
+            open={form === 'webhook'}
+            onOpenChange={(open) => {
+              if (busy) return
+              setForm(open ? 'webhook' : null)
+              setError('')
+              setSelectedScopes([])
+            }}
+          >
+            <Card className="min-w-0">
+              <CardHeader className={cardHeaderRow}>
+                <div className="min-w-0 space-y-1.5">
+                  <h2 className={cardTitle}>Webhooks</h2>
+                  <CardDescription>
+                    Tell your other tools when a file is ready. Connect
+                    automations, notifications, and your own services.
+                  </CardDescription>
+                </div>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="shrink-0 self-start"
+                    disabled={busy}
                   >
-                    {/* Status follows the title on its line, like every
-                        status badge on the profile tabs. */}
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <h3 className="min-w-0 break-words text-sm font-medium">
-                        {hook.name}
-                      </h3>
-                      <Badge variant={hook.enabled ? 'success' : 'neutral'}>
-                        {hook.enabled ? 'Enabled' : 'Paused'}
-                      </Badge>
+                    <Plus />
+                    Add webhook
+                  </Button>
+                </DialogTrigger>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <DialogContent showCloseButton={!busy}>
+                  <DialogHeader>
+                    <DialogTitle>Add webhook</DialogTitle>
+                    <DialogDescription>
+                      Connect a receiver to get signed metadata when your files
+                      are ready.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {error && (
+                    <Alert variant="destructive">
+                      <AlertCircle aria-hidden="true" />
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  )}
+                  <form onSubmit={createHook} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="webhook-name">Connection name</Label>
+                      <Input
+                        id="webhook-name"
+                        name="name"
+                        placeholder="My automation server"
+                        required
+                        maxLength={CONNECTION_NAME_MAX_LENGTH}
+                      />
                     </div>
-                    <p className="mt-1 break-all text-xs text-muted-foreground">
-                      {hook.url}
+                    <div className="space-y-2">
+                      <Label htmlFor="webhook-url">Receiver URL</Label>
+                      <Input
+                        id="webhook-url"
+                        name="url"
+                        type="url"
+                        placeholder="https://automation.example.com/flare"
+                        required
+                        maxLength={WEBHOOK_URL_MAX_LENGTH}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Your receiver gets signed file metadata when your
+                        uploads finish. File contents and passwords are never
+                        included.
+                      </p>
+                    </div>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          setForm(null)
+                          setError('')
+                          setSelectedScopes([])
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={busy}>
+                        Connect webhook
+                      </Button>
+                    </div>
+                  </form>
+                </DialogContent>
+                <div className="space-y-3">
+                  {!data && (
+                    <p role="status" className="text-sm text-muted-foreground">
+                      Loading webhooks…
                     </p>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy || !hook.enabled}
-                        onClick={() =>
-                          void run(
-                            { action: 'test-webhook', id: hook.id },
-                            'Test queued. Delivery status updates automatically.'
-                          )
-                        }
-                      >
-                        <Send />
-                        Send test
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            {
-                              action: 'toggle-webhook',
-                              id: hook.id,
-                              enabled: !hook.enabled,
-                            },
-                            hook.enabled
-                              ? 'Webhook paused. Pending deliveries cancelled.'
-                              : 'Webhook enabled.'
-                          )
-                        }
-                      >
-                        {hook.enabled ? 'Pause' : 'Enable'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="text-destructive hover:bg-danger/10 hover:text-destructive"
-                        disabled={busy}
-                        onClick={() =>
-                          void run(
-                            { action: 'delete-webhook', id: hook.id },
-                            'Webhook deleted.'
-                          )
-                        }
-                      >
-                        Delete
-                      </Button>
+                  )}
+                  {data?.webhooks.length === 0 && (
+                    <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+                      Connect a receiver to start automating your uploads.
+                    </p>
+                  )}
+                  {data?.webhooks.map((hook) => (
+                    <div
+                      key={hook.id}
+                      className="rounded-xl border bg-muted/30 p-4"
+                    >
+                      {/* Status follows the title on its line, like every
+                        status badge on the profile tabs. */}
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <h3 className="min-w-0 break-words text-sm font-medium">
+                          {hook.name}
+                        </h3>
+                        <Badge variant={hook.enabled ? 'success' : 'neutral'}>
+                          {hook.enabled ? 'Enabled' : 'Paused'}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
+                        {hook.url}
+                      </p>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy || !hook.enabled}
+                          onClick={() =>
+                            void run(
+                              { action: 'test-webhook', id: hook.id },
+                              'Test queued. Delivery status updates automatically.'
+                            )
+                          }
+                        >
+                          <Send />
+                          Send test
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(
+                              {
+                                action: 'toggle-webhook',
+                                id: hook.id,
+                                enabled: !hook.enabled,
+                              },
+                              hook.enabled
+                                ? 'Webhook paused. Pending deliveries cancelled.'
+                                : 'Webhook enabled.'
+                            )
+                          }
+                        >
+                          {hook.enabled ? 'Pause' : 'Enable'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:bg-danger/10 hover:text-destructive"
+                          disabled={busy}
+                          onClick={() =>
+                            void run(
+                              { action: 'delete-webhook', id: hook.id },
+                              'Webhook deleted.'
+                            )
+                          }
+                        >
+                          Delete
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </Dialog>
         </PermissionGate>
       </div>
       <PermissionGate permission="webhooks.manage">

@@ -42,7 +42,7 @@ export default async function UploadPage() {
             : 'Upload files privately using your saved defaults.'
         }
       />
-      <div className={`${pagePanelClassName} max-w-4xl`}>
+      <div className={pagePanelClassName}>
         <UploadForm
           user={user}
           maxSize={maxSizeBytes}
