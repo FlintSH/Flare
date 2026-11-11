@@ -186,6 +186,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
   const [message, setMessage] = useState('')
   const [tagSearch, setTagSearch] = useState('')
   const editorTrigger = useRef<HTMLElement | null>(null)
+  const newProfileTrigger = useRef<HTMLButtonElement | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const refresh = useAccountRefresh(UPLOAD_PROFILES)
   const choose = (profile: UploadProfileView | null) => {
@@ -275,7 +276,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
             <Upload />
             Import recipe
           </Button>
-          <Button onClick={() => choose(null)}>
+          <Button ref={newProfileTrigger} onClick={() => choose(null)}>
             <Plus />
             New profile
           </Button>
@@ -678,6 +679,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                             `/api/upload-profiles/${editing.id}`,
                             'DELETE'
                           )
+                          editorTrigger.current = newProfileTrigger.current
                           setEditorOpen(false)
                           setEditing(null)
                           toast({

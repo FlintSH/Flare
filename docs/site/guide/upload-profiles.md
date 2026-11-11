@@ -20,7 +20,7 @@ Open **Profile → Uploads** to manage profiles. [Try the upload-options lab](/d
 5. Choose **Save profile**. It becomes available once the profile has a name and, for a saved profile, once you change something.
 6. Choose **Make default** if it should apply when an upload does not explicitly select another profile.
 
-The editor stays open after saving so you can choose **Make default** or download a tool configuration. Choose **Close** when finished. Closing before saving discards your unfinished changes; reopening a saved profile loads its saved settings. Selecting a saved profile or importing a recipe also opens this editor.
+The editor stays open after saving so you can choose **Make default** or download a tool configuration. Choose **Close** when finished. Closing before saving discards your unfinished changes; reopening a saved profile loads its saved settings. Selecting a saved profile or importing a recipe also opens this editor. Deleting a profile closes the editor and returns keyboard focus to **New profile**.
 
 The built-in starters are starting points you can review and edit:
 

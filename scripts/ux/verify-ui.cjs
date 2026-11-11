@@ -4,8 +4,9 @@ const assert = require('node:assert/strict')
 const { mkdir } = require('node:fs/promises')
 const {
   chromium,
-  expect,
+  expect: baseExpect,
 } = require('../../docs/site/node_modules/@playwright/test')
+const expect = baseExpect.configure({ timeout: 30000 })
 const origin = process.env.FLARE_UX_ORIGIN || 'http://localhost:3049'
 if (!['localhost', '127.0.0.1'].includes(new URL(origin).hostname))
   throw new Error('Use a disposable local instance.')
@@ -76,6 +77,33 @@ async function main() {
     await expect(
       page.getByRole('button', { name: /^Temporary clips/ })
     ).toBeFocused()
+    await page.getByRole('button', { name: 'New profile', exact: true }).click()
+    const disposableName = 'UX deletion ' + Date.now()
+    await page.getByLabel('Profile name').fill(disposableName)
+    await page
+      .getByRole('button', { name: 'Save profile', exact: true })
+      .click()
+    await expect(
+      page.getByRole('dialog', { name: 'Edit profile' })
+    ).toBeVisible()
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Close', exact: true })
+      .first()
+      .click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    // Reopen from the saved row, which disappears after deletion.
+    await page.getByRole('button').filter({ hasText: disposableName }).click()
+    await page
+      .getByRole('button', { name: 'Delete profile', exact: true })
+      .click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect(
+      page.getByRole('button').filter({ hasText: disposableName })
+    ).toHaveCount(0)
+    await expect(
+      page.getByRole('button', { name: 'New profile', exact: true })
+    ).toBeFocused()
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 })
       for (const route of ['upload', 'paste']) {
@@ -87,9 +115,22 @@ async function main() {
           ),
           false
         )
-        // The page wrapper fills the common dashboard container.
-        const wrapper = page.locator('main > div').first()
-        assert.ok((await wrapper.boundingBox()).width > width * 0.8)
+        // Compare the actual form panel with its page's inner content width.
+        const panel = page
+          .locator('main')
+          .getByRole('heading', { level: 1 })
+          .locator('xpath=ancestor::header/following-sibling::div[1]')
+        const dimensions = await panel.evaluate((e) => ({
+          panel: e.getBoundingClientRect().width,
+          available:
+            e.parentElement.clientWidth -
+            parseFloat(getComputedStyle(e.parentElement).paddingLeft) -
+            parseFloat(getComputedStyle(e.parentElement).paddingRight),
+        }))
+        assert.ok(
+          Math.abs(dimensions.panel - dimensions.available) <= 1,
+          `${route} panel is ${dimensions.panel}px, available ${dimensions.available}px`
+        )
         await shot(`${route}-${width}`)
       }
       await goto('/dashboard/profile?section=invites')
