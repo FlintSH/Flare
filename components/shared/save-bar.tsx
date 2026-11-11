@@ -35,7 +35,7 @@ export function SaveBar({
     <div
       {...props}
       className={cn(
-        'flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/80 px-6 py-4 shadow-sm backdrop-blur-xl sm:flex-row sm:flex-wrap sm:items-center sm:justify-between',
+        'flex flex-col gap-4 rounded-2xl border border-border/60 bg-panel px-6 py-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between',
         // Floating over the form, it takes the opaque lifted surface.
         sticky && 'sticky bottom-4 z-30 bg-overlay shadow-lg shadow-black/20',
         className

@@ -1,0 +1,115 @@
+{
+  "method": "Original untouched route rows plus actual later-build rerun of user-actions. Original raw reports retained. No computed row values edited.",
+  "totals": [
+    {
+      "state": "midnight",
+      "measured": 496,
+      "failures": 0,
+      "min": 6.31,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "midnight-light",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.26,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "orbit",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.79,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "orbit-light",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.26,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "tide",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.5,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "tide-light",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.23,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "ember",
+      "measured": 496,
+      "failures": 0,
+      "min": 5.44,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "ember-light",
+      "measured": 496,
+      "failures": 0,
+      "min": 4.95,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "extreme",
+      "measured": 496,
+      "failures": 0,
+      "min": 6.31,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "extreme-light",
+      "measured": 496,
+      "failures": 0,
+      "min": 6.11,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    },
+    {
+      "state": "saturated",
+      "measured": 496,
+      "failures": 0,
+      "min": 6.31,
+      "originalSamples": 502,
+      "originalFailures": 2,
+      "replacedRoute": "user-actions",
+      "build": "LjrzqbRACLi2egsZ3OOTl"
+    }
+  ]
+}

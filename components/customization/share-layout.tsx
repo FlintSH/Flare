@@ -23,7 +23,7 @@ export const publicColumnClassName = 'mx-auto w-full min-w-0 max-w-7xl px-4'
 
 /** A header chip: the instance brand, or the uploader on a share page. */
 export const publicChipClassName =
-  'inline-flex h-10 min-w-0 max-w-full items-center rounded-full border border-border/60 bg-card/80 px-3 shadow-sm backdrop-blur-xl sm:px-4'
+  'inline-flex h-10 min-w-0 max-w-full items-center rounded-full border border-border/60 bg-panel px-3 shadow-sm sm:px-4'
 
 /** The brand chip at the start of the row, with optional content at the end. */
 export function PublicHeader({ children }: { children?: ReactNode }) {

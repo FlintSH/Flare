@@ -1,10 +1,18 @@
 'use client'
 
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 
 import { type LucideIcon, ShieldCheck } from 'lucide-react'
 
 import { PageHeader } from '@/components/layout/page-header'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 import { cn } from '@/lib/utils'
 
@@ -39,52 +47,27 @@ export function PreferencesShell<T extends string>({
   asideNote?: ReactNode
 }) {
   const selected = sections.find((section) => section.id === activeSection)
-  const navigation = useRef<HTMLElement>(null)
-  // On narrow screens the section list scrolls sideways: fade whichever edge
-  // still has sections beyond it, so cut-off items read as "more".
-  const [edges, setEdges] = useState({ start: true, end: true })
+  const mobileSectionId = useId()
+  const sectionHeading = useRef<HTMLHeadingElement>(null)
+  const focusSelection = useRef(false)
+  const dirtySections = sections.filter((section) => section.dirty)
+
+  const selectSection = (section: T) => {
+    if (section === activeSection) return
+    focusSelection.current = true
+    onSectionChange(section)
+  }
 
   useEffect(() => {
-    const nav = navigation.current
-    if (!nav) return
-    const update = () =>
-      setEdges({
-        start: nav.scrollLeft <= 1,
-        end: nav.scrollLeft + nav.clientWidth >= nav.scrollWidth - 1,
-      })
-    update()
-    nav.addEventListener('scroll', update, { passive: true })
-    window.addEventListener('resize', update)
-    return () => {
-      nav.removeEventListener('scroll', update)
-      window.removeEventListener('resize', update)
-    }
-  }, [])
-
-  useEffect(() => {
-    const revealSelection = (centre: boolean) => {
-      const nav = navigation.current
-      const active = nav?.querySelector<HTMLElement>('[aria-current="page"]')
-      if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return
-      const container = nav.getBoundingClientRect()
-      const item = active.getBoundingClientRect()
-      // A new selection is centred, clear of the edge fades, with its
-      // neighbours showing on both sides so the strip still reads as
-      // scrollable.
-      if (centre)
-        nav.scrollLeft +=
-          item.left + item.width / 2 - (container.left + container.width / 2)
-      else if (item.left < container.left)
-        nav.scrollLeft -= container.left - item.left
-      else if (item.right > container.right)
-        nav.scrollLeft += item.right - container.right
-    }
-    revealSelection(true)
-    // A resize (a phone's toolbar showing or hiding fires one) only brings
-    // the selection back into view, so it doesn't undo a swipe.
-    const onResize = () => revealSelection(false)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    if (!focusSelection.current) return
+    focusSelection.current = false
+    // Wait for a popup to finish returning focus to its trigger. Section
+    // changes keep the page mounted, including edits in previously used panels.
+    const frame = window.requestAnimationFrame(() => {
+      sectionHeading.current?.focus({ preventScroll: true })
+      sectionHeading.current?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
   }, [activeSection])
 
   return (
@@ -100,28 +83,52 @@ export function PreferencesShell<T extends string>({
         actions={actions}
       />
 
-      <div className="grid min-w-0 gap-7 pt-7 lg:grid-cols-[210px_minmax(0,1fr)] lg:gap-10 lg:pt-9">
-        <aside className="min-w-0">
+      <div className="grid min-w-0 gap-6 pt-6 lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-8">
+        <aside className="min-w-0 self-start lg:sticky lg:top-24 lg:-m-1 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto lg:p-1">
+          <div className="space-y-2 lg:hidden">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+              <Label htmlFor={mobileSectionId}>Section</Label>
+              {dirtySections.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {dirtySections.length}{' '}
+                  {dirtySections.length === 1 ? 'section has' : 'sections have'}{' '}
+                  unsaved changes
+                </span>
+              )}
+            </div>
+            <Select
+              value={activeSection}
+              onValueChange={(value) => selectSection(value as T)}
+            >
+              <SelectTrigger
+                id={mobileSectionId}
+                aria-label={`${title} section`}
+                className="h-11"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {sections.map((section) => (
+                  <SelectItem key={section.id} value={section.id}>
+                    {section.title}
+                    {section.dirty ? ' · Unsaved changes' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <nav
-            ref={navigation}
             aria-label={`${title} sections`}
-            className="flex gap-2 overflow-x-auto pb-2 lg:flex-col lg:overflow-visible lg:pb-0"
-            style={
-              edges.start && edges.end
-                ? undefined
-                : {
-                    maskImage: `linear-gradient(to right, ${edges.start ? '#000' : 'transparent'}, #000 2rem, #000 calc(100% - 2rem), ${edges.end ? '#000' : 'transparent'})`,
-                  }
-            }
+            className="hidden gap-1.5 lg:flex lg:flex-col"
           >
             {sections.map((section) => (
               <button
                 key={section.id}
                 type="button"
-                onClick={() => onSectionChange(section.id)}
+                onClick={() => selectSection(section.id)}
                 aria-current={activeSection === section.id ? 'page' : undefined}
                 className={cn(
-                  'flex shrink-0 items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:items-start',
+                  'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                   activeSection === section.id
                     ? 'border-border bg-card text-foreground shadow-sm'
                     : 'border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground'
@@ -129,15 +136,15 @@ export function PreferencesShell<T extends string>({
               >
                 <span
                   className={cn(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-full border',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
                     activeSection === section.id
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border/70'
+                      ? 'bg-primary/10 text-primary'
+                      : 'bg-muted/40'
                   )}
                 >
                   <section.icon className="h-3.5 w-3.5" aria-hidden="true" />
                 </span>
-                <span className="min-w-0 lg:pt-0.5">
+                <span className="min-w-0 pt-0.5">
                   <span className="flex items-center gap-2 whitespace-nowrap text-sm font-medium">
                     {section.title}
                     {section.dirty && (
@@ -146,7 +153,7 @@ export function PreferencesShell<T extends string>({
                       </span>
                     )}
                   </span>
-                  <span className="mt-1 hidden text-balance text-xs font-normal leading-relaxed text-muted-foreground lg:block">
+                  <span className="mt-1 block text-pretty text-xs font-normal leading-relaxed text-muted-foreground">
                     {section.hint || section.description}
                   </span>
                 </span>
@@ -154,7 +161,7 @@ export function PreferencesShell<T extends string>({
             ))}
           </nav>
           {asideNote && (
-            <div className="mt-8 hidden border-t border-border/60 px-3.5 pt-6 text-xs leading-relaxed text-muted-foreground lg:block">
+            <div className="mt-5 hidden border-t border-border/60 px-3 pt-4 text-xs leading-relaxed text-muted-foreground lg:block">
               <ShieldCheck className="mb-3 h-5 w-5" aria-hidden="true" />
               {asideNote}
             </div>
@@ -164,10 +171,14 @@ export function PreferencesShell<T extends string>({
         <div className="min-w-0 space-y-6">
           {selected && (
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight">
+              <h2
+                ref={sectionHeading}
+                tabIndex={-1}
+                className="scroll-mt-28 text-xl font-semibold tracking-tight outline-none"
+              >
                 {selected.title}
               </h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
                 {selected.description}
               </p>
             </div>

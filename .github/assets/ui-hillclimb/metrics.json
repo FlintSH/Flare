@@ -1,0 +1,264 @@
+{
+  "contrast": [
+    {
+      "scope": "dark / desktop",
+      "before": {
+        "measured": 869,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 637
+        },
+        "apcaWeakBody": 423,
+        "routes": [
+          "audit",
+          "library",
+          "links",
+          "paste",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "users"
+        ]
+      },
+      "after": {
+        "measured": 955,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 1096,
+          "offscreen": 5
+        },
+        "apcaWeakBody": 590,
+        "routes": [
+          "audit",
+          "audit-failure",
+          "library",
+          "links",
+          "paste",
+          "paste-invalid-password",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "upload-invalid-password",
+          "users"
+        ]
+      },
+      "sameRouteScope": false
+    },
+    {
+      "scope": "dark / mobile",
+      "before": {
+        "measured": 728,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 628,
+          "offscreen": 9
+        },
+        "apcaWeakBody": 329,
+        "routes": [
+          "audit",
+          "library",
+          "links",
+          "paste",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "users"
+        ]
+      },
+      "after": {
+        "measured": 774,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 1071,
+          "offscreen": 16
+        },
+        "apcaWeakBody": 458,
+        "routes": [
+          "audit",
+          "audit-failure",
+          "library",
+          "links",
+          "paste",
+          "paste-invalid-password",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "upload-invalid-password",
+          "users"
+        ]
+      },
+      "sameRouteScope": false
+    },
+    {
+      "scope": "light / desktop",
+      "before": {
+        "measured": 866,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 635
+        },
+        "apcaWeakBody": 8,
+        "routes": [
+          "audit",
+          "library",
+          "links",
+          "paste",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "users"
+        ]
+      },
+      "after": {
+        "measured": 967,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 1120,
+          "offscreen": 5
+        },
+        "apcaWeakBody": 12,
+        "routes": [
+          "audit",
+          "audit-failure",
+          "library",
+          "links",
+          "paste",
+          "paste-invalid-password",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "upload-invalid-password",
+          "users"
+        ]
+      },
+      "sameRouteScope": false
+    },
+    {
+      "scope": "light / mobile",
+      "before": {
+        "measured": 722,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 624,
+          "offscreen": 9
+        },
+        "apcaWeakBody": 8,
+        "routes": [
+          "audit",
+          "library",
+          "links",
+          "paste",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "users"
+        ]
+      },
+      "after": {
+        "measured": 782,
+        "failing": 0,
+        "unmeasured": {
+          "covered": 1095,
+          "offscreen": 16
+        },
+        "apcaWeakBody": 12,
+        "routes": [
+          "audit",
+          "audit-failure",
+          "library",
+          "links",
+          "paste",
+          "paste-invalid-password",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload",
+          "upload-invalid-password",
+          "users"
+        ]
+      },
+      "sameRouteScope": false
+    }
+  ],
+  "focus": [
+    {
+      "scope": "dark / mobile",
+      "before": null,
+      "after": {
+        "stops": 146,
+        "noVisibleChangeFlags": 0,
+        "weakChangeFlags": 10,
+        "otherFlags": 0,
+        "routes": [
+          "library",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload"
+        ]
+      }
+    },
+    {
+      "scope": "light / mobile",
+      "before": {
+        "stops": 146,
+        "noVisibleChangeFlags": 0,
+        "weakChangeFlags": 2,
+        "otherFlags": 0,
+        "routes": [
+          "library",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload"
+        ]
+      },
+      "after": {
+        "stops": 146,
+        "noVisibleChangeFlags": 0,
+        "weakChangeFlags": 3,
+        "otherFlags": 0,
+        "routes": [
+          "library",
+          "profile-account",
+          "roles",
+          "settings-general",
+          "upload"
+        ]
+      }
+    }
+  ],
+  "sources": [
+    {
+      "metric": "contrast",
+      "state": "dark",
+      "before": "contrast-before-dark.json",
+      "after": "contrast-final-dark.json"
+    },
+    {
+      "metric": "focus",
+      "state": "dark",
+      "before": null,
+      "after": "focus-final-dark.json"
+    },
+    {
+      "metric": "contrast",
+      "state": "light",
+      "before": "contrast-before-light.json",
+      "after": "contrast-final-light.json"
+    },
+    {
+      "metric": "focus",
+      "state": "light",
+      "before": "focus-before-light.json",
+      "after": "focus-final-light.json"
+    }
+  ]
+}

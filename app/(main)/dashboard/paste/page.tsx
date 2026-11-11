@@ -7,13 +7,13 @@ export default async function PastePage() {
   await requireDashboardPage('/dashboard/paste')
 
   return (
-    <div className="container space-y-7">
+    <div className="space-y-5 sm:space-y-6">
       <PageHeader
         eyebrow="Your files"
         title="Create a paste"
         description="Share text or code, with syntax highlighting from the file extension."
       />
-      <div className={pagePanelClassName}>
+      <div className={`${pagePanelClassName} max-w-4xl`}>
         <PasteForm />
       </div>
     </div>

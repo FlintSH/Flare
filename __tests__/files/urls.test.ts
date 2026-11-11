@@ -181,6 +181,12 @@ describe('thumbnail optimization', () => {
     ).toBe(false)
   })
 
+  it('loads SVG previews directly instead of sending them to the raster optimizer', () => {
+    expect(canOptimizeThumbnail({ ...image, mimeType: 'image/svg+xml' })).toBe(
+      false
+    )
+  })
+
   it('keeps GIFs animated', () => {
     expect(canOptimizeThumbnail({ ...image, mimeType: 'image/gif' })).toBe(
       false

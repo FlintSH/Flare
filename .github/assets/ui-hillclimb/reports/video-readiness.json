@@ -1,0 +1,114 @@
+[
+  {
+    "tag": "before",
+    "mode": "dark",
+    "viewport": "desktop",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "before",
+    "mode": "dark",
+    "viewport": "mobile",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "final",
+    "mode": "dark",
+    "viewport": "desktop",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "final",
+    "mode": "dark",
+    "viewport": "mobile",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "before",
+    "mode": "light",
+    "viewport": "desktop",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "before",
+    "mode": "light",
+    "viewport": "mobile",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "final",
+    "mode": "light",
+    "viewport": "desktop",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  },
+  {
+    "tag": "final",
+    "mode": "light",
+    "viewport": "mobile",
+    "playback": {
+      "readyState": 4,
+      "currentTime": 1.5,
+      "paused": true,
+      "error": null,
+      "width": 1280,
+      "height": 720
+    },
+    "errors": []
+  }
+]

@@ -21,6 +21,8 @@ Flare gives administrators control over who can join, how files are stored, what
 
 Settings lives at `/dashboard/settings`; Users at `/dashboard/users`; Roles at `/dashboard/roles`; Audit log at `/dashboard/audit`. Settings links can open a section directly, for example `/dashboard/settings?section=storage`. Older `section=about` links lead to General's instance information; `section=advanced` leads to Appearance's custom styles.
 
+On phones and narrow windows, use the labeled **Section** menu to see every Settings section. On desktop the section rail stays beside the form as you scroll. Switching sections keeps unfinished edits; sections with changes are marked **Unsaved changes** in the menu. This does not save or publish them.
+
 Choose **Documentation** in the **Settings** header to open the handbook in a new tab. The link stays available in every settings section, including on phones, so you can read a guide while keeping unsaved changes in the original tab.
 
 Stable builds open the archive for their installed release; rolling builds open the published rolling handbook. During setup, versions before 2.1.0 open their archive homepage for the original setup instructions; newer versions open the dedicated setup guide. Rolling documentation follows the latest published rolling commit, so it may be ahead of an older rolling installation. An unknown or other prerelease version opens [Versions](/versions) for you to choose. Custom builds use their package version and configured release channel; see [build identity](/hosting/configuration#core-environment-variables) if those do not match your source.
@@ -45,7 +47,7 @@ OCR processing outcomes can be investigated in [Audit log](./audit); the audit d
 
 ### Credits
 
-**Show credits footer** controls the instance's Flare credit footer. Share pages can inherit that choice or explicitly show/hide their footer through the appearance studio; shared folders, file password pages, and the not-found page follow the share pages. The studio's footer text is a separate design field.
+The dashboard shows credits as a compact footer line; public pages retain their footer panel. **Show credits footer** controls the instance's Flare credit footer. Share pages can inherit that choice or explicitly show/hide their footer through the appearance studio; shared folders, file password pages, and the not-found page follow the share pages. The studio's footer text is a separate design field.
 
 ### Instance information
 

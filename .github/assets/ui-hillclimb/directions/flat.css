@@ -1,0 +1,19 @@
+/* Flat editorial hierarchy. Prototype only. */
+[class*='bg-card/80'] {
+  background: hsl(var(--card));
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.fixed.-z-10 {
+  opacity: 0.1;
+}
+[class*='rounded-2xl'] {
+  border-radius: 0.5rem;
+}
+header h1 {
+  font-size: 1.75rem !important;
+}
+header:has(h1) {
+  border-bottom: 0 !important;
+  padding-bottom: 0.5rem !important;
+}

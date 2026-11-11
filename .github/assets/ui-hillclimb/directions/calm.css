@@ -1,0 +1,26 @@
+/* Lifted surfaces, quieter glow, tighter hierarchy. Prototype only. */
+.dark {
+  --prototype-panel: color-mix(
+    in oklab,
+    hsl(var(--card)) 96%,
+    hsl(var(--card-foreground))
+  );
+}
+.light {
+  --prototype-panel: hsl(var(--card));
+}
+[class*='bg-card/80'] {
+  background: var(--prototype-panel);
+}
+.fixed.-z-10 {
+  opacity: 0.45;
+}
+header h1 {
+  font-size: 1.875rem !important;
+}
+header:has(h1) {
+  padding-bottom: 1.25rem !important;
+}
+header:has(h1) p {
+  margin-top: 0.5rem !important;
+}
