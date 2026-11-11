@@ -31,7 +31,7 @@ Your personal setting changes the dashboard. Public share pages retain the insta
 
 ## Default dark-mode contrast
 
-The default dark theme keeps Flare's navy palette but separates its layers: the page is the darkest navy, cards and panels sit one step lighter, and dialogs and menus one step above that, so each layer reads clearly without turning grey or bright. Borders, field outlines and secondary text are clearer, and hovered items have their own fill on panels and in menus. These changes apply across the workspace and public pages that use the default palette.
+The default dark theme keeps Flare's navy palette but separates its layers: the page is the darkest navy, cards and panels sit one step lighter, and dialogs and menus one step above that, so each layer reads clearly without turning grey or bright. Borders, field outlines and secondary text are clearer, and hovered items have their own fill on panels and in menus. Menus keep a visible line between groups of options, and the folder lists in the **Move to folder** dialog and the archive destination picker highlight the folder under your pointer. These changes apply across the workspace and public pages that use the default palette.
 
 Existing installations using the complete original classic palette receive these colors automatically when pages reload. Empty classic palettes use the new defaults too. A customized classic palette or a published studio palette keeps its saved colors. Administrators can adjust those colors in [instance appearance](../admin/appearance); personal mode preferences continue to choose light or dark within the instance's palette.
 

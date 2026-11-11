@@ -102,6 +102,8 @@ describe('palette presets', () => {
     // Muted fills (thumbnails, skeletons) still show at half opacity.
     expect(contrast(mix(p.muted, panel, 0.5), panel)).toBeGreaterThan(1.1)
     expect(contrast(p.border, panel)).toBeGreaterThan(1.5)
+    // Menu separators use the border colour in dark mode.
+    expect(contrast(p.border, overlay)).toBeGreaterThan(1.2)
     expect(contrast(control, panel)).toBeGreaterThan(3)
     expect(contrast(control, overlay)).toBeGreaterThan(3)
     expect(contrast(p.mutedForeground, overlay)).toBeGreaterThan(4.5)
