@@ -94,22 +94,18 @@ The default webhook policy accepts public HTTPS destinations only. Flare resolve
 
 These belong to the app runtime or build tooling, rather than saved instance configuration.
 
-| Variable                                 | Official image behavior                                                                                     |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `PORT`                                   | `3000`; the bundled Docker health check also targets port 3000, so change that check if you change the port |
-| `HOSTNAME`                               | Set to `0.0.0.0` in the image                                                                               |
-| `NODE_ENV`                               | `production`; development uses `pnpm dev`                                                                   |
-| `NEXT_TELEMETRY_DISABLED`                | `1` in the image; controls Next.js telemetry                                                                |
-| `NEXT_RUNTIME`                           | Set by Next.js; Flare initializes background workers for the Node runtime                                   |
-| `METICULOUS_BUILD`                       | Docker build argument, default `false`; `true` includes production browser source maps for visual testing   |
-| `NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN` | Optional public recording token for development/preview or explicitly enabled test deployments              |
-| `METICULOUS_RECORDING_ENABLED`           | Explicit `true` enables recording eligibility outside development/preview when a token exists               |
-| `METICULOUS_BACKEND_RECORDER_MODE`       | `replay` enables the backend replay path used by visual tests                                               |
-| `VERCEL_ENV`                             | A platform marker; `preview` enables recording eligibility when a recording token is present                |
+| Variable                  | Official image behavior                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `PORT`                    | `3000`; the bundled Docker health check also targets port 3000, so change that check if you change the port |
+| `HOSTNAME`                | Set to `0.0.0.0` in the image                                                                               |
+| `NODE_ENV`                | `production`; development uses `pnpm dev`                                                                   |
+| `NEXT_TELEMETRY_DISABLED` | `1` in the image; controls Next.js telemetry                                                                |
+| `NEXT_RUNTIME`            | Set by Next.js; Flare initializes background workers for the Node runtime                                   |
+| `VERCEL_ENV`              | A platform marker; `preview` enables recording eligibility when a recording token is present                |
 
 The Dockerfile also sets Corepack/pnpm installation variables (`COREPACK_ENABLE_DOWNLOAD_PROMPT`, `COREPACK_HOME`, `pnpm_config_verify_deps_before_run`, and `HUSKY`) to make its packaged runtime work: the startup script's pnpm commands use the pnpm release and dependencies built into the image and never start an install. They are not Flare feature controls. Earlier images set `npm_config_verify_deps_before_run`, which pnpm 11 ignores, so each of those commands first compared the installed dependencies with the lockfile and would have tried to install them had they differed. Build identity arguments `FLARE_RELEASE_CHANNEL` and `FLARE_COMMIT_SHA` are baked into the official image by release workflows.
 
-Meticulous's hosted CI workflow has been retired. Its recorder variables and disposable test image remain available for [local visual testing](/contributing#local-visual-testing-with-meticulous); ordinary production recording still requires explicit opt-in and a recording token. `METICULOUS_API_TOKEN` authenticates the optional CLI, not Flare's server or users, and is no longer required as a repository Actions secret.
+Browser and backend session recording are no longer bundled with Flare. Existing installations need no database migration for this removal. Remove obsolete recording environment variables and recording-related Docker build arguments from deployment configuration; they no longer enable recording or production browser source maps.
 
 ## Email environment variables
 

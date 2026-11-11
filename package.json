@@ -31,7 +31,6 @@
     "knip:fix": "knip --fix"
   },
   "dependencies": {
-    "@alwaysmeticulous/backend-recorder-launcher": "^2.342.0",
     "@aws-sdk/client-s3": "^3.1138.0",
     "@aws-sdk/lib-storage": "^3.1138.0",
     "@aws-sdk/s3-request-presigner": "^3.1138.0",
@@ -109,7 +108,6 @@
     "zod": "^4.6.6"
   },
   "devDependencies": {
-    "@alwaysmeticulous/sdk-bundles-api": "^2.341.0",
     "@trivago/prettier-plugin-sort-imports": "^5.2.2",
     "@types/archiver": "^6.0.4",
     "@types/bcryptjs": "^2.4.6",

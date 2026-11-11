@@ -1,6 +1,4 @@
 .git
-.meticulous
-.meticulous-onboard
 .next
 node_modules
 npm-debug.log

@@ -125,9 +125,9 @@ The application checks that CI runs are `pnpm exec tsc --noEmit`, `pnpm test`, `
 
 The **Docker Test** workflow builds the image for `linux/amd64` and `linux/arm64`, starts it next to an empty PostgreSQL 16 database, and passes only when the image's own health check reports `healthy`. The container applies the migrations itself during that start, as it does for operators. If the container stops, its health check reports `unhealthy`, or it is still starting after 3 minutes, the job prints the health-check results and the container log and fails.
 
-The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger and Meticulous's browser installer to address vulnerable transitive packages. The browser installer includes its proxy and ZIP extraction dependencies so local testing still works without requiring a system `unzip` command. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress.
+The 2.1 dependency refresh keeps the existing application framework versions compatible. The root overrides update Prisma's configuration merger to address vulnerable transitive packages. The handbook separately overrides Vite to its patched 6.4 line while retaining stable VitePress.
 
-Later security floors raise that proxy stack's `basic-ftp` to 6.2.3 or later, because `get-uri` 8 still requests the vulnerable 5.x line. They also keep `ip-address` and Vitest's Vite on patched releases, because `pnpm update ip-address vite` leaves both at their locked vulnerable versions. Tailwind CSS 3 requires `postcss-selector-parser` 6.x. Keep it on 6.1.5 or later, the maintainers' backport of the 7.1.6 parser fix, rather than forcing 7.x onto Tailwind 3. Until advisory GHSA-rj75-hqrm-r3gf lists 6.1.5 as patched, `pnpm audit` and Dependabot still report it.
+The root override keeps Vitest's Vite on a patched release, because dependency updates can leave it at a locked vulnerable version. Tailwind CSS 3 requires `postcss-selector-parser` 6.x. Keep it on 6.1.5 or later, the maintainers' backport of the 7.1.6 parser fix, rather than forcing 7.x onto Tailwind 3. Until advisory GHSA-rj75-hqrm-r3gf lists 6.1.5 as patched, `pnpm audit` and Dependabot still report it.
 
 Recheck these overrides against upstream releases before removing them, and run application tests, database migrations, production builds, and local browser checks after changes.
 
@@ -183,8 +183,6 @@ From the repository root, use your disposable database role and authentication:
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_timeline_test_local'
 export NEXTAUTH_URL='http://localhost:3064'
 export NEXTAUTH_SECRET='public-disposable-timeline-demo-secret-2026-only'
-export METICULOUS_RECORDING_ENABLED=false
-export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
 pnpm exec prisma migrate deploy
 node scripts/migrate-config.js
 node scripts/timeline/seed.cjs
@@ -198,7 +196,7 @@ export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
 node scripts/timeline/verify-ui.cjs
 ```
 
-The demonstration account is `timeline-demo-alex@example.test` with the deliberately public password `Timeline-demo-only-2026!`. The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a hosted Meticulous run or a benchmark of production storage.
+The demonstration account is `timeline-demo-alex@example.test` with the deliberately public password `Timeline-demo-only-2026!`. The second account supplies an ownership-isolation check. The checks use UTC so dates are reproducible; the shipped library uses each viewer's browser time zone. This is local browser coverage, not a benchmark of production storage.
 
 The browser checks cover direct date jumps, bounded mounted cards and file requests, one shared height for cards and loading placeholders whether or not files have tags or a folder, no repeated folder label inside that folder, selection and archive inputs across scrolling, fresh bulk-tag membership after a real external API change, search and folder totals, date grouping, alternate sorts, image navigation, old page links, and position preservation when using browser Back or resizing between desktop and mobile. One retry check **simulates a network failure by aborting a request**; the retry fetches real files from the local server. The recordings omit that injected failure and the separate archive-input and current-tag membership regressions. Set `FLARE_TIMELINE_RESULTS` to a temporary JSON path to save the measured counts and check results alongside the console output.
 
@@ -230,7 +228,7 @@ Keep `DATABASE_URL` set to the disposable `flare_timeline_test_local` database. 
 
 Cleanup attempts every tracked upload even when a deletion fails, then closes Chromium. Verification, deletion, and browser-shutdown failures are reported together, and the command exits unsuccessfully. If a deletion failed, restore the local server/session and remove the listed **Thumbnail check** uploads from Alex's disposable library before retrying; the next run refuses stale fixtures. Cleanup failure tests use simulated responses and rejected requests without making real deletions.
 
-Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `thumbnail-library-desktop.webp`, `thumbnail-library-mobile.webp`, `thumbnail-moderation-desktop.webp`, and `thumbnail-moderation-mobile.webp`. Inspect every capture before updating handbook evidence. These checks verify the rendered application rather than a Meticulous replay; they do not establish a pixel-identical comparison with a baseline.
+Set `FLARE_TIMELINE_SCREENSHOTS` to a temporary directory to capture `thumbnail-library-desktop.webp`, `thumbnail-library-mobile.webp`, `thumbnail-moderation-desktop.webp`, and `thumbnail-moderation-mobile.webp`. Inspect every capture before updating handbook evidence. These checks verify the rendered application; they do not establish a pixel-identical comparison with a baseline.
 
 The shared storage contract tests also delay attaching a reader by a full event-loop turn, for complete and ranged reads. They catch S3 streams that lose their bytes before response setup finishes. The default S3 contract uses an in-memory SDK backend; the optional `TEST_S3_*` run in `__tests__/storage/s3.test.ts` exercises a separately configured S3-compatible endpoint. Local browser checks against filesystem storage alone do not establish S3 service compatibility.
 
@@ -279,8 +277,6 @@ Use a **disposable local PostgreSQL database named exactly `archive_demo`**. `sc
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/archive_demo'
 export NEXTAUTH_URL='http://localhost:3062'
 export NEXTAUTH_SECRET="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
-export METICULOUS_RECORDING_ENABLED=false
-export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
 pnpm exec prisma migrate deploy
 pnpm exec next dev --hostname 127.0.0.1 --port 3062
 ```
@@ -319,7 +315,7 @@ DATABASE_URL="$FLARE_ARCHIVE_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/archives/database.test.ts
 ```
 
-The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. Shared archive tests also check current visibility/password access, revalidation after reading an archive, separate listing and entry rate budgets, and shared reads joining one listing. The streamed-preview tests cover byte ranges, inline media detection, damaged members, the extraction explanation, `202` progress polling with a cursor, owner role, session, and source changes during progress polls, a progress poll answered while a role change holds its lock, and unlock cookies. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility or a Meticulous zero-diff result. If Meticulous authentication or a suitable recorded session is unavailable, report that gap and use these local checks without triggering a hosted run.
+The suite accepts only local PostgreSQL databases named exactly `flare_archive_test_local` or `flare_archive_test_ci`, with the public schema. Without `FLARE_ARCHIVE_DATABASE_URL` it is skipped. It tests atomic publication and rollback, source ownership, quota, upload profiles and stale revisions, storage provenance, and safe filenames against real PostgreSQL, an in-memory storage provider, and real temporary-file codec operations. Shared archive tests also check current visibility/password access, revalidation after reading an archive, separate listing and entry rate budgets, and shared reads joining one listing. The streamed-preview tests cover byte ranges, inline media detection, damaged members, the extraction explanation, `202` progress polling with a cursor, owner role, session, and source changes during progress polls, a progress poll answered while a role change holds its lock, and unlock cookies. The browser demos separately exercise the actual local storage provider. These checks complement the codec and provider tests; they do not establish real S3 compatibility.
 
 Shared-request admission has separate handler and body-guard regression suites:
 
@@ -341,8 +337,6 @@ Use a **disposable local PostgreSQL database named exactly `flare_auth_demo`**. 
 export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_auth_demo'
 export NEXTAUTH_URL='http://localhost:3061'
 export NEXTAUTH_SECRET='public-disposable-security-demo-secret-2026-only'
-export METICULOUS_RECORDING_ENABLED=false
-export NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN=''
 pnpm exec prisma migrate deploy
 pnpm exec next dev --hostname 127.0.0.1 --port 3061
 ```
@@ -536,84 +530,6 @@ node scripts/ui-hillclimb/verify-ui.cjs
 ```
 
 Install the handbook's separate dependencies first so its Playwright is available. The suite creates and deletes disposable upload/paste files, opens and cancels account actions, and restores local Settings edits without saving them. It checks folder disclosure and remembered state, removable filters, section history and focus, audit presets, password recovery with closed options, real coarse-pointer switch/calendar controls, tablet tabs, and a 200% layout emulation. The latter uses a 720 CSS-pixel viewport at device scale 2; it is not an operating-system zoom or device test. Results and screenshots stay under `.agent-artifacts/visual-polish/qa/` unless `FLARE_HILLCLIMB_OUTPUT` selects another temporary directory.
-
-## Local visual testing with Meticulous
-
-Flare no longer runs Meticulous in GitHub Actions or uploads builds for hosted test runs. The CLI, repository skills under `.agents/skills/`, browser/backend recorders, and disposable test image remain available for local visual checks. Agents can use `meticulous-simulate-and-diff` to replay relevant sessions against a local app and inspect screenshots during development. Follow the repository's `AGENTS.md` policy when a skill includes a final hosted run: that step is disabled here.
-
-Local replay runs Chromium locally, but still uses Meticulous services for authentication, execution configuration, and session/replay data; simulation results are uploaded to Meticulous. It is not an offline service or a guarantee of free access to every command. Use the capabilities available to your account without starting paid hosted work. Do not run `meticulous ci`, `meticulous agent upload-build`, or `meticulous agent trigger-test-run` as part of routine validation. If service access or a usable session is unavailable, report that limitation and use local browser checks instead.
-
-### Start a disposable app
-
-Run these commands from the repository root with Docker available:
-
-```sh
-docker build --build-arg METICULOUS_BUILD=true -t flare-meticulous-app .
-docker build -f Dockerfile.meticulous -t flare-meticulous .
-docker run --rm -p 127.0.0.1:3000:3000 flare-meticulous
-```
-
-Wait for startup to finish, then open `http://localhost:3000/auth/login`. The fixture administrator is `meticulous@example.test` with password `Flare-test-only-2026!`. These credentials and the image's session secret are deliberately public test fixtures; use this image only for isolated local testing.
-
-`Dockerfile.meticulous` extends the normal app image with PostgreSQL and a process supervisor. Every container start creates a fresh database, runs migrations, seeds the fixture administrator, and starts Flare with its normal authentication guards. PostgreSQL listens only on loopback inside the container. The entrypoint ignores an external `DATABASE_URL`; no hosted database is needed. Stopping the container discards this test state. Rebuild both images after changing application code.
-
-### Replay and compare locally
-
-If needed, install the CLI outside Flare's runtime dependencies:
-
-```sh
-npm install --global @alwaysmeticulous/cli@latest
-meticulous auth whoami
-meticulous schema simulate
-```
-
-If authentication is missing, run `meticulous auth login` in an interactive terminal. OAuth project selection is available through `meticulous auth set-project`. An existing `METICULOUS_API_TOKEN` can also authenticate the CLI; keep it in your environment or secret store, never in commands committed to this repository. The public recording token described below is a different credential.
-
-Choose a session recorded against the same disposable fixtures that exercises the changed UI, or [record one](#record-a-local-session). Replace `SESSION_ID` with its actual ID. With a known-good version of the local app running, make a baseline:
-
-```sh
-METICULOUS_SESSION_ID='SESSION_ID'
-meticulous simulate \
-  --sessionId="$METICULOUS_SESSION_ID" \
-  --appUrl=http://localhost:3000 \
-  --headless --takeSnapshots --storyboard
-```
-
-Save the replay ID from the command's `View simulation at:` URL. Run the changed app at the same address, then replay the same session with that baseline:
-
-```sh
-METICULOUS_BASE_REPLAY_ID='BASE_REPLAY_ID'
-meticulous simulate \
-  --sessionId="$METICULOUS_SESSION_ID" \
-  --appUrl=http://localhost:3000 \
-  --baseReplayId="$METICULOUS_BASE_REPLAY_ID" \
-  --headless --takeSnapshots --storyboard
-```
-
-Inspect the per-screenshot results, screenshots, and changed DOM metadata under `~/.meticulous/replays/`. Diffs are stored under the new replay's `diffs/BASE_REPLAY_ID/` directory. Without `--baseReplayId`, the command captures screenshots for inspection but does not establish that the UI is unchanged. Report the exercised routes, expected changes, unexpected differences, and any failed or incomplete replay. Keep session downloads, replay output, and caches out of Git; a repository-local `.meticulous/` directory is excluded from Git and the Docker build context.
-
-For an HTTP `--appUrl`, the CLI does not configure backend replay inside the running app. These commands combine browser network stubs with server rendering against the live disposable database. Recorded cookies must match the fixture account and session secret, and any server-visible data the flow needs must exist in that database. A browser-stubbed write does not populate the local database. If a session depends on missing state, prepare matching demonstration fixtures or choose another session; an incomplete replay is not a passing visual check. Setting `METICULOUS_BACKEND_RECORDER_MODE=replay` alone cannot restore recorded backend state because it also needs session-specific mock data.
-
-### Record a local session
-
-Flare passes the browser session ID to its backend recorder, which instruments server rendering and Prisma calls. Ordinary production recording stays off unless explicitly enabled. Development/preview recording requires `NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN`; for local development it can live in gitignored `.env.local`. Keep recording limited to demonstration data because recordings include interactions, network data, and account context.
-
-To record the disposable production build, stop the first container, export your project's public recording token in your shell, then run:
-
-```sh
-docker run --rm -p 127.0.0.1:3000:3000 \
-  -e METICULOUS_RECORDING_ENABLED=true \
-  -e NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN \
-  flare-meticulous
-```
-
-In another terminal, run `meticulous record session`. Sign in with the fixture user in its recording browser, then open `http://localhost:3000/dashboard` in a new tab of that same browser to start an authenticated recording. Its initial state must include the authentication cookie: a stubbed sign-in response cannot create a real server session for later server-rendered requests. The CLI recorder captures HTTP-only cookies, unlike the page script alone. When driving that browser automatically, call `window.Meticulous.record.flush()` before closing it so final interactions are uploaded.
-
-For server-rendered replay, the project's Network Stubbing setting must be **Stub all requests, apart from requests for server components and static assets**. This lets the current app render its own server components instead of returning recorded development-build responses. Backend recordings remain available to tooling configured to use them, but the local HTTP URL recipe above does not automatically inject them. A replay is a simulation using recorded network responses; it does not prove that a real upload, email, or webhook was delivered.
-
-### Retire existing hosted CI setup
-
-The former `.github/workflows/meticulous.yaml` workflow has been removed. Once that change is on the default branch, repository administrators should remove any Meticulous required status checks from branch protection or rulesets, disable any separately configured Meticulous GitHub integration automation, and remove the repository Actions secret `METICULOUS_API_TOKEN` if nothing else uses it. Already queued runs and external integration settings are not canceled by deleting the workflow file. Local CLI credentials and recording tokens are separate from the retired Actions secret.
 
 ## Automatic coverage checks
 

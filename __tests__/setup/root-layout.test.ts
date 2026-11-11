@@ -65,9 +65,6 @@ vi.mock('@/components/theme/theme-initializer', () => ({
 vi.mock('@/components/providers/input-modality', () => ({
   InputModality: nothing,
 }))
-vi.mock('@/components/providers/meticulous-context', () => ({
-  MeticulousContext: nothing,
-}))
 vi.mock('@/components/ui/toaster', () => ({ Toaster: nothing }))
 
 async function render() {

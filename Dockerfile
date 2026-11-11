@@ -20,9 +20,6 @@ RUN pnpm install --frozen-lockfile
 FROM node:24 AS builder
 WORKDIR /app
 
-ARG METICULOUS_BUILD=false
-ENV METICULOUS_BUILD=$METICULOUS_BUILD
-
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 ENV HUSKY=0
 RUN corepack enable pnpm
@@ -38,9 +35,6 @@ RUN pnpm build
 
 FROM node:24 AS runner
 WORKDIR /app
-
-ARG METICULOUS_BUILD=false
-ENV METICULOUS_BUILD=$METICULOUS_BUILD
 
 # Keep release identity available to server-side settings and update checks.
 ARG FLARE_RELEASE_CHANNEL=stable

@@ -25,31 +25,13 @@ beforeEach(() => {
   vi.resetModules()
   clients.built = 0
   delete processState[Symbol.for('flare.database.client')]
-  delete processState[Symbol.for('flare.database.query-recorder')]
 })
 afterEach(() => vi.unstubAllEnvs())
 
 describe('the database client', () => {
-  it('applies a registered query recorder before the audit extension', async () => {
-    const { recordDatabaseQueries } =
-      await import('@/lib/database/query-recorder')
-    recordDatabaseQueries({ name: 'recorder' })
-    const { prisma } = await import('@/lib/database/prisma')
-    expect(prisma).toEqual({ layers: ['base', 'recorder', 'audit'] })
-  })
-
-  it('applies only the audit extension when no recorder is registered', async () => {
+  it('applies the audit extension', async () => {
     const { prisma } = await import('@/lib/database/prisma')
     expect(prisma).toEqual({ layers: ['base', 'audit'] })
-  })
-
-  it('refuses a recorder registered after the client was built', async () => {
-    await import('@/lib/database/prisma')
-    const { recordDatabaseQueries } =
-      await import('@/lib/database/query-recorder')
-    expect(() => recordDatabaseQueries({ name: 'recorder' })).toThrow(
-      'The database client was built before its query recorder was registered.'
-    )
   })
 
   it('keeps one client per process in production too', async () => {
