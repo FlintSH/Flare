@@ -211,7 +211,7 @@ export function FolderDialog({
           <>
             {folders.find((folder) => folder.id === existing?.parentId)
               ?.shareToken && (
-              <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <p className="rounded-lg bg-muted p-3 text-sm text-muted-foreground dark:bg-accent">
                 The parent folder has a share link. Public files moved into it
                 will appear on its shared page.
               </p>
