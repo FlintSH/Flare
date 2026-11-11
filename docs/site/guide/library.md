@@ -105,9 +105,11 @@ Open an image preview to browse it in the full-screen viewer. The image sequence
 | Close                  | Choose the close button or press Escape.   |
 | Download               | Use the download control when available.   |
 
+The top-right **Copy link** control copies the current image’s share-page URL. **Open share page** takes you to that page in the same tab; browser Back returns to the library. These actions do not change visibility or remove password protection. If copying fails (for example, clipboard access is blocked), open the share page and copy the address from your browser.
+
 If an image disappears from the filtered results while you browse, Flare may ask you to choose another image. If a next image fails to load, check your connection and retry.
 
-<Screenshot src="/screenshots/timeline/library-image-viewer.webp" alt="Full-screen image viewer opened from the continuous library, with navigation and zoom controls" caption="Open any loaded image and continue through the filtered collection beyond the visible cards." />
+<Screenshot src="/screenshots/timeline/library-image-viewer.webp" alt="Full-screen image viewer opened from the continuous library, with copy-link, share-page, download, navigation, and zoom controls" caption="Open any loaded image and continue through the filtered collection beyond the visible cards." />
 
 ## Work with a file
 

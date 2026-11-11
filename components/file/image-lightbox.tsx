@@ -7,7 +7,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
   ImageOff,
+  Link,
   Loader2,
   Minus,
   Plus,
@@ -22,10 +24,13 @@ import {
 
 import { cn } from '@/lib/utils'
 
+import { useToast } from '@/hooks/use-toast'
+
 export interface LightboxImage {
   id: string
   name: string
   src: string
+  shareUrl?: string
   downloadUrl?: string
   subtitle?: string
 }
@@ -61,6 +66,7 @@ export function ImageLightbox({
   navigationPending = false,
   positionLabel,
 }: ImageLightboxProps) {
+  const { toast } = useToast()
   const [opener] = useState(() =>
     document.activeElement instanceof HTMLElement
       ? document.activeElement
@@ -144,7 +150,7 @@ export function ImageLightbox({
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <span>
+                <span className="shrink-0 whitespace-nowrap">
                   {positionLabel || `${index + 1} of ${images.length}`}
                 </span>
                 {current.subtitle && (
@@ -154,6 +160,44 @@ export function ImageLightbox({
                 )}
               </div>
             </div>
+            {current.shareUrl && (
+              <>
+                <button
+                  type="button"
+                  className={controlClass}
+                  aria-label="Copy link"
+                  title="Copy link"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(
+                        new URL(current.shareUrl!, window.location.origin).href
+                      )
+                      toast({
+                        title: 'Link copied',
+                        description: 'Your file is ready to share.',
+                      })
+                    } catch {
+                      toast({
+                        title: 'Couldn’t copy the link',
+                        description:
+                          'Open the share page and copy its address from your browser.',
+                        variant: 'destructive',
+                      })
+                    }
+                  }}
+                >
+                  <Link className="h-5 w-5" />
+                </button>
+                <a
+                  className={controlClass}
+                  href={current.shareUrl}
+                  aria-label="Open share page"
+                  title="Open share page"
+                >
+                  <ExternalLink className="h-5 w-5" />
+                </a>
+              </>
+            )}
             {current.downloadUrl && (
               <a
                 className={controlClass}
