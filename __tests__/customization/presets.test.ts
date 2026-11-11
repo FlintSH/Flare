@@ -92,11 +92,11 @@ describe('palette presets', () => {
     const control = mix(p.mutedForeground, p.input, 0.55)
     // Panels step up from the page, and menus and dialogs from panels.
     expect(contrast(panel, p.background)).toBeGreaterThan(1.07)
-    expect(luminance(overlay)).toBeGreaterThan(luminance(panel))
+    expect(contrast(overlay, panel)).toBeGreaterThan(1.08)
     // The separation comes from a deeper page, not lighter surfaces: every
     // surface stays near black instead of turning into a slate sheet.
     expect(contrast(panel, '#000000')).toBeLessThan(1.15)
-    expect(contrast(overlay, '#000000')).toBeLessThan(1.2)
+    expect(contrast(overlay, '#000000')).toBeLessThan(1.3)
     // Hover fills show on panels and inside menus.
     expect(contrast(p.accent, panel)).toBeGreaterThan(1.3)
     expect(contrast(p.accent, overlay)).toBeGreaterThan(1.25)

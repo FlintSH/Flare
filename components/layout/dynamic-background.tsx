@@ -17,13 +17,15 @@ export function DynamicBackground() {
         }}
       />
     )
+  // The default dark primary is near white: at full strength its glow hazes
+  // the page until it matches the panels, so dark mode keeps only a hint.
   return (
     <div className="fixed inset-0 -z-10">
       {}
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background/95" />
 
       {}
-      <div className="absolute inset-0 bg-gradient-to-tr from-primary/[.08] via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-tr from-primary/[.08] via-transparent to-transparent dark:from-primary/[.03]" />
 
       {}
       <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-transparent to-secondary/[.06]" />
@@ -36,7 +38,7 @@ export function DynamicBackground() {
 
       {}
       <div className="absolute inset-0 opacity-15">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gradient-radial from-primary/20 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gradient-radial from-primary/20 to-transparent rounded-full blur-3xl dark:from-primary/10" />
         <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-gradient-radial from-accent/15 to-transparent rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-gradient-radial from-secondary/20 to-transparent rounded-full blur-2xl" />
       </div>

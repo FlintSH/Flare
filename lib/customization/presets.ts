@@ -24,8 +24,8 @@ export const PALETTE_PRESETS = {
     lightAccent: '#0f172a',
     // Display values only: defaultDark applies DARK_PALETTE as is.
     background: '#010610',
-    line: '#1e293b',
-    mutedForeground: '#94a3b8',
+    line: '#222d40',
+    mutedForeground: '#9aa8bc',
     defaultDark: true,
   },
   orbit: {

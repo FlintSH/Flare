@@ -276,7 +276,7 @@ The customization wrapper also contains `version` (currently `1`), `revision` (i
 
 ### Palette fields and defaults
 
-The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are below. Two earlier sets of dark defaults are kept only to recognize untouched installations, which then resolve to the current values: the original (`#020817` for the page, cards and popovers, and `#1e293b` for secondary and accent) and a lighter set (`#0c1426` cards, `#162036` popovers, `#33445f` secondary and accent, `#26334d` muted, `#303f59` borders, `#3a4a63` inputs and `#a8b5c9` secondary text on the `#020817` page).
+The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are below. Two earlier sets of dark defaults are kept only to recognize untouched installations, which then resolve to the current values: the original (`#020817` for the page, cards and popovers, and `#1e293b` for secondary, accent and borders, `#94a3b8` secondary text) and a lighter set (`#0c1426` cards, `#162036` popovers, `#33445f` secondary and accent, `#26334d` muted, `#303f59` borders, `#3a4a63` inputs and `#a8b5c9` secondary text on the `#020817` page).
 
 | Field                   | Studio light | Studio dark | Legacy HSL          |
 | ----------------------- | ------------ | ----------- | ------------------- |
@@ -284,19 +284,19 @@ The studio uses the same field names for `theme.light` and `theme.dark`. The leg
 | `foreground`            | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `card`                  | `#ffffff`    | `#040c1b`   | `219.1 74.2% 6.1%`  |
 | `cardForeground`        | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
-| `popover`               | `#ffffff`    | `#030b1d`   | `221.5 81.2% 6.3%`  |
+| `popover`               | `#ffffff`    | `#071022`   | `220 65.9% 8%`      |
 | `popoverForeground`     | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `primary`               | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `primaryForeground`     | `#f8fafc`    | `#0f172a`   | `222.2 47.4% 11.2%` |
-| `secondary`             | `#e2e8f0`    | `#29364d`   | `218.3 30.5% 23.1%` |
+| `secondary`             | `#e2e8f0`    | `#2d3b55`   | `219 30.8% 25.5%`   |
 | `secondaryForeground`   | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `muted`                 | `#f1f5f9`    | `#1e293b`   | `217.2 32.6% 17.5%` |
-| `mutedForeground`       | `#475569`    | `#94a3b8`   | `215 20.2% 65.1%`   |
-| `accent`                | `#e2e8f0`    | `#222e44`   | `218.8 33.3% 20%`   |
+| `mutedForeground`       | `#475569`    | `#9aa8bc`   | `215.3 20.2% 67.1%` |
+| `accent`                | `#e2e8f0`    | `#26334b`   | `218.9 32.7% 22.2%` |
 | `accentForeground`      | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `destructive`           | `#dc2626`    | `#991b1b`   | `0 62.8% 30.6%`     |
 | `destructiveForeground` | `#ffffff`    | `#f8fafc`   | `210 40% 98%`       |
-| `border`                | `#cbd5e1`    | `#1e293b`   | `217.2 32.6% 17.5%` |
+| `border`                | `#cbd5e1`    | `#222d40`   | `218 30.6% 19.2%`   |
 | `input`                 | `#cbd5e1`    | `#1e293b`   | `217.2 32.6% 17.5%` |
 | `ring`                  | `#64748b`    | `#cbd5e1`   | `212.7 26.8% 83.9%` |
 

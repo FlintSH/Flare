@@ -47,16 +47,19 @@ const LIFTED_CLASSIC_PALETTE = {
 
 /**
  * The default dark palette: a deeper page so panels separate without getting
- * lighter, and separate fills for hover and selection. Lines, quiet fills and
- * secondary text keep the original slate.
+ * lighter, menus and dialogs one soft step above panels, and separate fills
+ * for hover and selection. Lines, quiet fills and secondary text stay close
+ * to the original slate.
  */
 export const CLASSIC_PALETTE = {
   ...ORIGINAL_CLASSIC_PALETTE,
   background: '220 88.2% 3.3%',
   card: '219.1 74.2% 6.1%',
-  popover: '221.5 81.2% 6.3%',
-  secondary: '218.3 30.5% 23.1%',
-  accent: '218.8 33.3% 20%',
+  popover: '220 65.9% 8%',
+  secondary: '219 30.8% 25.5%',
+  mutedForeground: '215.3 20.2% 67.1%',
+  accent: '218.9 32.7% 22.2%',
+  border: '218 30.6% 19.2%',
 }
 
 export const SUPERSEDED_CLASSIC_PALETTES = [

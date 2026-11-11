@@ -8,8 +8,47 @@ import {
   SUPERSEDED_CLASSIC_PALETTES,
   defaultClassicColors,
 } from '@/lib/customization/legacy-appearance'
-import { LIGHT_PALETTE } from '@/lib/customization/schema'
+import { DARK_PALETTE, LIGHT_PALETTE } from '@/lib/customization/schema'
 import { paletteVariables } from '@/lib/customization/theme'
+
+// Frozen copies of the defaults earlier versions saved, so a change to the
+// recognizer's own palettes cannot move the test inputs with it.
+const ORIGINAL_DEFAULT = {
+  background: '222.2 84% 4.9%',
+  foreground: '210 40% 98%',
+  card: '222.2 84% 4.9%',
+  cardForeground: '210 40% 98%',
+  popover: '222.2 84% 4.9%',
+  popoverForeground: '210 40% 98%',
+  primary: '210 40% 98%',
+  primaryForeground: '222.2 47.4% 11.2%',
+  secondary: '217.2 32.6% 17.5%',
+  secondaryForeground: '210 40% 98%',
+  muted: '217.2 32.6% 17.5%',
+  mutedForeground: '215 20.2% 65.1%',
+  accent: '217.2 32.6% 17.5%',
+  accentForeground: '210 40% 98%',
+  destructive: '0 62.8% 30.6%',
+  destructiveForeground: '210 40% 98%',
+  border: '217.2 32.6% 17.5%',
+  input: '217.2 32.6% 17.5%',
+  ring: '212.7 26.8% 83.9%',
+}
+const LIFTED_DEFAULT = {
+  ...ORIGINAL_DEFAULT,
+  card: '221.5 52% 9.8%',
+  popover: '221.3 42.1% 14.9%',
+  secondary: '216.8 30.1% 28.6%',
+  muted: '220 33.9% 22.5%',
+  mutedForeground: '216.4 23.4% 72.4%',
+  accent: '216.8 30.1% 28.6%',
+  border: '218 29.9% 26.9%',
+  input: '216.6 26.1% 30.8%',
+}
+const EARLIER_DEFAULTS: Record<string, string>[] = [
+  ORIGINAL_DEFAULT,
+  LIFTED_DEFAULT,
+]
 
 function declarations(css: string, selector: string) {
   const body = css.slice(css.indexOf(`${selector}{`) + selector.length + 1)
@@ -23,8 +62,8 @@ function declarations(css: string, selector: string) {
 }
 
 describe('initial server-rendered theme', () => {
-  it.each(SUPERSEDED_CLASSIC_PALETTES)(
-    'upgrades a saved untouched earlier default but retains a customized palette',
+  it.each(EARLIER_DEFAULTS)(
+    'upgrades saved untouched earlier default %# but retains a customized palette',
     (earlier) => {
       const config = structuredClone(DEFAULT_CONFIG)
       config.settings.appearance.customColors = { ...earlier }
@@ -43,13 +82,58 @@ describe('initial server-rendered theme', () => {
     }
   )
 
-  it('recognizes both earlier defaults and leaves the current one alone', () => {
-    expect(SUPERSEDED_CLASSIC_PALETTES).toHaveLength(2)
-    for (const earlier of SUPERSEDED_CLASSIC_PALETTES)
+  it.each(EARLIER_DEFAULTS)(
+    'leaves earlier default %# alone when a color is missing or added',
+    (earlier) => {
+      const { ring: _ring, ...missing } = earlier
+      expect(defaultClassicColors(missing)).toEqual(missing)
+      const extended = { ...earlier, sidebar: '217.2 32.6% 17.5%' }
+      expect(defaultClassicColors(extended)).toEqual(extended)
+    }
+  )
+
+  it('recognizes exactly the two earlier defaults and leaves the current one alone', () => {
+    expect(SUPERSEDED_CLASSIC_PALETTES).toEqual(EARLIER_DEFAULTS)
+    for (const earlier of EARLIER_DEFAULTS)
       expect(earlier).not.toEqual(CLASSIC_PALETTE)
     expect(defaultClassicColors({ ...CLASSIC_PALETTE })).toEqual(
       CLASSIC_PALETTE
     )
+  })
+
+  it('keeps the classic and studio dark defaults the same colors', () => {
+    const toHex = (triplet: string) => {
+      const [h, s, l] = triplet.split(' ').map((part) => parseFloat(part))
+      const chroma = (1 - Math.abs((2 * l) / 100 - 1)) * (s / 100)
+      const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1))
+      const m = l / 100 - chroma / 2
+      const [r, g, b] = [
+        [chroma, x, 0],
+        [x, chroma, 0],
+        [0, chroma, x],
+        [0, x, chroma],
+        [x, 0, chroma],
+        [chroma, 0, x],
+      ][Math.floor(h / 60) % 6]
+      return (
+        '#' +
+        [r, g, b]
+          .map((channel) =>
+            Math.round((channel + m) * 255)
+              .toString(16)
+              .padStart(2, '0')
+          )
+          .join('')
+      )
+    }
+    for (const [key, value] of Object.entries(CLASSIC_PALETTE)) {
+      // The classic palette keeps its original deeper red.
+      if (key === 'destructive') continue
+      expect([key, toHex(value)]).toEqual([
+        key,
+        DARK_PALETTE[key as keyof typeof DARK_PALETTE],
+      ])
+    }
   })
 
   it('fills every default Flare HSL token after setup saved an empty palette', () => {

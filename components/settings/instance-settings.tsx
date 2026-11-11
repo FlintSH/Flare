@@ -1976,7 +1976,7 @@ export function InstanceSettings({
             tone="unsaved"
             title="You have unsaved instance settings"
             description={`${changedSettingsGroups.join(', ')}${hasFaviconChanged() ? ' · Favicon' : ''}`}
-            className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20"
+            className="fixed inset-x-4 bottom-4 z-40 mx-auto max-w-3xl bg-overlay shadow-xl shadow-black/20 dark:shadow-black/60"
           >
             <Button
               variant="outline"
