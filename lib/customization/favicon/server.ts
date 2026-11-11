@@ -34,43 +34,60 @@ function contentVersion(bytes: Buffer) {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16)
 }
 
-async function exists(
-  storage: Awaited<ReturnType<typeof getStorageProvider>>,
-  key: string
-) {
-  try {
-    await storage.getFileSize(key)
-    return true
-  } catch (error) {
-    if (isMissingObject(error)) return false
-    throw error
-  }
-}
-
 /** Cleanup jobs for the favicon belong to the instance, not an account. */
 const OWNER = 'instance'
+
+/**
+ * Both places a saved address may name: its own object, and the shared one
+ * of earlier versions.
+ */
+function possibleObjects(saved: string) {
+  const version = faviconVersion(saved)
+  return version ? [uploadKey(version), LEGACY_KEY] : [LEGACY_KEY]
+}
+
+/**
+ * The objects to delete once `saved` is replaced. An address saved by an
+ * earlier version names the shared object instead of its own; when storage
+ * can't say which, both are queued, since deleting a missing object succeeds.
+ */
+async function objectsOf(
+  storage: Awaited<ReturnType<typeof getStorageProvider>>,
+  saved: string | null
+): Promise<string[]> {
+  if (!saved) return []
+  const [own] = possibleObjects(saved)
+  if (own === LEGACY_KEY) return [LEGACY_KEY]
+  try {
+    await storage.getFileSize(own)
+    return [own]
+  } catch (error) {
+    return isMissingObject(error) ? [LEGACY_KEY] : possibleObjects(saved)
+  }
+}
 
 /**
  * Saves `next` as the favicon address and queues the replaced image for
  * deletion in the same transaction. The settings lock orders concurrent
  * uploads and removals, so each replaced address is queued exactly once, and
  * the storage cleanup worker retries the deletion until storage accepts it.
+ * Storage is read before the transaction, never while it holds the lock.
  */
 async function replaceSavedFavicon(next: string | null) {
   const storage = await getStorageProvider()
   const target = captureStorageTarget(storage)
+  const expected = (await getConfig()).settings.appearance.favicon
+  const expectedObjects = await objectsOf(storage, expected)
   await prisma.$transaction(async (tx) => {
     await lockSettings(tx)
     const previous = (await readConfig(tx)).settings.appearance.favicon
     await applyConfigUpdate(tx, { settings: { appearance: { favicon: next } } })
     if (!previous) return
-    const version = faviconVersion(previous)
-    // An address saved by an earlier version names the shared object instead.
-    const key =
-      version && (await exists(storage, uploadKey(version)))
-        ? uploadKey(version)
-        : LEGACY_KEY
-    await queueStorageDeletion(tx, OWNER, key, target)
+    // Changed since the check: queue every place it may name. Neither holds
+    // the favicon saved now.
+    const keys =
+      previous === expected ? expectedObjects : possibleObjects(previous)
+    for (const key of keys) await queueStorageDeletion(tx, OWNER, key, target)
   })
 }
 

@@ -30,13 +30,23 @@ vi.mock('@/lib/auth', () => ({
 }))
 // Transactions run one at a time, as the settings lock each one takes makes
 // them in PostgreSQL.
-const transactions = vi.hoisted(() => ({ tail: Promise.resolve() as unknown }))
+const transactions = vi.hoisted(() => ({
+  tail: Promise.resolve() as unknown,
+  open: 0,
+}))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     $transaction: (run: (tx: object) => unknown) => {
       const result = Promise.resolve(transactions.tail)
         .catch(() => {})
-        .then(() => run({}))
+        .then(async () => {
+          transactions.open++
+          try {
+            return await run({})
+          } finally {
+            transactions.open--
+          }
+        })
       transactions.tail = result.catch(() => {})
       return result
     },
@@ -423,6 +433,46 @@ describe('favicon upload, serving and page links', () => {
     const saved = state.favicon
     expect(await storedObjects()).toEqual(saved ? [keyOf(saved)] : [])
     if (saved) expect((await fetchIcon(saved)).status).toBe(200)
+  })
+
+  it('never waits on storage while holding the settings lock', async () => {
+    await upload(png)
+    const calls: number[] = []
+    for (const method of [
+      'getFileSize',
+      'getFileStream',
+      'uploadFile',
+      'deleteFile',
+    ] as const) {
+      const original = provider[method].bind(provider) as (
+        ...args: unknown[]
+      ) => Promise<unknown>
+      vi.spyOn(provider, method).mockImplementation(((...args: unknown[]) => {
+        calls.push(transactions.open)
+        return original(...args)
+      }) as never)
+    }
+    await upload(otherPng)
+    await remove(
+      new Request('http://localhost/api/settings/favicon', {
+        method: 'DELETE',
+      })
+    )
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every((open) => open === 0)).toBe(true)
+  })
+
+  it("still saves when storage can't say where the replaced favicon is, queuing both places", async () => {
+    const { url } = await (await upload(png)).json()
+    vi.spyOn(provider, 'getFileSize').mockRejectedValueOnce(
+      new Error('storage unavailable')
+    )
+    const { url: next } = await (await upload(otherPng)).json()
+    expect(state.favicon).toBe(next)
+    expect(state.queued.map(({ path }) => path)).toEqual([
+      `uploads/favicons/${keyOf(url)}`,
+      LEGACY,
+    ])
   })
 
   it('keeps a failed upload from being linked and deletes its image', async () => {
