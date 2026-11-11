@@ -9,7 +9,7 @@ Uploading requires `files.upload`, including drag-and-drop, screenshot tools, an
 
 Use **Upload** when you want to review settings before sending files. For quick uploads with your saved defaults, drop files onto another dashboard page or use a [screenshot tool](./screenshot-tools).
 
-<Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area and sharing options" caption="The upload page brings file selection and sharing choices into one flow." />
+<Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area, effective upload settings, and collapsed Upload options" caption="The upload page brings file selection and sharing choices into one flow." />
 
 ## Encrypted by default
 
@@ -35,8 +35,8 @@ After an encrypted upload, the links under **Upload complete** carry the file's 
 1. Open **Upload**.
 2. Click the file-selection area or drag files into it. You can select several files and add more to the queue before starting.
 3. Review filenames and sizes. Remove an individual file, or clear the queue if you want to start again.
-4. Choose an **Upload profile**. The line under it sums up what the profile applies; the options below it change this upload only.
-5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Then set any one-time sharing options.
+4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. The line under it shows the effective visibility, password protection, expiration action, and filename behavior for this batch. Without that permission, your saved defaults apply automatically.
+5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Open **Upload options** for one-time visibility, password, or expiration overrides. You can leave it closed to use your saved defaults.
 6. Start the upload. Wait for the completion links before closing the tab.
 
 While files upload, the queue shows each file's progress, and a progress card shows the file being sent and its percentage. Drag-and-drop uploads use the same card. It has its own place on screen, so notifications such as **Copied to clipboard** don't cover it: the top left, below the navigation bar, or the bottom on a phone-sized screen. Close it with **×** if it's in the way; the upload continues, and the card returns for the next file. Earlier builds showed progress as a notification, so any other notification replaced it for the rest of that file.
@@ -49,11 +49,13 @@ Anyone who can access a supported archive's [share page](./archives#browse-an-ar
 
 <Screenshot src="/screenshots/workspace/upload-queue.png" alt="Several selected files in the upload queue" caption="Review your queue before uploading. Each file displays its size and transfer progress." />
 
+**Upload options** (or **Expiration options** when your role cannot share) starts closed so file selection and the upload action stay easy to reach. Its status changes to **Customized** after an override. Closing it keeps your choices; when profile selection is available, its effective summary stays visible and updates as you change them. **Save to** stays outside the disclosure so you can always review the destination. Password protection and expiration controls are still available to the same roles as before this layout change.
+
 ## Choose your upload settings
 
 | Setting                 | What it does                                                                                                                                                                                                                                                                                                                                                            |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Upload profile**      | Applies a saved collection of upload choices. Use account settings directly to bypass the default profile.                                                                                                                                                                                                                                                              |
+| **Upload profile**      | Applies a saved collection of upload choices (`uploadProfiles.manage`). Use account settings directly to bypass the default profile.                                                                                                                                                                                                                                    |
 | **Save to**             | Puts the file in one of your folders (`folders.manage`). A public file directly in a shared folder also appears on that folder's share page.                                                                                                                                                                                                                            |
 | **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                                                                                                                                                                                                                                                      |
 | **Password protection** | Requires recipients of a public file to enter the password before opening it. For a plain file the server checks it, and eligible owners and accounts with `content.read` retain access. For an encrypted file the password is part of the key: it must pass a strength check in your browser, the server never receives it, and only you can open the file without it. |
@@ -61,9 +63,11 @@ Anyone who can access a supported archive's [share page](./archives#browse-an-ar
 
 Without `folders.manage`, the upload page doesn't show **Save to** and uploads are unfiled, including when a link opens **Upload** with a folder selected. Earlier builds showed **Save to** to these roles anyway, and the server refused the upload with "Your role cannot organize uploads into folders."
 
+<Screenshot src="/screenshots/workspace/restricted-upload.webp" alt="Restricted upload page showing private uploads, automatic saved defaults, and expanded Expiration options, without profile selection, sharing, password, or folder controls" caption="Restricted roles can still upload privately. Saved defaults apply automatically, and the page offers only permitted choices." />
+
 Choosing **From upload profile** also includes the account defaults that the profile inherits. If you have not configured a default profile, account and instance settings supply the starting values. See [upload profiles](./upload-profiles) for the exact order.
 
-Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. For plain files Flare accepts file passwords up to 72 bytes; accented characters and emoji can use more than one byte each. An encrypted file's password has no such limit, but a short or common one is refused by the strength meter under the field.
+Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. For plain files Flare accepts file passwords with at least 8 characters and at most 72 bytes; accented characters and emoji can use more than one byte each. An encrypted file's password has no such limit, but a short or common one is refused by the strength meter under the field.
 
 ## Set an expiration
 
@@ -127,3 +131,5 @@ File types may be restricted by the administrator, and the server checks file co
 An administrator with `audit.read` can investigate [Audit log](/admin/audit) using the filename, account, time, and available request context. Upload/finalization records retain the file ID and name when the server can identify them, including useful context for some failures; they do not contain file bytes or submitted passwords. An early proxy rejection or interrupted request may not reach Flare at all, so provide the visible error and approximate time rather than assuming every failed transfer has an audit event. OCR and later background work have separate outcomes after upload acceptance. An image OCR can't read is marked as read with no text, and an `ocr.failed` event records it. Earlier versions also left a text-recognition worker running for each such image until Flare restarted, so many unreadable images could slowly use up the server's memory.
 
 For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).
+
+If a password is invalid, one explanation appears beside its field while **Upload options** is open. Closing the options moves that explanation beside **Review password**. Choose **Review password** to reopen the options and focus the field. Correct or remove the password to enable creation.

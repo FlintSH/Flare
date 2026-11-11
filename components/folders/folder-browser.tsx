@@ -1,10 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 
 import Link from 'next/link'
 
 import {
+  ChevronDown,
   ChevronRight,
   Folder,
   FolderPlus,
@@ -57,6 +58,26 @@ export function FolderBrowser({
   const canManage = allows(user, 'manageFolders')
   const canShare = allows(user, 'shareFolders')
   const [action, setAction] = useState<FolderAction | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const expansionKey = `flare:folders:${user?.id ?? 'anonymous'}:${value ?? 'all'}`
+  useEffect(() => {
+    try {
+      setExpanded(localStorage.getItem(expansionKey) === 'open')
+    } catch {
+      setExpanded(false)
+    }
+  }, [expansionKey])
+  const toggleExpanded = () => {
+    const next = !expanded
+    setExpanded(next)
+    try {
+      localStorage.setItem(expansionKey, next ? 'open' : 'closed')
+    } catch {
+      /* Storage can be disabled. The control still works. */
+    }
+  }
+
+  const foldersId = useId()
   const current = folders.find((folder) => folder.id === value)
   const trail = folderTrail(folders, current?.id ?? null)
   const children = folders
@@ -149,6 +170,27 @@ export function FolderBrowser({
             >
               Unfiled
             </Button>
+            {value !== UNFILED && children.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-expanded={expanded}
+                aria-controls={foldersId}
+                onClick={toggleExpanded}
+                className="gap-1.5 text-sm text-muted-foreground"
+              >
+                <Folder className="h-4 w-4" aria-hidden="true" />
+                {current ? 'Subfolders' : 'Folders'}
+                <span className="tabular-nums">{children.length}</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  className={cn(
+                    'h-3.5 w-3.5 transition-transform motion-reduce:transition-none',
+                    expanded && 'rotate-180'
+                  )}
+                />
+              </Button>
+            )}
           </nav>
         ) : (
           <p className="text-sm text-muted-foreground">
@@ -171,7 +213,13 @@ export function FolderBrowser({
             <Button
               variant="outline"
               size="sm"
-              className="gap-2"
+              className={cn(
+                'gap-2 px-2 sm:px-3',
+                value !== UNFILED &&
+                  children.length > 0 &&
+                  'hidden sm:inline-flex'
+              )}
+              title="New folder"
               disabled={
                 loading || error || (!!value && value !== UNFILED && !current)
               }
@@ -179,7 +227,7 @@ export function FolderBrowser({
                 setAction({ kind: 'create', parentId: current?.id ?? null })
               }
             >
-              <FolderPlus className="h-4 w-4" />
+              <FolderPlus className="h-4 w-4" aria-hidden="true" />
               New folder
             </Button>
           )}
@@ -189,7 +237,12 @@ export function FolderBrowser({
       {error ? (
         <p role="alert" className="mt-3 text-sm text-destructive">
           Couldn’t load folders.{' '}
-          <button type="button" className="underline" onClick={onRetry}>
+          <button
+            data-flare-control
+            type="button"
+            className="underline"
+            onClick={onRetry}
+          >
             Try again
           </button>
         </p>
@@ -201,6 +254,7 @@ export function FolderBrowser({
         <p role="alert" className="mt-3 text-sm text-muted-foreground">
           This folder is no longer available.{' '}
           <button
+            data-flare-control
             type="button"
             className="underline"
             onClick={() => onChange(null)}
@@ -219,6 +273,7 @@ export function FolderBrowser({
                 <ol className="-ml-1 flex min-w-0 items-center gap-1 text-sm text-muted-foreground">
                   <li className="shrink-0">
                     <button
+                      data-flare-control
                       type="button"
                       onClick={() => onChange(null)}
                       className="rounded px-1 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
@@ -236,6 +291,7 @@ export function FolderBrowser({
                         className="h-3.5 w-3.5 shrink-0"
                       />
                       <button
+                        data-flare-control
                         type="button"
                         onClick={() => onChange(folder.id)}
                         aria-current={
@@ -271,22 +327,46 @@ export function FolderBrowser({
           )}
           {value !== UNFILED && children.length > 0 && (
             <section
+              id={foldersId}
               aria-label={current ? 'Subfolders' : 'Folders'}
-              className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3"
+              hidden={!expanded}
+              className={cn(
+                'mt-3 max-h-64 gap-2 overflow-y-auto rounded-lg p-1 -m-1 sm:grid-cols-2 lg:grid-cols-3',
+                expanded && 'grid'
+              )}
             >
+              {canManage && (
+                <div className="col-span-full pb-1 sm:hidden">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || error}
+                    onClick={() =>
+                      setAction({
+                        kind: 'create',
+                        parentId: current?.id ?? null,
+                      })
+                    }
+                  >
+                    <FolderPlus className="h-4 w-4" aria-hidden="true" />
+                    New folder
+                  </Button>
+                </div>
+              )}
               {children.map((folder) => (
                 <div
                   key={folder.id}
-                  className="flex min-w-0 items-center rounded-xl border border-border/60 bg-background/50 p-2 transition-colors hover:bg-muted/50"
+                  className="flex min-w-0 items-center rounded-xl border border-border/60 bg-background/50 p-1 transition-colors hover:bg-muted/50"
                 >
                   <button
+                    data-flare-control
                     type="button"
                     onClick={() => onChange(folder.id)}
-                    className="flex min-w-0 flex-1 items-center gap-3 rounded-lg p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg p-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-label={`Open folder ${folder.name}`}
                   >
-                    <span className="rounded-lg bg-primary/10 p-2 text-primary">
-                      <Folder className="h-5 w-5" />
+                    <span className="rounded-lg bg-primary/10 p-1.5 text-primary">
+                      <Folder className="h-4 w-4" />
                     </span>
                     <span className="min-w-0 flex-1">
                       <span

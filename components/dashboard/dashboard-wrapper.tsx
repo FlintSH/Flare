@@ -30,7 +30,7 @@ export function DashboardWrapper({
 
       <a
         href="#main-content"
-        className="sr-only fixed left-6 top-6 z-[100] rounded-lg bg-primary px-4 py-3 text-primary-foreground focus:not-sr-only"
+        className="fixed left-6 top-6 z-[100] -translate-y-[200%] rounded-lg bg-primary px-4 py-3 text-primary-foreground outline-none focus:translate-y-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
       >
         Skip to content
       </a>
@@ -61,7 +61,7 @@ export function DashboardWrapper({
           {children}
         </div>
       </main>
-      {showFooter && <Footer />}
+      {showFooter && <Footer compact />}
       <LibraryMaintenance />
     </div>
   )

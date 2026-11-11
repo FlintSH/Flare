@@ -322,12 +322,28 @@ async function dismissUnlockPrompt(page, expect) {
   await expect(dialog).toHaveCount(0)
 }
 
+/**
+ * Opens the options of the upload form or the paste form. The visibility,
+ * the password and the expiration are in a section that starts closed
+ * ("Upload options", "Sharing options", or "Expiration options" for a role
+ * that cannot share). Does nothing if it is open.
+ */
+async function openCreationOptions(page) {
+  const options = page
+    .locator('details')
+    .filter({ hasText: /Upload options|Sharing options|Expiration options/ })
+    .first()
+  if (!(await options.evaluate((element) => element.open)))
+    await options.locator('summary').click()
+}
+
 module.exports = {
   completeKeySetup,
   createAccountRecord,
   dismissUnlockPrompt,
   fillSignInForm,
   keysOfMnemonic,
+  openCreationOptions,
   saveRecoveryPhrase,
   signIn,
   signInContext,

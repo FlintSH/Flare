@@ -70,6 +70,7 @@ import {
   downloadDecrypted,
 } from '@/lib/files/encrypted-client'
 import { requestFileEncryption } from '@/lib/files/existing-client'
+import { fileTypeLabel } from '@/lib/files/file-kind'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
 import { thumbnailKind } from '@/lib/files/thumbnail-client'
@@ -590,8 +591,13 @@ function OpenFileCard({
   // The icon steps aside for the hover and focus controls, so it doesn't
   // show through between them.
   const typeIcon = (
-    <div className="flex h-full items-center justify-center transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
-      <FileTypeIcon file={file} className="h-16 w-16 text-muted-foreground" />
+    <div className="flex h-full flex-col items-center justify-center gap-3 transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
+      <FileTypeIcon file={file} className="h-12 w-12 text-muted-foreground" />
+      <span className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
+        {file.name.includes('.')
+          ? file.name.split('.').pop()?.toUpperCase().slice(0, 12)
+          : fileTypeLabel(file.mimeType)}
+      </span>
     </div>
   )
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
@@ -640,7 +646,7 @@ function OpenFileCard({
   return (
     <Card
       className={cn(
-        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-card/80 shadow-sm backdrop-blur-xl transition-colors hover:bg-card/95',
+        'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-panel shadow-sm transition-colors',
         // Selected cards keep a 2px edge inside the column: the border plus a
         // ring drawn above the thumbnail and the hover veil, so it looks the
         // same on every card and while hovered. The ring sits inside the
@@ -671,7 +677,7 @@ function OpenFileCard({
               else onPreview?.(file)
             }
           }}
-          className="relative block aspect-square overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
+          className="relative block aspect-[4/3] overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
         >
           {isImage && !previewFailed ? (
             <Image

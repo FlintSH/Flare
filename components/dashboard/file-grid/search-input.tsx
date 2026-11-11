@@ -38,13 +38,13 @@ export const SearchInput = memo(function SearchInput({
     <div className="relative min-w-0 flex-1">
       <Search
         aria-hidden="true"
-        className="pointer-events-none absolute left-3.5 top-3 h-4 w-4 text-muted-foreground"
+        className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"
       />
       <Input
         type="search"
         aria-label="Search files by name"
         placeholder="Search your files…"
-        className="h-10 rounded-lg bg-background/70 pl-10 pr-10 [&::-webkit-search-cancel-button]:appearance-none"
+        className="h-10 rounded-lg bg-background/70 pl-10 pr-12 [&::-webkit-search-cancel-button]:appearance-none"
         value={value}
         onChange={(event) => updateSearch(event.target.value)}
       />
@@ -53,7 +53,7 @@ export const SearchInput = memo(function SearchInput({
           type="button"
           variant="ghost"
           size="icon"
-          className="absolute right-1 top-1 h-8 w-8 rounded-lg"
+          className="absolute right-0 top-0 h-full w-10 rounded-lg"
           aria-label="Clear file search"
           onClick={() => updateSearch('', true)}
         >

@@ -1,0 +1,175 @@
+{
+  "results": [
+    "Date rail jumps directly from newest files to July 2018; mounted cards and requests stay bounded",
+    "Selecting visible cards survives scrolling and unmounting; Done clears selection",
+    "Searching all account files resets position and returns the correct total",
+    "Native scrolling across the virtual window preserves the file and its pixel position in both directions",
+    "390px mobile library and date jump fit the viewport; desktop/mobile resizing preserves the historical month and Home returns to newest",
+    "Create archive retains every selected file after its card unmounts",
+    "Bulk tags refresh offscreen selections after a real external removal and submit add for the unchecked tag",
+    "Named-token selected-ID reads and the example client enforce ownership/scope and audit the owner/token without credentials",
+    "Image preview opens from the virtual grid, navigates to the next image, and closes normally",
+    "Create archive retains both unmounted selections at 1440px; Cancel clears selection without creating a file",
+    "A non-overflowing folder directory chains wheel scrolling into the file library",
+    "Month grouping, alternate sort without the date rail, folder filtering, empty results, and reset work against the real account",
+    "Old page links restore the corresponding file; oldest/week order works and changing filters clears selection",
+    "An intentionally aborted historical request exposes Retry; Retry loads the real files without losing position",
+    "Opening a historical filename and using Back restores the same part of the library",
+    "Create archive retains both unmounted selections at 390px; Cancel clears selection without creating a file"
+  ],
+  "accountFiles": 12000,
+  "browser": "Chromium",
+  "timezone": "UTC",
+  "samples": [
+    {
+      "stage": "desktop-newest",
+      "mountedFiles": 20,
+      "mountedRows": 5,
+      "firstMounted": 0,
+      "lastMounted": 19,
+      "date": "October 2026",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "desktop-pointer-scrub",
+      "mountedFiles": 40,
+      "mountedRows": 10,
+      "firstMounted": 6616,
+      "lastMounted": 6655,
+      "date": "March 2022",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "desktop-oldest-jump",
+      "mountedFiles": 24,
+      "mountedRows": 6,
+      "firstMounted": 11976,
+      "lastMounted": 11999,
+      "date": "July 2018",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "mobile-newest",
+      "mountedFiles": 5,
+      "mountedRows": 5,
+      "firstMounted": 0,
+      "lastMounted": 4,
+      "date": "October 2026",
+      "horizontalOverflow": false,
+      "cardHeights": [312.5]
+    },
+    {
+      "stage": "mobile-oldest-jump",
+      "mountedFiles": 5,
+      "mountedRows": 5,
+      "firstMounted": 11995,
+      "lastMounted": 11999,
+      "date": "July 2018",
+      "horizontalOverflow": false,
+      "cardHeights": [312.5]
+    },
+    {
+      "stage": "resized-desktop-oldest",
+      "mountedFiles": 24,
+      "mountedRows": 6,
+      "firstMounted": 11976,
+      "lastMounted": 11999,
+      "date": "July 2018",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "resized-same-columns-middle",
+      "mountedFiles": 40,
+      "mountedRows": 10,
+      "firstMounted": 5984,
+      "lastMounted": 6023,
+      "date": "August 2022",
+      "horizontalOverflow": false,
+      "cardHeights": [288.5]
+    },
+    {
+      "stage": "resized-mobile-oldest",
+      "mountedFiles": 10,
+      "mountedRows": 10,
+      "firstMounted": 11984,
+      "lastMounted": 11993,
+      "date": "July 2018",
+      "horizontalOverflow": false,
+      "cardHeights": [312.5]
+    },
+    {
+      "stage": "mobile-native-window-boundary",
+      "mountedFiles": 10,
+      "mountedRows": 10,
+      "firstMounted": 7986,
+      "lastMounted": 7995,
+      "date": "April 2021",
+      "horizontalOverflow": false,
+      "cardHeights": [312.5]
+    },
+    {
+      "stage": "largest-sort",
+      "mountedFiles": 20,
+      "mountedRows": 5,
+      "firstMounted": 0,
+      "lastMounted": 19,
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "folder-travel-journal",
+      "mountedFiles": 20,
+      "mountedRows": 5,
+      "firstMounted": 0,
+      "lastMounted": 19,
+      "date": "September 2026",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    },
+    {
+      "stage": "legacy-page-250",
+      "mountedFiles": 40,
+      "mountedRows": 10,
+      "firstMounted": 5960,
+      "lastMounted": 5999,
+      "date": "August 2022",
+      "horizontalOverflow": false,
+      "cardHeights": [294.5]
+    }
+  ],
+  "archiveSelections": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "selectedNames": [
+        "Alpine morning 00001.webp",
+        "Pacific coast 00002.webp"
+      ],
+      "submitted": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "selectedNames": [
+        "Alpine morning 00001.webp",
+        "Pacific coast 00002.webp"
+      ],
+      "submitted": false
+    }
+  ],
+  "deepJumpFileRequests": 2,
+  "nativeSeamPixelError": 0,
+  "reverseSeamPixelError": 0,
+  "accessibility": {
+    "desktop": [],
+    "mobile": []
+  }
+}

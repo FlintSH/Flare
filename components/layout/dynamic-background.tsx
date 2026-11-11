@@ -23,19 +23,19 @@ export function DynamicBackground() {
       <div className="absolute inset-0 bg-gradient-to-br from-background via-background to-background/95" />
 
       {}
-      <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-tr from-primary/[.08] via-transparent to-transparent" />
 
       {}
-      <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-transparent to-secondary/15" />
+      <div className="absolute inset-0 bg-gradient-to-bl from-transparent via-transparent to-secondary/[.06]" />
 
       {}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/10 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-accent/[.04] to-transparent" />
 
       {}
-      <div className="absolute inset-0 bg-radial-gradient from-primary/5 via-transparent to-background/50" />
+      <div className="absolute inset-0 bg-radial-gradient from-primary/[.025] via-transparent to-background/50" />
 
       {}
-      <div className="absolute inset-0 opacity-30">
+      <div className="absolute inset-0 opacity-15">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-gradient-radial from-primary/20 to-transparent rounded-full blur-3xl" />
         <div className="absolute bottom-1/3 right-1/4 w-80 h-80 bg-gradient-radial from-accent/15 to-transparent rounded-full blur-3xl" />
         <div className="absolute top-1/2 right-1/3 w-64 h-64 bg-gradient-radial from-secondary/20 to-transparent rounded-full blur-2xl" />
@@ -43,7 +43,7 @@ export function DynamicBackground() {
 
       {}
       <div
-        className="absolute inset-0 opacity-[0.02]"
+        className="absolute inset-0 opacity-[0.012]"
         style={{
           backgroundImage: `
             linear-gradient(hsl(var(--muted-foreground)) 1px, transparent 1px),

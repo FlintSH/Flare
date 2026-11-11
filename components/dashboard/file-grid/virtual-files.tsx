@@ -74,7 +74,7 @@ export function VirtualFiles({
   } | null>(null)
   const seekDestination = useRef<number | null>(null)
   const position = useRef(initialIndex)
-  const previousColumns = useRef(1)
+  const previousSize = useRef({ width: 0, columns: 1 })
   const observeOffset = useRef<
     ((offset: number, isScrolling: boolean) => void) | null
   >(null)
@@ -140,14 +140,15 @@ export function VirtualFiles({
         remembered.columns === dimensions.columns
           ? remembered.rows.get(index + windowStart)
           : undefined
-      // A card is as tall as it is wide plus 69px for its details and borders,
+      // A card has a 4:3 preview plus 69px for its details and borders,
       // and each row adds 16px of spacing, so this matches the measured row.
       return (
         knownSize ??
         (layout.row(index + windowStart).heading
           ? 44
-          : (dimensions.width - (dimensions.columns - 1) * 16) /
-              dimensions.columns +
+          : ((dimensions.width - (dimensions.columns - 1) * 16) /
+              dimensions.columns) *
+              0.75 +
             85)
       )
     },
@@ -277,13 +278,16 @@ export function VirtualFiles({
     if (!dimensions.width) return
     if (!initialized.current) {
       initialized.current = true
-      previousColumns.current = dimensions.columns
+      previousSize.current = dimensions
       if (restoreIndex.current > 0)
         seek(layout.rowAt(Math.min(timeline!.total - 1, restoreIndex.current)))
       else if (window.scrollY > dimensions.top)
         window.scrollTo({ top: 0, behavior: 'instant' })
-    } else if (previousColumns.current !== dimensions.columns) {
-      previousColumns.current = dimensions.columns
+    } else if (
+      previousSize.current.columns !== dimensions.columns ||
+      previousSize.current.width !== dimensions.width
+    ) {
+      previousSize.current = dimensions
       const target = layout.rowAt(
         Math.min(timeline!.total - 1, position.current)
       )

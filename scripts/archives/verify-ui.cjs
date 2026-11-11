@@ -450,14 +450,15 @@ async function browseAndExtract(browser, state, fixture) {
   assert.ok((await content.text()).includes('A small project handoff'))
   await page.getByRole('link', { name: 'Open folder', exact: true }).click()
   await page.waitForURL((url) => url.searchParams.get('folder') === root.id)
-  const subfolders = page.getByRole('region', {
-    name: 'Subfolders',
-    exact: true,
-  })
-  const guide = subfolders.getByRole('button', {
-    name: 'Open folder guide',
-    exact: true,
-  })
+  const subfolders = page
+    .getByRole('navigation', { name: 'File library', exact: true })
+    .getByRole('button', { name: /^Subfolders \d+$/ })
+  await expect(subfolders).toHaveAttribute('aria-expanded', 'false')
+  await subfolders.click()
+  await expect(subfolders).toHaveAttribute('aria-expanded', 'true')
+  const guide = page
+    .getByRole('region', { name: 'Subfolders', exact: true })
+    .getByRole('button', { name: 'Open folder guide', exact: true })
   await expect(guide).toBeVisible()
   await expect(
     subfolders.getByRole('button', { name: 'Open folder empty', exact: true })

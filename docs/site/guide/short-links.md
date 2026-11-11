@@ -44,9 +44,9 @@ The same rule holds for links of password-protected encrypted files (`#p.` and a
 
 ## Manage existing links
 
-The table shows each link's original destination, short link, clicks, creation date, and available actions. Newer links appear first. On phones, the destination takes the row's full width; the short link, clicks, and creation date sit under it, with the copy and delete actions beside them. On medium-width screens, only the creation date moves under the destination.
+Each row starts with the shareable `/u/…` path and its copy action. The original destination appears below it, so long addresses do not hide the link you want to share. Clicks and creation date have their own columns on wider screens and move below the destination on phones. The delete action stays separate at the row's right edge. Newer links appear first.
 
-Use the row's copy action to share an existing link, or open it to confirm where it leads. If clipboard access fails, select the link and copy it manually.
+Use the copy action beside the path to copy the complete short URL, including your instance's domain. Open the short path to check the redirect, or open the destination below it directly. If clipboard access fails, right-click or press and hold the short path and use your browser's link menu to copy its address.
 
 To stop a redirect, choose its delete action and confirm. The generated short URL then stops resolving through Flare. If deleting fails, **Could not delete link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link is still available and to try again, which earlier versions said for every failure. Deleting the short link does not remove the original webpage or prevent someone using its full address.
 

@@ -1,4 +1,5 @@
 import {
+  type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -51,6 +52,7 @@ import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
 import { requestFileEncryption } from '@/lib/files/existing-client'
+import { fileTypeLabel } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
 import { requestMaintenance } from '@/lib/library/browser-maintenance'
 import {
@@ -78,6 +80,7 @@ import { useFileFilters } from '@/hooks/use-file-filters'
 import { useFileLibraryPosition } from '@/hooks/use-file-library-position'
 import { useFolders } from '@/hooks/use-folders'
 import { useFreshFileSelection } from '@/hooks/use-fresh-file-selection'
+import { useHydrated } from '@/hooks/use-hydrated'
 import { useImageGallery } from '@/hooks/use-image-gallery'
 import { useEncryptedTypes, useLibrary } from '@/hooks/use-library'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -88,10 +91,31 @@ import {
 import { useTags } from '@/hooks/use-tags'
 import { toast } from '@/hooks/use-toast'
 
-// Summaries of the active filters, with the same hairline as badges so they
-// keep their shape on light panels.
-const filterChipClassName =
-  'rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs'
+/** Every constraint is removable on its own, without losing the current scope. */
+function FilterChip({
+  label,
+  onRemove,
+  children,
+}: {
+  label: string
+  onRemove: () => void
+  children?: ReactNode
+}) {
+  return (
+    <button
+      data-flare-control
+      type="button"
+      onClick={onRemove}
+      aria-label={`Remove ${label} filter`}
+      title={label}
+      className="inline-flex min-h-8 max-w-full items-center gap-1.5 rounded-lg border border-border/60 bg-muted px-2.5 py-1 text-xs transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+    >
+      {children}
+      <span className="truncate">{label}</span>
+      <X className="h-3 w-3 shrink-0" aria-hidden="true" />
+    </button>
+  )
+}
 
 function emptyFolderHint(user: PermissionSubject | null | undefined) {
   const upload = allows(user, ['uploadFiles', 'fileIntoFolder'])
@@ -127,6 +151,7 @@ function AccountFileGrid({ scope }: { scope: string }) {
 }
 
 function FileLibrary({ scope }: { scope: string }) {
+  const hydrated = useHydrated()
   const lifetime = useRequestLifetime()
   const client = useQueryClient()
   const { user } = usePermissions()
@@ -382,6 +407,7 @@ function FileLibrary({ scope }: { scope: string }) {
         <div className="flex flex-col gap-3 lg:flex-row">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
+            hasTagFilter={Boolean(filters.tag)}
             sortBy={filters.sortBy}
             onSortChange={setSortBy}
             selectedTypes={filters.types}
@@ -412,48 +438,63 @@ function FileLibrary({ scope }: { scope: string }) {
           filters.groupBy !== 'none') && (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {filters.tag && (
-              <button
-                type="button"
-                onClick={() => setTag(null)}
-                aria-label={`Remove ${activeTagName} filter`}
-                className="inline-flex max-w-full items-center gap-1.5 rounded-lg border border-primary/20 bg-primary/10 px-2.5 py-1 text-xs text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Tag className="h-3 w-3 shrink-0" />
-                <span className="truncate">{activeTagName}</span>
-                <X className="h-3 w-3 shrink-0" />
-              </button>
+              <FilterChip label={activeTagName} onRemove={() => setTag(null)}>
+                <Tag className="h-3 w-3 shrink-0" aria-hidden="true" />
+              </FilterChip>
             )}
             {filters.search && (
-              <span className={`max-w-full truncate ${filterChipClassName}`}>
-                Search: {filters.search}
-              </span>
+              <FilterChip
+                label={`Search: ${filters.search}`}
+                onRemove={() => setSearch('')}
+              />
             )}
-            {filters.types.length > 0 && (
-              <span className={filterChipClassName}>
-                {filters.types.length} file{' '}
-                {filters.types.length === 1 ? 'type' : 'types'}
-              </span>
-            )}
-            {filters.visibility.map((value) => (
-              <span key={value} className={filterChipClassName}>
-                {
-                  VISIBILITY_FILTERS.find((filter) => filter.value === value)
-                    ?.label
+            {filters.types.map((type) => (
+              <FilterChip
+                key={type}
+                label={fileTypeLabel(type)}
+                onRemove={() =>
+                  setTypes(filters.types.filter((entry) => entry !== type))
                 }
-              </span>
+              />
+            ))}
+            {filters.visibility.map((value) => (
+              <FilterChip
+                key={value}
+                label={
+                  VISIBILITY_FILTERS.find((filter) => filter.value === value)
+                    ?.label || value
+                }
+                onRemove={() =>
+                  setVisibility(
+                    filters.visibility.filter((entry) => entry !== value)
+                  )
+                }
+              />
             ))}
             {(filters.dateFrom || filters.dateTo) && (
-              <span className={filterChipClassName}>Upload date selected</span>
+              <FilterChip
+                label={
+                  hydrated
+                    ? filters.dateFrom && filters.dateTo
+                      ? `Uploaded ${format(new Date(filters.dateFrom), 'MMM d, yyyy')} – ${format(new Date(filters.dateTo), 'MMM d, yyyy')}`
+                      : filters.dateFrom
+                        ? `Uploaded from ${format(new Date(filters.dateFrom), 'MMM d, yyyy')}`
+                        : `Uploaded through ${format(new Date(filters.dateTo!), 'MMM d, yyyy')}`
+                    : 'Upload date'
+                }
+                onRemove={() => setDateRange(null, null)}
+              />
             )}
             {filters.groupBy !== 'none' && (
-              <span className={filterChipClassName}>
-                Grouped by {filters.groupBy}
-              </span>
+              <FilterChip
+                label={`Grouped by ${filters.groupBy}`}
+                onRemove={() => setGroupBy('none')}
+              />
             )}
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 rounded-lg text-xs"
+              className="h-8 rounded-lg text-xs"
               onClick={resetFilters}
             >
               <X className="mr-1 h-3 w-3" />
@@ -579,7 +620,7 @@ function FileLibrary({ scope }: { scope: string }) {
           ))}
         </div>
       ) : error && !gallery ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-card/80 p-6 text-center">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-border/60 bg-panel p-6 text-center">
           <div className="mb-4 rounded-xl bg-destructive/10 p-3 text-destructive">
             <AlertCircle className="h-7 w-7" />
           </div>
@@ -594,7 +635,7 @@ function FileLibrary({ scope }: { scope: string }) {
           </Button>
         </div>
       ) : timeline?.total === 0 ? (
-        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-card/80 p-6 text-center">
+        <div className="flex min-h-64 flex-col items-center justify-center rounded-xl border border-dashed border-border/60 bg-panel p-6 text-center">
           <div className="mb-4 rounded-xl bg-primary/10 p-3 text-primary">
             {hasActiveFilters ? (
               <SearchX className="h-7 w-7" />

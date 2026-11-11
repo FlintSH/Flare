@@ -62,6 +62,20 @@ const emptyFilters: Filters = {
   requestId: '',
 }
 
+/** UI shortcuts use the same exact filters as the audit form and API. */
+const INVESTIGATIONS = [
+  { label: 'All activity', category: '', action: '', outcome: '' },
+  { label: 'Failed activity', category: '', action: '', outcome: 'failure' },
+  {
+    label: 'Sign-ins',
+    category: 'authentication',
+    action: 'auth.login',
+    outcome: '',
+  },
+  { label: 'Account changes', category: 'accounts', action: '', outcome: '' },
+  { label: 'Requests', category: 'requests', action: '', outcome: '' },
+] as const
+
 const OUTCOME_LABELS: Record<AuditOutcome, string> = {
   success: 'Success',
   failure: 'Failure',
@@ -153,90 +167,142 @@ function EventRow({
       : event.outcome === 'failure'
         ? XCircle
         : CheckCircle2
+  const request = event.category === 'requests'
+  const actor =
+    event.actorName ?? (event.actorId ? 'Deleted account' : 'System')
+  const outcome = (
+    <div
+      className={cn(
+        'col-start-2 row-start-1 flex items-center justify-end gap-2',
+        request
+          ? 'lg:col-start-4'
+          : 'md:col-start-auto md:row-start-auto md:gap-3'
+      )}
+    >
+      {event.outcome === 'success' ? (
+        <span className="sr-only">{OUTCOME_LABELS.success}</span>
+      ) : (
+        <Badge variant={event.outcome === 'denied' ? 'warning' : 'danger'}>
+          {OUTCOME_LABELS[event.outcome]}
+        </Badge>
+      )}
+      <ChevronDown
+        className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 motion-reduce:transition-none"
+        aria-hidden="true"
+      />
+    </div>
+  )
   return (
     <details className="group border-b last:border-0">
-      {/* Phones show each event in four short lines: the action with its
-          outcome, then the time, the actor, and the target. The actor and
-          target lines run under the outcome too, so paths keep the full
-          width. */}
-      <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-6 py-3 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.2fr)_7rem] md:items-center md:gap-3 md:py-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className={cn(
-              'mt-0.5 rounded-full p-2',
-              // The outcome chip already marks success; only exceptions
-              // repeat it in colour.
-              event.outcome === 'success'
-                ? 'bg-muted text-muted-foreground'
-                : event.outcome === 'denied'
-                  ? 'bg-warning/10 text-warning'
-                  : 'bg-danger/10 text-danger'
-            )}
-          >
-            <Icon className="h-4 w-4" aria-hidden="true" />
-          </div>
-          <div className="min-w-0">
-            <p className="break-words text-sm font-medium">
-              {describeAction(event.action)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              <time dateTime={event.createdAt}>
+      <summary
+        data-flare-control
+        className={cn(
+          'grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 px-5 transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-6 md:items-center',
+          request
+            ? 'py-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(0,9rem)_minmax(0,11rem)_6rem] lg:gap-x-4'
+            : 'py-3 md:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)_minmax(0,1.2fr)_6rem] md:gap-3 md:py-4'
+        )}
+      >
+        {request ? (
+          <>
+            {/* HTTP polling is operational context: one compact desktop
+                line, with actor and time together on phones. Full request
+                context and exact IDs remain in the expandable details. */}
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="shrink-0 font-mono text-xs font-semibold text-muted-foreground">
+                {event.method ?? describeAction(event.action)}
+              </span>
+              <span
+                className="min-w-0 break-words font-mono text-xs [overflow-wrap:anywhere] lg:truncate"
+                title={event.route ?? event.targetName ?? undefined}
+              >
+                {wrapAfterSlashes(
+                  event.route ??
+                    event.targetName ??
+                    event.targetType ??
+                    'Instance activity'
+                )}
+              </span>
+            </div>
+            <div className="col-start-1 row-start-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground lg:contents">
+              <span
+                className="max-w-full truncate lg:col-start-2 lg:row-start-1"
+                title={actor}
+              >
+                {actor}
+              </span>
+              <time
+                className="whitespace-nowrap lg:col-start-3 lg:row-start-1"
+                dateTime={event.createdAt}
+              >
                 {new Date(event.createdAt).toLocaleString()}
               </time>
-            </p>
-          </div>
-        </div>
-        <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
-          <p className="break-words text-xs md:text-sm">
-            <span className="font-medium">
-              {event.actorName ??
-                (event.actorId ? 'Deleted account' : 'System')}
-            </span>
-            <span className="text-muted-foreground md:hidden"> · </span>
-            <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
-              {event.category}
-            </span>
-          </p>
-        </div>
-        <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
-          <p className="break-words text-xs md:text-sm">
-            {wrapAfterSlashes(
-              event.targetName ??
-                event.targetType ??
-                event.route ??
-                'Instance activity'
-            )}
-            {event.targetName && (
-              <>
+            </div>
+            {outcome}
+          </>
+        ) : (
+          <>
+            <div className="flex min-w-0 items-start gap-3">
+              <div
+                className={cn(
+                  'mt-0.5 rounded-full p-2',
+                  event.outcome === 'success'
+                    ? 'bg-muted text-muted-foreground'
+                    : event.outcome === 'denied'
+                      ? 'bg-warning/10 text-warning'
+                      : 'bg-danger/10 text-danger'
+                )}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="break-words text-sm font-medium">
+                  {describeAction(event.action)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <time dateTime={event.createdAt}>
+                    {new Date(event.createdAt).toLocaleString()}
+                  </time>
+                </p>
+              </div>
+            </div>
+            <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
+              <p className="break-words text-xs md:text-sm">
+                <span className="font-medium">{actor}</span>
                 <span className="text-muted-foreground md:hidden"> · </span>
                 <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
-                  {event.targetType}
+                  {event.category}
                 </span>
-              </>
-            )}
-          </p>
-        </div>
-        <div className="col-start-2 row-start-1 flex items-center gap-2 md:col-start-auto md:row-start-auto md:justify-between md:gap-3">
-          <Badge
-            className="capitalize"
-            variant={
-              event.outcome === 'success'
-                ? 'success'
-                : event.outcome === 'denied'
-                  ? 'warning'
-                  : 'danger'
-            }
-          >
-            {event.outcome}
-          </Badge>
-          <ChevronDown
-            className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-            aria-hidden="true"
-          />
-        </div>
+              </p>
+            </div>
+            <div className="col-span-2 col-start-1 min-w-0 pl-11 md:col-span-1 md:col-start-auto md:pl-0">
+              <p className="break-words text-xs md:text-sm">
+                {wrapAfterSlashes(
+                  event.targetName ??
+                    event.targetType ??
+                    event.route ??
+                    'Instance activity'
+                )}
+                {event.targetName && (
+                  <>
+                    <span className="text-muted-foreground md:hidden"> · </span>
+                    <span className="capitalize text-muted-foreground md:mt-1 md:block md:text-xs">
+                      {event.targetType}
+                    </span>
+                  </>
+                )}
+              </p>
+            </div>
+            {outcome}
+          </>
+        )}
       </summary>
       <div className="space-y-4 border-t bg-muted/20 px-6 py-5">
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <dt className="text-xs text-muted-foreground">Outcome</dt>
+            <dd className="mt-1 text-xs">{OUTCOME_LABELS[event.outcome]}</dd>
+          </div>
           <div>
             <dt className="text-xs text-muted-foreground">Event</dt>
             <dd className="mt-1 break-all font-mono text-xs">{event.action}</dd>
@@ -269,6 +335,8 @@ function EventRow({
                   <dt className="text-xs text-muted-foreground">{label}</dt>
                   <dd>
                     <button
+                      data-flare-control
+                      type="button"
                       className="mt-1 break-all text-left font-mono text-xs text-primary underline underline-offset-4"
                       onClick={() => apply(field, event[field]!)}
                       title={`Filter by ${label.toLowerCase()}`}
@@ -374,6 +442,31 @@ function AccountAuditLog() {
     setActive(next)
     setPage(1)
   }
+  const pendingFilters = JSON.stringify(draft) !== JSON.stringify(active)
+  const categories = [
+    ...new Set(
+      [...(result?.filters.categories ?? []), draft.category].filter(Boolean)
+    ),
+  ].sort()
+  const actions = [
+    ...new Set(
+      [...(result?.filters.actions ?? []), draft.action].filter(Boolean)
+    ),
+  ].sort()
+  const activeCriteria = [
+    active.q && `Search: ${active.q}`,
+    active.category && `Category: ${active.category}`,
+    active.action && `Action: ${describeAction(active.action)}`,
+    active.outcome &&
+      `Outcome: ${OUTCOME_LABELS[active.outcome as AuditOutcome]}`,
+    active.range === 'custom'
+      ? `Time: ${active.from.replace('T', ' ') || 'any start'} to ${active.to.replace('T', ' ') || 'any end'}`
+      : active.range !== 'all' &&
+        `Time: last ${active.range} ${active.range === '1' ? 'day' : 'days'}`,
+    active.actorId && `Actor ID: ${active.actorId}`,
+    active.targetId && `Target ID: ${active.targetId}`,
+    active.requestId && `Request ID: ${active.requestId}`,
+  ].filter(Boolean)
   const activeCount = Object.entries(active).filter(
     ([key, value]) =>
       value &&
@@ -430,6 +523,52 @@ function AccountAuditLog() {
             </span>
           )}
         </div>
+        <div className="space-y-2">
+          <div
+            role="group"
+            aria-label="Investigation presets"
+            className="flex flex-wrap gap-2"
+          >
+            {INVESTIGATIONS.map((preset) => (
+              <Button
+                key={preset.label}
+                type="button"
+                variant={
+                  active.category === preset.category &&
+                  active.action === preset.action &&
+                  active.outcome === preset.outcome
+                    ? 'secondary'
+                    : 'outline'
+                }
+                aria-pressed={
+                  active.category === preset.category &&
+                  active.action === preset.action &&
+                  active.outcome === preset.outcome
+                }
+                disabled={loading}
+                onClick={() => {
+                  const next = {
+                    ...draft,
+                    category: preset.category,
+                    action: preset.action,
+                    outcome: preset.outcome,
+                  }
+                  setDraft(next)
+                  setActive(next)
+                  setPage(1)
+                }}
+                className="rounded-lg"
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Presets apply immediately and keep your search, time range, and
+            exact IDs. Failed activity shows failures; choose Denied under
+            Outcome to investigate access refusals.
+          </p>
+        </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-2 sm:col-span-2">
             <Label htmlFor="audit-search">Search activity</Label>
@@ -454,7 +593,7 @@ function AccountAuditLog() {
             onChange={(value) => update('category', value)}
           >
             <option value="">All categories</option>
-            {result?.filters.categories.map((value) => (
+            {categories.map((value) => (
               <option key={value} value={value}>
                 {value}
               </option>
@@ -478,7 +617,7 @@ function AccountAuditLog() {
             onChange={(value) => update('action', value)}
           >
             <option value="">All actions</option>
-            {result?.filters.actions.map((value) => (
+            {actions.map((value) => (
               <option key={value} value={value}>
                 {describeAction(value)}
               </option>
@@ -516,7 +655,10 @@ function AccountAuditLog() {
             undefined
           }
         >
-          <summary className="w-fit cursor-pointer rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+          <summary
+            data-flare-control
+            className="w-fit cursor-pointer rounded-sm text-sm font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
             Filter by actor, target, or request ID
           </summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -540,6 +682,12 @@ function AccountAuditLog() {
             ))}
           </div>
         </details>
+        {pendingFilters && (
+          <p role="status" className="text-xs text-warning">
+            Filter edits are not applied yet. Choose Apply filters or an
+            investigation preset to update the activity below.
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={loading}>
             Apply filters
@@ -574,7 +722,7 @@ function AccountAuditLog() {
         </Alert>
       )}
       <section
-        className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-xl"
+        className="overflow-hidden rounded-2xl border border-border/60 bg-panel shadow-sm"
         aria-label="Audit events"
         aria-busy={loading}
       >
@@ -588,6 +736,21 @@ function AccountAuditLog() {
                 : `${(result?.total ?? 0).toLocaleString()} matching events · newest first`}
           </p>
         </div>
+        {activeCriteria.length > 0 && (
+          <ul
+            aria-label="Applied filters"
+            className="flex flex-wrap gap-2 border-b px-6 py-3 text-xs text-muted-foreground"
+          >
+            {activeCriteria.map((criterion) => (
+              <li
+                key={String(criterion)}
+                className="max-w-full break-words rounded-md bg-muted px-2 py-1 [overflow-wrap:anywhere]"
+              >
+                {criterion}
+              </li>
+            ))}
+          </ul>
+        )}
         {!error &&
           result?.events.map((event) => (
             <EventRow key={event.id} event={event} apply={apply} />

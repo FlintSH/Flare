@@ -688,6 +688,7 @@ async function uploadEncrypted(page, list, { visibility, password } = {}) {
     'encrypted'
   )
   await chooseFiles(page, list)
+  if (visibility || password) await shared.openCreationOptions(page)
   if (visibility) {
     await page.locator('#upload-visibility').click()
     await page
@@ -738,6 +739,7 @@ async function testUpload(alex) {
   // A weak password of an encrypted file stops the upload in the browser.
   await page.getByRole('radio', { name: /Encrypted/ }).check()
   await chooseFiles(page, [fixtures.text])
+  await shared.openCreationOptions(page)
   await page.locator('#upload-password').fill('sunshine2024')
   await expect(page.locator('#upload-password-hint')).toHaveAttribute(
     'data-strength-score',

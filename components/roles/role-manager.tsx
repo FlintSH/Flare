@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 
 import {
   AlertCircle,
+  ChevronDown,
   ChevronRight,
   Loader2,
   Lock,
@@ -38,6 +39,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -114,6 +120,7 @@ export function RoleManager() {
   const [draft, setDraft] = useState<Draft | null>(null)
   const [savedDraft, setSavedDraft] = useState('')
   const [query, setQuery] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<string[]>([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -158,6 +165,7 @@ export function RoleManager() {
     setSavedDraft(JSON.stringify(next))
     setError('')
     setQuery('')
+    setExpandedGroups([])
   }, [])
   const load = useCallback(async () => {
     const { roles } = await readRoles()
@@ -286,12 +294,18 @@ export function RoleManager() {
     }
   }
 
+  const search = query.trim().toLowerCase()
+  const administrator = draft?.permissions.includes('administrator') === true
   const groups = PERMISSION_GROUPS.map((group) => ({
     ...group,
+    total: group.permissions.length,
+    explicit: group.permissions.filter((permission) =>
+      draft?.permissions.includes(permission.key)
+    ).length,
     permissions: group.permissions.filter((permission) =>
       `${group.label} ${permission.label} ${permission.description}`
         .toLowerCase()
-        .includes(query.toLowerCase())
+        .includes(search)
     ),
   })).filter((group) => group.permissions.length)
 
@@ -532,7 +546,7 @@ export function RoleManager() {
                       <p className="mt-1 text-xs text-muted-foreground">
                         {draft.permissions.includes('administrator')
                           ? 'All permissions, including permissions added in the future.'
-                          : `${draft.permissions.length} enabled in this role`}
+                          : `${draft.permissions.length} explicitly granted in this role`}
                       </p>
                     </div>
                     <div className="relative w-full sm:w-64">
@@ -577,81 +591,117 @@ export function RoleManager() {
                       grantable.length > 0 &&
                       grantable.every((key) => draft.permissions.includes(key))
                     return (
-                      <section
+                      <Collapsible
                         key={group.id}
-                        className="overflow-hidden rounded-2xl border border-border/60 bg-card/80 shadow-sm backdrop-blur-xl"
+                        open={
+                          Boolean(search) || expandedGroups.includes(group.id)
+                        }
+                        onOpenChange={(open) => {
+                          if (search) return
+                          setExpandedGroups((previous) =>
+                            open
+                              ? [...previous, group.id]
+                              : previous.filter((id) => id !== group.id)
+                          )
+                        }}
+                        className="overflow-hidden rounded-2xl border border-border/60 bg-panel shadow-sm"
                       >
-                        <header className="flex items-center justify-between gap-3 border-b bg-muted/40 px-6 py-4">
-                          <div>
-                            <h3 className="text-base font-semibold">
-                              {group.label}
-                            </h3>
-                            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                              {group.description}
-                            </p>
-                          </div>
+                        <h3>
+                          <CollapsibleTrigger asChild>
+                            <button
+                              data-flare-control
+                              type="button"
+                              className="group flex w-full items-start justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-6"
+                            >
+                              <span className="min-w-0">
+                                <span className="block text-sm font-semibold">
+                                  {group.label}
+                                </span>
+                                <span className="mt-1 block text-xs font-normal leading-relaxed text-muted-foreground">
+                                  {group.description}
+                                </span>
+                                <span className="mt-2 block text-xs font-normal tabular-nums text-muted-foreground">
+                                  {administrator
+                                    ? `All ${group.total} via Administrator`
+                                    : `${group.explicit} / ${group.total} explicitly granted`}
+                                </span>
+                              </span>
+                              <ChevronDown
+                                aria-hidden="true"
+                                className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180 motion-reduce:transition-none"
+                              />
+                            </button>
+                          </CollapsibleTrigger>
+                        </h3>
+                        <CollapsibleContent>
                           {editable &&
                             grantable.length > 1 &&
                             !draft.permissions.includes('administrator') && (
-                              // Text ends on the switch column's edge.
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="ghost"
-                                className="-mr-3"
-                                disabled={busy}
-                                onClick={() => toggle(grantable, !allEnabled)}
-                              >
-                                {allEnabled ? 'Clear group' : 'Enable group'}
-                              </Button>
-                            )}
-                        </header>
-                        <div className="divide-y">
-                          {group.permissions.map((permission) => {
-                            const administratorOverride =
-                              draft.permissions.includes('administrator') &&
-                              permission.key !== 'administrator'
-                            const disabled =
-                              !editable ||
-                              busy ||
-                              administratorOverride ||
-                              !canToggle(permission.key)
-                            return (
-                              <div
-                                key={permission.key}
-                                className="flex items-center justify-between gap-5 px-6 py-4"
-                              >
-                                <div>
-                                  <Label
-                                    htmlFor={`permission-${permission.key}`}
-                                    className="text-sm"
-                                  >
-                                    {permission.label}
-                                  </Label>
-                                  <p
-                                    id={`description-${permission.key}`}
-                                    className="mt-1 text-xs leading-relaxed text-muted-foreground"
-                                  >
-                                    {permission.description}
-                                  </p>
-                                </div>
-                                <Switch
-                                  id={`permission-${permission.key}`}
-                                  aria-describedby={`description-${permission.key}`}
-                                  checked={
-                                    administratorOverride ||
-                                    draft.permissions.includes(permission.key)
-                                  }
-                                  disabled={disabled}
-                                  onCheckedChange={(enabled) =>
-                                    toggle([permission.key], enabled)
-                                  }
-                                />
+                              <div className="flex justify-end border-t px-3 py-1.5 sm:px-6">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={busy}
+                                  onClick={() => toggle(grantable, !allEnabled)}
+                                >
+                                  {search
+                                    ? allEnabled
+                                      ? 'Clear matches'
+                                      : 'Enable matches'
+                                    : allEnabled
+                                      ? 'Clear group'
+                                      : 'Enable group'}
+                                </Button>
                               </div>
-                            )
-                          })}
-                        </div>
-                      </section>
+                            )}
+                          <div className="divide-y border-t">
+                            {group.permissions.map((permission) => {
+                              const administratorOverride =
+                                draft.permissions.includes('administrator') &&
+                                permission.key !== 'administrator'
+                              const disabled =
+                                !editable ||
+                                busy ||
+                                administratorOverride ||
+                                !canToggle(permission.key)
+                              return (
+                                <div
+                                  key={permission.key}
+                                  className="flex items-center justify-between gap-5 px-6 py-4"
+                                >
+                                  <div>
+                                    <Label
+                                      htmlFor={`permission-${permission.key}`}
+                                      className="text-sm"
+                                    >
+                                      {permission.label}
+                                    </Label>
+                                    <p
+                                      id={`description-${permission.key}`}
+                                      className="mt-1 text-xs leading-relaxed text-muted-foreground"
+                                    >
+                                      {permission.description}
+                                    </p>
+                                  </div>
+                                  <Switch
+                                    id={`permission-${permission.key}`}
+                                    aria-describedby={`description-${permission.key}`}
+                                    checked={
+                                      administratorOverride ||
+                                      draft.permissions.includes(permission.key)
+                                    }
+                                    disabled={disabled}
+                                    onCheckedChange={(enabled) =>
+                                      toggle([permission.key], enabled)
+                                    }
+                                  />
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
                     )
                   })}
                 </section>

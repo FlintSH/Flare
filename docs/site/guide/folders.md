@@ -30,12 +30,16 @@ What this changes for you:
 
 ## Create and browse folders
 
-1. Open **Files** and choose **New folder**.
+1. Open **Files**. On a phone with existing folders, expand **Folders** (or **Subfolders**) first, then choose **New folder**. Otherwise choose **New folder** beside the scope controls.
 2. Give it a name and save.
-3. Open the folder to see its direct files and subfolders.
+3. Choose **Folders** and its count, then open the folder to see its direct files. Choose **Subfolders** to browse its children.
 4. Choose **New folder** inside it to create a subfolder, or **Upload here** to add files.
 
 Folder names can be up to 80 characters. Use a plain-text name without `/` or `\`; `.` and `..` are reserved. Flare trims the ends of a name and saves each run of spaces as one space; unlike a tag name, a folder name can't contain a tab or line break. Names must be distinct within the same parent, ignoring letter case, so `Photos` and `photos` can't share a parent. The same name can be useful in separate projects. Your browser checks these rules, because the server cannot compare sealed names. Two browsers that create the same name at the same moment can both succeed; rename one of the folders. Folders that [archive extraction](./archives#extract-into-your-library) creates follow the same rules.
+
+The folder directory starts collapsed so it does not push files down the page. **Folders** or **Subfolders** expands it; choose the same control again to close it. Your choice is remembered on this device for your account and each library scope. If browser storage is unavailable, the control still works for the current visit. A long directory scrolls inside a bounded area; at its edge, scrolling continues through the page.
+
+The current folder path, **All files**, **Unfiled**, and permitted sharing controls remain available with the directory closed. On phones with folders, the labeled **New folder** action lives inside the expanded directory. With no folders to browse, it stays beside the scope controls. Existing folders, share links, and saved folder bookmarks need no migration.
 
 **All files** includes files from every folder. **Unfiled** includes files that do not belong to a folder. Opening a specific folder shows its direct files; open a subfolder to see the files inside that subfolder.
 

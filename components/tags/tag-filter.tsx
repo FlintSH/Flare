@@ -49,12 +49,12 @@ export function TagFilter({
           variant="outline"
           aria-label="Filter by tag"
           className={cn(
-            'h-10 w-10 shrink-0 gap-2 rounded-lg bg-background/70 p-0 data-[state=open]:bg-accent sm:w-auto sm:px-3',
+            'h-10 min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:w-auto',
             value && 'border-primary bg-primary/10 [&_svg]:text-foreground'
           )}
         >
           <Tag className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="hidden max-w-28 truncate sm:inline">
+          <span className="max-w-28 truncate">
             {value === UNTAGGED ? 'Untagged' : selected?.name || 'Tags'}
           </span>
         </Button>
@@ -83,6 +83,7 @@ export function TagFilter({
             ),
           ].map((tag) => (
             <button
+              data-flare-control
               key={tag.id ?? 'all'}
               type="button"
               aria-pressed={value === tag.id}

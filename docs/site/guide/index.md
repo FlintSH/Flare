@@ -31,7 +31,7 @@ The name, colors, logo, and background can differ between instances. The tasks a
 
 1. Open **Upload** in the navigation.
 2. Drop a file into the selection area, or click it to browse your device.
-3. Choose **Public (anyone with the link)** to share it with another person. Choose **Private (only me)** to keep it in your account; accounts with `content.read` also retain access.
+3. Open **Upload options** to change visibility. Choose **Public (anyone with the link)** to share it with another person, or **Private (only me)** to keep it in your account; accounts with `content.read` also retain access. Roles without sharing permission upload privately and see **Expiration options** instead.
 4. Optionally add a password or expiration.
 5. Start the upload and wait for the completion result.
 6. Choose **Copy link**, then send that link to your recipient.
@@ -41,6 +41,8 @@ The copied link opens a Flare share page. A password or private setting still ap
 Continue with [uploading files](./uploading) and [sharing and privacy](./sharing).
 
 ## Find your way around
+
+Keyboard users can press **Tab** to reveal **Skip to content**, then **Enter** to move past the navigation to the page.
 
 The bar at the top of the dashboard holds your own places: **Files**, **Upload**, **Paste**, and **Links**. Select your avatar at the right of the bar for the account menu, which has **Profile** and **Sign out**. If your roles let you help run the instance, the bar ends with an **Admin** menu after a thin divider.
 
@@ -74,6 +76,10 @@ When the window is too narrow for the bar, choose the menu button next to your a
 </div>
 
 Earlier versions put every page in the bar, including **Profile**, **Users**, **Roles**, **Audit log**, and **Settings**, and showed the menu button to everyone below 1280 pixels. Page addresses haven't changed, so bookmarks such as `/dashboard/settings` and `/dashboard/profile` still work.
+
+On touch devices, shared buttons, inputs, selects, and menu rows have larger targets; switches and radio controls keep compact visuals with larger hit areas, and calendar days use a compact seven-column grid while the desktop keeps compact controls. Keyboard focus stays visible, and reduced-motion preferences suppress UI animation.
+
+If a dashboard page cannot load, **Try again** appears inside the workspace so navigation remains available.
 
 Profile and Settings remember the selected section in the page address, so browser Back and Forward work when moving between sections.
 

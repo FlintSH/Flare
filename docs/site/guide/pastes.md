@@ -9,18 +9,17 @@ Creating pastes requires both `pastes.create` and `files.upload`. Pastes remain 
 
 **Paste** saves text directly into Flare without first creating a file on your device. Use it for code snippets, configuration examples, logs, notes, and small text handoffs. A paste becomes a file in your library with the same access controls as other uploads.
 
-<Screenshot src="/screenshots/workspace/paste.png" alt="Paste form with an upload profile, text editor, filename, visibility, and password" caption="Paste your content, choose its sharing settings, and create a link." />
+<Screenshot src="/screenshots/workspace/paste.png" alt="Paste form starting with content and filename, followed by an upload profile and collapsed sharing options" caption="Paste your content, choose its sharing settings, and create a link." />
 
 ## Create a paste
 
 1. Open **Paste** in the navigation.
-2. Select an upload profile, or keep the current default.
-3. Enter your text or code in **Content**. The character count helps you see how much you have entered; it groups thousands with commas, such as `12,345`, in every browser language.
-4. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
-5. Keep visibility from the profile or explicitly choose **Public** or **Private**.
-6. Add a password if you want recipients of a public paste to unlock it.
-7. Keep **Encryption** on **Encrypted**, or choose **Plain** if the paste's link must show its text in previews on other sites.
-8. Choose **Create paste**.
+2. Enter your text or code in **Content**. The character count groups thousands with commas, such as `12,345`, in every browser language.
+3. Optionally enter a filename. If you leave it blank, Flare uses `paste.txt`.
+4. If your role has `uploadProfiles.manage`, review **Upload profile** or keep the current default. Its summary shows the effective visibility, password status, expiration action, and filename behavior. Without that permission, your saved upload defaults apply automatically and the profile picker is hidden.
+5. Keep **Encryption** on **Encrypted**, or choose **Plain** if the paste's link must show its text in previews on other sites.
+6. Open **Sharing options** to override visibility or add a password, if your role can share. Leave it closed to use the saved defaults.
+7. Choose **Create paste**.
 
 A paste is a file, so it is encrypted in your browser by default like any upload: the server stores neither its text nor its filename, and the share link carries the key after `#`. Your keys must be unlocked. See [Encrypted and plain files](./encryption). An encrypted paste is limited to 10 MB.
 
@@ -96,3 +95,7 @@ A private paste stays accessible only to its owner and accounts with `content.re
 The error stays beside the form and your text remains available to retry. Check your connection, sign-in state, storage quota, and any instance restrictions. Before leaving the page or reloading, copy content you need to keep: the form is not a persistent drafts system.
 
 If the request's outcome is unclear, check **Files** before submitting again. A request that reached the server but lost its response may already have created the paste.
+
+Closing **Sharing options** keeps overrides; **Customized** marks that choice and the effective summary stays visible. Review it before creating another paste.
+
+If a password is invalid, one explanation appears beside its field while **Sharing options** is open. Closing the options moves that explanation beside **Review password**. Choose **Review password** to reopen the options and focus the field. Correct or remove the password to enable creation.

@@ -889,6 +889,7 @@ async function uploadEncrypted(page, list, { password } = {}) {
   await chooseFiles(page, list)
   if (password) {
     passwords.add(password)
+    await shared.openCreationOptions(page)
     await page.locator('#upload-password').fill(password)
     await expect(page.locator('#upload-password-hint')).toHaveAttribute(
       'data-strength-score',

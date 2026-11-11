@@ -797,6 +797,7 @@ async function upload(
     .setInputFiles(
       list.map(({ name, mimeType, buffer }) => ({ name, mimeType, buffer }))
     )
+  if (visibility || password) await shared.openCreationOptions(page)
   if (visibility) {
     await page.locator('#upload-visibility').click()
     await page

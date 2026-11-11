@@ -48,6 +48,7 @@ body {
        dialog. A light theme dims toward the foreground so a white dialog
        separates from a white page. */
     --overlay: hsl(var(--popover));
+    --panel: hsl(var(--card));
     --scrim: hsl(var(--foreground) / 0.32);
     --scrim-solid: color-mix(
       in srgb,
@@ -62,6 +63,12 @@ body {
   }
 
   .dark {
+    /* Lift panels within the configured card hue; preserve custom palettes. */
+    --panel: color-mix(
+      in oklab,
+      hsl(var(--card)) 96%,
+      hsl(var(--card-foreground))
+    );
     --destructive-text: hsl(var(--destructive));
     --destructive-fill: hsl(var(--destructive));
     --scrim: hsl(var(--background) / 0.7);
@@ -386,5 +393,38 @@ body {
   .checker-dark {
     --checker-a: #1e293b;
     --checker-b: #334155;
+  }
+}
+
+/* Coarse pointers get comfortable targets without changing desktop density.
+   Restrict this to controls, not every button-shaped decorative element. */
+@media (pointer: coarse) {
+  [data-flare-control] {
+    min-height: 2.75rem;
+  }
+  [data-flare-control]:is(button, a),
+  [role='tab'][data-flare-control] {
+    min-width: 2.75rem;
+  }
+  [role='menuitem'],
+  [role='menuitemcheckbox'],
+  [role='menuitemradio'],
+  [role='option'] {
+    min-height: 2.75rem;
+  }
+  input[data-flare-control],
+  textarea[data-flare-control] {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
   }
 }

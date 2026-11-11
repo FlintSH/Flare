@@ -9,7 +9,11 @@ Your [roles](/admin/roles) determine which profile actions are available. Editin
 
 Select your avatar at the right of the dashboard bar and choose **Profile** to manage settings that belong to you. **Settings**, in the **Admin** menu, is the administrators' separate area for instance-wide behavior.
 
-<Screenshot src="/screenshots/roles/profile-roles.webp" alt="Profile Account section showing the demonstration account’s Moderator, Creator, and Everyone roles above its identity fields" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
+On a phone or narrow window, open the **Section** selector to see all your available Profile sections. On a wider screen, use the section list at the left; it stays within reach while you scroll. **Account** starts with shortcuts to **Identity**, **Sign-in security**, **Active sessions**, **Login history**, **Password**, and **Appearance**, where your permissions allow them. Choose a shortcut to move directly to that card. The section and card address can be bookmarked, and browser Back and Forward return to earlier choices.
+
+Switching sections keeps unfinished edits available in the same page, but does not save them. Use each card's save action before leaving or reloading Profile.
+
+<Screenshot src="/screenshots/preferences-grouping/profile-account-desktop.png" alt="Profile Account section showing the demonstration account's Admin and Everyone roles above its identity fields, security, and personal preferences" caption="Your roles shows the account’s current grants alongside identity and personal preferences." />
 
 Verification, recovery-address enrollment, passphrase recovery, and confirmed email-change flows remain available under their own identity and email-policy checks, even without `profile.update`. Role restrictions on application preferences do not remove those account-security paths.
 
@@ -21,7 +25,7 @@ Verification, recovery-address enrollment, passphrase recovery, and confirmed em
 
 ## Login history and active sessions
 
-Open **Profile → Account** and scroll to **Active sessions** and **Login history**. These account-security controls are available independently of `profile.update`; you do not need permission to manage other users. A session belongs to one completed browser sign-in, so several tabs in the same browser can share a session while another browser or private window has its own.
+Open **Profile → Account** and choose the **Active sessions** or **Login history** shortcut. These account-security controls are available independently of `profile.update`; you do not need permission to manage other users. A session belongs to one completed browser sign-in, so several tabs in the same browser can share a session while another browser or private window has its own.
 
 <Screenshot src="/screenshots/audit/sessions-desktop.webp" alt="Profile Account section showing active browser sessions, a This browser marker, individual Revoke session actions, and Revoke all sessions" caption="Review the sign-in time, last activity, method, and recorded client details before revoking a session." />
 
@@ -70,7 +74,7 @@ If you see an unfamiliar successful sign-in, revoke it or all sessions, change t
 
 ## Update your name and avatar
 
-Under **Profile → Account**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
+Under **Profile → Account**, choose **Identity**, update **Username** and choose **Save changes**, which becomes available once you edit a field. A username needs at least one character, the same rule as registration, setup, and **Users**. Earlier versions asked for two characters here, so a one-character name given during setup couldn't be saved again. The name can appear as uploader attribution on share pages when the administrator enables it.
 
 Choose **Change avatar** and select a PNG, JPEG, GIF, or WebP image of at most 2 MB to update your photo. A larger file shows **File too large** and another format, such as SVG, HEIC, or AVIF, shows **Invalid file type**; nothing is uploaded, so resize or convert the image and try again. The server checks the same rules again and also checks that the content really is a PNG, JPEG, GIF, or WebP image, though not necessarily the one its name says: a JPEG saved as `photo.png` works. Earlier versions accepted an image of any type and size, but refused one whose content was another format than its name said. When your instance enforces [storage quotas](#check-storage-and-usage), the image must fit in your remaining space, although it isn't added to your used space. An avatar may appear wherever the instance presents your identity, so use an image you are comfortable associating with your account.
 
@@ -82,7 +86,7 @@ Changing your username does not automatically change file URL paths. For a memor
 
 ## Change your passphrase
 
-An account signs in with a **passphrase** that never leaves your browser, and has a 24-word **recovery phrase**. Both belong to the encryption keys of your account. [Passphrase and recovery phrase](./passphrase) explains them in full; this section is the short version for **Profile → Account → Passphrase and recovery**.
+An account signs in with a **passphrase** that never leaves your browser, and has a 24-word **recovery phrase**. Both belong to the encryption keys of your account. [Passphrase and recovery phrase](./passphrase) explains them in full; this section is the short version for **Profile → Account**, where the **Passphrase** shortcut jumps to **Passphrase and recovery**.
 
 - **Show recovery phrase** asks for your passphrase and shows the 24 words again.
 - **Change passphrase** makes new keys for your account. It ends every session, including the one you are using, deletes every API token, revokes the upload token from before encryption if you still had one, and gives you a new recovery phrase. The dialog lists this before it asks for anything. [Read the steps and the consequences](./passphrase#change-your-passphrase) first; screenshot tools need their configuration installed again afterwards.

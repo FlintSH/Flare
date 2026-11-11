@@ -22,6 +22,10 @@ import {
   type UploadProfileOptions,
   type UploadProfileView,
 } from '@/lib/uploads/schema'
+import {
+  type UploadSummaryOverrides,
+  uploadSettingsSummary,
+} from '@/lib/uploads/summary'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -41,14 +45,16 @@ export const UPLOAD_PROFILES = 'upload-profiles'
 
 /** The upload profiles; a new `refreshKey` reads them again from scratch. */
 export function useUploadProfiles(refreshKey = 0) {
+  const { can } = usePermissions()
+  const enabled = can('uploadProfiles.manage')
   const profiles = useAccountQuery<ProfilesData>(
     UPLOAD_PROFILES,
     '/api/upload-profiles',
-    { key: [refreshKey], retry: false }
+    { key: [refreshKey], retry: false, enabled }
   )
-  const failure = profiles.error
+  const failure = enabled ? profiles.error : null
   return {
-    data: profiles.data ?? null,
+    data: enabled ? (profiles.data ?? null) : null,
     error: !failure
       ? ''
       : failure instanceof RefusedRequest
@@ -65,12 +71,14 @@ export function ProfilePicker({
   refreshKey = 0,
   onSnapshotChange,
   onEncryptionChange,
+  overrides,
 }: {
   value?: string | null
   onChange: (value: string | null | undefined) => void
   disabled?: boolean
   mode?: 'upload' | 'archive'
   refreshKey?: number
+  overrides?: UploadSummaryOverrides
   onSnapshotChange?: (
     snapshot: {
       id: string
@@ -85,9 +93,14 @@ export function ProfilePicker({
    */
   onEncryptionChange?: (encryption: UploadEncryption) => void
 }) {
-  const { user } = usePermissions()
+  const { user, can } = usePermissions()
+  const canManageProfiles = can('uploadProfiles.manage')
   const { data, error } = useUploadProfiles(refreshKey)
   const archiveMode = mode === 'archive'
+  useEffect(() => {
+    const fallback = archiveMode ? null : undefined
+    if (user && !canManageProfiles && value !== fallback) onChange(fallback)
+  }, [user, canManageProfiles, value, onChange, archiveMode])
   // Archive summaries and their revision must use the same authority snapshot.
   const canShare = archiveMode
     ? data?.canShare === true
@@ -129,6 +142,24 @@ export function ProfilePicker({
     effective?.expiration === 'DISABLED'
       ? expiry
       : `${expiry}, then ${effective?.expiryAction === 'SET_PRIVATE' ? 'private' : 'deleted'}`
+  if (!canManageProfiles)
+    return (
+      <div className="space-y-2">
+        {!archiveMode && !canShare && (
+          <p className="text-xs text-muted-foreground">
+            Your uploads are private because your roles do not allow sharing.
+          </p>
+        )}
+        <p
+          aria-live="polite"
+          className="text-pretty text-xs leading-relaxed text-muted-foreground"
+        >
+          {archiveMode
+            ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
+            : 'Your saved upload defaults apply automatically.'}
+        </p>
+      </div>
+    )
   return (
     <div className="space-y-2">
       {/* One height with or without the link, so a field beside the picker
@@ -192,7 +223,10 @@ export function ProfilePicker({
           Your uploads are private because your roles do not allow sharing.
         </p>
       )}
-      <p className="text-pretty text-xs text-muted-foreground">
+      <p
+        aria-live="polite"
+        className="text-pretty text-xs leading-relaxed text-muted-foreground"
+      >
         {archiveMode && !selectedId
           ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
           : archiveMode && selectedId && !profile
@@ -202,7 +236,9 @@ export function ProfilePicker({
                 : 'Loading the selected upload profile…')
             : error ||
               (effective
-                ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveMode ? archiveExpiry : expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}.${archiveMode ? ` ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.` : ' Options below override this upload only.'}`
+                ? archiveMode
+                  ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveExpiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.`
+                  : uploadSettingsSummary(effective, canShare, overrides)
                 : 'Your saved default is applied by the server.')}
       </p>
       {archiveMode &&

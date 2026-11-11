@@ -5,7 +5,7 @@ description: Protect passphrase sign-in with an authenticator app, save recovery
 
 # Two-factor authentication and passkeys
 
-Open **Profile → Account → Sign-in security** to manage your account's sign-in methods. Two-factor authentication (2FA) adds an authenticator code after your passphrase. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that passphrase.
+Open **Profile → Account** and choose the **Sign-in security** shortcut to manage your account's sign-in methods. On a phone, choose **Account** from the **Section** selector first. Two-factor authentication (2FA) adds an authenticator code after your passphrase. A passkey lets you sign in using your device's screen lock, biometric check, or security key instead of typing that passphrase.
 
 A second factor and a passkey decide who may sign in. Your [passphrase](./passphrase) is what opens your encryption keys, and neither of them replaces it: after a passkey sign-in Flare asks for the passphrase to unlock the keys, and a second factor gives no protection against someone who holds a copy of the server's database. [What the design does not protect](./passphrase#what-the-design-does-not-protect) lists these limits.
 
@@ -31,7 +31,7 @@ For example, if recent recovery proof expires while **Add a passkey** is open, i
 
 ## Check where your account is signed in
 
-Use **Profile → Account → Active sessions** to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
+Choose **Active sessions** in the **Profile → Account** shortcuts to revoke an unfamiliar browser or all browser sessions, including your own. **Login history** helps distinguish a completed sign-in from a failed attempt. [Review the controls and their limits](./account#login-history-and-active-sessions). Session revocation does not disable your passkeys, remove an authenticator, or revoke API credentials; review each compromised credential separately.
 
 ## Choose your sign-in method
 

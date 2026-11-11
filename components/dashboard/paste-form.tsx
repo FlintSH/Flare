@@ -19,6 +19,7 @@ import {
   FilePasswordHint,
   filePasswordFieldProps,
 } from '@/components/file/file-password-hint'
+import { CreationOptions } from '@/components/shared/creation-options'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -215,14 +216,6 @@ export function PasteForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      <ProfilePicker
-        value={profileId}
-        onChange={setProfileId}
-        disabled={isSubmitting}
-        onEncryptionChange={(mode) =>
-          changeChoice({ by: 'profile', mode, profileId })
-        }
-      />
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Label htmlFor="content">Content</Label>
@@ -243,7 +236,7 @@ export function PasteForm({
           aria-describedby={error ? 'paste-error' : undefined}
         />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label htmlFor="filename">
             Filename{' '}
@@ -266,66 +259,23 @@ export function PasteForm({
             Add an extension such as .js, .py, or .md for syntax highlighting.
           </p>
         </div>
-        {canShare && (
-          <div className="space-y-2">
-            <Label htmlFor="paste-visibility">Visibility</Label>
-            <Select
-              value={visibility}
-              onValueChange={setVisibility}
-              disabled={isSubmitting}
-            >
-              <SelectTrigger id="paste-visibility">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="inherit">From upload profile</SelectItem>
-                <SelectItem value="PUBLIC">
-                  Public (anyone with the link)
-                </SelectItem>
-                <SelectItem value="PRIVATE">Private (only me)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
       </div>
-      {canShare && (
-        <div className="space-y-2">
-          <Label htmlFor="paste-password">
-            Password protection{' '}
-            <span className="font-normal text-muted-foreground">
-              (optional)
-            </span>
-          </Label>
-          <Input
-            id="paste-password"
-            type="password"
-            autoComplete="new-password"
-            placeholder="Leave empty for no password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            disabled={isSubmitting}
-            {...(encrypted
-              ? {
-                  'aria-invalid': Boolean(
-                    password && passwordStrength.strength?.acceptable === false
-                  ),
-                  'aria-describedby': 'paste-password-hint',
-                }
-              : filePasswordFieldProps('paste-password-hint', password))}
-          />
-          {encrypted ? (
-            <FilePasswordStrength
-              id="paste-password-hint"
-              password={password}
-              strength={passwordStrength.strength}
-              failed={passwordStrength.failed}
-              empty="With a password, the link alone does not open the paste. Flare never receives the password."
-            />
-          ) : (
-            <FilePasswordHint id="paste-password-hint" password={password} />
-          )}
-        </div>
-      )}
+      <ProfilePicker
+        value={profileId}
+        onChange={setProfileId}
+        disabled={isSubmitting}
+        overrides={{
+          visibility:
+            visibility === 'inherit'
+              ? undefined
+              : (visibility as 'PUBLIC' | 'PRIVATE'),
+          password: Boolean(password),
+          passwordInvalid: Boolean(passwordProblem),
+        }}
+        onEncryptionChange={(mode) =>
+          changeChoice({ by: 'profile', mode, profileId })
+        }
+      />
       <EncryptionChoice
         value={encryption}
         onChange={(mode: EncryptionMode) =>
@@ -336,6 +286,80 @@ export function PasteForm({
         plainForbidden={plainUploadsForbidden}
         noun="paste"
       />
+      {canShare && (
+        <CreationOptions
+          error={passwordProblem}
+          passwordField="paste-password"
+          customized={Boolean(visibility !== 'inherit' || password)}
+        >
+          {canShare && (
+            <div className="space-y-2">
+              <Label htmlFor="paste-visibility">Visibility</Label>
+              <Select
+                value={visibility}
+                onValueChange={setVisibility}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger id="paste-visibility">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="inherit">From upload profile</SelectItem>
+                  <SelectItem value="PUBLIC">
+                    Public (anyone with the link)
+                  </SelectItem>
+                  <SelectItem value="PRIVATE">Private (only me)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {canShare && (
+            <div className="space-y-2">
+              <Label htmlFor="paste-password">
+                Password protection{' '}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <Input
+                id="paste-password"
+                type="password"
+                autoComplete="new-password"
+                placeholder="Leave empty for no password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={isSubmitting}
+                {...(encrypted
+                  ? {
+                      'aria-invalid': Boolean(
+                        password &&
+                        passwordStrength.strength?.acceptable === false
+                      ),
+                      'aria-describedby': 'paste-password-hint',
+                    }
+                  : filePasswordFieldProps('paste-password-hint', password))}
+              />
+              {/* The browser checks the password of an encrypted paste, and
+                  the server never receives it (section 8.2). The server
+                  checks the password of a plain one by its own rule. */}
+              {encrypted ? (
+                <FilePasswordStrength
+                  id="paste-password-hint"
+                  password={password}
+                  strength={passwordStrength.strength}
+                  failed={passwordStrength.failed}
+                  empty="With a password, the link alone does not open the paste. Flare never receives the password."
+                />
+              ) : (
+                <FilePasswordHint
+                  id="paste-password-hint"
+                  password={password}
+                />
+              )}
+            </div>
+          )}
+        </CreationOptions>
+      )}
       {error && (
         <Alert id="paste-error" variant="destructive">
           <AlertCircle aria-hidden="true" />

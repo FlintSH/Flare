@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback } from 'react'
+import { type MouseEvent, useCallback } from 'react'
 
 import { useRouter } from 'next/navigation'
 
@@ -106,6 +106,44 @@ export function ProfileClient({
     PROFILE_SECTION_ALIASES
   )
   const handleRefresh = useCallback(() => router.refresh(), [router])
+  const accountShortcuts = [
+    ...(can('profile.update')
+      ? [{ title: 'Identity', anchor: 'profile-identity' }]
+      : []),
+    { title: 'Sign-in security', anchor: 'sign-in-security' },
+    { title: 'Active sessions', anchor: 'active-sessions' },
+    { title: 'Login history', anchor: 'login-history' },
+    ...(can('profile.update')
+      ? [
+          {
+            // The card below has this name for an account with keys.
+            title: security?.hasPassphrase ? 'Passphrase' : 'Password',
+            anchor: 'password',
+          },
+        ]
+      : []),
+    ...(can('appearance.personal')
+      ? [{ title: 'Appearance', anchor: 'workspace-appearance' }]
+      : []),
+  ]
+
+  const focusAccountAnchor = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    )
+      return
+    // Native fragments keep bookmarkable URLs and Back/Forward behavior.
+    // A target card also receives keyboard focus, rather than leaving focus
+    // on a shortcut now several screens above the selected setting.
+    const target = document.getElementById(event.currentTarget.hash.slice(1))
+    if (!target) return
+    target.tabIndex = -1
+    target.focus({ preventScroll: true })
+  }
 
   const visibleSections = sections.filter((section) =>
     section.id === 'uploads'
@@ -134,6 +172,18 @@ export function ProfileClient({
       asideNote="These settings belong to your account. Your preferences travel with you."
     >
       <PreferencesPanel active={displayedSection === 'account'}>
+        <nav aria-label="Account shortcuts" className="flex flex-wrap gap-2">
+          {accountShortcuts.map((shortcut) => (
+            <a
+              key={shortcut.anchor}
+              href={`#${shortcut.anchor}`}
+              onClick={focusAccountAnchor}
+              className="inline-flex min-h-11 items-center rounded-lg border border-border/70 px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:min-h-9"
+            >
+              {shortcut.title}
+            </a>
+          ))}
+        </nav>
         <Card>
           <CardHeader>
             <CardTitle>Your roles</CardTitle>
@@ -147,7 +197,11 @@ export function ProfileClient({
           </CardContent>
         </Card>
         <PermissionGate permission="profile.update">
-          <Card>
+          <Card
+            id="profile-identity"
+            tabIndex={-1}
+            className="scroll-mt-28 outline-none"
+          >
             <CardHeader>
               <CardTitle>A little about you</CardTitle>
               <CardDescription>
@@ -162,7 +216,11 @@ export function ProfileClient({
         <SignInSecurity />
         <ProfileSessions />
         <PermissionGate permission="profile.update">
-          <Card id="password" className="scroll-mt-28">
+          <Card
+            id="password"
+            tabIndex={-1}
+            className="scroll-mt-28 outline-none"
+          >
             <CardHeader>
               <CardTitle>
                 {security?.hasPassphrase
@@ -181,7 +239,11 @@ export function ProfileClient({
           </Card>
         </PermissionGate>
         <PermissionGate permission="appearance.personal">
-          <div id="workspace-appearance" className="scroll-mt-28">
+          <div
+            id="workspace-appearance"
+            tabIndex={-1}
+            className="scroll-mt-28 outline-none"
+          >
             <PersonalAppearanceSettings initialPreference={initialPreference} />
           </div>
         </PermissionGate>

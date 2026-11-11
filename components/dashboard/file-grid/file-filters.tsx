@@ -1,13 +1,15 @@
-import { Fragment, type ReactNode, memo } from 'react'
+import { Fragment, type ReactNode, memo, useId, useState } from 'react'
 
 import { format } from 'date-fns'
 import {
   Calendar as CalendarIcon,
+  ChevronDown,
   Eye,
   Filter,
   Globe,
   KeyRound,
   Lock,
+  SlidersHorizontal,
 } from 'lucide-react'
 import { DateRange } from 'react-day-picker'
 
@@ -50,6 +52,7 @@ import { useHydrated } from '@/hooks/use-hydrated'
 
 interface FileFiltersProps {
   tagFilter?: ReactNode
+  hasTagFilter?: boolean
   sortBy: SortOption
   onSortChange: (value: SortOption) => void
   selectedTypes: string[]
@@ -77,6 +80,7 @@ const visibilityIcons = {
 
 export const FileFilters = memo(function FileFilters({
   tagFilter,
+  hasTagFilter = false,
   sortBy,
   onSortChange,
   selectedTypes,
@@ -91,6 +95,14 @@ export const FileFilters = memo(function FileFilters({
 }: FileFiltersProps) {
   // The chosen days are named in the reader's time zone, which the server lacks.
   const hydrated = useHydrated()
+  const [expanded, setExpanded] = useState(false)
+  const controlsId = useId()
+  const activeCount =
+    Number(hasTagFilter) +
+    selectedTypes.length +
+    visibility.length +
+    Number(Boolean(date?.from || date?.to)) +
+    Number(groupBy !== 'none')
   const fileTypesByCategory = [...new Set([...fileTypes, ...selectedTypes])]
     .sort()
     .reduce(
@@ -102,13 +114,10 @@ export const FileFilters = memo(function FileFilters({
     )
   // Every trigger shows the same fill while its menu is open.
   const filterClass =
-    'relative h-10 w-10 shrink-0 justify-center rounded-lg bg-background/70 p-0 data-[state=open]:bg-accent sm:w-auto sm:justify-between sm:gap-2 sm:px-3'
+    'relative h-10 min-w-0 justify-start gap-2 rounded-lg bg-background/70 px-3 data-[state=open]:bg-accent sm:w-auto sm:justify-between'
 
   return (
-    // A slightly tighter gap on phones leaves the sort label room to show
-    // "Newest first" in full at 390px.
-    <div className="flex flex-wrap gap-1.5 sm:gap-2">
-      {tagFilter}
+    <div className="flex flex-wrap gap-2">
       <Select value={sortBy} onValueChange={onSortChange}>
         {/* On narrow phones a long choice ends in an ellipsis instead of
             being cut off mid-letter. */}
@@ -130,182 +139,216 @@ export const FileFilters = memo(function FileFilters({
           ))}
         </SelectContent>
       </Select>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            aria-label="Visibility"
-            className={cn(
-              filterClass,
-              visibility.length > 0 &&
-                'border-primary bg-primary/10 [&_svg]:text-foreground'
-            )}
-          >
-            <Eye className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden sm:inline">Visibility</span>
-            {visibility.length > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums leading-none text-primary-foreground sm:static sm:h-5 sm:min-w-5 sm:text-[11px]">
-                {visibility.length}
-              </span>
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>Who can access</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {VISIBILITY_FILTERS.map(({ value, label }) => {
-            const Icon = visibilityIcons[value]
-            return (
-              <DropdownMenuCheckboxItem
-                key={value}
-                checked={visibility.includes(value)}
-                onSelect={(event) => event.preventDefault()}
-                onCheckedChange={(checked) =>
-                  onVisibilityChange(
-                    checked
-                      ? [...visibility, value]
-                      : visibility.filter((item) => item !== value)
-                  )
-                }
-              >
-                <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
-                {label}
-              </DropdownMenuCheckboxItem>
-            )
-          })}
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="outline"
-            aria-label="File type"
-            className={cn(
-              filterClass,
-              selectedTypes.length > 0 &&
-                'border-primary bg-primary/10 [&_svg]:text-foreground'
-            )}
-          >
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden sm:inline">File type</span>
-            {selectedTypes.length > 0 && (
-              <span className="absolute -right-1.5 -top-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold tabular-nums leading-none text-primary-foreground sm:static sm:h-5 sm:min-w-5 sm:text-[11px]">
-                {selectedTypes.length}
-              </span>
-            )}
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64">
-          <DropdownMenuLabel>Filter by file type</DropdownMenuLabel>
-          {/* Only the list scrolls, so its fade never reaches the menu's
+      <Button
+        variant="outline"
+        aria-expanded={expanded}
+        aria-controls={controlsId}
+        onClick={() => setExpanded((value) => !value)}
+        className="h-10 gap-2 rounded-lg bg-background/70 px-3 sm:hidden"
+      >
+        <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
+        Filters
+        {activeCount > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs tabular-nums text-primary-foreground">
+            {activeCount}
+          </span>
+        )}
+        <ChevronDown
+          className={cn(
+            'h-3.5 w-3.5 transition-transform motion-reduce:transition-none',
+            expanded && 'rotate-180'
+          )}
+        />
+      </Button>
+      <div
+        id={controlsId}
+        className={cn(
+          'w-full grid-cols-2 gap-2 sm:contents',
+          expanded ? 'grid' : 'hidden'
+        )}
+      >
+        {tagFilter}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              aria-label="Visibility"
+              className={cn(
+                filterClass,
+                visibility.length > 0 &&
+                  'border-primary bg-primary/10 [&_svg]:text-foreground'
+              )}
+            >
+              <Eye className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">Visibility</span>
+              {visibility.length > 0 && (
+                <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums leading-none text-primary-foreground">
+                  {visibility.length}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel>Who can access</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {VISIBILITY_FILTERS.map(({ value, label }) => {
+              const Icon = visibilityIcons[value]
+              return (
+                <DropdownMenuCheckboxItem
+                  key={value}
+                  checked={visibility.includes(value)}
+                  onSelect={(event) => event.preventDefault()}
+                  onCheckedChange={(checked) =>
+                    onVisibilityChange(
+                      checked
+                        ? [...visibility, value]
+                        : visibility.filter((item) => item !== value)
+                    )
+                  }
+                >
+                  <Icon className="mr-2 h-4 w-4 text-muted-foreground" />
+                  {label}
+                </DropdownMenuCheckboxItem>
+              )
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              aria-label="File type"
+              className={cn(
+                filterClass,
+                selectedTypes.length > 0 &&
+                  'border-primary bg-primary/10 [&_svg]:text-foreground'
+              )}
+            >
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">File type</span>
+              {selectedTypes.length > 0 && (
+                <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold tabular-nums leading-none text-primary-foreground">
+                  {selectedTypes.length}
+                </span>
+              )}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>Filter by file type</DropdownMenuLabel>
+            {/* Only the list scrolls, so its fade never reaches the menu's
               border and the heading stays in view. */}
-          {/* Not a tab stop of its own: the menu's arrow keys move through
+            {/* Not a tab stop of its own: the menu's arrow keys move through
               the items, and the fade mask would hide its focus ring. A click
               on a heading focuses the list itself, where those keys don't
               work, so focus goes back to the menu. */}
-          <div
-            ref={scrollFadeRef}
-            tabIndex={-1}
-            onFocus={(event) => {
-              if (event.target === event.currentTarget)
-                event.currentTarget
-                  .closest<HTMLElement>('[role="menu"]')
-                  ?.focus()
-            }}
-            className="scroll-fade max-h-72 overflow-y-auto overscroll-contain outline-none"
-          >
-            {Object.entries(fileTypesByCategory).map(([category, types]) => (
-              <Fragment key={category}>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
-                  {category}
-                </DropdownMenuLabel>
-                {types.map((type) => (
-                  <DropdownMenuCheckboxItem
-                    key={type}
-                    title={type}
-                    checked={selectedTypes.includes(type)}
-                    onSelect={(event) => event.preventDefault()}
-                    onCheckedChange={(checked) =>
-                      onTypesChange(
-                        checked
-                          ? [...selectedTypes, type]
-                          : selectedTypes.filter((item) => item !== type)
-                      )
-                    }
-                  >
-                    <span className="truncate">{fileTypeLabel(type)}</span>
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </Fragment>
-            ))}
-            {Object.keys(fileTypesByCategory).length === 0 && (
-              <p className="px-2 py-3 text-sm text-muted-foreground">
-                File types appear after your first upload.
-              </p>
-            )}
-          </div>
-        </DropdownMenuContent>
-      </DropdownMenu>
-      <Popover>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            aria-label="Upload date"
-            className={cn(
-              filterClass,
-              (date?.from || groupBy !== 'none') &&
-                'border-primary bg-primary/10 [&_svg]:text-foreground'
-            )}
-          >
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-            <span className="hidden truncate sm:inline">
-              {date?.from && hydrated
-                ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
-                : 'Upload date'}
-            </span>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="end">
-          <Calendar
-            initialFocus
-            mode="range"
-            defaultMonth={date?.from}
-            selected={date}
-            onSelect={onDateChange}
-            numberOfMonths={1}
-          />
-          <div className="flex items-center justify-between gap-3 border-t px-3 py-3">
-            <span className="text-sm text-muted-foreground">Group files</span>
-            <Select value={groupBy} onValueChange={onGroupChange}>
-              <SelectTrigger
-                aria-label="Group files by upload date"
-                className="h-9 w-36 text-sm"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {GROUP_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {date?.from && (
-            <div className="border-t p-2">
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => onDateChange(undefined)}
-              >
-                Clear date range
-              </Button>
+            <div
+              ref={scrollFadeRef}
+              tabIndex={-1}
+              onFocus={(event) => {
+                if (event.target === event.currentTarget)
+                  event.currentTarget
+                    .closest<HTMLElement>('[role="menu"]')
+                    ?.focus()
+              }}
+              className="scroll-fade max-h-72 overflow-y-auto overscroll-contain outline-none"
+            >
+              {Object.entries(fileTypesByCategory).map(([category, types]) => (
+                <Fragment key={category}>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs font-medium text-muted-foreground">
+                    {category}
+                  </DropdownMenuLabel>
+                  {types.map((type) => (
+                    <DropdownMenuCheckboxItem
+                      key={type}
+                      title={type}
+                      checked={selectedTypes.includes(type)}
+                      onSelect={(event) => event.preventDefault()}
+                      onCheckedChange={(checked) =>
+                        onTypesChange(
+                          checked
+                            ? [...selectedTypes, type]
+                            : selectedTypes.filter((item) => item !== type)
+                        )
+                      }
+                    >
+                      <span className="truncate">{fileTypeLabel(type)}</span>
+                    </DropdownMenuCheckboxItem>
+                  ))}
+                </Fragment>
+              ))}
+              {Object.keys(fileTypesByCategory).length === 0 && (
+                <p className="px-2 py-3 text-sm text-muted-foreground">
+                  File types appear after your first upload.
+                </p>
+              )}
             </div>
-          )}
-        </PopoverContent>
-      </Popover>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              aria-label="Upload date"
+              className={cn(
+                filterClass,
+                (date?.from || groupBy !== 'none') &&
+                  'border-primary bg-primary/10 [&_svg]:text-foreground'
+              )}
+            >
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              <span className="truncate">
+                {date?.from && hydrated
+                  ? `${format(date.from, 'MMM d')}${date.to ? ` – ${format(date.to, 'MMM d')}` : ''}`
+                  : 'Upload date'}
+              </span>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="flex max-h-[var(--radix-popover-content-available-height)] w-auto flex-col overflow-hidden p-0"
+            align="end"
+          >
+            <Calendar
+              className="min-h-0 overflow-y-auto"
+              initialFocus
+              mode="range"
+              defaultMonth={date?.from}
+              selected={date}
+              onSelect={onDateChange}
+              numberOfMonths={1}
+            />
+            <div className="flex shrink-0 items-center justify-between gap-3 border-t px-3 py-3">
+              <span className="text-sm text-muted-foreground">Group files</span>
+              <Select value={groupBy} onValueChange={onGroupChange}>
+                <SelectTrigger
+                  aria-label="Group files by upload date"
+                  className="h-9 w-36 text-sm"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GROUP_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {date?.from && (
+              <div className="shrink-0 border-t p-2">
+                <Button
+                  variant="ghost"
+                  className="w-full"
+                  onClick={() => onDateChange(undefined)}
+                >
+                  Clear date range
+                </Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+      </div>
     </div>
   )
 })

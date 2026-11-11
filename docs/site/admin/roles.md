@@ -8,7 +8,7 @@ Roles let you give people the tools they need: a contributor can upload, a moder
 
 Every account receives **Everyone**, the instance's shared starting permissions. Additional roles add permissions to that baseline. A person can have several roles, and there is no separate “normal user” or “admin user” account type.
 
-<Screenshot src="/screenshots/roles/roles-overview.webp" alt="Roles screen with Admin, Support, Moderator, Creator, and Everyone and an explanation of full administrator access" caption="Real demonstration instance: Everyone supplies the baseline; additional roles describe separate responsibilities." />
+<Screenshot src="/screenshots/roles/roles-overview.webp" alt="Roles screen with Admin, Moderator, and Everyone, an explanation of full administrator access, and collapsed permission groups" caption="Real demonstration instance: Everyone supplies the baseline; additional roles describe separate responsibilities." />
 
 ## Your first roles
 
@@ -28,7 +28,7 @@ Everyone cannot be deleted, renamed, reordered, manually assigned, or granted Ad
 [Watch the recorded create-and-assign walkthrough](/demos#create-and-assign-a-role), then follow these steps on your own instance.
 
 1. Choose **Admin → Roles**, then **Create role**. Give it a clear name, such as **Content moderators**, a short description, and a distinguishable color. Until you save it, the role list shows the new role as **Not saved yet**.
-2. Under **Permissions**, use the grouped switches, **Find a permission…**, or **Enable group** / **Clear group** to choose the grants. Choose individual permissions for a narrowly scoped role.
+2. Under **Permissions**, choose a group to expand its switches, or use **Find a permission…** to open all matching groups. Each group starts collapsed and shows how many of its permissions this role explicitly grants. Choose individual permissions for a narrowly scoped role; **Enable group** / **Clear group** changes the grantable switches in that group. While searching, these actions are named **Enable matches** / **Clear matches** and affect only the matching grantable permissions.
 3. Set **Position** below the roles that should manage it. Higher positions mean higher authority for managing roles and accounts; position does not add feature permissions. Below Administrator, you can choose only positions under your own highest role. Another number shows the allowed range under the field and keeps **Save role** off until you correct it. Earlier versions locked the whole editor of a new role, including **Position** and **Save role**, once its number reached your highest role, so only discarding the role got you out.
 4. Choose **Save role** in the bar at the end of the editor. While the role has unsaved changes, that bar stays at the bottom of the screen as you scroll. Creating a role does not assign it to anyone.
 5. In **Users**, open **Edit user → Roles** and select the additional roles it should receive. Everyone is already included automatically. Save the account.
@@ -147,9 +147,11 @@ Invitations are separate from account creation. `invites.create` lets a person b
 
 Content moderation is instance-wide and does not use the account-management hierarchy: these grants can apply to content owned by higher-ranked accounts. Content reading is sensitive: a moderator with `content.read` can see private content and bypass file passwords. Explain this access to the people using your instance. [Sharing and privacy](/guide/sharing) describes the reader-facing boundaries.
 
+The group summaries count stored grants in this role, including unsaved edits, against the entire group even while search shows fewer switches. They do not add Everyone’s grants or another assigned role’s permissions. For a role containing **Administrator**, the summary reads **All N via Administrator** instead of showing explicit-grant counts: the wildcard gives full access regardless of individual switches. Searching temporarily opens matching groups; clear search to return to the groups you had opened. Selecting another role starts with its groups collapsed. No permission or assignment migration is needed for existing installations.
+
 ### Manage permissions on a phone
 
-The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles** under **Admin**, then select a role or choose **Create role**. The page scrolls down to the role's editor, below the role list. Use its permission switches, then **Save role**. Role hierarchy and validation are the same as on desktop.
+The same role groups and permission search are available on narrow screens. Open the navigation menu, choose **Roles** under **Admin**, then select a role or choose **Create role**. The page scrolls down to the role's editor, below the role list. Expand a permission group or search for the permission, adjust its switches, then choose **Save role**. Role hierarchy and validation are the same as on desktop.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/roles/roles-mobile.webp" alt="Mobile role editor with separate View all content, Edit all content, and Delete all content switches" caption="Content reading, editing, and deletion remain separate choices on a phone." />

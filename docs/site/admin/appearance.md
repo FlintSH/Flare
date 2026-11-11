@@ -42,6 +42,7 @@ Start with **Midnight**, **Orbit**, **Tide**, or **Ember**, then customize the l
 A few colors are derived from the palette so they stay readable whatever it holds:
 
 - **Destructive** fills buttons such as **Delete**. Error messages and destructive menu items use the same hue, lightened in dark mode and darkened in light mode when the color is too dark or too light to read as text. In dark mode a very deep destructive color is also lifted for button fills (to about 55% lightness), so **Delete** reads as a clear red next to the red text instead of a maroon that looks disabled.
+- Panels use **Card** directly in light mode. In dark mode they blend a small amount of **Card foreground** into **Card**, separating content from the page without replacing the configured palette. The glow background is quieter; **Plain** and **Grid** retain their selected behavior. These finish changes apply to existing installations without rewriting saved colors.
 - The outlines of text fields, selects, and unchecked switches mix **Input** with **Muted foreground**, so an empty field stays visible. With the default palettes they reach 3:1 against the page.
 - Success, warning, danger, and info labels, such as an invite's **Active** status or the audit log's outcomes, use fixed green, amber, red, and blue shades for each mode. They don't change with the palette.
 

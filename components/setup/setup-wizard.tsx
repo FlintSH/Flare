@@ -164,7 +164,7 @@ const stepColumns = steps
 
 // The ready step's next-step links, on the same surface as the cards.
 const nextStepClassName =
-  'group rounded-2xl border border-border/60 bg-card/80 p-6 shadow-sm backdrop-blur-xl transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+  'group rounded-2xl border border-border/60 bg-panel p-6 shadow-sm transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
 
 const initialData: SetupData = {
   admin: { name: '', email: '' },
@@ -480,7 +480,7 @@ export function SetupWizard({
                           onClick={() => go(item.id)}
                           className={cn(
                             'flex w-max min-w-full shrink-0 flex-col items-center gap-2 rounded-xl px-1.5 py-3 text-center disabled:cursor-default lg:w-full lg:flex-row lg:gap-3 lg:px-3 lg:text-left',
-                            active && 'border bg-card/80 shadow-sm',
+                            active && 'border bg-panel shadow-sm',
                             !active && 'border border-transparent',
                             canReturn && 'hover:bg-muted/30'
                           )}
