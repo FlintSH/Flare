@@ -43,6 +43,7 @@ interface VirtualFilesProps {
   renderFile: (file: FileType) => ReactNode
   onVisibleFiles: (files: FileType[], firstIndex: number) => void
   onRefresh: () => void
+  dateControlsRef: RefObject<HTMLDivElement | null>
   selectionBarRef: RefObject<HTMLDivElement | null>
 }
 
@@ -54,6 +55,7 @@ export function VirtualFiles({
   onVisibleFiles,
   onRefresh,
   selectionBarRef,
+  dateControlsRef,
 }: VirtualFilesProps) {
   'use no memo'
   // TanStack exposes a mutable instance. Compiler memoization would freeze its
@@ -192,14 +194,9 @@ export function VirtualFiles({
     if (!element) return
     const measure = () => {
       const width = element.getBoundingClientRect().width
-      const columns =
-        window.innerWidth >= 1280
-          ? 4
-          : window.innerWidth >= 1024
-            ? 3
-            : window.innerWidth >= 640
-              ? 2
-              : 1
+      // Measure the content, not the viewport: sidebars and page gutters
+      // change how much room the cards actually have.
+      const columns = Math.max(2, Math.min(4, Math.floor((width + 16) / 256)))
       const top = element.getBoundingClientRect().top + window.scrollY
       setDimensions((old) =>
         old.width === width &&
@@ -420,12 +417,32 @@ export function VirtualFiles({
             ? 'Loading files'
             : `Showing files near ${firstIndex + 1} of ${timeline!.total}`}
       </div>
+      {chronological && layout.rowCount > 3 && (
+        <DateRail
+          controlsRef={dateControlsRef}
+          label={label}
+          firstLabel={bucketLabel(
+            timeline!.buckets[0],
+            'year',
+            timeline!.timezone
+          )}
+          lastLabel={bucketLabel(
+            timeline!.buckets[timeline!.buckets.length - 1],
+            'year',
+            timeline!.timezone
+          )}
+          row={(firstRow?.index ?? 0) + windowStart}
+          rowCount={layout.rowCount}
+          scrolling={virtualizer.isScrolling}
+          onSeek={seek}
+        />
+      )}
       <div
         ref={container}
         role="list"
         aria-label="Your files"
         aria-busy={loading}
-        className="relative mr-6 sm:mr-8 min-[1360px]:mr-0"
+        className="relative"
         style={{ height: virtualizer.getTotalSize(), overflowAnchor: 'none' }}
         onFocusCapture={(event) => {
           const row = (event.target as HTMLElement).closest<HTMLElement>(
@@ -499,25 +516,6 @@ export function VirtualFiles({
           </div>,
           document.body
         )}
-      {chronological && layout.rowCount > 3 && (
-        <DateRail
-          label={label}
-          firstLabel={bucketLabel(
-            timeline!.buckets[0],
-            'year',
-            timeline!.timezone
-          )}
-          lastLabel={bucketLabel(
-            timeline!.buckets[timeline!.buckets.length - 1],
-            'year',
-            timeline!.timezone
-          )}
-          row={(firstRow?.index ?? 0) + windowStart}
-          rowCount={layout.rowCount}
-          scrolling={virtualizer.isScrolling}
-          onSeek={seek}
-        />
-      )}
       <p className="py-6 text-center text-xs text-muted-foreground">
         {timeline!.total.toLocaleString()}{' '}
         {timeline!.total === 1 ? 'file' : 'files'} ·{' '}

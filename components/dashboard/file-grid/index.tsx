@@ -153,6 +153,7 @@ function FileLibrary({ scope }: { scope: string }) {
   const { user } = usePermissions()
   const libraryHeading = useRef<HTMLHeadingElement>(null)
   const selectionBar = useRef<HTMLDivElement>(null)
+  const dateControls = useRef<HTMLDivElement>(null)
   const [files, setFiles] = useState<FileType[]>([])
   const [selectedFiles, setSelectedFiles] = useState<FileType[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
@@ -329,7 +330,7 @@ function FileLibrary({ scope }: { scope: string }) {
         className={pagePanelClassName}
       >
         <PageHeader
-          className="mb-4 border-0 pb-0"
+          className="mb-4 border-0 pb-0 [&_p]:hidden sm:[&_p]:block"
           actionsBesideTitle
           headingRef={libraryHeading}
           title="Your files"
@@ -386,9 +387,12 @@ function FileLibrary({ scope }: { scope: string }) {
             </>
           }
         />
-        <div className="flex flex-col gap-3 lg:flex-row">
+        <div className="flex flex-col gap-3 xl:flex-row">
           <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
+            dateControl={
+              <div ref={dateControls} className="min-[1360px]:hidden" />
+            }
             hasTagFilter={Boolean(filters.tag)}
             sortBy={filters.sortBy}
             onSortChange={setSortBy}
@@ -564,7 +568,11 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           aria-busy="true"
           aria-label="Loading files"
-          className="mr-6 grid gap-4 sm:mr-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 min-[1360px]:mr-0"
+          className="grid gap-4"
+          style={{
+            gridTemplateColumns:
+              'repeat(auto-fit, minmax(min(240px, calc((100% - 16px) / 2)), 1fr))',
+          }}
         >
           {Array.from({ length: 8 }, (_, index) => (
             <FileCardSkeleton key={index} />
@@ -650,6 +658,7 @@ function FileLibrary({ scope }: { scope: string }) {
           <VirtualFiles
             library={library}
             selectionBarRef={selectionBar}
+            dateControlsRef={dateControls}
             initialIndex={anchorIndex.current}
             chronological={isDateOrder(librarySort(filters.sortBy))}
             onVisibleFiles={onVisibleFiles}

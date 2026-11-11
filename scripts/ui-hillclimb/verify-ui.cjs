@@ -93,7 +93,7 @@ async function main() {
       ).toHaveAttribute('aria-expanded', 'true')
       await page.getByRole('button', { name: /^Folders \d/ }).click()
       if (size.width < 640) {
-        const filters = page.getByRole('button', { name: /^Filters/ })
+        const filters = page.getByRole('button', { name: /^Sort & filters/ })
         await expect(filters).toHaveAttribute('aria-expanded', 'false')
         await filters.click()
         await expect(
@@ -506,7 +506,7 @@ async function main() {
         for (const height of [740, 844]) {
           await phone.setViewportSize({ width, height })
           await phone.goto(origin + '/dashboard')
-          await phone.getByRole('button', { name: /^Filters/ }).click()
+          await phone.getByRole('button', { name: /^Sort & filters/ }).click()
           await phone
             .getByRole('button', { name: 'Upload date', exact: true })
             .tap()

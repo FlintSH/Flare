@@ -615,3 +615,7 @@ Comparisons show added and removed source lines between the selected releases. H
 The same-commit documentation gate starts when the policy is introduced; it does not retroactively reject commits that predate the handbook.
 
 If a feature is renamed or removed, update navigation and incoming links in the same change. Keep a short redirect/link page when there are established external links. OpenAPI and example clients must change with the implementation; do not promise a versioning policy the server does not implement.
+
+### Gallery layout regression check
+
+After preparing the disposable timeline fixtures described above, run `FLARE_TIMELINE_TEST_ORIGIN=http://localhost:3064 node scripts/timeline/verify-gallery-layout.cjs`. It checks 320–1440px layouts, alignment with the navbar, search and card edges, two phone columns, mobile sort/filter disclosure, date-rail hit-area separation, the fixed Dates dialog remaining visible through a jump, and resizing after a jump to the last file. Set `FLARE_TIMELINE_STORAGE_STATE` to an existing local fixture browser-state file to reuse a sign-in. The 12,000-file fixture now fits within one 8,000-row window on phones; window rebasing remains covered by the timeline-layout unit tests. It uses the real local server and fixture account; no responses are mocked.
