@@ -7,7 +7,9 @@ import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
+import { queueStorageDeletion } from '@/lib/storage/deletion'
 import { isMissingObject } from '@/lib/storage/missing'
+import { captureStorageTarget } from '@/lib/storage/targets'
 
 import {
   FAVICON_MAX_BYTES,
@@ -32,35 +34,44 @@ function contentVersion(bytes: Buffer) {
   return createHash('sha256').update(bytes).digest('hex').slice(0, 16)
 }
 
-/**
- * Saves `next` as the favicon address and returns the one it replaced. The
- * settings lock orders concurrent uploads and removals, so each replaced
- * address is returned to exactly one of them.
- */
-async function replaceSavedFavicon(next: string | null) {
-  return prisma.$transaction(async (tx) => {
-    await lockSettings(tx)
-    const previous = (await readConfig(tx)).settings.appearance.favicon
-    await applyConfigUpdate(tx, { settings: { appearance: { favicon: next } } })
-    return previous
-  })
-}
-
-async function deleteQuietly(key: string) {
+async function exists(
+  storage: Awaited<ReturnType<typeof getStorageProvider>>,
+  key: string
+) {
   try {
-    await (await getStorageProvider()).deleteFile(key)
+    await storage.getFileSize(key)
+    return true
   } catch (error) {
-    if (!isMissingObject(error))
-      loggers.files.warn('Could not delete an unused favicon', { key, error })
+    if (isMissingObject(error)) return false
+    throw error
   }
 }
 
-/** Deletes the image of a favicon address that is no longer saved. */
-async function deleteReplaced(previous: string | null) {
-  const version = faviconVersion(previous)
-  // The shared object of earlier versions is unused once anything replaces it.
-  await deleteQuietly(LEGACY_KEY)
-  if (version) await deleteQuietly(uploadKey(version))
+/** Cleanup jobs for the favicon belong to the instance, not an account. */
+const OWNER = 'instance'
+
+/**
+ * Saves `next` as the favicon address and queues the replaced image for
+ * deletion in the same transaction. The settings lock orders concurrent
+ * uploads and removals, so each replaced address is queued exactly once, and
+ * the storage cleanup worker retries the deletion until storage accepts it.
+ */
+async function replaceSavedFavicon(next: string | null) {
+  const storage = await getStorageProvider()
+  const target = captureStorageTarget(storage)
+  await prisma.$transaction(async (tx) => {
+    await lockSettings(tx)
+    const previous = (await readConfig(tx)).settings.appearance.favicon
+    await applyConfigUpdate(tx, { settings: { appearance: { favicon: next } } })
+    if (!previous) return
+    const version = faviconVersion(previous)
+    // An address saved by an earlier version names the shared object instead.
+    const key =
+      version && (await exists(storage, uploadKey(version)))
+        ? uploadKey(version)
+        : LEGACY_KEY
+    await queueStorageDeletion(tx, OWNER, key, target)
+  })
 }
 
 /** Returns the address pages now link to. */
@@ -69,23 +80,29 @@ export async function saveFavicon(png: Buffer): Promise<string> {
   const key = uploadKey(version)
   const url = faviconAddress(version)
   await (await getStorageProvider()).uploadFile(png, key, FAVICON_TYPE)
-  let previous: string | null
   try {
-    previous = await replaceSavedFavicon(url)
+    await replaceSavedFavicon(url)
   } catch (error) {
-    await deleteQuietly(key)
+    // Never saved, so nothing links to it.
+    await (await getStorageProvider()).deleteFile(key).catch((cleanup) => {
+      if (!isMissingObject(cleanup))
+        loggers.files.warn('Could not delete an unsaved favicon', {
+          key,
+          error: cleanup,
+        })
+    })
     throw error
   }
-  await deleteReplaced(previous)
   return url
 }
 
 /**
- * Stops linking the favicon, so pages fall back to Flare's own icon, then
- * deletes its image. Removing a favicon that isn't there is no error.
+ * Stops linking the favicon, so pages fall back to Flare's own icon, and
+ * queues its image for deletion. Removing a favicon that isn't there is no
+ * error.
  */
 export async function removeFavicon(): Promise<void> {
-  await deleteReplaced(await replaceSavedFavicon(null))
+  await replaceSavedFavicon(null)
 }
 
 async function readIcon(key: string): Promise<Buffer | Readable | null> {

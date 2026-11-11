@@ -20,6 +20,7 @@ import { LocalStorageProvider } from '@/lib/storage/providers/local'
 const state = vi.hoisted(() => ({
   favicon: null as string | null,
   provider: null as unknown,
+  queued: [] as { ownerId: string; path: string; provider?: string }[],
 }))
 vi.mock('next/font/local', () => ({ default: () => ({ variable: 'inter' }) }))
 vi.mock('@/lib/auth', () => ({
@@ -27,8 +28,19 @@ vi.mock('@/lib/auth', () => ({
     user: { id: 'manager', permissions: ['appearance.manage'] },
   }),
 }))
+// Transactions run one at a time, as the settings lock each one takes makes
+// them in PostgreSQL.
+const transactions = vi.hoisted(() => ({ tail: Promise.resolve() as unknown }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { $transaction: (run: (tx: object) => unknown) => run({}) },
+  prisma: {
+    $transaction: (run: (tx: object) => unknown) => {
+      const result = Promise.resolve(transactions.tail)
+        .catch(() => {})
+        .then(() => run({}))
+      transactions.tail = result.catch(() => {})
+      return result
+    },
+  },
 }))
 vi.mock('@/lib/database/locks', () => ({ lockSettings: async () => {} }))
 vi.mock('@/lib/audit', async (importOriginal) => ({
@@ -54,6 +66,16 @@ vi.mock('@/lib/config', () => ({
     update: { settings: { appearance: { favicon: string | null } } }
   ) => {
     state.favicon = update.settings.appearance.favicon
+  },
+}))
+vi.mock('@/lib/storage/deletion', () => ({
+  queueStorageDeletion: async (
+    _tx: unknown,
+    ownerId: string,
+    path: string,
+    target: { provider: string } | null
+  ) => {
+    state.queued.push({ ownerId, path, provider: target?.provider })
   },
 }))
 vi.mock('@/lib/storage', () => ({
@@ -118,6 +140,7 @@ describe('favicon upload, serving and page links', () => {
     provider = new LocalStorageProvider()
     state.provider = provider
     state.favicon = null
+    state.queued = []
   })
 
   afterEach(async () => {
@@ -145,6 +168,11 @@ describe('favicon upload, serving and page links', () => {
   const keyOf = (url: string) => `${url.slice(url.indexOf('v=') + 2)}.png`
   const stored = (url: string) =>
     readFile(join(directory, 'uploads/favicons', keyOf(url)))
+  // What the storage cleanup worker does with the queued jobs.
+  const runCleanup = async () => {
+    for (const { path } of state.queued.splice(0))
+      await provider.deleteFile(path).catch(() => {})
+  }
   // Every favicon object left in storage, the shared one of earlier versions too.
   const storedObjects = async () => [
     ...(await readdir(join(directory, 'uploads/favicons')).catch(() => [])),
@@ -165,7 +193,15 @@ describe('favicon upload, serving and page links', () => {
     expect(secondUrl).not.toBe(firstUrl)
     expect(state.favicon).toBe(secondUrl)
     expect(await stored(secondUrl)).toEqual(otherPng)
-    // Each upload has its own object; the replaced one is deleted.
+    // Each upload has its own object; the replaced one is queued for deletion.
+    expect(state.queued).toEqual([
+      {
+        ownerId: 'instance',
+        path: `uploads/favicons/${keyOf(firstUrl)}`,
+        provider: 'local',
+      },
+    ])
+    await runCleanup()
     expect(await storedObjects()).toEqual([keyOf(secondUrl)])
 
     const current = await fetchIcon(secondUrl)
@@ -236,6 +272,8 @@ describe('favicon upload, serving and page links', () => {
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png)
 
     const { url } = await (await upload(otherPng)).json()
+    expect(state.queued.map(({ path }) => path)).toEqual([LEGACY])
+    await runCleanup()
     expect(await storedObjects()).toEqual([keyOf(url)])
     expect(Buffer.from(await (await fetchIcon(url)).arrayBuffer())).toEqual(
       otherPng
@@ -261,14 +299,19 @@ describe('favicon upload, serving and page links', () => {
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ url: null })
     expect(state.favicon).toBeNull()
+    expect(state.queued.map(({ path }) => path)).toContain(
+      `uploads/favicons/${keyOf(url)}`
+    )
+    await runCleanup()
     expect(await storedObjects()).toEqual([])
     expect((await fetchIcon(url)).status).toBe(404)
     expect((await generateMetadata()).icons).toEqual({
       icon: { url: '/icon.svg', type: 'image/svg+xml' },
     })
 
-    // Removing again, with nothing stored, still succeeds.
+    // Removing again, with nothing stored, still succeeds and queues nothing.
     expect((await removal()).status).toBe(200)
+    expect(state.queued).toEqual([])
   })
 
   it('refuses other origins, non-form bodies and uploads breaking the control rules before storing anything', async () => {
@@ -354,37 +397,43 @@ describe('favicon upload, serving and page links', () => {
     expect(await storedObjects()).toEqual([])
   })
 
-  it('never deletes an upload saved while a slow removal is still deleting', async () => {
-    const { url: first } = await (await upload(png)).json()
-    let finishDelete!: () => void
-    const deleting = new Promise<void>((resolve) => (finishDelete = resolve))
-    const deleteFile = provider.deleteFile.bind(provider)
-    const deletes = vi
-      .spyOn(provider, 'deleteFile')
-      .mockImplementation(async (path) => {
-        if (path.endsWith(keyOf(first))) await deleting
-        await deleteFile(path)
-      })
+  it('queues each replaced image once and never the saved one, however saves interleave', async () => {
+    await upload(png)
+    const results = await Promise.all([
+      remove(
+        new Request('http://localhost/api/settings/favicon', {
+          method: 'DELETE',
+        })
+      ),
+      upload(otherPng),
+      upload(png),
+      remove(
+        new Request('http://localhost/api/settings/favicon', {
+          method: 'DELETE',
+        })
+      ),
+      upload(otherPng),
+    ])
+    expect(results.map(({ status }) => status)).toEqual([
+      200, 200, 200, 200, 200,
+    ])
+    const paths = state.queued.map(({ path }) => path)
+    expect(new Set(paths).size).toBe(paths.length)
+    await runCleanup()
+    const saved = state.favicon
+    expect(await storedObjects()).toEqual(saved ? [keyOf(saved)] : [])
+    if (saved) expect((await fetchIcon(saved)).status).toBe(200)
+  })
 
-    const removal = remove(
-      new Request('http://localhost/api/settings/favicon', {
-        method: 'DELETE',
-      })
+  it('keeps a failed upload from being linked and deletes its image', async () => {
+    const { url } = await (await upload(png)).json()
+    const config = await import('@/lib/config')
+    vi.spyOn(config, 'applyConfigUpdate').mockRejectedValueOnce(
+      new Error('database unavailable')
     )
-    await vi.waitFor(() =>
-      expect(deletes).toHaveBeenCalledWith(`uploads/favicons/${keyOf(first)}`)
-    )
-    // An upload saved while the removal's delete is still running...
-    const { url } = await (await upload(otherPng)).json()
-    expect(state.favicon).toBe(url)
-    // ...keeps its image when that delete finally lands.
-    finishDelete()
-    expect((await removal).status).toBe(200)
+    expect((await upload(otherPng)).status).toBe(500)
     expect(state.favicon).toBe(url)
     expect(await storedObjects()).toEqual([keyOf(url)])
-    const served = await fetchIcon(url)
-    expect(served.status).toBe(200)
-    expect(Buffer.from(await served.arrayBuffer())).toEqual(otherPng)
   })
 
   it("links pages only to the favicon saved now, never alongside Flare's icon", async () => {

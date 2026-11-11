@@ -315,6 +315,8 @@ For **Storage provenance is unknown**, verify the original object location using
 
 For **Storage deletion failed**, check storage reachability, credentials, delete permissions, and local-volume ownership. For **Storage target changed**, compare `target` with the saved S3 settings. Plan maintenance to restore the original matching target and valid credentials, let cleanup complete, then resume the storage migration. Do not rewrite a job's target to a different bucket or discard a pending row to make the count disappear. Wait until its next `availableAt`; restarting the app does not bypass the retry schedule.
 
+Jobs whose `ownerId` is `instance` delete favicons an administrator replaced or removed under **Settings → Appearance → Favicon**; they belong to no account.
+
 An empty queue means all recorded jobs completed; it does not certify erasure from backups, S3 object versions, external caches, or storage left by older deletions. Flare has no account undelete operation: recovery needs a consistent pre-deletion database and file backup. A copied database can itself resume pending deletions, so follow the isolation precautions above.
 
 ### Resolve an unknown storage target
