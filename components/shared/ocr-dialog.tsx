@@ -114,7 +114,7 @@ export function OcrDialog({
                 <div className="mb-4 rounded-xl border bg-muted/30 p-4">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-medium">Confidence:</span>
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted dark:bg-border">
                       <div
                         className="h-full bg-primary transition-all duration-500"
                         style={{ width: `${confidence}%` }}

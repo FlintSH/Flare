@@ -178,7 +178,7 @@ Text is escaped into Flare's HTML and plain-text messages. These settings are no
 
 ## Settings stored in the database
 
-These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades.
+These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades. The complete untouched original classic color palette is recognized when configuration is read and resolves to the current higher-contrast dark defaults, including in the Settings controls. Customized classic palettes and published studio palettes keep their saved colors. No environment variable or database migration is needed; see [appearance administration](../admin/appearance) for reset and preset controls.
 
 | Setting                         | Default                                                               | Guide                                                             |
 | ------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -276,28 +276,28 @@ The customization wrapper also contains `version` (currently `1`), `revision` (i
 
 ### Palette fields and defaults
 
-The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are:
+The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are below. Earlier versions used `#020817` for cards and popovers, `#1e293b` for secondary, muted, accent, border and input, and `#94a3b8` for secondary text; the classic values matching those are kept only to recognize untouched installations.
 
 | Field                   | Studio light | Studio dark | Legacy HSL          |
 | ----------------------- | ------------ | ----------- | ------------------- |
 | `background`            | `#f8fafc`    | `#020817`   | `222.2 84% 4.9%`    |
 | `foreground`            | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
-| `card`                  | `#ffffff`    | `#020817`   | `222.2 84% 4.9%`    |
+| `card`                  | `#ffffff`    | `#0c1426`   | `221.5 52% 9.8%`    |
 | `cardForeground`        | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
-| `popover`               | `#ffffff`    | `#020817`   | `222.2 84% 4.9%`    |
+| `popover`               | `#ffffff`    | `#162036`   | `221.3 42.1% 14.9%` |
 | `popoverForeground`     | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `primary`               | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `primaryForeground`     | `#f8fafc`    | `#0f172a`   | `222.2 47.4% 11.2%` |
-| `secondary`             | `#e2e8f0`    | `#1e293b`   | `217.2 32.6% 17.5%` |
+| `secondary`             | `#e2e8f0`    | `#33445f`   | `216.8 30.1% 28.6%` |
 | `secondaryForeground`   | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
-| `muted`                 | `#f1f5f9`    | `#1e293b`   | `217.2 32.6% 17.5%` |
-| `mutedForeground`       | `#475569`    | `#94a3b8`   | `215 20.2% 65.1%`   |
-| `accent`                | `#e2e8f0`    | `#1e293b`   | `217.2 32.6% 17.5%` |
+| `muted`                 | `#f1f5f9`    | `#26334d`   | `220 33.9% 22.5%`   |
+| `mutedForeground`       | `#475569`    | `#a8b5c9`   | `216.4 23.4% 72.4%` |
+| `accent`                | `#e2e8f0`    | `#33445f`   | `216.8 30.1% 28.6%` |
 | `accentForeground`      | `#0f172a`    | `#f8fafc`   | `210 40% 98%`       |
 | `destructive`           | `#dc2626`    | `#991b1b`   | `0 62.8% 30.6%`     |
 | `destructiveForeground` | `#ffffff`    | `#f8fafc`   | `210 40% 98%`       |
-| `border`                | `#cbd5e1`    | `#1e293b`   | `217.2 32.6% 17.5%` |
-| `input`                 | `#cbd5e1`    | `#1e293b`   | `217.2 32.6% 17.5%` |
+| `border`                | `#cbd5e1`    | `#303f59`   | `218 29.9% 26.9%`   |
+| `input`                 | `#cbd5e1`    | `#3a4a63`   | `216.6 26.1% 30.8%` |
 | `ring`                  | `#64748b`    | `#cbd5e1`   | `212.7 26.8% 83.9%` |
 
 Account-specific settings are stored separately from the instance configuration: personal theme preference, upload defaults and profiles, tool options, scoped tokens, webhook destinations, authenticator enrollment, passkey public credentials, and the passkey requirement are managed in **Profile**. Both recovery-code sets are stored as account-bound hashes. Their values do not override operator limits or grant administrator permissions. See [the user handbook](/guide/) and [API authentication](/api/authentication).

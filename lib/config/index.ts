@@ -6,6 +6,7 @@ import {
   CLASSIC_PALETTE,
   LEGACY_COLOR_MESSAGE,
   MAX_LEGACY_COLORS,
+  defaultClassicColors,
   legacyAppearanceUpdateSchema,
   legacyColors,
   legacyTheme,
@@ -104,7 +105,11 @@ export const configSchema = z.object({
       // rather than rejected, so an old configuration can still be read.
       theme: z.unknown().transform(legacyTheme).prefault('dark'),
       favicon: z.string().nullable(),
-      customColors: z.unknown().transform(legacyColors).prefault({}),
+      customColors: z
+        .unknown()
+        .transform(legacyColors)
+        .transform(defaultClassicColors)
+        .prefault({}),
     }),
     advanced: z.object({
       customCSS: z.string(),

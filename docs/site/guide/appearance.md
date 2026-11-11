@@ -29,6 +29,16 @@ The preference is stored with your account, so it follows you when you sign in o
 
 Your personal setting changes the dashboard. Public share pages retain the instance's brand and public appearance behavior.
 
+## Default dark-mode contrast
+
+The default dark theme keeps Flare's navy palette but separates its layers: the page is the darkest navy, cards and panels sit one step lighter, and dialogs and menus one step above that, so each layer reads clearly without turning grey or bright. Borders, field outlines and secondary text are clearer, and hovered items have their own fill on panels and in menus. Menus keep a visible line between groups of options, and the folder lists in the **Move to folder** dialog and the archive destination picker highlight the folder under your pointer while the selected folder keeps its own highlight. Notices and progress tracks inside dialogs, such as the shared-folder note when deleting a folder and the confidence bar in **Extracted text**, keep a visible fill. These changes apply across the workspace and public pages that use the default palette.
+
+Existing installations using the complete original classic palette receive these colors automatically when pages reload. Empty classic palettes use the new defaults too. A customized classic palette or a published studio palette keeps its saved colors. Administrators can adjust those colors in [instance appearance](../admin/appearance); personal mode preferences continue to choose light or dark within the instance's palette.
+
+<Screenshot src="/screenshots/dark-contrast/library-desktop.webp" alt="Default dark-mode file library: navy panels and file cards a step lighter than the deep navy page, with outlined search and filter controls" caption="The default dark palette separates panels and controls from the page without changing the layout." />
+
+<Screenshot src="/screenshots/dark-contrast/folder-mobile.webp" alt="New folder dialog on a phone: a dark navy surface a step above the dimmed library, with a readable description and an outlined folder-name field" caption="Dialogs sit one step above the page in the same navy, with a visible keyboard focus ring." />
+
 ## What your administrator controls
 
 The instance may have its own name, tagline, light/dark logos, and footer, as well as custom colors, typeface, background, and corner radius. These choices appear across the workspace and public pages.

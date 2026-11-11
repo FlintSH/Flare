@@ -9,8 +9,8 @@ import { hexToHsl } from './theme'
 export const LEGACY_THEMES = ['dark', 'light', 'system'] as const
 export type LegacyTheme = (typeof LEGACY_THEMES)[number]
 
-/** The classic dark palette new instances start with, as `H S% L%` triplets. */
-export const CLASSIC_PALETTE: Readonly<Record<string, string>> = {
+/** The original saved classic palette, retained to recognize untouched installations. */
+export const ORIGINAL_CLASSIC_PALETTE = {
   background: '222.2 84% 4.9%',
   foreground: '210 40% 98%',
   card: '222.2 84% 4.9%',
@@ -30,6 +30,30 @@ export const CLASSIC_PALETTE: Readonly<Record<string, string>> = {
   border: '217.2 32.6% 17.5%',
   input: '217.2 32.6% 17.5%',
   ring: '212.7 26.8% 83.9%',
+}
+
+/** Distinct canvas, raised surfaces, hover fills and separators in the default navy palette. */
+export const CLASSIC_PALETTE = {
+  ...ORIGINAL_CLASSIC_PALETTE,
+  card: '221.5 52% 9.8%',
+  popover: '221.3 42.1% 14.9%',
+  secondary: '216.8 30.1% 28.6%',
+  muted: '220 33.9% 22.5%',
+  mutedForeground: '216.4 23.4% 72.4%',
+  accent: '216.8 30.1% 28.6%',
+  border: '218 29.9% 26.9%',
+  input: '216.6 26.1% 30.8%',
+}
+
+/** Upgrade only the complete untouched classic palette; never rewrite custom colors. */
+export function defaultClassicColors(
+  colors: Record<string, string>
+): Record<string, string> {
+  const entries = Object.entries(ORIGINAL_CLASSIC_PALETTE)
+  return Object.keys(colors).length === entries.length &&
+    entries.every(([key, value]) => colors[key] === value)
+    ? { ...CLASSIC_PALETTE }
+    : colors
 }
 
 /** Classic palettes have 19 tokens; leave room without allowing unbounded maps. */
