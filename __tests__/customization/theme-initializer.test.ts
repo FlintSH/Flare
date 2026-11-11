@@ -5,7 +5,8 @@ import { initialThemeStyles } from '@/components/theme/initial-theme-styles'
 import { DEFAULT_CONFIG, configSchema } from '@/lib/config'
 import {
   CLASSIC_PALETTE,
-  ORIGINAL_CLASSIC_PALETTE,
+  SUPERSEDED_CLASSIC_PALETTES,
+  defaultClassicColors,
 } from '@/lib/customization/legacy-appearance'
 import { LIGHT_PALETTE } from '@/lib/customization/schema'
 import { paletteVariables } from '@/lib/customization/theme'
@@ -22,23 +23,33 @@ function declarations(css: string, selector: string) {
 }
 
 describe('initial server-rendered theme', () => {
-  it('upgrades a saved untouched classic palette but retains a customized palette', () => {
-    const config = structuredClone(DEFAULT_CONFIG)
-    config.settings.appearance.customColors = { ...ORIGINAL_CLASSIC_PALETTE }
-    expect(configSchema.parse(config).settings.appearance.customColors).toEqual(
+  it.each(SUPERSEDED_CLASSIC_PALETTES)(
+    'upgrades a saved untouched earlier default but retains a customized palette',
+    (earlier) => {
+      const config = structuredClone(DEFAULT_CONFIG)
+      config.settings.appearance.customColors = { ...earlier }
+      expect(
+        configSchema.parse(config).settings.appearance.customColors
+      ).toEqual(CLASSIC_PALETTE)
+      expect(initialThemeStyles(config)).toContain(
+        `--card: ${CLASSIC_PALETTE.card};`
+      )
+      config.settings.appearance.customColors.primary = '120 50% 50%'
+      expect(
+        configSchema.parse(config).settings.appearance.customColors.card
+      ).toBe(earlier.card)
+      expect(initialThemeStyles(config)).toContain(`--card: ${earlier.card};`)
+      expect(initialThemeStyles(config)).toContain('--primary: 120 50% 50%;')
+    }
+  )
+
+  it('recognizes both earlier defaults and leaves the current one alone', () => {
+    expect(SUPERSEDED_CLASSIC_PALETTES).toHaveLength(2)
+    for (const earlier of SUPERSEDED_CLASSIC_PALETTES)
+      expect(earlier).not.toEqual(CLASSIC_PALETTE)
+    expect(defaultClassicColors({ ...CLASSIC_PALETTE })).toEqual(
       CLASSIC_PALETTE
     )
-    expect(initialThemeStyles(config)).toContain(
-      `--card: ${CLASSIC_PALETTE.card};`
-    )
-    config.settings.appearance.customColors.primary = '120 50% 50%'
-    expect(
-      configSchema.parse(config).settings.appearance.customColors.card
-    ).toBe(ORIGINAL_CLASSIC_PALETTE.card)
-    expect(initialThemeStyles(config)).toContain(
-      `--card: ${ORIGINAL_CLASSIC_PALETTE.card};`
-    )
-    expect(initialThemeStyles(config)).toContain('--primary: 120 50% 50%;')
   })
 
   it('fills every default Flare HSL token after setup saved an empty palette', () => {
@@ -67,9 +78,9 @@ describe('initial server-rendered theme', () => {
     config.settings.appearance.customColors = { primary: '120 50% 50%' }
     const css = initialThemeStyles(config)
     expect(css).toContain('--primary: 120 50% 50%;')
-    expect(css).toContain('--background: 222.2 84% 4.9%;')
+    expect(css).toContain(`--background: ${CLASSIC_PALETTE.background};`)
     expect(css).toContain('--foreground: 210 40% 98%;')
-    expect(css).toContain('--input: 216.6 26.1% 30.8%;')
+    expect(css).toContain(`--input: ${CLASSIC_PALETTE.input};`)
     expect(css).not.toContain('.dark{')
   })
 
@@ -83,7 +94,7 @@ describe('initial server-rendered theme', () => {
       expect(declarations(css, '.light')).toEqual(
         paletteVariables(config.settings.customization.published.theme.light)
       )
-      expect(css).toContain('--background: 222.2 84% 4.9%;')
+      expect(css).toContain(`--background: ${CLASSIC_PALETTE.background};`)
     }
   })
 
@@ -129,6 +140,6 @@ describe('initial server-rendered theme', () => {
         DEFAULT_CONFIG.settings.customization.published.theme.dark
       )
     )
-    expect(css).toContain('--background: 222.2 84% 4.9%;')
+    expect(css).toContain(`--background: ${CLASSIC_PALETTE.background};`)
   })
 })

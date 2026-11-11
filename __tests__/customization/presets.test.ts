@@ -84,26 +84,33 @@ describe('palette presets', () => {
     }
   })
 
-  it('steps rendered dark surfaces up from the page without glaring overlays', () => {
+  it('separates rendered dark surfaces while keeping them deep', () => {
     const p = DARK_PALETTE
     // The colours the dark theme actually paints (app/globals.css).
     const panel = mix(p.card, p.cardForeground, 0.96)
     const overlay = mix(p.popover, p.foreground, 0.93)
     const control = mix(p.mutedForeground, p.input, 0.55)
-    expect(contrast(panel, p.background)).toBeGreaterThan(1.1)
-    expect(contrast(overlay, panel)).toBeGreaterThan(1.15)
-    // Dialogs and menus stay dark navy rather than a light slate sheet.
-    expect(contrast(overlay, p.background)).toBeLessThan(1.6)
+    // Panels step up from the page, and menus and dialogs from panels.
+    expect(contrast(panel, p.background)).toBeGreaterThan(1.07)
+    expect(luminance(overlay)).toBeGreaterThan(luminance(panel))
+    // The separation comes from a deeper page, not lighter surfaces: every
+    // surface stays near black instead of turning into a slate sheet.
+    expect(contrast(panel, '#000000')).toBeLessThan(1.15)
+    expect(contrast(overlay, '#000000')).toBeLessThan(1.2)
     // Hover fills show on panels and inside menus.
-    expect(contrast(p.accent, panel)).toBeGreaterThan(1.5)
-    expect(contrast(p.accent, overlay)).toBeGreaterThan(1.35)
-    // A hovered tab never outshines the selected one.
-    expect(luminance(p.secondary)).toBeGreaterThanOrEqual(luminance(p.accent))
+    expect(contrast(p.accent, panel)).toBeGreaterThan(1.3)
+    expect(contrast(p.accent, overlay)).toBeGreaterThan(1.25)
+    // Selection is a step above hover, so a hovered tab never outshines the
+    // selected one.
+    expect(luminance(p.secondary)).toBeGreaterThan(luminance(p.accent))
     // Muted fills (thumbnails, skeletons) still show at half opacity.
     expect(contrast(mix(p.muted, panel, 0.5), panel)).toBeGreaterThan(1.1)
-    expect(contrast(p.border, panel)).toBeGreaterThan(1.5)
-    // Menu separators use the border colour in dark mode.
-    expect(contrast(p.border, overlay)).toBeGreaterThan(1.2)
+    // Lines stay soft: visible on panels and in menus without outlining them.
+    for (const surface of [panel, overlay]) {
+      const line = contrast(p.border, surface)
+      expect(line).toBeGreaterThan(1.15)
+      expect(line).toBeLessThan(1.4)
+    }
     expect(contrast(control, panel)).toBeGreaterThan(3)
     expect(contrast(control, overlay)).toBeGreaterThan(3)
     expect(contrast(p.mutedForeground, overlay)).toBeGreaterThan(4.5)

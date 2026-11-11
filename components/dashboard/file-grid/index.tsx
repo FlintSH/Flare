@@ -497,7 +497,7 @@ function FileLibrary({ scope }: { scope: string }) {
         <div
           ref={selectionBar}
           aria-busy={selection.loading}
-          className="sticky top-24 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-overlay px-4 py-3 shadow-lg shadow-black/20"
+          className="sticky top-24 z-30 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-border bg-overlay px-4 py-3 shadow-lg shadow-black/20 dark:shadow-black/60"
         >
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
