@@ -36,7 +36,7 @@ On the registration page, or from an [invite link](./invites):
 
 1. Enter a **Username** and your **Email address**.
 2. Enter a **Passphrase** and repeat it in **Confirm passphrase**. The meter under the field shows the estimate and, for a weak one, the reason.
-3. Choose **Create account**. The button reads **Deriving your keys…** while your browser stretches the passphrase. This takes under a second on a current desktop and longer on a phone.
+3. Choose **Create account**. The button reads **Deriving your keys…** while your browser stretches the passphrase. This takes about a quarter of a second on a current desktop and longer on a phone: expect one to three seconds on a slow one. Signing in and unlocking take the same time.
 4. Flare shows your **recovery phrase**. Write the 24 words down in order, or use **Copy** or **Download as text** and move the copy offline. Tick **I saved my recovery phrase somewhere offline** and choose **Continue**.
 5. Type the three words that Flare asks for, to prove your copy is right, and choose **Finish**.
 

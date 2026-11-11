@@ -38,16 +38,16 @@ can be reviewed alone. Nothing is visible to a user before phase 3.
 Phases 1 to 7 are implemented on `feat/e2ee`. The pull request is a draft
 and no person has reviewed the cryptography or the code.
 
-| Phase | State                                                                                                                                                   |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Done. 137 shared vectors. The TypeScript library, the Python reference and the Rust client agree on the vectors of the procedures that each implements. |
-| 2     | Done.                                                                                                                                                   |
-| 3     | Done.                                                                                                                                                   |
-| 4     | Done.                                                                                                                                                   |
-| 5     | Done. Tested in Chromium only.                                                                                                                          |
-| 6     | Done. The program is built and tested on Linux x86_64 only. The workflow for the other platforms has not run.                                           |
-| 7     | Done for accounts, tokens and files. The files of an account that does not come back stay plain (specification, section 14.3).                          |
-| 8     | Partly done. Large files are measured (below). The time of Argon2id on a slow phone and a library of 20,000 files are not measured.                     |
+| Phase | State                                                                                                                                                                     |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | Done. 137 shared vectors. The TypeScript library, the Python reference and the Rust client agree on the vectors of the procedures that each implements.                   |
+| 2     | Done.                                                                                                                                                                     |
+| 3     | Done.                                                                                                                                                                     |
+| 4     | Done.                                                                                                                                                                     |
+| 5     | Done. Tested in Chromium only.                                                                                                                                            |
+| 6     | Done. The program is built and tested on Linux x86_64 only. The workflow for the other platforms has not run.                                                             |
+| 7     | Done for accounts, tokens and files. The files of an account that does not come back stay plain (specification, section 14.3).                                            |
+| 8     | Done in Chromium on a desktop processor (below). Not done: a measurement on a real phone. The Argon2id times for slower devices are estimates from a slowed-down browser. |
 
 A security review in two passes read the branch on 2026-11-10. Draft 23 of
 the specification records its results. Section 15 of the specification
@@ -55,14 +55,53 @@ lists the questions that it left open (questions 3 to 6).
 
 ### Measurements
 
-On a virtual machine with 4 cores, with headless Chromium, local storage
-and the production build:
+On a virtual machine with 4 cores of an AMD Ryzen 9 5950X, with headless
+Chromium, local storage and the production build.
+
+**Large files** (`scripts/e2ee/measure-media.cjs`):
 
 | What                                                | Result                                        |
 | --------------------------------------------------- | --------------------------------------------- |
 | Upload of a 2 GiB file from the browser             | 182 s. Peak memory of the browser: 975 MiB.   |
 | Download of a 2 GiB file through the service worker | 148 s.                                        |
 | Seek to the middle of a 2-hour video of 1,445 MiB   | 0.67 s. 7.2 MiB of ciphertext in 15 requests. |
+
+**A large library** (`scripts/e2ee/measure-library.cjs`): one account with
+20,000 encrypted files, 1,000 of them images with about 700 bytes of sealed
+image text each. Specification, section 9.8.
+
+| What                                                             | Result                                |
+| ---------------------------------------------------------------- | ------------------------------------- |
+| First files on the page after sign-in                            | 1.2 s                                 |
+| First sync of the search cache                                   | 41 requests, 17.3 MiB, done at 13.2 s |
+| Every file can be found, first visit                             | 13.7 s after sign-in                  |
+| Size of the cache in the browser (ciphertext)                    | 17.4 MiB                              |
+| Every file can be found, later visit (2 requests, cache on disk) | 4.6 s                                 |
+| One search, from the last key to the result on the page          | 0.91 s median, 1.05 s slowest of 12   |
+| Memory of all browser processes                                  | 539 MiB after the sync, 667 MiB peak  |
+
+The library shows files before the cache is complete. A search during the
+first sync gives its result when the record arrives. The time of one search
+contains the delay of the search field and one request to the server for
+the rows. The memory contains what the test tool keeps of each answer.
+
+**Argon2id** (`scripts/e2ee/measure-argon2.cjs`): 64 MiB, 3 passes, 4 lanes,
+with the WebAssembly code of the browser client, 5 runs for each row.
+Specification, section 4.3.
+
+| Processor of the page      | Median | Slowest |
+| -------------------------- | ------ | ------- |
+| As it is                   | 0.24 s | 0.26 s  |
+| Slowed down by a factor 2  | 0.47 s | 0.51 s  |
+| Slowed down by a factor 4  | 1.09 s | 1.24 s  |
+| Slowed down by a factor 6  | 1.54 s | 1.73 s  |
+| Slowed down by a factor 10 | 2.78 s | 3.08 s  |
+
+The rows with a factor are estimates. Chromium slows the processor of the
+page; it does not make the memory slower, and it does not show if a phone
+can give 64 MiB to one page. A sign-in or an unlock does this calculation
+one time. A measurement on a real phone is still to do: sign in on the
+phone and note the time between the passphrase and the library.
 
 Firefox, Safari, mobile browsers and S3 storage are not measured.
 

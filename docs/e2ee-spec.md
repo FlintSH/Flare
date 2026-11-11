@@ -2,7 +2,7 @@
 
 | Field   | Value                                               |
 | ------- | --------------------------------------------------- |
-| Status  | Draft 23. Phases 1 to 7 implemented. Not reviewed.  |
+| Status  | Draft 24. Phases 1 to 8 implemented. Not reviewed.  |
 | Version | Protocol version 1 (`v1`)                           |
 | Author  | Claude Fable 5.2, with assistance from birb         |
 | Date    | 2026-11-10                                          |
@@ -370,6 +370,15 @@ A browser without threads calculates the 4 lanes one after the other. The
 result is the same. The time is longer. The implementation must measure the
 time on a slow phone before the release. If the time is not acceptable, the
 authors must change this section before the release of version 1.
+
+**Measured** (draft 24). The browser client calculates the lanes one after
+the other in WebAssembly. In Chromium on a desktop processor (AMD Ryzen 9
+5950X) one calculation takes 0.24 seconds. With the processor of the page
+slowed down by a factor of 4, 6 and 10 it takes 1.1, 1.5 and 2.8 seconds.
+These three values are estimates of slower devices. They are not
+measurements on a phone: the memory is not slower in this test, and the
+test does not show if a phone gives 64 MiB to a page. Question 1 of section
+15 stays open for a measurement on a real phone.
 
 ### 4.4 Encodings
 
@@ -1715,6 +1724,17 @@ each account stanza. That is approximately 4 seconds for 50 000 files. A
 phone is slower. The client shows the first files before the worker is
 done.
 
+**Measured** (draft 24). An account with 20 000 encrypted files, of which
+1 000 have about 700 bytes of image text, in Chromium on a desktop
+processor: the first sync is 41 requests and 17.3 MiB, and each file can be
+found 13.7 seconds after the sign-in. The page shows the first files after
+1.2 seconds. The cache has 17.4 MiB. In a later session each file can be
+found after 4.6 seconds, with 2 requests. One search takes 0.9 seconds from
+the last key to the result on the page; this contains the delay of the
+search field and one request for the rows. All processes of the browser
+use 540 MiB after the sync. `docs/e2ee-implementation-plan.md` has the
+table.
+
 The same method applies to the sort by name and to the "apply to existing
 files" operation of a tag rule.
 
@@ -2488,8 +2508,9 @@ after the upgrade.
 
 ## 15. Open questions
 
-1. **Time of Argon2id on a slow phone.** Section 4.3. A measurement is
-   necessary.
+1. **Time of Argon2id on a slow phone.** Section 4.3 has the time on a
+   desktop processor and estimates for slower processors. A measurement on
+   a real phone is still necessary.
 2. **Public upload links.** This feature is not merged. It must use the
    upload procedure of section 10.2.
 3. **A record of the owner for the place of a file.** From the security
@@ -2561,3 +2582,4 @@ when.
 | 21    | 2026-11-10 | Results of the implementation of encrypted files. The form of a random `file_id`. A password that the owner adds later does not stop a person who has `file_key`. The script policy has `'strict-dynamic'`. The server sends webhook version 2 for each file.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | 22    | 2026-11-10 | Results of the implementation of the library, of the content features and of script uploads. All additions are PROPOSED. Reset deletes folder keys, tag records and stanzas. The form of the shared folder link. Re-key of a subtree after the owner stops sharing. Records that the browser of the owner makes later. Plain files can wait for tag rules. The sequence number and the repair of the local cache. The local address of the service worker, ranges, the end of the file, a worker that stops, downloads and PDF. An archive is not trusted. The export procedure. The server also rejects a short link that contains a key. A script client checks the accepted versions and builds the link from its own origin. Rules for the `encryption` setting and for old tokens. A folder stanza that a script client cannot renew is not stored. The program for script clients is `flare-upload`.                                                                                                                                                                                                                                                 |
 | 23    | 2026-11-10 | Results of the security review. All additions are PROPOSED. After a rotation, each folder that no shared folder link opens gets a new key pair (sections 8.3.4 and 8.3.5). A moderator cannot make an encrypted file public (section 9.4.4). The claim of section 9.4.5 about a compromised server is corrected, and section 9.4.7 states the limit of the repair list. The browser builds each link with a key on its own origin (section 10.3). The server replaces only a stanza for an old key (section 8.3.4). The plain names of folders and tags leave the audit records (section 9.4.7). Section 14.1 states the risk of the old password hash in old copies of the database. New open questions 3 to 6. Results of the implementation of section 14.2: fifteen rules for the server encryption of existing files, which are PROPOSED (who starts the job, the selection and which files it covers, the order of the steps and a stop at any time, the new address, files with a server-side password, the folder stanza, the thumbnail that the server makes, what the server deletes, the quota, errors, and what the application must not say). |
+| 24    | 2026-11-11 | Measurements of phase 8: the time of Argon2id in the browser, with estimates for slower processors (section 4.3), and the cost of a library of 20 000 encrypted files (section 9.8.3). Question 1 of section 15 is now only about a real phone. No rule changed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
