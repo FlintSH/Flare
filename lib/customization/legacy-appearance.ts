@@ -36,11 +36,11 @@ export const ORIGINAL_CLASSIC_PALETTE = {
 export const CLASSIC_PALETTE = {
   ...ORIGINAL_CLASSIC_PALETTE,
   card: '221.5 52% 9.8%',
-  popover: '221.2 42.1% 14.9%',
-  secondary: '217.9 34.5% 21.6%',
-  muted: '220.6 37.3% 16.3%',
+  popover: '221.3 42.1% 14.9%',
+  secondary: '216.8 30.1% 28.6%',
+  muted: '220 33.9% 22.5%',
   mutedForeground: '216.4 23.4% 72.4%',
-  accent: '218.2 31.9% 27.1%',
+  accent: '216.8 30.1% 28.6%',
   border: '218 29.9% 26.9%',
   input: '216.6 26.1% 30.8%',
 }

@@ -41,7 +41,7 @@ describe('initial server-rendered theme', () => {
     expect(initialThemeStyles(config)).toContain('--primary: 120 50% 50%;')
   })
 
-  it('keeps every original Flare HSL token after setup saved an empty palette', () => {
+  it('fills every default Flare HSL token after setup saved an empty palette', () => {
     const fresh = structuredClone(DEFAULT_CONFIG)
     const completed = structuredClone(DEFAULT_CONFIG)
     completed.settings.general.setup.completed = true
