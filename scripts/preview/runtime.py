@@ -447,7 +447,7 @@ def deploy(pr, sha, run_id, attempt, image, domain, expires_at):
         patch(environment_id, {
             app: {"source": {"image": image, "autoUpdates": {"type": "disabled"}},
                   "variables": variable_config({"PORT": 3000, "HOSTNAME": "::", "NEXTAUTH_URL": url,
-                     "PREVIEW_EXPIRES_AT": expires_at, "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN": ""})},
+                     "PREVIEW_EXPIRES_AT": expires_at})},
             gateway: {"source": {"image": os.environ["PREVIEW_GATEWAY_IMAGE"], "autoUpdates": {"type": "disabled"}},
                       "variables": variable_config({"PORT": 8080, "PREVIEW_PUBLIC_URL": url,
                          "PREVIEW_UPSTREAM": "http://preview-app.railway.internal:3000",

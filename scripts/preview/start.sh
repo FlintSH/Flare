@@ -14,8 +14,6 @@ export pnpm_config_verify_deps_before_run=false
 export PRISMA_HIDE_UPDATE_MESSAGE=1
 export CHECKPOINT_DISABLE=1
 export NEXT_TELEMETRY_DISABLED=1
-export METICULOUS_RECORDING_ENABLED=false
-unset METICULOUS_BACKEND_RECORDER_MODE NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN
 
 attempt=0
 until pnpm prisma migrate deploy; do

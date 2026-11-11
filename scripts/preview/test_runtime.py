@@ -573,7 +573,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(saved[GATEWAY]["variables"]["PREVIEW_HEAD_SHA"]["value"], SHA)
         self.assertNotIn("PREVIEW_HEAD_SHA", saved[APP]["variables"])
         self.assertEqual(set(saved[APP]["variables"]), {
-            "PORT", "HOSTNAME", "NEXTAUTH_URL", "PREVIEW_EXPIRES_AT", "NEXT_PUBLIC_METICULOUS_RECORDING_TOKEN",
+            "PORT", "HOSTNAME", "NEXTAUTH_URL", "PREVIEW_EXPIRES_AT",
         })
         self.assertNotIn("synthetic-controller-token", json.dumps(saved))
         self.assertNotIn("synthetic-project-token", json.dumps(saved))
