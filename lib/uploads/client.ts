@@ -8,7 +8,10 @@ import {
   sealedThumbnailRecord,
 } from '@/lib/e2ee/client/files'
 import { type OpenedFolder, folderStanzaFor } from '@/lib/e2ee/client/folders'
-import { rememberOpenedFile } from '@/lib/e2ee/client/opened-files'
+import {
+  openedFilesEpoch,
+  rememberOpenedFile,
+} from '@/lib/e2ee/client/opened-files'
 import { encryptFile, storedLengthOf } from '@/lib/e2ee/file'
 import { type ShareSecret, ownOriginPath, shareLink } from '@/lib/e2ee/link'
 
@@ -411,6 +414,8 @@ function encryptedUploadResult(
   file: Pick<File, 'name' | 'type' | 'size'>,
   created: NewEncryptedFile,
   secret: ShareSecret,
+  /** `openedFilesEpoch()` from before the upload began. */
+  startedAt: number,
   library?: UploadLibrary,
   whole?: File
 ): UploadResponse {
@@ -428,8 +433,10 @@ function encryptedUploadResult(
     name: file.name,
     type: file.type || ENCRYPTED_PART_TYPE,
   }
-  rememberOpenedFile(uploaded.id, opened)
-  if (whole)
+  // A lock or a sign-out during the upload: the key is not kept in memory,
+  // and the work that needs it waits for the next unlock.
+  const kept = rememberOpenedFile(uploaded.id, opened, startedAt)
+  if (whole && kept)
     library?.uploaded?.({ id: uploaded.id, file: whole, plain: false, opened })
   return {
     url: link,
@@ -448,6 +455,8 @@ async function uploadEncrypted(
   onProgress?: Progress,
   extraHeaders: Record<string, string> = {}
 ): Promise<UploadResponse> {
+  // The file key belongs in memory only while the keys of this moment are.
+  const startedAt = openedFilesEpoch()
   const { created, secret, records } = await prepareEncryptedUpload(
     file,
     options,
@@ -502,6 +511,7 @@ async function uploadEncrypted(
         file,
         created,
         secret,
+        startedAt,
         options.library,
         file
       )
@@ -590,6 +600,7 @@ async function uploadEncrypted(
       file,
       created,
       secret,
+      startedAt,
       options.library,
       file
     )
@@ -630,6 +641,7 @@ export async function uploadEncryptedStream(
   options: UploadOptions & { encryptFor: Uint8Array },
   onProgress?: Progress
 ): Promise<EncryptedStreamUpload> {
+  const startedAt = openedFilesEpoch()
   const { created, secret, records } = await prepareEncryptedUpload(
     source,
     options
@@ -668,7 +680,8 @@ export async function uploadEncryptedStream(
       body,
       { name: source.name, type: source.type, size: plaintextBytes },
       created,
-      secret
+      secret,
+      startedAt
     ),
     id: parseEncryptedUploadResponse(body).id,
     records: created.records,

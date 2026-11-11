@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
@@ -54,6 +54,10 @@ import { folderPath } from '@/lib/folders/navigation'
 import { UNFILED, folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { UploadResponse } from '@/lib/uploads/client'
+import {
+  INITIAL_ENCRYPTION_CHOICE,
+  encryptionChoice,
+} from '@/lib/uploads/encryption-choice'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
@@ -112,9 +116,11 @@ export function UploadForm({
   // What the dialog shows first follows the selected upload profile. The
   // choice a person then makes is explicit and wins, until they select a
   // different profile (docs/e2ee-spec.md, section 11.2).
-  const [chosenEncryption, setEncryption] =
-    useState<EncryptionMode>('encrypted')
-  const encryption = plainUploadsForbidden ? 'encrypted' : chosenEncryption
+  const [choice, changeChoice] = useReducer(
+    encryptionChoice,
+    INITIAL_ENCRYPTION_CHOICE
+  )
+  const encryption = plainUploadsForbidden ? 'encrypted' : choice.mode
   const encrypted = encryption === 'encrypted'
   const keys = useUploadEncryption()
   const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>()
@@ -298,11 +304,15 @@ export function UploadForm({
           value={profileId}
           onChange={setProfileId}
           disabled={isUploading}
-          onEncryptionChange={setEncryption}
+          onEncryptionChange={(mode) =>
+            changeChoice({ by: 'profile', mode, profileId })
+          }
         />
         <EncryptionChoice
           value={encryption}
-          onChange={setEncryption}
+          onChange={(mode: EncryptionMode) =>
+            changeChoice({ by: 'person', mode, profileId })
+          }
           disabled={isUploading}
           locked={keys.locked}
           plainForbidden={plainUploadsForbidden}

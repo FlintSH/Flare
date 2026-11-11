@@ -197,7 +197,7 @@ The ZIP contains:
 - `files/<upload date>/<file ID>.flare-encrypted`: an encrypted file that your keys do not open, for example one from before you [reset your keys without the recovery phrase](./passphrase). It is included as ciphertext, with `"decrypted": false`.
 - `export-report.json`: when the export ran, how many files were written, how many were decrypted, which were included as ciphertext, and which were left out with the reason for each.
 
-A file that fails part-way is left out and the export goes on: a file that fails its integrity check, a file the server no longer sends, or a lost connection during that file. The summary under the button says how many were left out, and `export-report.json` names them. Export again to retry.
+A file that fails part-way is left out and the export goes on: a file that fails its integrity check, a file the server no longer sends, or a lost connection during that file. The summary under the button says how many were left out, and `export-report.json` names them. Export again to retry. A plain file whose stored name has a `#` or a `?` in it is read by its exact address, like every other file.
 
 If your encryption keys are locked in this browser, the page says so and offers two buttons. **Unlock** asks for your passphrase and then exports decrypted files. **Export without decrypting** gives the server's export: each encrypted file as ciphertext named `<file ID>.flare-encrypted`, with the records that open it listed in `user-data.json`.
 

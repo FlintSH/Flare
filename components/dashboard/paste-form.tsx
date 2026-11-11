@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useReducer, useState } from 'react'
 
 import Link from 'next/link'
 
@@ -36,6 +36,10 @@ import { ProfilePicker } from '@/components/upload-profiles/profile-picker'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { allows } from '@/lib/permissions/actions'
 import { uploadPaste } from '@/lib/uploads/client'
+import {
+  INITIAL_ENCRYPTION_CHOICE,
+  encryptionChoice,
+} from '@/lib/uploads/encryption-choice'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
@@ -58,9 +62,11 @@ export function PasteForm({
   const [password, setPassword] = useState('')
   // Shown first as the selected upload profile says; the choice made here
   // wins (docs/e2ee-spec.md, section 11.2).
-  const [chosenEncryption, setEncryption] =
-    useState<EncryptionMode>('encrypted')
-  const encryption = plainUploadsForbidden ? 'encrypted' : chosenEncryption
+  const [choice, changeChoice] = useReducer(
+    encryptionChoice,
+    INITIAL_ENCRYPTION_CHOICE
+  )
+  const encryption = plainUploadsForbidden ? 'encrypted' : choice.mode
   const encrypted = encryption === 'encrypted'
   const keys = useUploadEncryption()
   const libraryFor = useUploadLibrary()
@@ -213,7 +219,9 @@ export function PasteForm({
         value={profileId}
         onChange={setProfileId}
         disabled={isSubmitting}
-        onEncryptionChange={setEncryption}
+        onEncryptionChange={(mode) =>
+          changeChoice({ by: 'profile', mode, profileId })
+        }
       />
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -320,7 +328,9 @@ export function PasteForm({
       )}
       <EncryptionChoice
         value={encryption}
-        onChange={setEncryption}
+        onChange={(mode: EncryptionMode) =>
+          changeChoice({ by: 'person', mode, profileId })
+        }
         disabled={isSubmitting}
         locked={keys.locked}
         plainForbidden={plainUploadsForbidden}

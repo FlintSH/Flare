@@ -11,6 +11,18 @@ const opened = new Map<string, OpenedFile>()
 const unopened = new Set<string>()
 const watchers = new Set<() => void>()
 let version = 0
+/**
+ * Moves on each time the store is emptied. Work that opens a file takes the
+ * number when it starts, and its result counts only while the number is
+ * still the same: a file key that arrives after a lock or a sign-out must
+ * not come back into memory.
+ */
+let epoch = 0
+
+/** The number that a result must still have to be kept. */
+export function openedFilesEpoch(): number {
+  return epoch
+}
 
 function changed() {
   version++
@@ -21,17 +33,35 @@ export function openedFile(id: string): OpenedFile | undefined {
   return opened.get(id)
 }
 
-export function rememberOpenedFile(id: string, file: OpenedFile) {
+/**
+ * Keeps an opened file. `startedAt` is `openedFilesEpoch()` from before the
+ * work began. If the store was emptied since then, the key is erased and
+ * nothing is kept. Returns whether the file was kept.
+ */
+export function rememberOpenedFile(
+  id: string,
+  file: OpenedFile,
+  startedAt: number
+): boolean {
+  if (startedAt !== epoch) {
+    wipe(file.fileKey)
+    return false
+  }
   opened.set(id, {
     ...file,
     fileKey: file.fileKey.slice() as typeof file.fileKey,
   })
   unopened.delete(id)
   changed()
+  return true
 }
 
-/** Records that the keys this browser holds do not open the file. */
-export function rememberUnopenedFile(id: string) {
+/**
+ * Records that the keys this browser holds do not open the file. A failure
+ * from before the store was emptied says nothing about the keys of now.
+ */
+export function rememberUnopenedFile(id: string, startedAt: number) {
+  if (startedAt !== epoch) return
   unopened.add(id)
   changed()
 }
@@ -58,6 +88,8 @@ export function openedFileState(
 
 /** Erases every key this page holds for a file. */
 export function forgetOpenedFiles() {
+  // Also with nothing in the store: work that opens a file can be on its way.
+  epoch++
   if (!opened.size && !unopened.size) return
   for (const file of opened.values()) wipe(file.fileKey)
   opened.clear()

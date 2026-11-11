@@ -11,6 +11,7 @@ import { fileLayout } from '@/lib/e2ee/file'
 import { base64urlDecode } from '@/lib/e2ee/primitives'
 import { exportEntryNamer } from '@/lib/files/export-entry-names'
 import { normalizedType, safeFileName } from '@/lib/files/safe-render'
+import { fileUrls } from '@/lib/files/urls'
 
 /**
  * The account export for an account with encrypted files, built in the
@@ -265,14 +266,11 @@ export function exportArchive(
     // The size the server lists. The entry holds what the server sends.
     sizeHint: entry.file.sizeBytes,
     async open() {
-      const response = await environment.fetch(
-        `/api/files${entry.file.urlPath}`,
-        {
-          signal,
-          credentials: 'same-origin',
-          cache: 'no-store',
-        }
-      )
+      const response = await environment.fetch(fileUrls(entry.file).content, {
+        signal,
+        credentials: 'same-origin',
+        cache: 'no-store',
+      })
       if (!response.ok || !response.body) throw new ExportFetchError()
       return responseBytes(response)
     },
@@ -284,7 +282,7 @@ export function exportArchive(
     size: plaintextLengthOf(entry.file.sizeBytes),
     async *open() {
       const source = openEncryptedSource({
-        url: `/api/files${entry.file.urlPath}`,
+        url: fileUrls(entry.file).content,
         fileKey: entry.opened!.fileKey,
         header: base64urlDecode(entry.file.encryption!.header!),
         storedLength: entry.file.sizeBytes,

@@ -9,6 +9,7 @@ import type { StoredAccountKeys } from '@/lib/e2ee/client/key-store'
 import {
   openedFileState,
   openedFiles,
+  openedFilesEpoch,
   rememberOpenedFile,
   rememberUnopenedFile,
 } from '@/lib/e2ee/client/opened-files'
@@ -30,16 +31,23 @@ export function openOwnedFile(
   records: EncryptedRecordsWire,
   keys: StoredAccountKeys
 ): Promise<void> {
-  const known = pending.get(id)
+  // The work belongs to the keys of this moment. If the browser is locked
+  // or signed out before it ends, its result is erased and not kept, and a
+  // later unlock starts new work for the file.
+  const startedAt = openedFilesEpoch()
+  const slot = `${startedAt}:${id}`
+  const known = pending.get(slot)
   if (known) return known
   const work = unwrapperFor(keys)
     .then((unwrapper) => unwrapper.unwrap(records))
     .then(
-      (opened) => rememberOpenedFile(id, opened),
-      () => rememberUnopenedFile(id)
+      (opened) => {
+        rememberOpenedFile(id, opened, startedAt)
+      },
+      () => rememberUnopenedFile(id, startedAt)
     )
-    .finally(() => pending.delete(id))
-  pending.set(id, work)
+    .finally(() => pending.delete(slot))
+  pending.set(slot, work)
   return work
 }
 
@@ -73,8 +81,10 @@ export function useEncryptedFile(file: {
   }, [file.id, records, keys, known])
 
   if (!encrypted) return null
-  if (opened) return { status: 'open', opened }
+  // The lock comes first: without keys nothing is shown as open, whatever
+  // the store holds at this moment.
   if (!keys) return { status: state.status === 'locked' ? 'locked' : 'opening' }
+  if (opened) return { status: 'open', opened }
   if (!records || failed) return { status: 'failed' }
   return { status: 'opening' }
 }

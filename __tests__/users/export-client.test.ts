@@ -399,6 +399,38 @@ describe('the export a browser builds', () => {
     }
   })
 
+  it('escapes the stored address of a file, so a name with # or ? reads that file', async () => {
+    const bytes = new TextEncoder().encode('the notes')
+    const name = 'notes.h#ml?x'
+    const server = fakeServer({
+      '/api/files/alexm/notes.h%23ml%3Fx': bytes,
+    })
+    const plan = await planExport(
+      manifestOf([plainFile(name, bytes)]),
+      opener({})
+    )
+    let summary: ExportSummary | null = null
+    const entries = await unzip(
+      await collect(
+        exportArchive(plan, {
+          fetch: server.fetch,
+          signal: new AbortController().signal,
+          onProgress: () => undefined,
+          onDone: (result) => {
+            summary = result
+          },
+        })
+      )
+    )
+    expect(server.requests.map((request) => request.url)).toEqual([
+      '/api/files/alexm/notes.h%23ml%3Fx',
+    ])
+    expect(summary).not.toBeNull()
+    expect(
+      [...entries.values()].some((entry) => entry.equals(Buffer.from(bytes)))
+    ).toBe(true)
+  })
+
   it('names the saved file as the server export does', () => {
     expect(exportFilename(1767225600000)).toBe(
       'flare-data-export-1767225600000.zip'

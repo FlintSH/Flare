@@ -62,7 +62,7 @@ An encrypted file shows only a [generic preview](./encryption#choose-encrypted-o
 The two columns work differently on purpose:
 
 - **A tool has no dialog**, so its profile decides. Flare refuses an encrypted upload to a Plain profile and a plain upload to an Encrypted one, with a message that names the setting. This stops a wrong configuration from uploading plain files by mistake. A token that selects no profile follows your default profile, or **Encrypted** if you have none.
-- **In the browser, your choice in the upload dialog wins.** The profile only decides which choice the dialog shows first when you select it. Dropping files onto the dashboard has no dialog and always encrypts.
+- **In the browser, your choice in the upload dialog wins.** The profile only decides which choice the dialog shows first when you select it. A choice you make stays until you select a different profile, also if you made it while the page was still loading your profiles. Dropping files onto the dashboard has no dialog and always encrypts.
 
 Two exceptions: a tool configuration [from before encryption](./screenshot-tools#old-configurations) always uploads plain files, whatever the profile says. And if your administrator [forbids plain uploads](/admin/#forbid-plain-uploads), **Plain** cannot be selected for a profile, uploads through a profile that is already Plain are refused, and the upload dialog shows no choice.
 
