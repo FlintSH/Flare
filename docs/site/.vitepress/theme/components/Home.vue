@@ -1,37 +1,38 @@
 <script setup>
 import { withBase } from 'vitepress'
 import DocIcon from './DocIcon.vue'
+import FeatureShowcase from './FeatureShowcase.vue'
 
 const features = [
   {
-    title: 'Screenshot tools',
-    text: 'Connect ShareX, iTake, Flameshot, Spectacle, or Bash to your own instance.',
+    title: 'Capture tools',
+    text: 'Upload directly from ShareX, iTake, Flameshot, Spectacle, or Bash.',
     link: '/guide/screenshot-tools.html',
     icon: 'terminal',
   },
   {
-    title: 'Rich previews',
-    text: 'Let recipients preview images, video, audio, PDFs, and code before downloading.',
-    link: '/guide/sharing.html',
+    title: 'Tags & folders',
+    text: 'Group files into folders and keep them easy to find with tags.',
+    link: '/guide/folders.html',
     icon: 'files',
   },
   {
-    title: 'Stay organized',
-    text: 'Find uploads with folders, tags, and search that includes text from images.',
-    link: '/guide/library.html',
+    title: 'OCR search',
+    text: 'Find screenshots by the text inside them, not just their filenames.',
+    link: '/guide/library.html#read-text-in-images-with-ocr',
     icon: 'search',
   },
   {
-    title: 'Sharing controls',
-    text: 'Choose public or private access, add a password, or set an expiry.',
-    link: '/guide/sharing.html',
-    icon: 'shield',
+    title: 'Local or S3',
+    text: 'Keep files on local disk or an S3-compatible bucket.',
+    link: '/hosting/storage.html',
+    icon: 'server',
   },
   {
-    title: 'Make it yours',
-    text: 'Customize your branding, themes, and share pages to suit your instance.',
-    link: '/admin/appearance.html',
-    icon: 'settings',
+    title: 'Roles & permissions',
+    text: 'Give each person the access they need with custom roles.',
+    link: '/admin/roles.html',
+    icon: 'shield',
   },
   {
     title: 'API & webhooks',
@@ -60,21 +61,7 @@ const features = [
           </a>
         </div>
       </div>
-      <picture class="product-picture">
-        <source
-          media="(max-width: 600px)"
-          :srcset="withBase('/landing/library-mobile.webp')"
-          width="390"
-          height="900"
-        />
-        <img
-          :src="withBase('/landing/library-desktop.webp')"
-          alt="Flare’s real file library with demonstration images, folders, search, and sharing controls."
-          width="1440"
-          height="1000"
-          fetchpriority="high"
-        />
-      </picture>
+      <FeatureShowcase />
     </section>
 
     <section class="product-features" aria-label="Flare features">

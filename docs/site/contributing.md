@@ -43,6 +43,8 @@ The release builder applies the current shared stylesheet, layout, fonts, and pa
 
 Product screenshots are prepared separately in `public/landing/` from the existing demonstration captures. They show the current product presentation; they are not substituted into historical guides. The release builder temporarily installs the product homepage only for the public root, then restores the original page, component, and image bytes before rendering its archive. The homepage keeps the version/source stamp below its product content and above the creator credit.
 
+The hero's interactive showcase is a local illustration using sample files, with no audio or connection to an instance. Keep its demo label, manual chapter controls, pause behavior, and reduced-motion support. Actual app recordings remain separate in [Interactive demos](./demos#watch-real-workflows). The release overlay includes the showcase component and its styles; archived homepages keep their original content.
+
 This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below: the product homepage links to stable documentation, and readers must explicitly open the rolling preview for development prerelease instructions.
 
 ### Build the release site

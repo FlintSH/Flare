@@ -10,18 +10,21 @@ export const productNavigation = [
   { text: 'Versions', link: '/versions' },
 ]
 
-const presentation = [
+export const productPresentation = [
   'index.md',
   '.vitepress/theme/components/Home.vue',
   '.vitepress/theme/components/DocIcon.vue',
   '.vitepress/theme/landing.css',
+  '.vitepress/theme/components/FeatureShowcase.vue',
+  '.vitepress/theme/components/showcase-model.mjs',
+  '.vitepress/theme/showcase.css',
 ]
 
 // The public root is the project's home. Archives still render their original
 // homepage, including their original component and any generated image bytes.
 export async function withProductHome({ site, target, repo }, build) {
   const paths = [
-    ...presentation,
+    ...productPresentation,
     ...landingImages.map(([, name]) => `public/landing/${name}`),
   ]
   const originals = await Promise.all(
@@ -35,7 +38,7 @@ export async function withProductHome({ site, target, repo }, build) {
     })
   )
   try {
-    for (const path of presentation) {
+    for (const path of productPresentation) {
       await mkdir(dirname(resolve(target, path)), { recursive: true })
       await copyFile(resolve(site, path), resolve(target, path))
     }

@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import sharp from 'sharp'
-import { withProductHome } from './product-home.mjs'
+import { productPresentation, withProductHome } from './product-home.mjs'
 import { landingImages } from './landing-assets.mjs'
 
 for (const fail of [false, true]) {
@@ -17,12 +17,7 @@ for (const fail of [false, true]) {
       await writeFile(file, value)
     }
     try {
-      for (const file of [
-        'index.md',
-        '.vitepress/theme/components/Home.vue',
-        '.vitepress/theme/components/DocIcon.vue',
-        '.vitepress/theme/landing.css',
-      ])
+      for (const file of productPresentation)
         await write(join(site, file), `current ${file}`)
       await write(join(target, 'index.md'), 'Original archived homepage')
       await write(
@@ -81,8 +76,10 @@ for (const fail of [false, true]) {
         'Original archived screenshot bytes'
       )
       for (const file of [
-        '.vitepress/theme/components/DocIcon.vue',
-        '.vitepress/theme/landing.css',
+        ...productPresentation.filter(
+          (file) =>
+            !['index.md', '.vitepress/theme/components/Home.vue'].includes(file)
+        ),
         'public/landing/library-mobile.webp',
       ])
         await assert.rejects(readFile(join(target, file)), { code: 'ENOENT' })

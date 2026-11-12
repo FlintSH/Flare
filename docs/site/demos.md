@@ -11,6 +11,28 @@ import { withBase } from 'vitepress'
 
 Explore real screens before you install, or discover a feature you have not tried yet. The walkthrough uses captured app screens; the settings lab runs locally in your browser. Neither connects to a live account.
 
+## Homepage feature showcase
+
+The [project homepage](./) has a silent interactive preview with sample files. Choose **Capture**, **Organize**, **OCR**, **Storage**, **API**, or **Roles** to inspect a scene. **Pause** stops the animation; **Play** restarts the tour. Automatic playback pauses when the preview leaves the screen or the browser tab is hidden. With reduced motion enabled, scenes start still and can be selected manually.
+
+This is an illustrated local demo, not a recording or a connection to a Flare instance. The recorded workflows below show real application interactions.
+
+1. **Capture:** connected capture tools send a sample screenshot into the library and produce a sharing link.
+2. **Organize:** sample files move into a folder and receive tags.
+3. **OCR:** a search for text inside an example invoice finds its image even though that text is absent from the filename.
+4. **Storage:** an upload is shown going to either local disk or S3-compatible storage. Changing the real provider does not migrate existing files; follow the [storage guide](./hosting/storage).
+5. **API:** an example upload request uses an environment variable for its token. The preview never executes it.
+6. **Roles:** an example custom role grants selected permissions. Real roles combine grants with Everyone; follow the [role guide](./admin/roles).
+
+<details>
+<summary>Preview scenes and phone layout</summary>
+
+<Screenshot src="/screenshots/handbook/homepage-showcase-desktop.webp" alt="Flare's dark homepage with its short introduction, Capture scene, six feature cards, and source metadata" caption="The homepage pairs a short introduction with a silent illustrated feature preview." />
+
+<Screenshot src="/screenshots/handbook/feature-showcase-mobile.webp" alt="Six illustrated demo scenes at phone width: captures arriving, tags and folders, OCR search, local or S3 storage, an API request, and role grants" caption="All six scenes use sample data. Tabs select still scenes; Play runs the silent tour." />
+
+</details>
+
 ## Explore the workspace
 
 Choose a step, then enlarge the screenshot to inspect the details. The screenshots use demonstration accounts and files.

@@ -73,7 +73,7 @@ test('product homepage introduces Flare and leads into installation and document
   await page.goto('./')
   await expect(page.locator('.product-home')).toBeVisible()
   await expect(page.locator('h1')).toHaveText('Your own file host.')
-  for (const image of await page.locator('.product-home img').all()) {
+  for (const image of await page.locator('.product-home img:visible').all()) {
     await image.scrollIntoViewIfNeeded()
     await expect
       .poll(() => image.evaluate((element) => element.naturalWidth))
@@ -138,7 +138,7 @@ test('search and screenshot dialogs keep keyboard focus and readable controls', 
   )
   await page.keyboard.press('Escape')
   await expect(page.locator('.VPLocalSearchBox')).not.toBeVisible()
-  const screenshot = page.locator('.screenshot-button').first()
+  const screenshot = page.locator('.demo-tour .screenshot-button')
   await screenshot.click()
   const dialog = page.getByRole('dialog')
   await expect(dialog).toBeVisible()
