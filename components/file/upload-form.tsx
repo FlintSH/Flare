@@ -47,6 +47,7 @@ import { folderPath } from '@/lib/folders/navigation'
 import { UNFILED, folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { UploadResponse } from '@/lib/uploads/client'
+import { formatTransfer } from '@/lib/uploads/speed'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useFolders } from '@/hooks/use-folders'
@@ -199,7 +200,7 @@ export function UploadForm({
             </button>
           </div>
           <ul className="divide-y rounded-xl border">
-            {files.map(({ key, file, preview, uploaded, progress }) => (
+            {files.map(({ key, file, preview, uploaded, progress, speed }) => (
               <li key={key} className="flex items-center gap-3 p-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
                   {preview ? (
@@ -223,7 +224,7 @@ export function UploadForm({
                   </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
                     {isUploading
-                      ? `${formatBytes(uploaded)} / ${formatBytes(file.size)}`
+                      ? formatTransfer(uploaded, file.size, speed)
                       : formatBytes(file.size)}
                   </p>
                   {isUploading && (

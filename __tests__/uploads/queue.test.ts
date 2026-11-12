@@ -184,6 +184,36 @@ describe('an upload queue', () => {
     await batch
   })
 
+  it('measures the speed of the file being sent', async () => {
+    let now = 0
+    vi.spyOn(performance, 'now').mockImplementation(() => now)
+    const client = fakeClient()
+    const queue = createUploadQueue(client.send)
+    queue.add([file('big.bin', 4000)], 10_000)
+
+    const batch = queue.upload({})
+    const sending = await client.next()
+    expect(queue.getState().files[0].speed).toBeNull()
+    expect(uploadActivity.get().file).toMatchObject({
+      size: 4000,
+      uploaded: 0,
+      speed: null,
+    })
+    now = 1000
+    sending.progress(2000)
+    expect(queue.getState().files[0]).toMatchObject({
+      uploaded: 2000,
+      speed: 2000,
+    })
+    expect(uploadActivity.get().file).toMatchObject({
+      uploaded: 2000,
+      progress: 50,
+      speed: 2000,
+    })
+    sending.succeed()
+    await batch
+  })
+
   it('runs one batch at a time', async () => {
     const client = fakeClient()
     const queue = createUploadQueue(client.send)

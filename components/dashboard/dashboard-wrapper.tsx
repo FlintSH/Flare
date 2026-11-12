@@ -1,6 +1,5 @@
 import { GlobalDropZone } from '@/components/dashboard/global-drop-zone'
 import { DashboardNav } from '@/components/dashboard/nav'
-import { UploadProgress } from '@/components/dashboard/upload-progress'
 import { UserNav } from '@/components/dashboard/user-nav'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
@@ -22,7 +21,6 @@ export function DashboardWrapper({
       <DynamicBackground />
       <PermissionGate permission="files.upload">
         <GlobalDropZone maxSize={maxUploadSize} />
-        <UploadProgress />
       </PermissionGate>
 
       <a
