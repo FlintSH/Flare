@@ -27,6 +27,11 @@ export interface FileUrls {
   content: string
   /** JSON naming where a video plays from. */
   direct: string
+  /**
+   * Redirects to where the bytes are best fetched, for players and previews
+   * that keep the address: fresh storage URL each time, or `raw`.
+   */
+  media: string
   thumbnail: string
   download: string
   ocr: string
@@ -97,6 +102,7 @@ export function fileUrls(
     raw: address(`${path}/raw`),
     content: address(`/api/files${path}`),
     direct: address(`${path}/direct`),
+    media: address(`${path}/media`),
     ...fileIdUrls(file.id, { origin, password }),
   }
 }

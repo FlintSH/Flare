@@ -13,6 +13,7 @@ import {
   InfoIcon,
   Layers3,
   Loader2,
+  MessageSquareShare,
   Palette as PaletteIcon,
   RotateCcw,
   Save,
@@ -20,6 +21,12 @@ import {
   Upload,
 } from 'lucide-react'
 
+import {
+  EMBED_MODE_OPTIONS,
+  EmbedCardFields,
+  EmbedModePicker,
+} from '@/components/embeds/embed-fields'
+import { EmbedPreview } from '@/components/embeds/embed-preview'
 import { colorSwatchClassName } from '@/components/shared/form-styles'
 import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
@@ -67,6 +74,7 @@ import {
   appearancePackSchema,
 } from '@/lib/customization/schema'
 import { exportAppearancePack } from '@/lib/customization/state'
+import { type EmbedCardTemplates, instanceEmbedCard } from '@/lib/embeds/schema'
 import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import { cn } from '@/lib/utils'
 
@@ -97,6 +105,12 @@ const sections = [
     description: 'The page behind every link',
   },
   {
+    id: 'embeds',
+    name: 'Embeds',
+    icon: MessageSquareShare,
+    description: 'How links look where they are pasted',
+  },
+  {
     id: 'packs',
     name: 'Appearance packs',
     icon: Download,
@@ -121,6 +135,19 @@ const styleOptions = [
     description: 'A polished handoff, with room to breathe.',
   },
 ] as const
+
+// Where the appearance document keeps each part of the card that
+// instanceEmbedCard reads.
+const EMBED_CARD_FIELDS = {
+  siteName: 'siteNameTemplate',
+  author: 'authorTemplate',
+  title: 'titleTemplate',
+  description: 'descriptionTemplate',
+  color: 'embedColor',
+} as const satisfies Record<
+  keyof EmbedCardTemplates,
+  keyof AppearanceDocument['sharing']
+>
 
 const palettePresets = [
   {
@@ -1020,7 +1047,7 @@ export function CustomizationStudio({
                       <div>
                         <SettingRow
                           label="Show uploader"
-                          description="Include the uploader’s name and avatar on the page, and attribution in social previews."
+                          description="Include the uploader’s name and avatar on the page, and attribution in embeds."
                         >
                           <Switch
                             aria-label="Show uploader"
@@ -1032,7 +1059,7 @@ export function CustomizationStudio({
                         </SettingRow>
                         <SettingRow
                           label="Show filename"
-                          description="Display the name in the page heading and social previews."
+                          description="Display the name in the page heading and embeds."
                         >
                           <Switch
                             aria-label="Show filename"
@@ -1105,48 +1132,54 @@ export function CustomizationStudio({
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="sharing-title-template">
-                          Social preview title
-                        </Label>
-                        <Input
-                          id="sharing-title-template"
-                          value={document.sharing.titleTemplate}
-                          onChange={(event) =>
-                            change('sharing', {
-                              titleTemplate: event.target.value,
-                            })
-                          }
-                          placeholder="Automatic from file details"
-                          maxLength={500}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="sharing-description-template">
-                          Social preview description
-                        </Label>
-                        <Input
-                          id="sharing-description-template"
-                          value={document.sharing.descriptionTemplate}
-                          onChange={(event) =>
-                            change('sharing', {
-                              descriptionTemplate: event.target.value,
-                            })
-                          }
-                          placeholder="Automatic from file details"
-                          maxLength={500}
-                        />
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {
-                            'Available: {{instanceName}}, {{filename}}, {{size}}, {{uploader}}. Hidden details are omitted from these templates too. Leave empty for automatic text.'
-                          }
-                        </p>
-                      </div>
                       <p className="text-xs text-muted-foreground leading-relaxed">
                         These controls change presentation. Existing URLs and
                         downloaded files can still contain their original names.
                         File access stays governed by visibility and passwords.
                       </p>
+                    </CardContent>
+                  </>
+                )}
+                {section === 'embeds' && (
+                  <>
+                    <CardHeader>
+                      <CardTitle>Decide how links unfold</CardTitle>
+                      <CardDescription>
+                        What chat apps and social networks show when someone
+                        pastes a link to a file.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-5">
+                      <EmbedModePicker
+                        label="Embed mode"
+                        options={EMBED_MODE_OPTIONS}
+                        value={document.sharing.embedMode}
+                        onChange={(embedMode) =>
+                          change('sharing', { embedMode })
+                        }
+                      />
+                      <EmbedCardFields
+                        value={instanceEmbedCard(document.sharing)}
+                        onChange={(key, value) =>
+                          change('sharing', {
+                            [EMBED_CARD_FIELDS[key]]: value,
+                          })
+                        }
+                      />
+                      <div className="border-t">
+                        <SettingRow
+                          label="Let people design their own"
+                          description="Accounts can choose their own mode and card in Profile. Turn this off to use this embed for every link."
+                        >
+                          <Switch
+                            aria-label="Let people design their own"
+                            checked={document.sharing.personalEmbeds}
+                            onCheckedChange={(personalEmbeds) =>
+                              change('sharing', { personalEmbeds })
+                            }
+                          />
+                        </SettingRow>
+                      </div>
                     </CardContent>
                   </>
                 )}
@@ -1204,8 +1237,8 @@ export function CustomizationStudio({
                           </p>
                           <p className="text-pretty text-sm text-muted-foreground">
                             Export the design you are previewing: identity,
-                            embedded logos, both palettes, surfaces and
-                            share-page choices.
+                            embedded logos, both palettes, surfaces, share-page
+                            choices and embeds.
                           </p>
                         </div>
                         <Button variant="outline" onClick={exportPack}>
@@ -1223,14 +1256,22 @@ export function CustomizationStudio({
                 )}
               </Card>
               <div className="min-w-0 xl:sticky xl:top-28 self-start">
-                <AppearancePreview
-                  document={document}
-                  creditsFooter={creditsFooter}
-                  mode={mode}
-                  onModeChange={setMode}
-                  protectedPreview={protectedPreview}
-                  onProtectedChange={setProtectedPreview}
-                />
+                {section === 'embeds' ? (
+                  <EmbedPreview
+                    mode={document.sharing.embedMode}
+                    card={instanceEmbedCard(document.sharing)}
+                    appearance={document}
+                  />
+                ) : (
+                  <AppearancePreview
+                    document={document}
+                    creditsFooter={creditsFooter}
+                    mode={mode}
+                    onModeChange={setMode}
+                    protectedPreview={protectedPreview}
+                    onProtectedChange={setProtectedPreview}
+                  />
+                )}
               </div>
             </div>
           </div>

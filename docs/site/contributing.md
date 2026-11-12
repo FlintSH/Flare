@@ -533,6 +533,20 @@ node scripts/ui-hillclimb/verify-ui.cjs
 
 Install the handbook's separate dependencies first so its Playwright is available. The suite creates and deletes disposable upload/paste files, opens and cancels account actions, and restores local Settings edits without saving them. It checks folder disclosure and remembered state, removable filters, section history and focus, audit presets, password recovery with closed options, real coarse-pointer switch/calendar controls, tablet tabs, and a 200% layout emulation. The latter uses a 720 CSS-pixel viewport at device scale 2; it is not an operating-system zoom or device test. Results and screenshots stay under `.agent-artifacts/visual-polish/qa/` unless `FLARE_HILLCLIMB_OUTPUT` selects another temporary directory.
 
+## Embed checks
+
+A share link answers by who asks, so its [embeds](/guide/embeds) are checked with real requests. `scripts/embeds/verify.cjs` asks a running instance for share links the way link-preview fetchers do, with the `User-Agent` of Discord, X, and WhatsApp, a browser, and a fetcher Flare doesn't know, and checks each answer: the redirect to an image, the preview page's tags, the video's poster and lasting address, the protected and private cases, the share page's tags in its `<head>`, oEmbed, a rich embed, an account's own embed, personal embeds turned off, and details the instance hides.
+
+It writes to the database directly: it marks setup complete, turns OCR off, deletes and recreates the accounts `embeds-demo-alex` and `embeds-demo-mira` with their files, uploads five small files, and edits the saved appearance. So it refuses any database not named exactly `flare_embeds_demo` on `localhost` or `127.0.0.1`, and any origin on another host. Point a local instance at that database, then run:
+
+```sh
+DATABASE_URL=postgresql://flare_test@127.0.0.1:5432/flare_embeds_demo \
+FLARE_EMBEDS_TEST_ORIGIN=http://localhost:3070 \
+node scripts/embeds/verify.cjs
+```
+
+`NEXTAUTH_URL` on the instance must equal the origin, because preview addresses follow it. The script uses local storage answers; the signed-URL path on S3 is covered by `__tests__/embeds/routes.test.ts` with a stubbed provider. It checks what Flare sends, not how an app draws it: paste a link into the app itself before promising a result there.
+
 ## Automatic coverage checks
 
 `npm run check:coverage` checks every API route file against the inventory, verifies all named-token operations, scopes, and current role requirements against `openapi.json`, checks that every permission key is covered in the roles guide, compares the downloadable webhook schema to its canonical version, and checks that supported environment variables appear in the configuration guide. It collects those variables from `process.env.NAME` and `FLARE_*` names in the `.ts`, `.tsx`, `.js`, `.mjs`, and `.sh` files under `lib/`, `app/`, and `scripts/`, in `instrumentation.ts`, and in `next.config.ts`. It lists the email overrides with `lib/email/environment.ts`, the module the app uses to read them, so a new email setting needs its `FLARE_EMAIL_*` row in the configuration guide. The check loads that module, `lib/integrations/bearer-routes.ts`, and `lib/permissions/catalog.ts` without a bundler, so those three must import nothing but types.

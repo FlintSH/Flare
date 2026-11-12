@@ -7,7 +7,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configureAuditWriter } from '@/lib/audit'
 
-const mocks = vi.hoisted(() => ({ file: undefined as unknown }))
+const mocks = vi.hoisted(() => ({
+  file: undefined as unknown,
+  storage: 'local' as 'local' | 's3',
+}))
 
 const file = {
   id: 'share-page-urls-file',
@@ -21,7 +24,9 @@ const file = {
   path: 'uploads/owner/key/photo.png',
   uploadOptions: null,
   folderId: null,
-  user: { name: 'Owner', image: null },
+  views: 0,
+  uploadedAt: new Date('2026-11-12T10:00:00Z'),
+  user: { name: 'Owner', image: null, preferences: {} },
 }
 
 vi.mock('next/headers', () => ({
@@ -43,28 +48,24 @@ vi.mock('@/lib/database/prisma', () => ({
   },
 }))
 vi.mock('@/lib/storage', () => ({
-  getStorageProvider: async () => ({ getPublicUrl: async () => null }),
+  getStorageProvider: async () => ({ kind: mocks.storage }),
 }))
-vi.mock('@/lib/config', () => ({
-  getConfig: async () => ({
-    settings: {
-      customization: {
-        published: {
-          brand: { name: 'Flare', tagline: 'Files' },
-          sharing: {
-            showFooter: false,
-            showFilename: true,
-            showSize: true,
-            showUploader: true,
-            titleTemplate: '',
-            descriptionTemplate: '',
+vi.mock('@/lib/config', async () => {
+  const { DEFAULT_APPEARANCE } = await import('@/lib/customization/schema')
+  return {
+    getConfig: async () => ({
+      settings: {
+        customization: {
+          published: {
+            ...DEFAULT_APPEARANCE,
+            sharing: { ...DEFAULT_APPEARANCE.sharing, showFooter: false },
           },
         },
+        general: { credits: { showFooter: false } },
       },
-      general: { credits: { showFooter: false } },
-    },
-  }),
-}))
+    }),
+  }
+})
 vi.mock('@/components/customization/instance-brand', () => ({
   InstanceBrand: () => null,
 }))
@@ -80,17 +81,20 @@ const page = (filename: string, password?: string) => ({
 beforeEach(() => {
   configureAuditWriter(async () => undefined)
   mocks.file = file
+  mocks.storage = 'local'
 })
 
 describe('share page addresses', () => {
-  it('points social previews at the raw file on the requested host', async () => {
+  it('links a preview to the share page and its image on the requested host', async () => {
     const metadata = await generateMetadata(page('photo.png'))
     const raw = 'http://share.example/owner/photo.png/raw'
     expect(metadata.openGraph).toMatchObject({
-      url: raw,
+      url: 'http://share.example/owner/photo.png',
       images: [expect.objectContaining({ url: raw })],
     })
-    expect(metadata.twitter).toMatchObject({ images: [raw] })
+    expect(metadata.twitter).toMatchObject({
+      images: [expect.objectContaining({ url: raw })],
+    })
   })
 
   it('encodes a name from an earlier build so previews reach the file', async () => {
@@ -99,13 +103,15 @@ describe('share page addresses', () => {
     const metadata = await generateMetadata(page('notes #1.png'))
     const raw = 'http://share.example/owner/notes%20%231.png/raw'
     expect(metadata.openGraph).toMatchObject({
-      url: raw,
+      url: 'http://share.example/owner/notes%20%231.png',
       images: [expect.objectContaining({ url: raw })],
     })
-    expect(metadata.twitter).toMatchObject({ images: [raw] })
+    expect(metadata.twitter).toMatchObject({
+      images: [expect.objectContaining({ url: raw })],
+    })
   })
 
-  it('plays a video from its raw URL when storage has no direct link', async () => {
+  it('plays a video from its raw URL when storage has no URL of its own', async () => {
     mocks.file = {
       ...file,
       name: 'clip.webm',
@@ -113,10 +119,32 @@ describe('share page addresses', () => {
       mimeType: 'video/webm',
     }
     const metadata = await generateMetadata(page('clip 50%.webm'))
-    const raw = 'http://share.example/owner/clip%2050%25.webm/raw'
     expect(metadata.openGraph).toMatchObject({
-      url: raw,
-      videos: [expect.objectContaining({ url: raw, secureUrl: raw })],
+      url: 'http://share.example/owner/clip%2050%25.webm',
+      videos: [
+        expect.objectContaining({
+          url: 'http://share.example/owner/clip%2050%25.webm/raw',
+        }),
+      ],
+    })
+  })
+
+  it('plays a video from its media address when storage signs its URLs', async () => {
+    // A signed URL in a preview stops working when it expires.
+    mocks.storage = 's3'
+    mocks.file = {
+      ...file,
+      name: 'clip.webm',
+      urlPath: '/owner/clip.webm',
+      mimeType: 'video/webm',
+    }
+    const metadata = await generateMetadata(page('clip.webm'))
+    expect(metadata.openGraph).toMatchObject({
+      videos: [
+        expect.objectContaining({
+          url: 'http://share.example/owner/clip.webm/media',
+        }),
+      ],
     })
   })
 

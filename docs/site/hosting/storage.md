@@ -49,6 +49,8 @@ Keep uploaded file objects private. Flare checks file access before serving or r
 
 The S3 endpoint used in a signed URL must be reachable by users' browsers, not only by the app container. A private Docker service name is unsuitable for browser redirects. Preserve the exact signed hostname, path, and query when using a proxy in front of object storage.
 
+[Link previews](/guide/embeds) of a video or audio file name the file's `/media` address instead of a signed URL. An app that plays the video asks Flare, which checks access and redirects to a URL signed at that moment, so the bytes still come from the bucket and a preview keeps playing after six hours. The endpoint must therefore also be reachable from the apps' servers, such as Discord's, over HTTPS. Earlier builds put the signed URL itself into the preview; messages posted then stop playing when it expires and need the link pasted again.
+
 ### Avatar compatibility
 
 Current S3 avatar uploads request a `public-read` object ACL and use a public avatar URL. This differs from the private signed-link flow for ordinary files. Providers that reject ACLs, or buckets that block public ACLs, can reject avatar uploads even when normal file uploads work.

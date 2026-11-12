@@ -101,6 +101,18 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Embeds and link previews
+
+This change needs no database migration and no new environment variable. After upgrading:
+
+- **What apps are sent changes.** Flare recognizes link-preview fetchers by name instead of by the word "bot". Discord, Telegram, Slack, Facebook and Messenger, Apple Messages, and Matrix (Synapse) still get an image's bytes, so the image appears on its own. Links to other files, which showed nothing in those apps, now show a card, and so do image links on X, LinkedIn, Mastodon, and Bluesky. [Embeds and link previews](/guide/embeds) has the whole table.
+- **Social preview text carries over** as the card's title and description. Empty fields, which meant Flare's own wording, read as `{{filename}} ({{size}})` and `Uploaded by {{uploader}}`. See [upgrading from social preview text](/admin/appearance#upgrading-from-social-preview-text) for the two cases where the wording differs.
+- **Video previews on S3 stop expiring.** A preview posted before the upgrade still holds a signed URL that stops playing six hours after it was posted. Paste the link again to replace it.
+- **Proxies and CDNs** must pass `User-Agent` through and must not cache share pages by address alone; see [keep access decisions in Flare](./reverse-proxy#keep-access-decisions-in-flare).
+- **Check one link.** Paste a public image and a public video into the app you use most, or [ask for the link as its fetcher does](/guide/embeds#check-what-an-app-is-given).
+
+Once any setting or appearance is saved on the new version, the saved appearance names the embed settings. An older image refuses that document, so settings and share pages fail to load there. As with any [rollback](#rollback), return to the old image only together with the database backup taken before upgrading.
+
 ### Next.js 16 and React 19
 
 Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup and upgrade steps above. There are no new settings, environment variables, or database migrations, and existing sessions stay signed in.

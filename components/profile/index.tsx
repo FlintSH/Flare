@@ -5,9 +5,17 @@ import { type MouseEvent, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
 import { ProfileClientProps } from '@/types/components/profile'
-import { Database, Plug, Upload, UserPlus, UserRound } from 'lucide-react'
+import {
+  Database,
+  MessageSquareShare,
+  Plug,
+  Upload,
+  UserPlus,
+  UserRound,
+} from 'lucide-react'
 
 import { PersonalAppearanceSettings } from '@/components/customization/personal-appearance-settings'
+import { PersonalEmbedSettings } from '@/components/embeds/personal-embed-settings'
 import { IntegrationsPanel } from '@/components/integrations/integrations-panel'
 import { InviteManager } from '@/components/invites/invite-manager'
 import {
@@ -63,6 +71,13 @@ const sections = [
     icon: Upload,
   },
   {
+    id: 'embeds',
+    hint: 'How your links preview',
+    title: 'Embeds',
+    description: 'Choose what apps show when you paste one of your links.',
+    icon: MessageSquareShare,
+  },
+  {
     id: 'integrations',
     hint: 'API tokens and webhooks',
     title: 'Integrations',
@@ -94,6 +109,8 @@ export function ProfileClient({
   usagePercentage,
   initialSection,
   initialPreference,
+  initialEmbed,
+  appearance,
 }: ProfileClientProps) {
   const { can, user: sessionUser } = usePermissions()
   const router = useRouter()
@@ -139,11 +156,13 @@ export function ProfileClient({
   const visibleSections = sections.filter((section) =>
     section.id === 'uploads'
       ? can('files.upload') || can('uploadProfiles.manage')
-      : section.id === 'integrations'
-        ? can('tokens.manage') || can('webhooks.manage')
-        : section.id === 'invites'
-          ? can('invites.create')
-          : true
+      : section.id === 'embeds'
+        ? can('files.share')
+        : section.id === 'integrations'
+          ? can('tokens.manage') || can('webhooks.manage')
+          : section.id === 'invites'
+            ? can('invites.create')
+            : true
   )
   const displayedSection = visibleSections.some(
     (section) => section.id === activeSection
@@ -266,6 +285,15 @@ export function ProfileClient({
             </Card>
           </PermissionGate>
         </div>
+      </PreferencesPanel>
+
+      <PreferencesPanel active={displayedSection === 'embeds'}>
+        <PersonalEmbedSettings
+          initial={initialEmbed}
+          appearance={appearance}
+          // The name crawlers are given for an account without one.
+          uploader={user.name || 'Anonymous'}
+        />
       </PreferencesPanel>
 
       <PreferencesPanel active={displayedSection === 'integrations'}>

@@ -1,4 +1,8 @@
-import type { PersonalAppearance } from '@/lib/customization/schema'
+import type {
+  AppearanceDocument,
+  PersonalAppearance,
+} from '@/lib/customization/schema'
+import type { PersonalEmbed } from '@/lib/embeds/schema'
 import type { PROFILE_SECTIONS } from '@/lib/preferences/navigation'
 
 export interface User {
@@ -26,6 +30,9 @@ export interface ProfileClientProps {
   usagePercentage: number
   initialSection: (typeof PROFILE_SECTIONS)[number]
   initialPreference: PersonalAppearance
+  initialEmbed: PersonalEmbed
+  /** The published instance appearance that embeds are written from. */
+  appearance: Pick<AppearanceDocument, 'brand' | 'sharing'>
 }
 
 export interface ProfileStorageProps {

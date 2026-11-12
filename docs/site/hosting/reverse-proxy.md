@@ -89,6 +89,8 @@ Earlier releases sent `public, max-age=31536000` for every video at `/api/files/
 
 For S3, Flare can issue temporary signed object URLs after authorizing access. Those URLs are bearer links until they expire; see [S3 access behavior](/hosting/storage#private-files-and-signed-links).
 
+A share link answers by who asks: a browser gets the share page, and a link-preview fetcher such as Discord's gets the file's [embed](/guide/embeds), chosen from its `User-Agent`. Pass the `User-Agent` and `Host` headers through unchanged. Flare sends the fetcher's answer with `Cache-Control: private, no-store` and `Vary: User-Agent`, and the share page itself is never cacheable; a rule that caches share links by address alone would serve one visitor's answer to everyone. A bot filter that challenges or blocks preview fetchers stops previews from appearing.
+
 Flare uses forwarded client addresses for request throttling and session history. Keep the app port private to the proxy and replace untrusted headers at the edge, as described in [client addresses and rate limits](#client-addresses-and-rate-limits).
 
 ## Client addresses and rate limits
@@ -162,4 +164,5 @@ After changing `NEXTAUTH_URL`, recreate the app container and use the final host
 - A generated screenshot-tool configuration contains the public URL.
 - A large upload succeeds and a video can seek to a later position.
 - A private file stays unavailable in a signed-out browser.
+- A public image link pasted into a chat app shows its preview. The addresses inside a preview use `NEXTAUTH_URL` when the request names its host; [check what an app is given](/guide/embeds#check-what-an-app-is-given).
 - If configured, OIDC returns to `/api/auth/callback/oidc` on this hostname, and account email links use the same public origin.

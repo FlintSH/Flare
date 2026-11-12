@@ -4,6 +4,10 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
   serverExternalPackages: ['tesseract.js'],
+  // Put every page's metadata in its <head>, whoever asks. By default only
+  // fetchers Next.js knows by name get that, and the rest find a share
+  // page's preview tags streamed into the body, where many never look.
+  htmlLimitedBots: /.*/,
   // Uploads and in-progress upload data live here at runtime. Keep them out
   // of route traces, so builds don't copy them into .next/standalone.
   outputFileTracingExcludes: {

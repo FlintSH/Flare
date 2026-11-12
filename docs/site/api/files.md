@@ -274,8 +274,49 @@ File content responses set `Cache-Control` from the file's access state, so a sh
 | `GET /{userUrlId}/{filename}/raw`, `200`/`206`                          | `private, no-store`           | No `Cache-Control` header                                              |
 | `GET`/`POST /api/files/{id}/download`, including a signed S3 redirect   | `private, no-store`           | No `Cache-Control` header                                              |
 | `GET /api/files/{id}/thumbnail`                                         | `private, no-store`           | `public, max-age=31536000, immutable`                                  |
+| `GET /{userUrlId}/{filename}/media`, a `302`                            | `private, no-store`           | `private, no-store`: each request is checked and signed again          |
 
 Access denials from these routes, `404` for a private file and `401` for a missing or wrong password, also send `private, no-store`. Archive listings and entries always do. There is no `Vary` header: a public, unprotected response is the same for every requester, and the others are never stored. A response cached while a file was public stays cached after it becomes private or gets a password; see [browser and CDN caching](/guide/sharing#browser-and-cdn-caching).
+
+## Addresses for players and previews
+
+These routes need no token. The media address judges access the way `/raw` does, by the file's visibility, a `password` query parameter, and a browser session if the request has one. oEmbed reads neither a session nor a password.
+
+### A media address you can keep
+
+`GET /{userUrlId}/{filename}/media` answers `302` to wherever the bytes are best fetched right now: a newly signed storage URL for video and audio when the instance stores files on S3, and the file's `/raw` address otherwise. Use it where an address is kept and played later, such as a `<video>` element on another site. A signed storage URL copied from `/direct` stops working after six hours; this address signs a new one on every request and checks the file's visibility and password each time.
+
+```sh
+curl --fail-with-body --silent --show-error --output /dev/null \
+  --write-out '%{http_code} %{redirect_url}\n' \
+  "$FLARE_URL$FLARE_FILE_PATH/media"
+```
+
+On local storage this prints `302` and the file's `/raw` address. A private file answers `404`, a missing or wrong password `401`, and too many wrong passwords `429` with `Retry-After`; none of them names a storage URL. The redirect is not a view; reading `/raw` after it is.
+
+### oEmbed
+
+`GET /api/oembed?url={share link}&format=json` describes a share link in [oEmbed](https://oembed.com) form. Flare links to it from a share link's [embed](/guide/embeds) when the card has an author line, because apps read that line only from here.
+
+```sh
+curl --fail-with-body --get \
+  --data-urlencode "url=$FLARE_URL$FLARE_FILE_PATH" \
+  --data-urlencode 'format=json' \
+  "$FLARE_URL/api/oembed"
+```
+
+```json
+{
+  "version": "1.0",
+  "type": "link",
+  "title": "photo.png (1.80 MB)",
+  "author_name": "Mira",
+  "provider_name": "Flare",
+  "provider_url": "https://flare.example"
+}
+```
+
+`title`, `author_name`, and `provider_name` are the card's title, author, and site name for that file, as its owner or the instance wrote them; `author_name` and the provider fields are left out when those lines are empty. It answers only for a public file without a password, and never reads a session or a password: every other link, including one that doesn't name a file, answers `404`. `format=xml` answers `501`.
 
 ## Browse the whole file timeline
 

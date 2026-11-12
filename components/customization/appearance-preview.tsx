@@ -12,15 +12,13 @@ import {
   Sun,
 } from 'lucide-react'
 
+import { SamplePicture } from '@/components/embeds/sample-media'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import type { AppearanceDocument } from '@/lib/customization/schema'
-import {
-  shareMetadataText,
-  showsShareFooter,
-} from '@/lib/customization/sharing'
+import { showsShareFooter } from '@/lib/customization/sharing'
 import { paletteVariables } from '@/lib/customization/theme'
 import { cn } from '@/lib/utils'
 
@@ -46,12 +44,6 @@ export function AppearancePreview({
   const { brand, theme, sharing } = document
   const [codePreview, setCodePreview] = useState(false)
   const sampleName = codePreview ? 'hello-world.ts' : 'a-little-inspiration.png'
-  const social = shareMetadataText(document, {
-    name: sampleName,
-    formattedSize: codePreview ? '240 B' : '1.8 MB',
-    uploader: 'you',
-    isMedia: !codePreview,
-  })
   const logo =
     mode === 'light'
       ? brand.logoLight || brand.logoDark
@@ -212,20 +204,13 @@ export function AppearancePreview({
                       </code>
                     </pre>
                   ) : (
-                    <div
-                      className="relative h-40 sm:h-48 overflow-hidden rounded-lg bg-gradient-to-br from-sky-200 via-indigo-300 to-violet-400"
+                    <SamplePicture
+                      className="h-40 sm:h-48"
                       style={{
                         marginInline:
                           sharing.imageFit === 'contain' ? '8px' : 0,
                       }}
-                    >
-                      <div className="absolute rounded-full bg-amber-100 w-14 h-14 top-6 right-9 opacity-90" />
-                      <div className="absolute -bottom-24 -left-8 w-80 h-52 rounded-[45%] rotate-12 bg-indigo-900/65" />
-                      <div className="absolute -bottom-28 -right-16 w-80 h-56 rounded-[45%] -rotate-12 bg-violet-950/75" />
-                      <div className="absolute left-5 bottom-4 text-white text-xs font-medium">
-                        A space for your perspective.
-                      </div>
-                    </div>
+                    />
                   )}
                 </div>
                 {/* As on the live share page: Download is the filled
@@ -278,17 +263,6 @@ export function AppearancePreview({
           {protectedPreview ? 'Show image' : 'Preview protected state'}
         </Button>
       </div>
-      {!protectedPreview && (
-        <div className="rounded-xl border p-4 text-sm space-y-1">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            Social preview text
-          </p>
-          <p className="font-medium break-words">{social.title}</p>
-          <p className="text-xs text-muted-foreground break-words">
-            {social.description}
-          </p>
-        </div>
-      )}
       {!theme.enabled && (
         <Alert variant="info" role="status">
           <InfoIcon aria-hidden="true" />

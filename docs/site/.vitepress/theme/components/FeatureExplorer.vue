@@ -32,6 +32,12 @@ const features = [
   ],
   [
     'Share',
+    'Embeds & link previews',
+    'Show an image or video on its own where a link is pasted, or a card you write with placeholders, an author line, and an accent color.',
+    '/guide/embeds',
+  ],
+  [
+    'Share',
     'Pastes & code',
     'Turn a note or code snippet into a hosted text file with a read-only preview.',
     '/guide/pastes',

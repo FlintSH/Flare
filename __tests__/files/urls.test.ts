@@ -17,6 +17,7 @@ describe('file URLs', () => {
       raw: '/Ab3dE/my-report.pdf/raw',
       content: '/api/files/Ab3dE/my-report.pdf',
       direct: '/Ab3dE/my-report.pdf/direct',
+      media: '/Ab3dE/my-report.pdf/media',
       thumbnail: '/api/files/cmfile0123456789abcdef/thumbnail',
       download: '/api/files/cmfile0123456789abcdef/download',
       ocr: '/api/files/cmfile0123456789abcdef/ocr',

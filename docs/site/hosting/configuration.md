@@ -247,30 +247,37 @@ Legacy appearance remains in `settings.appearance`: `theme` defaults to `dark`; 
 
 The studio's published document lives under `settings.customization.published`. The same shape is used for a saved `draft` and `previous` document. Paths in this table are relative to that appearance document.
 
-| Appearance path               | Initial value                                            | Choices or limit                                                      |
-| ----------------------------- | -------------------------------------------------------- | --------------------------------------------------------------------- |
-| `brand.name`                  | `Flare`                                                  | 1–60 characters                                                       |
-| `brand.tagline`               | `A free, modern, open source file upload platform`       | Up to 180 characters                                                  |
-| `brand.logoLight`             | Empty string                                             | Embedded PNG/JPEG/WebP data URL, up to 256 KB                         |
-| `brand.logoDark`              | Empty string                                             | Embedded PNG/JPEG/WebP data URL, up to 256 KB                         |
-| `brand.footerText`            | `Flare is a free, open source, self-hostable file host.` | Up to 200 characters                                                  |
-| `theme.enabled`               | `false`                                                  | Apply studio palettes rather than the original theme behavior         |
-| `theme.defaultMode`           | `dark`                                                   | `system`, `light`, `dark`                                             |
-| `theme.light`                 | Light palette below                                      | Full palette with six-digit hex colors                                |
-| `theme.dark`                  | Dark palette below                                       | Full palette with six-digit hex colors                                |
-| `theme.radius`                | `0.75`                                                   | 0–1.5 rem                                                             |
-| `theme.background`            | `glow`                                                   | `glow`, `plain`, `grid`                                               |
-| `theme.font`                  | `inter`                                                  | `inter`, `system`, `mono`                                             |
-| `sharing.defaultStyle`        | `framed`                                                 | `minimal`, `framed`, `delivery`                                       |
-| `sharing.showUploader`        | `true`                                                   | Show uploader attribution                                             |
-| `sharing.showFilename`        | `true`                                                   | Show filename                                                         |
-| `sharing.showSize`            | `true`                                                   | Show formatted file size                                              |
-| `sharing.showFooter`          | `null`                                                   | `null` inherits `general.credits.showFooter`; `true`/`false` override |
-| `sharing.imageFit`            | `contain`                                                | `contain` shows the whole image; `cover` fills the frame              |
-| `sharing.titleTemplate`       | Empty string                                             | Automatic title when empty; up to 500 characters                      |
-| `sharing.descriptionTemplate` | Empty string                                             | Automatic description when empty; up to 500 characters                |
+| Appearance path               | Initial value                                            | Choices or limit                                                               |
+| ----------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `brand.name`                  | `Flare`                                                  | 1–60 characters                                                                |
+| `brand.tagline`               | `A free, modern, open source file upload platform`       | Up to 180 characters                                                           |
+| `brand.logoLight`             | Empty string                                             | Embedded PNG/JPEG/WebP data URL, up to 256 KB                                  |
+| `brand.logoDark`              | Empty string                                             | Embedded PNG/JPEG/WebP data URL, up to 256 KB                                  |
+| `brand.footerText`            | `Flare is a free, open source, self-hostable file host.` | Up to 200 characters                                                           |
+| `theme.enabled`               | `false`                                                  | Apply studio palettes rather than the original theme behavior                  |
+| `theme.defaultMode`           | `dark`                                                   | `system`, `light`, `dark`                                                      |
+| `theme.light`                 | Light palette below                                      | Full palette with six-digit hex colors                                         |
+| `theme.dark`                  | Dark palette below                                       | Full palette with six-digit hex colors                                         |
+| `theme.radius`                | `0.75`                                                   | 0–1.5 rem                                                                      |
+| `theme.background`            | `glow`                                                   | `glow`, `plain`, `grid`                                                        |
+| `theme.font`                  | `inter`                                                  | `inter`, `system`, `mono`                                                      |
+| `sharing.defaultStyle`        | `framed`                                                 | `minimal`, `framed`, `delivery`                                                |
+| `sharing.showUploader`        | `true`                                                   | Show uploader attribution                                                      |
+| `sharing.showFilename`        | `true`                                                   | Show filename                                                                  |
+| `sharing.showSize`            | `true`                                                   | Show formatted file size                                                       |
+| `sharing.showFooter`          | `null`                                                   | `null` inherits `general.credits.showFooter`; `true`/`false` override          |
+| `sharing.imageFit`            | `contain`                                                | `contain` shows the whole image; `cover` fills the frame                       |
+| `sharing.embedMode`           | `direct`                                                 | `direct` shows media on its own where an app can; `rich` always shows the card |
+| `sharing.personalEmbeds`      | `true`                                                   | Let accounts choose their own embed mode and card                              |
+| `sharing.siteNameTemplate`    | `{{instanceName}}`                                       | Card site name; up to 100 characters; empty leaves it off                      |
+| `sharing.authorTemplate`      | Empty string                                             | Card author line; up to 100 characters; empty leaves it off                    |
+| `sharing.titleTemplate`       | `{{filename}} ({{size}})`                                | Card title; up to 500 characters; empty shows the file's name                  |
+| `sharing.descriptionTemplate` | `Uploaded by {{uploader}}`                               | Card description; up to 500 characters; empty leaves it off                    |
+| `sharing.embedColor`          | Empty string                                             | Card accent as a six-digit hex color, or empty for none                        |
 
-Both social templates support `{{instanceName}}`, `{{filename}}`, `{{size}}`, and `{{uploader}}`. Hidden details are omitted. [Appearance](/admin/appearance) describes the publish and recovery workflows.
+The four card templates support `{{filename}}`, `{{size}}`, `{{type}}`, `{{uploader}}`, `{{date}}`, `{{views}}`, and `{{instanceName}}`. Hidden details are omitted. An appearance saved before `sharing.embedMode` existed stored empty title and description templates to mean automatic text; Flare reads those as the initial values above until any setting is next saved, which stores them. [Appearance](/admin/appearance#embeds) describes the embed controls and the publish and recovery workflows. An account's own embed is stored with its preferences, not here.
+
+Preview addresses are built from `NEXTAUTH_URL` when a request names its host. A request for another host, such as a second domain pointed at the same instance, gets addresses on that host, with `https` in production.
 
 The customization wrapper also contains `version` (currently `1`), `revision` (initially `0`), `draft` and `previous` (initially `null`), and `publishedAt` (initially `null`). Flare manages these fields during saves, publishing, imports, and restoration. Revision checks protect against concurrent editors; do not strip or manually increment them to force a stale save.
 

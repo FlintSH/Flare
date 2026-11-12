@@ -9,6 +9,7 @@ export const SETTINGS_SECTIONS = [
 export const PROFILE_SECTIONS = [
   'account',
   'uploads',
+  'embeds',
   'integrations',
   'invites',
   'data',
