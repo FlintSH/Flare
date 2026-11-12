@@ -237,13 +237,21 @@ describe('safe durable audit events', () => {
   })
 
   it('keeps concurrent actors isolated and correlates model events with request results', async () => {
+    let releaseAlex!: () => void
+    let releaseMorgan!: () => void
+    const gates = {
+      Alex: new Promise<void>((resolve) => {
+        releaseAlex = resolve
+      }),
+      Morgan: new Promise<void>((resolve) => {
+        releaseMorgan = resolve
+      }),
+    }
     const handler = withAuditRoute(
       async (request: Request) => {
         const name = request.headers.get('fixture-actor')!
         setAuditActor({ id: name, name })
-        await new Promise((resolve) =>
-          setTimeout(resolve, name === 'Alex' ? 5 : 1)
-        )
+        await gates[name as keyof typeof gates]
         await recordAudit({
           action: 'file.create',
           category: 'files',
@@ -253,16 +261,19 @@ describe('safe durable audit events', () => {
       },
       { route: '/api/files' }
     )
-    await Promise.all(
-      ['Alex', 'Morgan'].map((name) =>
-        handler(
-          new Request('http://localhost/api/files?token=never-record', {
-            method: 'POST',
-            headers: { 'fixture-actor': name },
-          })
-        )
+    const [alex, morgan] = ['Alex', 'Morgan'].map((name) =>
+      handler(
+        new Request('http://localhost/api/files?token=never-record', {
+          method: 'POST',
+          headers: { 'fixture-actor': name },
+        })
       )
     )
+    // Both actors are set before either request resumes; finish Morgan first.
+    releaseMorgan()
+    await morgan
+    releaseAlex()
+    await alex
     const created = events.filter((event) => event.action === 'file.create')
     expect(created.map((event) => [event.actorName, event.targetName])).toEqual(
       [
