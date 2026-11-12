@@ -6,6 +6,7 @@ import {
   LANGUAGES,
   fileIcon,
   fileKind,
+  fileTypeDescription,
   fileTypeGroup,
   fileTypeLabel,
   isTextKind,
@@ -126,9 +127,115 @@ describe('fileKind', () => {
       'application/wasm',
       'application/x-protobuf',
       'application/x-python-code',
-      'application/octet-stream',
     ])
       expect(fileKind({ name: 'a.py', mimeType }).kind, mimeType).toBe('other')
+    // A generic type says nothing, so an unknown name stays a download.
+    for (const name of ['firmware.bin', 'module.pyc', 'setup', 'photo.raw'])
+      expect(
+        fileKind({ name, mimeType: 'application/octet-stream' }).kind,
+        name
+      ).toBe('other')
+  })
+
+  // A browser sends no type for an extension the uploading system doesn't
+  // know, such as .md on Windows, and the upload is stored as generic bytes.
+  it('opens text and code stored under a generic type by its name', () => {
+    for (const mimeType of ['application/octet-stream', 'binary/octet-stream'])
+      expect(fileKind({ name: 'README.md', mimeType }), mimeType).toEqual({
+        kind: 'code',
+        language: 'markdown',
+      })
+    expect(
+      fileKind({ name: 'main.rs', mimeType: 'application/octet-stream' })
+    ).toEqual({ kind: 'code', language: 'rust' })
+    for (const name of ['server.log', 'deploy.sh', '.env', 'Dockerfile'])
+      expect(
+        fileKind({ name, mimeType: 'application/octet-stream' }),
+        name
+      ).toEqual({ kind: 'text', language: 'text' })
+    // A name alone never decides for a type that says what the bytes are.
+    expect(
+      fileKind({ name: 'notes.md', mimeType: 'application/zip' }).kind
+    ).toBe('archive')
+    expect(
+      fileKind({ name: 'notes.md', mimeType: 'application/x-msdownload' }).kind
+    ).toBe('other')
+  })
+
+  it('shows tab-separated files as tables', () => {
+    expect(
+      fileKind({ name: 'cities.tsv', mimeType: 'text/tab-separated-values' })
+    ).toEqual({ kind: 'csv' })
+    expect(
+      fileKind({ name: 'cities.TSV', mimeType: 'application/octet-stream' })
+    ).toEqual({ kind: 'csv' })
+    expect(fileIcon({ name: 'cities.tsv', mimeType: 'text/plain' })).toBe(
+      'table'
+    )
+  })
+})
+
+describe('fileTypeDescription', () => {
+  const describes = (name: string, mimeType: string) =>
+    fileTypeDescription({ name, mimeType })
+
+  it('names media by its format', () => {
+    expect(describes('a.png', 'image/png')).toBe('PNG image')
+    expect(describes('a.jpg', 'image/jpeg')).toBe('JPEG image')
+    expect(describes('a.svg', 'image/svg+xml')).toBe('SVG image')
+    expect(describes('a.webp', 'image/webp')).toBe('WebP image')
+    expect(describes('a.mp4', 'video/mp4')).toBe('MP4 video')
+    expect(describes('a.mov', 'video/quicktime')).toBe('MOV video')
+    expect(describes('a.mp3', 'audio/mpeg')).toBe('MP3 audio')
+    expect(describes('a.m4a', 'audio/mp4')).toBe('M4A audio')
+    expect(describes('a.flac', 'audio/flac')).toBe('FLAC audio')
+  })
+
+  it('falls back to the extension, then the kind, for an unusual subtype', () => {
+    expect(describes('clip.mkv', 'video/x-some-long-vendor-type')).toBe(
+      'MKV video'
+    )
+    expect(describes('clip', 'video/x-some-long-vendor-type')).toBe('Video')
+  })
+
+  it('names documents, tables, text and code', () => {
+    expect(describes('a.pdf', 'application/pdf')).toBe('PDF document')
+    expect(describes('a.csv', 'text/csv')).toBe('CSV spreadsheet')
+    expect(describes('a.tsv', 'text/tab-separated-values')).toBe(
+      'TSV spreadsheet'
+    )
+    expect(describes('index.ts', 'video/mp2t')).toBe('TypeScript')
+    expect(describes('script.py', 'text/plain')).toBe('Python')
+    expect(describes('README.md', 'application/octet-stream')).toBe('Markdown')
+    expect(describes('notes.txt', 'text/plain')).toBe('Plain text')
+    expect(describes('README', 'text/plain')).toBe('Plain text')
+    expect(describes('server.log', 'text/x-log')).toBe('Log file')
+    expect(describes('deploy.sh', 'text/x-sh')).toBe('SH file')
+  })
+
+  it('names archives by their format', () => {
+    expect(describes('a.zip', 'application/zip')).toBe('ZIP archive')
+    expect(describes('a.tgz', 'application/octet-stream')).toBe(
+      'TAR.GZ archive'
+    )
+    expect(describes('a.rar', 'application/vnd.rar')).toBe('RAR archive')
+    expect(describes('a.7z', 'application/x-7z-compressed')).toBe('7z archive')
+  })
+
+  it('names files without a preview by a known type or their extension', () => {
+    expect(
+      describes(
+        'Report.docx',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      )
+    ).toBe('Word document')
+    expect(describes('firmware.bin', 'application/octet-stream')).toBe(
+      'BIN file'
+    )
+    expect(describes('data', 'application/octet-stream')).toBe('File')
+    // Never a member of Object, and never an extension that isn't one.
+    expect(describes('notes.constructor', 'constructor')).toBe('File')
+    expect(describes('a.b c', 'application/octet-stream')).toBe('File')
   })
 })
 

@@ -2,8 +2,8 @@
  * What a stored file is, decided one way for the library card, the moderation
  * list, the File type filter and the share page: which viewer previews it, how
  * its text is highlighted, its icon and its filter group. Browsers often store
- * CSV files and archives under a generic type, so those are also recognized by
- * the real filename. Browser-safe.
+ * CSV files, archives, and text or code under a generic type, so those are
+ * also recognized by the real filename. Browser-safe.
  */
 import { type ArchiveFormat, detectArchiveFormat } from '@/lib/archives/shared'
 
@@ -226,11 +226,54 @@ const EXTENSION_LANGUAGES = byLanguage({
   less: ['less'],
 })
 
+/** A name's last extension in lower case, or '' without one. */
+function extensionOf(name: string) {
+  return name.includes('.') ? (name.split('.').pop()?.toLowerCase() ?? '') : ''
+}
+
 /** The grammar for a plain-text file, such as a paste, from its extension. */
 export function languageFromFilename(name: string): Language {
-  if (!name.includes('.')) return 'text'
-  const extension = name.split('.').pop()?.toLowerCase()
-  return (extension && EXTENSION_LANGUAGES.get(extension)) || 'text'
+  return EXTENSION_LANGUAGES.get(extensionOf(name)) || 'text'
+}
+
+/**
+ * Text Flare shows without colouring when its type is generic. A browser
+ * sends no type for an extension the uploading system doesn't know, and the
+ * upload is stored as `application/octet-stream`.
+ */
+const PLAIN_TEXT_EXTENSIONS = new Set([
+  ...['txt', 'text', 'log', 'nfo', 'rst', 'adoc', 'org', 'tex', 'srt', 'vtt'],
+  ...['ini', 'cfg', 'conf', 'toml', 'env', 'properties', 'editorconfig'],
+  ...['gitignore', 'gitattributes', 'dockerignore', 'npmrc', 'lock'],
+  ...['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd'],
+  ...['rb', 'kt', 'kts', 'swift', 'scala', 'pl', 'lua', 'r', 'dart', 'ex'],
+  ...['exs', 'erl', 'hs', 'clj', 'cs', 'fs', 'groovy', 'gradle', 'jl', 'zig'],
+  ...['tf', 'proto', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'diff'],
+  ...['patch', 'jsonl', 'ndjson', 'asm', 'cmake', 'mk'],
+])
+
+/** Text files commonly shared without an extension. */
+const PLAIN_TEXT_NAMES = new Set([
+  ...['dockerfile', 'makefile', 'license', 'readme', 'changelog', 'authors'],
+  ...['notice', 'gemfile', 'procfile', 'caddyfile', 'jenkinsfile'],
+])
+
+const GENERIC_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'binary/octet-stream',
+])
+
+/** Text or code stored under a generic type, told from its name alone. */
+function textFromFilename(name: string): FileKindInfo | null {
+  const language = languageFromFilename(name)
+  if (language !== 'text') return { kind: 'code', language }
+  const extension = extensionOf(name)
+  return (extension ? PLAIN_TEXT_EXTENSIONS : PLAIN_TEXT_NAMES).has(
+    extension || name.toLowerCase()
+  )
+    ? { kind: 'text', language: 'text' }
+    : null
 }
 
 // Systems type TypeScript sources by their extension as MPEG transport
@@ -249,13 +292,19 @@ export function fileKind({ name = '', mimeType }: FileTypeInput): FileKindInfo {
   if (archiveFormat) return { kind: 'archive', archiveFormat }
   if (/\.(rar|7z)$/i.test(name) || /rar|7z-compressed/i.test(mimeType))
     return { kind: 'unsupported-archive' }
-  if (mimeType.includes('csv') || name.toLowerCase().endsWith('.csv'))
+  if (
+    mimeType.includes('csv') ||
+    mimeType === 'text/tab-separated-values' ||
+    /\.[ct]sv$/i.test(name)
+  )
     return { kind: 'csv' }
   const language = CODE_TYPES.get(mimeType)
   if (language) return { kind: 'code', language }
   if (mimeType.startsWith('text/'))
     return { kind: 'text', language: languageFromFilename(name) }
-  return { kind: 'other' }
+  return (
+    (GENERIC_TYPES.has(mimeType) && textFromFilename(name)) || { kind: 'other' }
+  )
 }
 
 /** Whether the share page offers the file's contents as text to copy. */
@@ -333,4 +382,127 @@ export function fileTypeLabel(mimeType: string) {
     TYPE_LABELS.get(mimeType) ||
     (mimeType.split('/')[1] || mimeType).toUpperCase()
   )
+}
+
+const LANGUAGE_NAMES: Record<Exclude<Language, 'text'>, string> = {
+  html: 'HTML',
+  css: 'CSS',
+  javascript: 'JavaScript',
+  jsx: 'JSX',
+  typescript: 'TypeScript',
+  tsx: 'TSX',
+  json: 'JSON',
+  python: 'Python',
+  markdown: 'Markdown',
+  yaml: 'YAML',
+  java: 'Java',
+  sql: 'SQL',
+  xml: 'XML',
+  wasm: 'WebAssembly text',
+  c: 'C',
+  cpp: 'C++',
+  rust: 'Rust',
+  php: 'PHP',
+  go: 'Go',
+  sass: 'Sass',
+  scss: 'SCSS',
+  less: 'Less',
+}
+
+/** Format names for stored media subtypes that don't read as one. */
+const MEDIA_FORMATS = new Map(
+  Object.entries({
+    jpeg: 'JPEG',
+    'svg+xml': 'SVG',
+    webp: 'WebP',
+    'x-icon': 'ICO',
+    'vnd.microsoft.icon': 'ICO',
+    quicktime: 'MOV',
+    'x-matroska': 'MKV',
+    'x-msvideo': 'AVI',
+    'x-m4v': 'M4V',
+    mpeg: 'MPEG',
+    'x-wav': 'WAV',
+    'x-flac': 'FLAC',
+    'x-m4a': 'M4A',
+    webm: 'WebM',
+  })
+)
+
+const DOCUMENT_TYPES = new Map(
+  Object.entries({
+    'application/msword': 'Word document',
+    'application/vnd.ms-excel': 'Excel spreadsheet',
+    'application/vnd.ms-powerpoint': 'PowerPoint presentation',
+    'application/vnd.oasis.opendocument.text': 'OpenDocument text',
+    'application/vnd.oasis.opendocument.spreadsheet':
+      'OpenDocument spreadsheet',
+    'application/vnd.oasis.opendocument.presentation':
+      'OpenDocument presentation',
+    'application/rtf': 'Rich text document',
+    'application/epub+zip': 'EPUB book',
+  })
+)
+
+/** An extension short and plain enough to name a format, in capitals. */
+function formatFromName(name: string) {
+  const extension = extensionOf(name)
+  return /^[a-z0-9]{1,5}$/.test(extension) ? extension.toUpperCase() : ''
+}
+
+/** "PNG image" from `image/png`; the name's extension when the type is vague. */
+function mediaDescription(file: FileTypeInput, noun: string) {
+  const subtype = file.mimeType.split('/')[1]?.split(';')[0] ?? ''
+  // MP3 is stored as audio/mpeg, and M4A as audio/mp4.
+  const audio = noun === 'audio'
+  const format =
+    (audio && subtype === 'mpeg' && 'MP3') ||
+    (audio && subtype === 'mp4' && 'M4A') ||
+    MEDIA_FORMATS.get(subtype) ||
+    (/^[a-z0-9]{2,5}$/.test(subtype) && subtype.toUpperCase()) ||
+    formatFromName(file.name ?? '')
+  return format ? `${format} ${noun}` : noun[0].toUpperCase() + noun.slice(1)
+}
+
+/**
+ * What a file is in a few words a recipient can read, such as "PNG image",
+ * "TypeScript" or "ZIP archive", for the share page.
+ */
+export function fileTypeDescription(file: FileTypeInput): string {
+  const name = file.name ?? ''
+  const info = fileKind(file)
+  switch (info.kind) {
+    case 'image':
+    case 'video':
+    case 'audio':
+      return mediaDescription(file, info.kind)
+    case 'pdf':
+      return 'PDF document'
+    case 'csv':
+      return /\.tsv$/i.test(name) ||
+        file.mimeType === 'text/tab-separated-values'
+        ? 'TSV spreadsheet'
+        : 'CSV spreadsheet'
+    case 'code':
+    case 'text': {
+      if (info.language !== 'text') return LANGUAGE_NAMES[info.language]
+      const format = formatFromName(name)
+      return !format || format === 'TXT' || format === 'TEXT'
+        ? 'Plain text'
+        : format === 'LOG'
+          ? 'Log file'
+          : `${format} file`
+    }
+    case 'archive':
+      return `${info.archiveFormat.toUpperCase()} archive`
+    case 'unsupported-archive':
+      return `${/rar/i.test(`${extensionOf(name)}${file.mimeType}`) ? 'RAR' : '7z'} archive`
+    default: {
+      const known =
+        DOCUMENT_TYPES.get(file.mimeType) ?? TYPE_LABELS.get(file.mimeType)
+      if (known && known !== 'Other file') return known
+      const format = formatFromName(name)
+      return format ? `${format} file` : 'File'
+    }
+  }
 }

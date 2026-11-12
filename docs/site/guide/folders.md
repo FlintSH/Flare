@@ -76,7 +76,7 @@ The shared page uses a link under `/s/folders/…`. It lists up to 48 files per 
 
 A visitor who opens a file from the shared page sees **Back to** and the folder's name above the file, including on the password page of a locked tile, to return to the listing page they opened it from. From a locked tile, both its password page and the unlocked file return to the first page. Flare shows the link only while the file is still a public member of that folder. The file's own link doesn't change: the folder pages pass their address, as the browser's referrer, only to your Flare instance, so the folder link never appears in a file URL or reaches other sites. A browser set to send no referrer opens the file without the link.
 
-<Screenshot src="/evidence/vault-folders/shared-folder-desktop.jpg" alt="Public shared collection with public files and a generic password-protected tile" caption="The public collection excludes private files and hides the filename and preview of locked files." />
+<Screenshot src="/evidence/vault-folders/shared-folder-desktop.jpg" alt="Public shared collection: tiles for public files with each file's type and size under its name, and a generic password-protected tile" caption="The public collection excludes private files and hides the filename and preview of locked files." />
 
 | Item in your folder                   | What a visitor sees                                                                 |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -87,6 +87,12 @@ A visitor who opens a file from the shared page sees **Back to** and the folder'
 | Tags and account details              | Not listed.                                                                         |
 
 A tile without an image preview shows the same icon for the file's kind as your [library cards](./library#read-a-file-card): video, audio, text or PDF, code, table, archive, or a plain file. Earlier versions told only video and audio apart, and showed a plain file for everything else.
+
+Under its name, each tile says what the file is, such as **JPEG image** or **Plain text**, followed by its size unless the instance hides sizes. A locked tile says **Password required** instead.
+
+An image tile shows a thumbnail that Flare resizes for the tile, as library cards do, so a folder of large photos opens without downloading every original. Animated GIFs and SVG images are shown as they are. Opening the folder adds no [views](./sharing#view-counts) to its files. Earlier versions loaded each image tile from the file's raw link at full size, which was slow for photo collections and added a view to every image on each visit.
+
+A short list sits in the middle of the page, like a shared file; a longer one starts under the header.
 
 There is no separate folder password. Protect individual public files with their own passwords, or keep them private. A shared folder is a collection for viewing, not a collaborative upload or editing space.
 

@@ -72,15 +72,17 @@ Every account can separately choose **Inherit**, **System**, **Light**, or **Dar
 
 Choose a default share-page layout:
 
-| Layout       | Useful for                                                              |
-| ------------ | ----------------------------------------------------------------------- |
-| **Minimal**  | A restrained page that gives the file most of the attention             |
-| **Framed**   | A familiar file viewer with a clear surrounding frame                   |
-| **Delivery** | A more spacious handoff for a file you want someone to open or download |
+| Layout       | What visitors see                                                                                    |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| **Minimal**  | The file's header and preview set on the page itself, without a card, so the file gets the attention |
+| **Framed**   | The file in a card in the middle of the page, with the uploader in the page header                   |
+| **Delivery** | A card across the full page width that opens with **A file for you** and names the uploader inside   |
+
+Every layout shows the file's name, type, and size with its actions above the preview, as [the sharing guide describes](../guide/sharing#what-a-share-page-shows). The layout changes the framing around them.
 
 <Screenshot src="/screenshots/customization/share-delivery.png" alt="A real Flare public share page using the Delivery layout" caption="The Delivery layout gives a shared file a spacious presentation." />
 
-Toggle uploader attribution, filename, and size. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. The preview follows it too, using the saved **Show credits footer** setting from **General**; earlier versions previewed an inherited footer even when that setting was off. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
+Toggle uploader attribution, filename, and size. With the filename off, a share page is titled by the file's type, such as **PNG image**, which is always shown. Set the footer to inherit the instance credit setting, always show, or always hide. The choice covers share pages, shared folders, file password pages, and the page visitors see for a missing, expired, or private link. The preview follows it too, using the saved **Show credits footer** setting from **General**; earlier versions previewed an inherited footer even when that setting was off. For images, **Show the whole image** uses contain; **Fill the frame** uses cover and may crop its displayed edges. The downloaded file is unchanged.
 
 Upload profiles can select a share style for new files. A file with no stored style inherits the current instance default, so changing the default can change how those older files appear too.
 

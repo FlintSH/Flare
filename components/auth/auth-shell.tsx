@@ -27,12 +27,15 @@ export function AuthFooter({ children }: { children: ReactNode }) {
  */
 export function AuthCard({
   titleId,
+  icon,
   eyebrow,
   title,
   description,
   children,
 }: {
   titleId: string
+  /** Shown in a tile above the title, as on a shared file's card. */
+  icon?: ReactNode
   eyebrow?: ReactNode
   title: ReactNode
   description: ReactNode
@@ -44,6 +47,11 @@ export function AuthCard({
       className="w-full max-w-[400px] rounded-2xl border border-border/60 bg-panel p-6 shadow-sm"
       data-flare-surface
     >
+      {icon && (
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border bg-muted/30 text-foreground [&_svg]:h-6 [&_svg]:w-6">
+          {icon}
+        </div>
+      )}
       <div className="mb-6 space-y-2 text-center">
         {eyebrow && (
           <p className="text-xs font-medium uppercase tracking-[.2em] text-muted-foreground">

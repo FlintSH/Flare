@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/database/prisma'
 import {
+  canOptimizeThumbnail,
   fileUrls,
   sharedFolderFileUrl,
   sharedFolderUrl,
@@ -41,6 +42,7 @@ export async function getSharedFolder(token: string, page = 1) {
     pageCount: Math.ceil(folder._count.files / SHARED_FOLDER_PAGE_SIZE),
     files: folder.files.map((file) => {
       const urls = fileUrls(file)
+      const image = !file.password && file.mimeType.startsWith('image/')
       return {
         id: file.id,
         name: file.password ? 'Password-protected file' : file.name,
@@ -48,7 +50,18 @@ export async function getSharedFolder(token: string, page = 1) {
         // route checks membership and the password before revealing its
         // canonical URL.
         href: file.password ? sharedFolderFileUrl(token, file.id) : urls.page,
-        rawUrl: file.password ? null : urls.raw,
+        // An image's tile shows its thumbnail, which the browser can ask
+        // Flare to resize and which adds no view, unlike its raw link.
+        thumbnail: image
+          ? {
+              url: urls.thumbnail,
+              optimize: canOptimizeThumbnail({
+                visibility: 'PUBLIC',
+                hasPassword: false,
+                mimeType: file.mimeType,
+              }),
+            }
+          : null,
         mimeType: file.password ? null : file.mimeType,
         size: file.password ? null : file.size,
         hasPassword: Boolean(file.password),

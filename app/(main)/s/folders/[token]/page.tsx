@@ -9,6 +9,7 @@ import {
   publicColumnClassName,
 } from '@/components/customization/share-layout'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
+import { SharedTilePreview } from '@/components/folders/shared-tile-preview'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { pagePanelClassName } from '@/components/layout/page-header'
@@ -16,6 +17,7 @@ import { Button } from '@/components/ui/button'
 
 import { getConfig } from '@/lib/config'
 import { showsShareFooter } from '@/lib/customization/sharing'
+import { fileTypeDescription } from '@/lib/files/file-kind'
 import { getSharedFolder } from '@/lib/folders/shared'
 import { cn, formatFileSize } from '@/lib/utils'
 
@@ -60,8 +62,21 @@ export default async function SharedFolderPage({
     <div className="relative isolate flex min-h-dvh min-w-0 flex-col">
       <DynamicBackground />
       <PublicHeader />
-      <main className="relative z-10 flex-1 pb-8 pt-5 sm:pt-[calc(1.5rem+6vh)]">
-        <div className={publicColumnClassName}>
+      {/* A short list sits in the middle of the page, like a shared file; a
+          long one starts under the header. The footer brings its own space
+          above it. */}
+      <main
+        className={cn(
+          'relative z-10 flex flex-1 flex-col pt-5 sm:pt-6',
+          !showFooter && 'pb-5 sm:pb-6'
+        )}
+      >
+        <div
+          className={cn(
+            publicColumnClassName,
+            'flex flex-1 flex-col sm:justify-center'
+          )}
+        >
           <section
             className={cn(pagePanelClassName, 'overflow-hidden p-0 sm:p-0')}
             data-flare-surface
@@ -89,11 +104,25 @@ export default async function SharedFolderPage({
             {folder.files.length ? (
               <ul className="grid grid-cols-1 gap-4 p-6 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {folder.files.map((file) => {
-                  const image = file.mimeType?.startsWith('image/')
-                    ? file.rawUrl
-                    : null
+                  const image = file.thumbnail
                   const iconClassName =
                     'h-8 w-8 text-muted-foreground min-[480px]:h-10 min-[480px]:w-10'
+                  const icon = (
+                    <FileTypeIcon
+                      file={{ name: file.name, mimeType: file.mimeType ?? '' }}
+                      className={iconClassName}
+                    />
+                  )
+                  const facts = [
+                    file.mimeType !== null &&
+                      fileTypeDescription({
+                        name: file.name,
+                        mimeType: file.mimeType,
+                      }),
+                    sharing.showSize &&
+                      file.size !== null &&
+                      formatFileSize(file.size),
+                  ].filter(Boolean)
                   return (
                     <li key={file.id} className="min-w-0">
                       <Link
@@ -112,12 +141,12 @@ export default async function SharedFolderPage({
                           )}
                         >
                           {image ? (
-                            // Raw routes apply file access checks again if visibility changes.
-                            <img
-                              src={image}
-                              alt=""
-                              loading="lazy"
-                              className="h-full w-full object-cover"
+                            // The thumbnail route checks file access again if
+                            // visibility changes.
+                            <SharedTilePreview
+                              src={image.url}
+                              optimize={image.optimize}
+                              fallback={icon}
                             />
                           ) : file.hasPassword ? (
                             <Lock
@@ -125,13 +154,7 @@ export default async function SharedFolderPage({
                               aria-hidden="true"
                             />
                           ) : (
-                            <FileTypeIcon
-                              file={{
-                                name: file.name,
-                                mimeType: file.mimeType ?? '',
-                              }}
-                              className={iconClassName}
-                            />
+                            icon
                           )}
                         </div>
                         <div className="space-y-1.5 p-3.5">
@@ -149,10 +172,10 @@ export default async function SharedFolderPage({
                                 <Lock className="h-3 w-3" aria-hidden="true" />
                                 Password required
                               </>
-                            ) : sharing.showSize && file.size !== null ? (
-                              formatFileSize(file.size)
                             ) : (
-                              'Open file'
+                              <span className="truncate">
+                                {facts.join(' · ')}
+                              </span>
                             )}
                             <ArrowRight
                               className="ml-auto h-4 w-4 shrink-0 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"

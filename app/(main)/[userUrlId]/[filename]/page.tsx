@@ -5,6 +5,7 @@ import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 
 import type { Prisma } from '@prisma/client'
+import { Lock } from 'lucide-react'
 
 import {
   FILE_PASSWORD_DESCRIPTION,
@@ -14,7 +15,9 @@ import {
 } from '@/components/auth/file-password-form'
 import { PublicState } from '@/components/auth/public-state'
 import { ShareLayout } from '@/components/customization/share-layout'
+import { FileActions } from '@/components/file/file-actions'
 import { ProtectedFile } from '@/components/file/protected-file'
+import { isCompactKind } from '@/components/file/viewer/types'
 import { Footer } from '@/components/layout/footer'
 
 import { recordAudit } from '@/lib/audit'
@@ -26,7 +29,12 @@ import { embedFileFields, fileEmbed } from '@/lib/embeds/file-embed'
 import { requestOrigin } from '@/lib/embeds/origin'
 import { ownerEmbed } from '@/lib/embeds/owner'
 import { checkPageAccess, countView, findFile } from '@/lib/files/delivery'
-import { fileKind } from '@/lib/files/file-kind'
+import { recordedExpiry } from '@/lib/files/expiry-notice'
+import {
+  fileKind,
+  fileTypeDescription,
+  isTextKind,
+} from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
@@ -135,6 +143,7 @@ export default async function FilePage({
 
     return (
       <PublicState
+        icon={<Lock aria-hidden="true" />}
         title={FILE_PASSWORD_TITLE}
         description={FILE_PASSWORD_DESCRIPTION}
         footer={showFooter ? <Footer /> : undefined}
@@ -152,7 +161,7 @@ export default async function FilePage({
 
   // From the real name, which the page may hide.
   const type = fileKind(file)
-  const isMediaFile = ['image', 'video', 'pdf'].includes(type.kind)
+  const compact = isCompactKind(type.kind)
 
   // Send only viewer fields to the client. In particular, never serialize the
   // uploader profile or the stored password hash into a public page.
@@ -162,6 +171,8 @@ export default async function FilePage({
     urlPath: file.urlPath,
     visibility: file.visibility,
     mimeType: file.mimeType,
+    // Stored in megabytes.
+    size: Math.round(file.size * 1024 * 1024),
     ...type,
   }
 
@@ -177,15 +188,27 @@ export default async function FilePage({
         file.uploadOptions,
         appearance.sharing.defaultStyle
       )}
+      file={{ name: file.name, mimeType: file.mimeType }}
       filename={file.name}
+      type={fileTypeDescription(file)}
       size={formatFileSize(file.size)}
+      expiresAt={recordedExpiry(file.uploadOptions)}
       uploader={{
         name: file.user?.name || 'Anonymous',
         image: file.user?.image || undefined,
       }}
-      isMedia={isMediaFile}
+      compact={compact}
       showFooter={showFooter}
       backLink={backLink}
+      actions={
+        <FileActions
+          file={viewerFile}
+          verifiedPassword={providedPassword}
+          showOcr={type.kind === 'image'}
+          isTextBased={isTextKind(type.kind)}
+          layout={compact ? 'stack' : 'toolbar'}
+        />
+      }
     >
       <ProtectedFile file={viewerFile} verifiedPassword={providedPassword} />
     </ShareLayout>

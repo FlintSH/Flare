@@ -22,7 +22,7 @@ const steps = [
     title: 'One link, a proper preview',
     label: 'Share',
     src: '/screenshots/workspace/share-framed-image.png',
-    text: 'A framed share page gives recipients an image preview and file actions. Minimal and delivery layouts offer different ways to present the same file.',
+    text: 'A share page gives recipients the file’s name, type, size, and actions above its preview. The Minimal and Delivery layouts frame the same file differently.',
     link: '/guide/sharing',
   },
   {

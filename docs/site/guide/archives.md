@@ -99,16 +99,16 @@ If Flare can't read the archive's structure at all, for example an upload that w
 ## Browse an archive shared with you
 
 1. Open the normal Flare share link. If the public archive is protected, enter **File password** and choose **Access file**.
-2. Under **Archive contents**, open folders or use **Search archive** to find member paths. **Archive root** returns to the top level.
+2. In the list under the archive's name, open folders or use **Search archive** to find member paths. **Archive root** returns to the top level.
 3. Select an entry to preview it, then choose **Download entry** to save that file. The share page remains open.
-4. Use the ordinary **Download** action below the viewer if you want the complete archive.
+4. Use the ordinary **Download** action beside the archive's name if you want the complete archive. It stays above the list, so you don't have to scroll past a long archive to reach it.
 
-<Screenshot src="/screenshots/archives/share-browse.webp" alt="Public Field kit.zip share page with inline Archive contents, four folders, and the whole-file Download action" caption="An anonymous visitor can browse an unprotected public archive without signing in." />
+<Screenshot src="/screenshots/archives/share-browse.webp" alt="Public Field kit.zip share page: its name, type and size with the whole-file Download action beside them, and four folders listed below" caption="An anonymous visitor can browse an unprotected public archive without signing in." />
 
 These actions do not add files to an account or expose other files in the owner's library. Share-page browsing is inline; it has no **Extract all** action, including when the owner is signed in. To extract into Flare, the owner uses **Files → Browse archive → Extract all** in their own library. Entry paths and filenames remain visible to authorized viewers even when the outer share-page filename is hidden by a presentation setting.
 
 ::: details See shared text and image previews
-<Screenshot src="/screenshots/archives/share-entry.webp" alt="Shared archive with the guide folder open, README.md text preview, and Download entry beside the member name" caption="Download entry saves the selected file; the ordinary Download action below saves the whole archive." />
+<Screenshot src="/screenshots/archives/share-entry.webp" alt="Shared archive with the guide folder open, README.md text preview, and Download entry beside the member name" caption="Download entry saves the selected file; the ordinary Download action beside the archive's name saves the whole archive." />
 
 <Screenshot src="/screenshots/archives/share-image.webp" alt="Public archive search for flare-icon showing the verified images/flare-icon.png preview and its download action" caption="Path search also finds image entries elsewhere in the shared archive." />
 :::
@@ -195,9 +195,9 @@ The same archive tools work in the mobile library. Scroll the dialog's fields wh
 
 <Screenshot src="/screenshots/archives/mobile-extract.webp" alt="Mobile Extract archive dialog with destination choices and extraction actions" caption="The extraction form scrolls within the dialog so its actions remain reachable on a phone." />
 
-On a share page, the entry list and preview stack vertically. Scroll to **Download entry** for the selected member or the ordinary **Download** action for the whole archive.
+On a share page, the entry list and preview stack vertically. The ordinary **Download** action for the whole archive stays above the list; scroll to **Download entry** for the selected member.
 
-<Screenshot src="/screenshots/archives/share-mobile.webp" alt="Shared archive at 390 pixels wide with README search result, text preview, Download entry, and whole-archive Download below" caption="Real shared-page browsing at 390px wide; the full-page capture shows both download actions." />
+<Screenshot src="/screenshots/archives/share-mobile.webp" alt="Shared archive at 390 pixels wide with the whole-archive Download above a README search result, its text preview, and Download entry" caption="Real shared-page browsing at 390px wide; the full-page capture shows both download actions." />
 
 ## Supported sizes and formats
 
@@ -241,7 +241,7 @@ When **Files** detects an account change or replacement sign-in, it closes the p
 | What you see                                                         | What to do                                                                                                                                                                                    |
 | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No archive action                                                    | Check the format and entrypoint. Library tools require `files.read`; share-page browsing requires access to the file.                                                                         |
-| **Flare can’t open this kind of archive**                            | RAR and 7z can't be browsed. Download the archive and open it on your device.                                                                                                                 |
+| **Flare can’t open this kind of archive**                            | RAR and 7z can't be browsed. Download the archive and open it on your device. A share page says so on the archive's card, beside **Download**.                                                |
 | Flare couldn't find the archive's file list                          | The upload was cut off, or the file isn't the archive its name suggests. Upload it again, or download it to inspect it locally.                                                               |
 | An entry has a lock, link, or warning mark                           | Select it to see why. Download the whole archive to open encrypted or unsupported entries locally.                                                                                            |
 | An entry shows an integrity error                                    | That entry is damaged inside the archive. Other entries still open; extraction stops if you try it.                                                                                           |

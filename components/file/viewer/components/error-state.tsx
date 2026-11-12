@@ -9,10 +9,10 @@ interface ErrorStateProps {
 
 export function ErrorState({
   error,
-  fallbackMessage = 'You can still try downloading the original file below.',
+  fallbackMessage = 'You can still download the original file.',
 }: ErrorStateProps) {
   return (
-    <div className="w-full px-6">
+    <div className="w-full p-4 sm:p-5">
       <PreviewPlaceholder
         role="alert"
         icon={FileWarning}

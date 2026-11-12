@@ -391,7 +391,7 @@ export function ArchiveBrowserContent({
       ) : !listing && !indexing ? (
         <div
           role="status"
-          className="flex min-h-56 items-center justify-center gap-3 text-sm text-muted-foreground"
+          className="flex min-h-56 items-center justify-center gap-3 text-sm text-muted-foreground md:min-h-64"
         >
           <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
           {state.status === 'busy'

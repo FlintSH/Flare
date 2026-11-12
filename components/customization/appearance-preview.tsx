@@ -4,6 +4,7 @@ import { type CSSProperties, useState } from 'react'
 
 import {
   Download,
+  FileCode,
   FileImage,
   InfoIcon,
   Link2,
@@ -44,6 +45,8 @@ export function AppearancePreview({
   const { brand, theme, sharing } = document
   const [codePreview, setCodePreview] = useState(false)
   const sampleName = codePreview ? 'hello-world.ts' : 'a-little-inspiration.png'
+  const sampleType = codePreview ? 'TypeScript' : 'PNG image'
+  const sampleSize = codePreview ? '240 B' : '1.8 MB'
   const logo =
     mode === 'light'
       ? brand.logoLight || brand.logoDark
@@ -135,14 +138,16 @@ export function AppearancePreview({
               )}
               <span className="font-bold text-sm truncate">{brand.name}</span>
             </span>
-            {sharing.showUploader && !protectedPreview && (
-              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground whitespace-nowrap">
-                <span className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-foreground">
-                  Y
+            {sharing.showUploader &&
+              !protectedPreview &&
+              sharing.defaultStyle !== 'delivery' && (
+                <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground whitespace-nowrap">
+                  <span className="w-5 h-5 rounded-full bg-primary/15 flex items-center justify-center text-foreground">
+                    Y
+                  </span>
+                  Uploaded by you
                 </span>
-                Uploaded by you
-              </span>
-            )}
+              )}
           </div>
           <div className="p-5 pt-2">
             {protectedPreview ? (
@@ -163,6 +168,9 @@ export function AppearancePreview({
                 </div>
               </div>
             ) : (
+              // As on the live share page: the file's icon, name and facts
+              // with the actions beside them, then the preview. Download is
+              // the filled primary action; the others are outline icons.
               <div
                 className={
                   sharing.defaultStyle === 'minimal'
@@ -171,32 +179,68 @@ export function AppearancePreview({
                 }
                 style={{ borderRadius: `${theme.radius}rem` }}
               >
-                {sharing.defaultStyle === 'delivery' && (
-                  <div className="px-4 pt-4 text-[9px] uppercase tracking-widest text-muted-foreground">
-                    A file for you
+                <div
+                  className={cn(
+                    'space-y-2',
+                    sharing.defaultStyle === 'minimal' ? 'pb-3' : 'border-b p-3'
+                  )}
+                >
+                  {sharing.defaultStyle === 'delivery' && (
+                    <div className="flex items-center justify-between gap-2 text-[9px] text-muted-foreground">
+                      <span className="uppercase tracking-widest">
+                        A file for you
+                      </span>
+                      {sharing.showUploader && <span>Uploaded by you</span>}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-muted/30">
+                      {codePreview ? (
+                        <FileCode className="h-4 w-4" />
+                      ) : (
+                        <FileImage className="h-4 w-4" />
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold">
+                        {sharing.showFilename ? sampleName : sampleType}
+                      </span>
+                      {(sharing.showFilename || sharing.showSize) && (
+                        <span className="block truncate text-[10px] text-muted-foreground">
+                          {[
+                            sharing.showFilename && sampleType,
+                            sharing.showSize && sampleSize,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ')}
+                        </span>
+                      )}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-1.5">
+                      <span className="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-2.5 py-1.5 text-[10px] text-primary-foreground">
+                        <Download className="h-3 w-3" />
+                        Download
+                      </span>
+                      <span className="flex h-[26px] w-[26px] items-center justify-center rounded-md border">
+                        <Link2 className="h-3 w-3" />
+                      </span>
+                    </span>
                   </div>
-                )}
-                {(sharing.showFilename || sharing.showSize) && (
-                  <div
-                    className={`${sharing.defaultStyle === 'delivery' ? 'text-left' : 'text-center'} p-3 space-y-1`}
-                  >
-                    {sharing.showFilename && (
-                      <p className="text-xs font-medium">{sampleName}</p>
-                    )}
-                    {sharing.showSize && (
-                      <p className="text-[10px] text-muted-foreground">
-                        {codePreview ? '240 B' : '1.8 MB'}
-                      </p>
-                    )}
-                  </div>
-                )}
+                </div>
                 <div
                   className={
-                    sharing.defaultStyle === 'minimal' ? 'py-2' : 'px-3'
+                    sharing.defaultStyle === 'minimal'
+                      ? 'overflow-hidden border'
+                      : ''
+                  }
+                  style={
+                    sharing.defaultStyle === 'minimal'
+                      ? { borderRadius: `${theme.radius}rem` }
+                      : undefined
                   }
                 >
                   {codePreview ? (
-                    <pre className="h-40 sm:h-48 bg-muted/60 text-foreground overflow-auto rounded-lg p-4 text-[11px] leading-6">
+                    <pre className="h-40 overflow-auto p-4 text-[11px] leading-6 text-foreground sm:h-48">
                       <code>
                         {
                           '// A little room for your ideas\n\nconst space = {\n  name: "My Flare",\n  madeFor: "you",\n}\n\nexport default space'
@@ -204,26 +248,16 @@ export function AppearancePreview({
                       </code>
                     </pre>
                   ) : (
-                    <SamplePicture
-                      className="h-40 sm:h-48"
-                      style={{
-                        marginInline:
-                          sharing.imageFit === 'contain' ? '8px' : 0,
-                      }}
-                    />
+                    // The picture sits on a stage, as on the live page.
+                    <div
+                      className={cn(
+                        'bg-muted/60',
+                        sharing.imageFit === 'contain' && 'px-8'
+                      )}
+                    >
+                      <SamplePicture className="h-40 rounded-none sm:h-48" />
+                    </div>
                   )}
-                </div>
-                {/* As on the live share page: Download is the filled
-                    primary action, Copy link the outline one. */}
-                <div className="flex gap-2 justify-center py-4">
-                  <span className="flex items-center gap-1.5 rounded-md border border-primary bg-primary px-3 py-1.5 text-[10px] text-primary-foreground">
-                    <Download className="w-3 h-3" />
-                    Download
-                  </span>
-                  <span className="border rounded-md px-3 py-1.5 text-[10px] flex items-center gap-1.5">
-                    <Link2 className="w-3 h-3" />
-                    Copy link
-                  </span>
                 </div>
               </div>
             )}

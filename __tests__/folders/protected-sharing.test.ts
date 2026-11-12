@@ -113,7 +113,7 @@ describe('protected shared-folder links', () => {
     expect(data!.files[0]).toMatchObject({
       name: 'Password-protected file',
       href: opaquePath,
-      rawUrl: null,
+      thumbnail: null,
       mimeType: null,
       size: null,
       hasPassword: true,
@@ -227,9 +227,27 @@ describe('protected shared-folder links', () => {
     expect(data!.files[0]).toMatchObject({
       name: file.name,
       href: '/recipient-slug/Quarterly%20Budget%20FY26.pdf',
-      rawUrl: '/recipient-slug/Quarterly%20Budget%20FY26.pdf/raw',
+      // Only an image has a picture to show on its tile.
+      thumbnail: null,
       hasPassword: false,
     })
+  })
+
+  // The tile's picture is the file's thumbnail, which can be resized and
+  // adds no view; the raw link it used to load is the whole original.
+  it('shows an image by its thumbnail, resized unless it is a GIF or SVG', async () => {
+    const image = { ...file, password: null, mimeType: 'image/jpeg' }
+    mocks.folder.mockResolvedValueOnce({
+      name: 'Marketing assets',
+      files: [image, { ...image, mimeType: 'image/gif' }, file],
+      _count: { files: 3 },
+    })
+    const data = await getSharedFolder(token)
+    expect(data!.files.map((entry) => entry.thumbnail)).toEqual([
+      { url: `/api/files/${fileId}/thumbnail`, optimize: true },
+      { url: `/api/files/${fileId}/thumbnail`, optimize: false },
+      null,
+    ])
   })
 
   it('links files from earlier builds the way the library spells them', async () => {
@@ -249,9 +267,9 @@ describe('protected shared-folder links', () => {
     )
     // The rendered attributes, where React writes & as &amp;.
     expect(html).toContain('href="/recipient-slug/Q&amp;A%20notes%20%232.png"')
-    expect(html).toContain(
-      'src="/recipient-slug/Q&amp;A%20notes%20%232.png/raw"'
-    )
+    // The tile's picture is named by the file's ID, never by its name.
+    expect(html).toContain(encodeURIComponent(`/api/files/${fileId}/thumbnail`))
+    expect(html).not.toContain('/raw"')
 
     mocks.file.mockResolvedValueOnce({ ...file, urlPath })
     await expect(openFile(password)).rejects.toThrow('REDIRECT:')

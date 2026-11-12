@@ -17,6 +17,13 @@ and an account menu): the organizing and sharing demos and [Folder](folder-deskt
 recorded the same way. The protected-file demo and [Public folder](shared-folder-desktop.jpg)
 show signed-out pages without the bar and were left as they were.
 
+Refreshed again on November 12, 2026 for the share page layout (the file's name,
+type, size and actions above its preview, centered public pages, and shared
+folder tiles with thumbnails and file types): the sharing and protected-file
+demos and [Public folder](shared-folder-desktop.jpg), recorded the same way.
+The other public-page screenshots below are still the September captures and
+show the earlier layout.
+
 Desktop screenshots use a 1440 × 1000 viewport. Mobile screenshots use 390 × 844;
 layout checks also passed at 320px. Dialogs were captured after animations settled.
 The GIFs are compact 1024px copies of the 1280 × 900 recordings; MP4s retain the
@@ -25,8 +32,8 @@ recorded resolution.
 | Demo                                | Recording                                                       | Shows                                                                                                                  |
 | ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Organize and upload (18 seconds)    | [GIF](organizing-demo.gif) · [MP4](organizing-demo.mp4)         | Create a folder, move two files, create a subfolder, upload directly into it, and open the uploaded file's folder.     |
-| Share and revoke (14 seconds)       | [GIF](sharing-demo.gif) · [MP4](sharing-demo.mp4)               | Folder sharing controls, the public collection, protected-file presentation, disabling the link, and the revoked page. |
-| Protected-file handoff (11 seconds) | [GIF](protected-file-demo.gif) · [MP4](protected-file-demo.mp4) | Open a protected tile, retry an incorrect password, then reveal the filename and existing viewer after verification.   |
+| Share and revoke (12 seconds)       | [GIF](sharing-demo.gif) · [MP4](sharing-demo.mp4)               | Folder sharing controls, the public collection, protected-file presentation, disabling the link, and the revoked page. |
+| Protected-file handoff (10 seconds) | [GIF](protected-file-demo.gif) · [MP4](protected-file-demo.mp4) | Open a protected tile, retry an incorrect password, then reveal the filename and existing viewer after verification.   |
 
 | Screenshot                                                     | Surface                                                                     |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------- |

@@ -13,10 +13,12 @@ import { cn } from '@/lib/utils'
 
 /**
  * A public page with one card: not found, errors and file password prompts.
- * It shares the header, column and card with share pages and sign-in pages.
+ * It shares the header and column with share pages, and the card with the
+ * sign-in pages.
  */
 export function PublicState({
   statusCode,
+  icon,
   title,
   description,
   children,
@@ -24,6 +26,7 @@ export function PublicState({
   backLink,
 }: {
   statusCode?: string
+  icon?: ReactNode
   title: string
   description: string
   children: ReactNode
@@ -34,16 +37,23 @@ export function PublicState({
     <div className="relative isolate flex min-h-dvh flex-col">
       <DynamicBackground />
       <PublicHeader />
-      <main className="relative z-10 flex flex-1 flex-col pb-8 pt-5 sm:pt-6">
+      {/* The footer brings its own space above it. */}
+      <main
+        className={cn(
+          'relative z-10 flex flex-1 flex-col pt-5 sm:pt-6',
+          !footer && 'pb-5 sm:pb-6'
+        )}
+      >
         <div className={cn(publicColumnClassName, 'flex flex-1 flex-col')}>
-          {/* Set a little below the header on wider screens, like the
-              sign-in pages, so a message doesn't move the whole card. A way
-              back to a shared folder sits right above the card. */}
-          <div className="flex flex-1 items-start justify-center sm:pt-[6vh]">
+          {/* In the middle of the page, where a shared file's card sits, so
+              unlocking a file doesn't move it. A way back to a shared folder
+              sits right above the card. */}
+          <div className="flex flex-1 items-center justify-center">
             <div className="flex w-full max-w-[400px] flex-col gap-3">
               {backLink && <PublicBackLink {...backLink} />}
               <AuthCard
                 titleId="public-state-title"
+                icon={icon}
                 eyebrow={statusCode && `Error ${statusCode}`}
                 title={title}
                 description={description}

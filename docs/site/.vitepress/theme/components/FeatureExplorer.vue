@@ -21,7 +21,7 @@ const features = [
   [
     'Share',
     'Rich previews',
-    'Images with zoom, video, audio, PDFs, CSV tables, plain text, and syntax-highlighted code.',
+    'Images with zoom, video, audio, PDFs, CSV and TSV tables, plain text, and syntax-highlighted code, each under the file’s name, type, size, and actions.',
     '/guide/sharing',
   ],
   [

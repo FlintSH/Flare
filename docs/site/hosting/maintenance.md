@@ -123,6 +123,15 @@ Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup a
 - **Custom CSS.** The bundled Inter fonts are now `/fonts/inter/Inter-VariableFont_opsz_wght.ttf` and `/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf`, without the comma in their old names. Update custom CSS that loads them by URL.
 - **Modified builds.** `middleware.ts` is now `proxy.ts`, and `next dev` and `next build` use Turbopack. Move your changes to `middleware.ts` into `proxy.ts`. A fork that adds a webpack configuration must port it to Turbopack options or build with `next build --webpack`.
 
+### Share page layout
+
+Builds after Flare 3.0.1 also lay out [share pages](/guide/sharing#what-a-share-page-shows), shared folders, and file password pages differently. There are no new settings, environment variables, or database migrations, and every link keeps working. Review these after updating:
+
+- **Custom CSS.** A share page's markup changed: the file's name, type, size, and actions are now a header above the preview, the card has one width for every previewable type, and the page centers it. Custom CSS written against the earlier structure may no longer match. Open a public file in each [share style](/admin/appearance#sharing) you use and adjust your rules. The `data-share-style` attribute on the page and `data-flare-surface` on its card are unchanged.
+- **View counts.** Opening a shared folder no longer adds a view to each image in it, because its tiles now load thumbnails instead of raw links. Totals already recorded stay as they are. See [view counts](/guide/sharing#view-counts).
+- **Shared folder images.** Those tiles are resized by the same image optimizer as public library previews, through `/_next/image` and `/api/files/{id}/thumbnail`. A proxy or CDN rule that already lets the library load its previews covers them. If tiles show file icons instead of pictures, follow [Image thumbnails fail](./troubleshooting#image-thumbnails-fail).
+- **Files stored with a generic type.** Text and code uploaded without a type, which Flare stores as `application/octet-stream`, now open in the text viewer when their name says what they are. Nothing is rewritten in the database; the stored type is unchanged. See [what recipients can preview](/guide/sharing#what-recipients-can-preview).
+
 This change doesn't touch the database, so going back needs only the earlier image.
 
 ### Upgrading from 3.0 to 3.0.1

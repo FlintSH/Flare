@@ -14,7 +14,11 @@ import { cn } from '@/lib/utils'
 
 import { ErrorState } from '../components/error-state'
 import { ExpandImageButton } from '../components/expand-image-button'
-import { LoadingState } from '../components/loading-state'
+import {
+  LoadingState,
+  stageMaxHeightClassName,
+  stageSurfaceClassName,
+} from '../components/loading-state'
 
 export function ImageViewer({
   file,
@@ -27,74 +31,91 @@ export function ImageViewer({
   const [failedUrl, setFailedUrl] = useState<string>()
   const [expanded, setExpanded] = useState(false)
   const [loaded, setLoaded] = useState<{
-    portrait: boolean
+    src: string
     /** Smaller than the stage both ways, so it gets a margin on the stage. */
     small: boolean
     tone: CheckerTone
   }>()
 
-  if (!src) return <LoadingState message="Loading image…" />
-  if (failedUrl === src) {
+  if (src && failedUrl === src) {
     return (
       <ErrorState error="This image couldn’t be displayed in your browser." />
     )
   }
 
   const cover = sharing.imageFit === 'cover'
+  const shown = src && loaded?.src === src ? loaded : null
 
   return (
-    // A stage between hairlines: narrow images sit on it instead of the
-    // card, and light screenshots keep their edges. The expand button sits
-    // on the stage's corner, beside a narrow image rather than over it.
+    // A stage under the file's header: narrow images sit on it instead of
+    // the card, and light screenshots keep their edges. The expand button
+    // sits on the picture's corner.
     <div
       className={cn(
-        'relative flex w-full items-center justify-center border-y border-border/60 bg-muted/60 dark:bg-muted/30',
-        loaded?.small && !cover && 'py-6'
+        'relative flex w-full items-center justify-center overflow-hidden',
+        stageSurfaceClassName,
+        shown && !cover && 'sm:min-h-56',
+        shown?.small && !cover && 'py-6'
       )}
     >
-      <div className={cover ? 'w-full' : 'max-w-full'}>
-        <img
-          src={src}
-          alt={file.name}
-          onLoad={({ currentTarget: image }) => {
-            const stage = image.parentElement?.parentElement
-            // Before the first paint at the new size.
-            flushSync(() =>
-              setLoaded({
-                portrait: image.naturalHeight > image.naturalWidth,
-                small:
-                  !!stage &&
-                  image.naturalWidth < stage.clientWidth &&
-                  image.naturalHeight < window.innerHeight * 0.5,
-                tone: checkerToneFor(image),
-              })
-            )
-          }}
-          onError={() => setFailedUrl(src)}
-          className={cn(
-            checkerClassName(loaded?.tone ?? null),
-            'block',
-            cover
-              ? 'h-[60vh] w-full object-cover'
-              : // Portrait images may use the height that keeps the card,
-                // including its actions, on a larger screen: the header,
-                // the card's offset (6vh), title and actions take about
-                // 15rem plus that offset.
-                // A faint edge keeps light images apart from the stage, except
-                // where the corners or edges are see-through (it would box
-                // empty space).
-                cn(
-                  'max-h-[60vh] max-w-full object-contain',
-                  loaded?.tone !== 'none' && 'ring-1 ring-foreground/10',
-                  loaded?.portrait &&
-                    'sm:max-h-[max(60vh,calc(100dvh_-_6vh_-_15rem))]'
-                )
-          )}
+      {/* The shape of a typical picture, so most images load without moving
+          the page. */}
+      {!shown && (
+        <LoadingState
+          message="Loading image…"
+          className={cn('aspect-[16/10]', stageMaxHeightClassName)}
         />
-        {/* Shown once the image has a size, so it sits on its corner. */}
-        {loaded && <ExpandImageButton onClick={() => setExpanded(true)} />}
-      </div>
-      {expanded && (
+      )}
+      {src && (
+        <div
+          className={cn(
+            'transition-opacity duration-300',
+            cover ? 'w-full' : 'max-w-full',
+            shown
+              ? 'relative opacity-100'
+              : 'pointer-events-none absolute inset-0 opacity-0'
+          )}
+        >
+          <img
+            src={src}
+            alt={file.name}
+            decoding="async"
+            onClick={() => setExpanded(true)}
+            onLoad={({ currentTarget: image }) => {
+              const stage = image.parentElement?.parentElement
+              // Before the first paint at the new size.
+              flushSync(() =>
+                setLoaded({
+                  src,
+                  small:
+                    !!stage &&
+                    image.naturalWidth < stage.clientWidth &&
+                    image.naturalHeight < window.innerHeight * 0.5,
+                  tone: checkerToneFor(image),
+                })
+              )
+            }}
+            onError={() => setFailedUrl(src)}
+            className={cn(
+              checkerClassName(shown?.tone ?? null),
+              'block cursor-zoom-in',
+              cover
+                ? 'h-[min(60vh,var(--stage-max,60vh))] w-full object-cover'
+                : // A faint edge keeps light images apart from the stage,
+                  // except where the corners or edges are see-through (it
+                  // would box empty space).
+                  cn(
+                    'max-w-full object-contain',
+                    stageMaxHeightClassName,
+                    shown?.tone !== 'none' && 'ring-1 ring-foreground/10'
+                  )
+            )}
+          />
+          {/* Shown once the image has a size, so it sits on its corner. */}
+          {shown && <ExpandImageButton onClick={() => setExpanded(true)} />}
+        </div>
+      )}
+      {expanded && src && (
         <ImageLightbox
           images={[{ id: file.id, name: file.name, src }]}
           index={0}

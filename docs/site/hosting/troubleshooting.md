@@ -83,7 +83,7 @@ An unknown file URL or a private file requested by an unauthorized visitor retur
 
 ## Image thumbnails fail
 
-Check the direct `/api/files/{id}/thumbnail` response in the same signed-in browser, even if the failed request is to `/_next/image?url=.../thumbnail`. A successful image response must contain readable image bytes; `200` with an empty body is still a failure. The thumbnail endpoint streams the original image, and the optimizer can resize public library previews. Protected library previews and **View content** use the browser session directly.
+Check the direct `/api/files/{id}/thumbnail` response in the same signed-in browser, even if the failed request is to `/_next/image?url=.../thumbnail`. A successful image response must contain readable image bytes; `200` with an empty body is still a failure. The thumbnail endpoint streams the original image, and the optimizer can resize public library previews and the image tiles of a [shared folder](/guide/folders#share-a-folder). A shared folder tile whose thumbnail fails shows the file's icon instead. Protected library previews and **View content** use the browser session directly.
 
 An S3 stream bug in older builds could discard the image before the response started reading it. The direct route then returned an empty `200`, and the optimizer rejected it with `400` and `"url" parameter is valid but internal response is invalid`. Deploy the fixed build, restart all app replicas, and reload open tabs. Existing S3 objects need no re-upload, thumbnail regeneration, bucket permission change, or database migration. If a proxy retained an old empty response, purge the affected thumbnail URL after updating; ordinary file access rules still apply.
 

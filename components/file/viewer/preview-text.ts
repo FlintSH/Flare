@@ -5,8 +5,7 @@ import { readPreviewBytes } from '@/lib/client/preview-bytes'
 /** The most text, code or CSV a share page loads to preview a file. */
 export const PREVIEW_TEXT_BYTES = 1024 * 1024
 
-const TOO_LARGE =
-  'This file is too large to preview. Download it to view all its data.'
+const TOO_LARGE = 'This file is too large to preview.'
 
 export type PreviewText =
   | { status: 'loading' }
@@ -35,6 +34,14 @@ export async function loadPreviewText(
   )
   if (truncated) throw new Error(TOO_LARGE)
   return new TextDecoder().decode(bytes)
+}
+
+/**
+ * Whether decoded text is really binary data: text files don't hold NUL
+ * characters, and almost every binary format does within its first bytes.
+ */
+export function looksBinary(text: string) {
+  return text.slice(0, 8192).includes('\u0000')
 }
 
 /** Loads a preview's text; pass a `failed` that keeps its identity. */
