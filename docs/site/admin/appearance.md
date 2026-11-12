@@ -62,7 +62,7 @@ To start over, choose **Reset to Flare defaults** at the bottom of the **Theme**
 - The classic colors return to their defaults and the classic theme mode to `dark`, so the instance looks like a fresh Flare installation.
 - Identity, logos, sharing choices, the favicon, and custom CSS/head HTML are unchanged. A saved draft keeps its identity and sharing edits with the default theme, and unsaved identity or sharing edits stay in the studio for you to save or publish.
 
-**Restore previous** brings back the studio theme you had before the reset. Customized classic colors are not kept, so note them first if you might want them again. If another administrator changed the appearance since you opened the page, the reset is refused with a message to reload, and nothing changes.
+**Restore previous** brings back the studio theme you had before the reset. Customized classic colors are not kept, so note them first if you might want them again. If another administrator changed the appearance since you opened the page, the reset is refused with a message to reload, and nothing changes. The button waits while **Save settings** is saving, and **Save settings** and **Discard** wait while a reset is in progress, so one can't put back what the other changed.
 
 <Screenshot src="/screenshots/customization/appearance-theme.png" alt="Appearance studio theme controls and a live preview" caption="Theme presets are starting points; paired palettes let both modes stay intentional." />
 

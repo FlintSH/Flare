@@ -205,6 +205,8 @@ export function CustomizationStudio({
   onStateChange,
   onDirtyChange,
   onThemeReset,
+  onThemeResetPending,
+  themeResetBlocked = false,
 }: {
   initialState: CustomizationState
   /** The instance's saved Show credits footer setting, for the preview. */
@@ -214,6 +216,10 @@ export function CustomizationStudio({
   onDirtyChange?: (dirty: boolean) => void
   /** Called after the theme and classic colors are reset to Flare's defaults. */
   onThemeReset?: () => void
+  /** Reports a reset in flight, so the page can hold its own settings save. */
+  onThemeResetPending?: (pending: boolean) => void
+  /** Set while the page saves settings; the reset waits for that save. */
+  themeResetBlocked?: boolean
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -272,7 +278,9 @@ export function CustomizationStudio({
   }
 
   async function act(command: AppearanceCommand) {
+    const reset = command.action === 'reset-theme'
     setBusy(true)
+    if (reset) onThemeResetPending?.(true)
     setError('')
     try {
       const next = await apiRequest<CustomizationState>('/api/customization', {
@@ -319,6 +327,7 @@ export function CustomizationStudio({
       setError(cause instanceof Error ? cause.message : 'Something went wrong.')
     } finally {
       setBusy(false)
+      if (reset) onThemeResetPending?.(false)
     }
   }
 
@@ -897,7 +906,7 @@ export function CustomizationStudio({
                             <Button
                               variant="outline"
                               className="shrink-0"
-                              disabled={busy}
+                              disabled={busy || themeResetBlocked}
                             >
                               <RotateCcw aria-hidden="true" />
                               Reset to Flare defaults
@@ -931,7 +940,7 @@ export function CustomizationStudio({
                                 Cancel
                               </AlertDialogCancel>
                               <AlertDialogAction
-                                disabled={busy}
+                                disabled={busy || themeResetBlocked}
                                 onClick={(event) => {
                                   event.preventDefault()
                                   void act({

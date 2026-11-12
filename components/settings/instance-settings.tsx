@@ -144,6 +144,9 @@ export function InstanceSettings({
     SETTINGS_SECTION_ALIASES
   )
   const [studioDirty, setStudioDirty] = useState(false)
+  // A save finishing after a reset would put the old classic colors back in
+  // savedConfig, so the two never run at once.
+  const [themeResetting, setThemeResetting] = useState(false)
   const handleStudioStateChange = useCallback(
     (customization: CustomizationState) => {
       setSavedConfig((previous) => ({
@@ -1681,6 +1684,8 @@ export function InstanceSettings({
                 onStateChange={handleStudioStateChange}
                 onDirtyChange={setStudioDirty}
                 onThemeReset={handleThemeReset}
+                onThemeResetPending={setThemeResetting}
+                themeResetBlocked={isSaving}
               />
               <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -2000,12 +2005,12 @@ export function InstanceSettings({
             <Button
               variant="outline"
               onClick={discardChanges}
-              disabled={isSaving}
+              disabled={isSaving || themeResetting}
             >
               <XCircle aria-hidden="true" />
               Discard
             </Button>
-            <Button onClick={saveChanges} disabled={isSaving}>
+            <Button onClick={saveChanges} disabled={isSaving || themeResetting}>
               {isSaving ? (
                 <Icons.spinner className="animate-spin" aria-hidden="true" />
               ) : (
