@@ -1,5 +1,13 @@
 import { z } from 'zod'
 
+import {
+  DEFAULT_EMBED_CARD,
+  EMBED_LIMITS,
+  EMBED_MODES,
+  embedColorSchema,
+  embedTemplateSchema,
+} from '@/lib/embeds/schema'
+
 import { LOGO_DATA_URL_MAX_LENGTH, isLogoDataUrl } from './logo'
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Use a six-digit hex color')
@@ -82,25 +90,24 @@ const logoSchema = z
     'Upload a PNG, JPEG, or WebP logo'
   )
 
-export const SHARE_TEMPLATE_FIELDS = [
-  'instanceName',
-  'filename',
-  'size',
-  'uploader',
-] as const
-const templateSchema = z
-  .string()
-  .max(500)
-  .refine((value) => {
-    const remaining = value.replace(
-      /\{\{([^{}]+)\}\}/g,
-      (_match, field: string) =>
-        (SHARE_TEMPLATE_FIELDS as readonly string[]).includes(field.trim())
-          ? ''
-          : '{invalid}'
-    )
-    return !/[{}]/.test(remaining)
-  }, 'Use only {{instanceName}}, {{filename}}, {{size}}, or {{uploader}} placeholders')
+/**
+ * Appearance saved before embeds had their own settings left the preview
+ * title and description empty to mean Flare's wording. Those lines are now
+ * written out, and an empty one is left off the card, so such a document
+ * gets the default card's lines: the title it showed, and the description
+ * it showed for media. A document that names an embed mode was saved since.
+ */
+function withEmbedText(sharing: unknown): unknown {
+  if (!sharing || typeof sharing !== 'object' || 'embedMode' in sharing)
+    return sharing
+  const saved = sharing as Record<string, unknown>
+  return {
+    ...saved,
+    titleTemplate: saved.titleTemplate || DEFAULT_EMBED_CARD.title,
+    descriptionTemplate:
+      saved.descriptionTemplate || DEFAULT_EMBED_CARD.description,
+  }
+}
 
 export const appearanceDocumentSchema = z
   .object({
@@ -124,18 +131,35 @@ export const appearanceDocumentSchema = z
         font: z.enum(['inter', 'system', 'mono']),
       })
       .strict(),
-    sharing: z
-      .object({
-        defaultStyle: z.enum(['minimal', 'framed', 'delivery']),
-        showUploader: z.boolean(),
-        showFilename: z.boolean(),
-        showSize: z.boolean(),
-        showFooter: z.boolean().nullable(),
-        imageFit: z.enum(['contain', 'cover']).default('contain'),
-        titleTemplate: templateSchema.default(''),
-        descriptionTemplate: templateSchema.default(''),
-      })
-      .strict(),
+    sharing: z.preprocess(
+      withEmbedText,
+      z
+        .object({
+          defaultStyle: z.enum(['minimal', 'framed', 'delivery']),
+          showUploader: z.boolean(),
+          showFilename: z.boolean(),
+          showSize: z.boolean(),
+          showFooter: z.boolean().nullable(),
+          imageFit: z.enum(['contain', 'cover']).default('contain'),
+          embedMode: z.enum(EMBED_MODES).default('direct'),
+          /** Whether accounts may choose their own embed mode and card. */
+          personalEmbeds: z.boolean().default(true),
+          siteNameTemplate: embedTemplateSchema(EMBED_LIMITS.siteName).default(
+            DEFAULT_EMBED_CARD.siteName
+          ),
+          authorTemplate: embedTemplateSchema(EMBED_LIMITS.author).default(
+            DEFAULT_EMBED_CARD.author
+          ),
+          titleTemplate: embedTemplateSchema(EMBED_LIMITS.title).default(
+            DEFAULT_EMBED_CARD.title
+          ),
+          descriptionTemplate: embedTemplateSchema(
+            EMBED_LIMITS.description
+          ).default(DEFAULT_EMBED_CARD.description),
+          embedColor: embedColorSchema.default(DEFAULT_EMBED_CARD.color),
+        })
+        .strict()
+    ),
   })
   .strict()
 
@@ -166,8 +190,13 @@ export const DEFAULT_APPEARANCE: AppearanceDocument = {
     showSize: true,
     showFooter: null,
     imageFit: 'contain',
-    titleTemplate: '',
-    descriptionTemplate: '',
+    embedMode: 'direct',
+    personalEmbeds: true,
+    siteNameTemplate: DEFAULT_EMBED_CARD.siteName,
+    authorTemplate: DEFAULT_EMBED_CARD.author,
+    titleTemplate: DEFAULT_EMBED_CARD.title,
+    descriptionTemplate: DEFAULT_EMBED_CARD.description,
+    embedColor: DEFAULT_EMBED_CARD.color,
   },
 }
 

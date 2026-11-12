@@ -10,7 +10,7 @@ Open **Settings → Appearance** to design the instance's identity and public sh
 
 ## A draft-to-publish workflow
 
-1. Edit Identity, Theme, or Sharing. The preview follows your working design. On a phone, the section tabs stay on one row; swipe it sideways to reach **Appearance packs**.
+1. Edit Identity, Theme, Sharing, or Embeds. The preview follows your working design. On a phone, the section tabs stay on one row; swipe it sideways to reach **Appearance packs**.
 2. Check light and dark modes, image and code examples, and a protected-file example.
 3. Choose **Save draft** to keep the design for later, or **Publish appearance** to make it live.
 4. Open a real share page and the dashboard on desktop and mobile.
@@ -84,31 +84,48 @@ Toggle uploader attribution, filename, and size. Set the footer to inherit the i
 
 Upload profiles can select a share style for new files. A file with no stored style inherits the current instance default, so changing the default can change how those older files appear too.
 
-### Social preview text
+The details you hide here stay out of every [embed](#embeds) too, whoever wrote its card. These are presentation controls: original filenames can still appear in existing URLs or downloaded files. Visibility and passwords determine access.
 
-Set a title and description template, or leave them empty for automatic text. Each allows up to 500 characters and these placeholders:
+## Embeds
 
-| Placeholder        | Inserts             |
-| ------------------ | ------------------- |
-| `{{instanceName}}` | Instance name       |
-| `{{filename}}`     | Displayed filename  |
-| `{{size}}`         | Formatted file size |
-| `{{uploader}}`     | Uploader name       |
+**Embeds** decides what chat apps and social networks show when someone pastes a link to a file. [Embeds and link previews](/guide/embeds) describes the result for each kind of file and app; this section covers the instance's side.
 
-For example:
+| Control                           | Initial value              | Effect                                                                                                                               |
+| --------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Direct media** / **Rich embed** | Direct media               | Whether images and videos appear on their own where an app can show them that way, or every link shows the card                      |
+| **Site name**                     | `{{instanceName}}`         | The small line above the title, up to 100 characters                                                                                 |
+| **Author**                        | Empty                      | A line apps read through oEmbed, up to 100 characters                                                                                |
+| **Title**                         | `{{filename}} ({{size}})`  | Up to 500 characters. An empty title shows the file's name.                                                                          |
+| **Description**                   | `Uploaded by {{uploader}}` | Up to 500 characters, on one or more lines                                                                                           |
+| **Accent color**                  | None                       | The colored edge of the card in Discord                                                                                              |
+| **Let people design their own**   | On                         | Accounts with `files.share` can choose their own mode and card under **Profile → Embeds**. Off, every link uses this embed, at once. |
 
-```text
-Title: {{filename}} · {{instanceName}}
-Description: Shared by {{uploader}} · {{size}}
-```
+Every line takes the [placeholders](/guide/embeds#placeholders) `{{filename}}`, `{{size}}`, `{{type}}`, `{{uploader}}`, `{{date}}`, `{{views}}`, and `{{instanceName}}`, and an empty line is left off the card. The preview beside the fields draws the card for a sample image, video, and file as you type.
 
-Hidden details are omitted from generated social text as well. These are presentation controls: original filenames can still appear in existing URLs or downloaded files. Visibility and passwords determine access. Social platforms may cache a previous preview after you change it.
+<Screenshot src="/screenshots/embeds/studio-embeds.webp" alt="Appearance studio, Embeds section: Direct media and Rich embed options, the card's site name, author, title and description fields with placeholder buttons, an accent color, the Let people design their own switch, and a preview of the embed" caption="The instance's embed is part of the draft, with a preview that follows each change." />
+
+The mode and card are part of the draft, so they go live when you publish and return with **Restore previous**. Turning **Let people design their own** off does not delete what accounts saved: their choices apply again when you turn it back on. Apps keep previews they already made, so a published change shows on links pasted from then on.
+
+A person's own card can say anything the placeholders and their wording allow, including a site name other than this instance's. If that is unwelcome on your instance, turn personal embeds off. To stop one account's card and leave the rest, remove `files.share` from that account: Flare reads the owner's roles each time a preview is fetched, so its links return to the instance's embed at once. The same permission lets the account change visibility and passwords, so it loses those too.
+
+`{{type}}`, `{{date}}`, and `{{views}}` have no switch like **Show filename**. A file's type, upload date, and view count appear in an embed only where this card or an account's own card names them.
+
+### Upgrading from social preview text
+
+Earlier versions had two fields under **Sharing**, **Social preview title** and **Social preview description**, and left them empty to mean Flare's own wording. They are now the card's **Title** and **Description**:
+
+- Text you wrote is kept as it is.
+- An empty title becomes `{{filename}} ({{size}})`, which reads as before.
+- An empty description becomes `Uploaded by {{uploader}}`. Earlier versions wrote `name - size, uploaded by …` for files that aren't media, repeating the title, and fell back to the instance tagline when uploader names were hidden. Those previews now show `Uploaded by …`, or no description when uploader names are hidden. WhatsApp and Signal, which show nothing without a description, still get the tagline then.
+- Nothing is rewritten in the database until any setting or appearance is next saved, which stores the whole configuration with these values. Until then Flare reads the saved appearance this way each time.
+
+Earlier versions also showed this text mostly to apps Flare didn't recognize, because recognized ones were sent the file's bytes instead. It now reaches every app that draws a card.
 
 ## Appearance packs
 
-Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, choose **Export appearance** to download the design currently being previewed. The file is named after the instance name in lowercase, with characters other than letters, digits, and hyphens replaced by hyphens, such as `flare-appearance.json`. It includes identity, embedded logos, paired palettes, surfaces, typography, and sharing choices.
+Packs are versioned JSON documents you can use to back up a design or share it with another instance. Under **Appearance packs**, choose **Export appearance** to download the design currently being previewed. The file is named after the instance name in lowercase, with characters other than letters, digits, and hyphens replaced by hyphens, such as `flare-appearance.json`. It includes identity, embedded logos, paired palettes, surfaces, typography, sharing choices, and the instance's embed.
 
-Import a supported `flare.appearance` version 1 pack of at most **1 MB**. Importing creates a saved draft. Review it in both modes and publish explicitly; importing alone does not replace the live design.
+Import a supported `flare.appearance` version 1 pack of at most **1 MB**. A pack exported before embeds had their own settings imports with the default embed, keeping any social preview text it had. A pack exported by this version names the embed settings, which earlier versions of Flare refuse as unsupported. Importing creates a saved draft. Review it in both modes and publish explicitly; importing alone does not replace the live design.
 
 Packs do not include accounts, uploaded files, storage credentials, custom CSS/head HTML, or other executable code. They are design exports, not complete configuration or instance backups. The separately configured favicon is not a studio logo or part of the appearance pack.
 

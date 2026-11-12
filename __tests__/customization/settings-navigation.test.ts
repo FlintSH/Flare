@@ -5,6 +5,8 @@ import SettingsPage from '@/app/(main)/dashboard/settings/page'
 import UploadProfilesPage from '@/app/(main)/dashboard/upload-profiles/page'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
+
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   user: vi.fn(),
@@ -154,6 +156,7 @@ describe('profile section compatibility', () => {
     ['appearance', 'account'],
     ['security', 'account'],
     ['uploads', 'uploads'],
+    ['embeds', 'embeds'],
     ['integrations', 'integrations'],
     ['data', 'data'],
     ['advanced', 'account'],
@@ -167,6 +170,7 @@ describe('profile section compatibility', () => {
     })
     mocks.config.mockResolvedValue({
       settings: {
+        customization: { published: DEFAULT_APPEARANCE },
         general: {
           storage: {
             quotas: { enabled: false, default: { value: 1, unit: 'GB' } },

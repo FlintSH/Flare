@@ -5,7 +5,7 @@ description: Manage your identity and sign-in details, verify or change email, c
 
 # Account, email, and data
 
-Your [roles](/admin/roles) determine which profile actions are available. Editing identity/avatar or upload defaults uses `profile.update`, downloading account data requires `profile.export`, `files.read`, and `links.read` together, managing tokens uses `tokens.manage`, and managing webhooks uses `webhooks.manage`. Personal appearance uses `appearance.personal`. Missing controls can reflect your permissions; contact the person managing roles for your instance.
+Your [roles](/admin/roles) determine which profile actions are available. Editing identity/avatar or upload defaults uses `profile.update`, downloading account data requires `profile.export`, `files.read`, and `links.read` together, managing tokens uses `tokens.manage`, and managing webhooks uses `webhooks.manage`. Personal appearance uses `appearance.personal`, and choosing how your links preview under **Profile → Embeds** uses `files.share`. Missing controls can reflect your permissions; contact the person managing roles for your instance.
 
 Select your avatar at the right of the dashboard bar and choose **Profile** to manage settings that belong to you. **Settings**, in the **Admin** menu, is the administrators' separate area for instance-wide behavior.
 
@@ -179,6 +179,8 @@ Inspect the archive and open important files before deleting their originals. A 
 ## Integrations and connected tools
 
 **Profile → Uploads** contains capture tools and the account upload token. Replacing that token disconnects generated configurations using it; re-download them afterward.
+
+**Profile → Embeds** chooses what chat apps and social networks show when you paste one of your links: the image or video on its own, or a card you write. See [embeds and link previews](./embeds).
 
 **Profile → Integrations** opens **New token** and **Add webhook** forms in modal dialogs, keeping the connection lists in place. Cancel or close a dialog to discard an unfinished connection; errors stay in the dialog so you can correct them. After creating a connection, copy its one-time secret from the message on the integrations page.
 

@@ -9,12 +9,13 @@ import {
   readPersonalAppearance,
   resolveShareStyle,
 } from '@/lib/customization/schema'
-import { shareMetadataText } from '@/lib/customization/sharing'
 import {
   exportAppearancePack,
   transitionAppearance,
 } from '@/lib/customization/state'
 import { themeStyles } from '@/lib/customization/theme'
+import { renderEmbedCard } from '@/lib/embeds/card'
+import { instanceEmbedCard } from '@/lib/embeds/schema'
 
 describe('appearance migration and portable packs', () => {
   it('preserves legacy appearance while adding disabled studio defaults', () => {
@@ -223,26 +224,29 @@ describe('appearance publication', () => {
 })
 
 describe('public disclosure and personal scope', () => {
-  it('omits hidden fields from both automatic and custom social text', () => {
+  it('omits hidden fields from both the default and a custom embed card', () => {
     const design = structuredClone(DEFAULT_APPEARANCE)
     design.sharing.showUploader = false
     design.sharing.showFilename = false
     design.sharing.showSize = false
     const file = {
       name: 'confidential.png',
-      formattedSize: '123 MB',
+      size: '123 MB',
+      mimeType: 'image/png',
       uploader: 'Private Person',
-      isMedia: true,
+      uploadedAt: new Date('2026-11-12T10:00:00Z'),
+      views: 4,
     }
-    const automatic = shareMetadataText(design, file)
-    expect(JSON.stringify(automatic)).not.toMatch(
+    const card = () =>
+      renderEmbedCard(instanceEmbedCard(design.sharing), file, design)
+    expect(JSON.stringify(card())).not.toMatch(
       /confidential|123 MB|Private Person/
     )
+    expect(card()).toMatchObject({ title: 'Shared file', description: '' })
     design.sharing.titleTemplate =
       '{{instanceName}} {{filename}} {{uploader}} {{size}}'
-    const custom = shareMetadataText(design, file)
-    expect(custom.title).toBe('Flare')
-    expect(custom.alt).toBe('Shared file')
+    design.sharing.authorTemplate = '{{uploader}}'
+    expect(card()).toMatchObject({ title: 'Flare Shared file', author: '' })
   })
 
   it('uses only supported file profile styles and keeps absent preferences inherited', () => {

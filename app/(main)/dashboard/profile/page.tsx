@@ -6,6 +6,7 @@ import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { readPersonalAppearance } from '@/lib/customization/schema'
 import { prisma } from '@/lib/database/prisma'
+import { readPersonalEmbed } from '@/lib/embeds/schema'
 import {
   PROFILE_SECTIONS,
   PROFILE_SECTION_ALIASES,
@@ -54,7 +55,9 @@ export default async function ProfilePage({
     redirect(SIGN_IN_PATH)
   }
 
-  const quota = storageQuotaBytes(await getConfig(), session.user)
+  const config = await getConfig()
+  const { brand, sharing } = config.settings.customization.published
+  const quota = storageQuotaBytes(config, session.user)
   const quotasEnabled = quota !== null
   const quotaMB = bytesToMB(quota ?? 0)
   const formattedQuota = formatFileSize(quotaMB)
@@ -86,6 +89,13 @@ export default async function ProfilePage({
       usagePercentage={usagePercentage}
       initialSection={initialSection}
       initialPreference={readPersonalAppearance(user.preferences)}
+      initialEmbed={readPersonalEmbed(user.preferences)}
+      // The embed preview names the instance. Its logos, which the layout
+      // already sends, stay out of this page.
+      appearance={{
+        brand: { ...brand, logoLight: '', logoDark: '' },
+        sharing,
+      }}
     />
   )
 }

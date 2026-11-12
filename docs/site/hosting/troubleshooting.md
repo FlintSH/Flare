@@ -91,6 +91,16 @@ For private or password-protected images that fail only in **View content**, upd
 
 If the direct request also fails, check that the session is still valid and has `files.read` for owned images or `content.read` for moderation. Private images are hidden with `404` from other visitors, and password-protected public images require the file password outside authorized owner/moderator sessions. For a `500`, inspect the application logs and storage availability. Keep file passwords and private file URLs out of support reports. See [library preview recovery](/guide/library#understand-activity-and-refresh) and [moderation permissions](/admin/users#moderate-files-and-shortened-links).
 
+## Link previews are missing, outdated, or stop playing
+
+A chat app or social network fetches a pasted link from its own servers to draw the [embed](/guide/embeds).
+
+- **No preview anywhere.** The app must reach the instance at the address in the link, over HTTPS, without a login, VPN, or bot challenge in the way. Ask for the link as the app does and read the answer: [check what an app is given](/guide/embeds#check-what-an-app-is-given). A `404` means the file is private or gone.
+- **Addresses in the preview use the wrong host or `http`.** They follow `NEXTAUTH_URL` when the request names its host. Set it to the public HTTPS address and make the proxy pass the original `Host`; see [verify the public origin](./reverse-proxy#verify-the-public-origin).
+- **The preview is an old one.** Apps keep previews: Discord for about 30 minutes, others longer. Paste the link with an extra query string such as `?v=2`.
+- **A video played at first and now doesn't.** A preview made by an earlier build on S3 storage contains a signed URL that expired after six hours. Paste the link again; current previews name the file's `/media` address, which doesn't expire. If new previews also fail, the S3 endpoint isn't reachable from the app's servers: see [signed links](./storage#private-files-and-signed-links).
+- **Every link shows a card where the image used to appear on its own.** The instance or the owner chose **Rich embed**; see [the instance's embed](/admin/appearance#embeds).
+
 ## S3 failures
 
 | Error or behavior                                     | Likely cause                                                                                                      |

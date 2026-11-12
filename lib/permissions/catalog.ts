@@ -28,7 +28,8 @@ export const PERMISSION_GROUPS = [
       {
         key: 'files.share',
         label: 'Share files',
-        description: 'Change file visibility and sharing protection.',
+        description:
+          'Change file visibility and sharing protection, and choose how your links embed.',
       },
       {
         key: 'pastes.create',
