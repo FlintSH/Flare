@@ -4,6 +4,7 @@ import {
   partitionBySize,
   uploadFile,
 } from './client'
+import { createSpeedMeter } from './speed'
 
 export type QueuedFile = {
   readonly key: number
@@ -14,6 +15,8 @@ export type QueuedFile = {
   readonly uploaded: number
   /** Whole percent of the file sent. */
   readonly progress: number
+  /** Bytes per second while it is sent; null before it can be measured. */
+  readonly speed: number | null
 }
 
 export type UploadBatch = {
@@ -30,7 +33,12 @@ export type UploadActivity = {
   readonly file: {
     readonly id: number
     readonly name: string
+    readonly size: number
+    /** Bytes sent so far. */
+    readonly uploaded: number
     readonly progress: number
+    /** Bytes per second; null before it can be measured. */
+    readonly speed: number | null
   } | null
   readonly uploading: boolean
 }
@@ -79,12 +87,16 @@ export function createUploadQueue(send = uploadFile) {
   const revoke = (files: readonly QueuedFile[]) => {
     for (const { preview } of files) if (preview) URL.revokeObjectURL(preview)
   }
-  const track = (key: number | undefined, uploaded: number) => {
+  const track = (
+    key: number | undefined,
+    uploaded: number,
+    speed: number | null
+  ) => {
     if (key === undefined) return
     update({
       files: state.files.map((item) =>
         item.key === key
-          ? { ...item, uploaded, progress: percent(item.file, uploaded) }
+          ? { ...item, uploaded, progress: percent(item.file, uploaded), speed }
           : item
       ),
     })
@@ -104,23 +116,27 @@ export function createUploadQueue(send = uploadFile) {
       for (const [index, file] of files.entries()) {
         const current = ++filesStarted
         id = current
-        setActivity({
-          file: { id: current, name: file.name, progress: 0 },
-          uploading: true,
-        })
-        track(queued?.[index], 0)
+        const measure = createSpeedMeter()
+        const show = (bytes: number, speed: number | null) =>
+          setActivity({
+            file: {
+              id: current,
+              name: file.name,
+              size: file.size,
+              uploaded: bytes,
+              progress: bytes ? percent(file, bytes) : 0,
+              speed,
+            },
+            uploading: true,
+          })
+        show(0, null)
+        track(queued?.[index], 0, measure(0))
         uploaded.push(
           await send(file, options, (bytes) => {
-            track(queued?.[index], bytes)
-            if (activity.file?.id === current)
-              setActivity({
-                file: {
-                  id: current,
-                  name: file.name,
-                  progress: percent(file, bytes),
-                },
-                uploading: true,
-              })
+            const speed = measure(bytes)
+            track(queued?.[index], bytes, speed)
+            // Another uploader on the page may have started a newer file.
+            if (activity.file?.id === current) show(bytes, speed)
           })
         )
       }
@@ -166,6 +182,7 @@ export function createUploadQueue(send = uploadFile) {
                 : undefined,
               uploaded: 0,
               progress: 0,
+              speed: null,
             })),
           ],
         })

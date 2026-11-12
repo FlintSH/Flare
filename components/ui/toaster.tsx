@@ -1,5 +1,6 @@
 'use client'
 
+import { UploadProgress } from '@/components/dashboard/upload-progress'
 import {
   Toast,
   ToastClose,
@@ -16,6 +17,8 @@ export function Toaster() {
 
   return (
     <ToastProvider>
+      {/* Shares the corner with notifications, above the latest one. */}
+      <UploadProgress />
       {toasts.map(function ({ id, title, description, action, ...props }) {
         return (
           <Toast key={id} {...props}>
