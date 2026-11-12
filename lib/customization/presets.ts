@@ -22,10 +22,10 @@ export const PALETTE_PRESETS = {
   midnight: {
     accent: '#f8fafc',
     lightAccent: '#0f172a',
-    background: '#020817',
     // Display values only: defaultDark applies DARK_PALETTE as is.
-    line: '#303f59',
-    mutedForeground: '#a8b5c9',
+    background: '#010610',
+    line: '#222d40',
+    mutedForeground: '#9aa8bc',
     defaultDark: true,
   },
   orbit: {

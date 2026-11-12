@@ -74,7 +74,7 @@ export function PreferencesShell<T extends string>({
     <div className="relative isolate mx-auto w-full max-w-7xl">
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -left-32 top-28 -z-10 h-96 w-96 rounded-full bg-primary/[.035] blur-3xl"
+        className="pointer-events-none absolute -left-32 top-28 -z-10 h-96 w-96 rounded-full bg-primary/[.035] blur-3xl dark:bg-primary/[.015]"
       />
       <PageHeader
         eyebrow={eyebrow}
@@ -130,7 +130,7 @@ export function PreferencesShell<T extends string>({
                 className={cn(
                   'flex items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
                   activeSection === section.id
-                    ? 'border-border bg-card text-foreground shadow-sm'
+                    ? 'border-border bg-panel text-foreground shadow-sm'
                     : 'border-transparent text-muted-foreground hover:bg-muted/40 hover:text-foreground'
                 )}
               >

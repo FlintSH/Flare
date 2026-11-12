@@ -226,7 +226,7 @@ export function DateRail({
               <div
                 aria-hidden="true"
                 className={cn(
-                  'pointer-events-none absolute right-4 top-0 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-overlay px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-lg shadow-black/20 transition-opacity motion-reduce:transition-none',
+                  'pointer-events-none absolute right-4 top-0 -translate-y-1/2 whitespace-nowrap rounded-lg border border-border bg-overlay px-3 py-1.5 text-xs font-medium text-popover-foreground shadow-lg shadow-black/20 dark:shadow-black/60 transition-opacity motion-reduce:transition-none',
                   visible ? 'opacity-100' : 'opacity-0'
                 )}
               >

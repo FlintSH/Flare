@@ -114,7 +114,7 @@ const palettePresets = [
   {
     name: 'Midnight',
     ...PALETTE_PRESETS.midnight,
-    swatches: ['#020817', '#303f59', '#f8fafc'],
+    swatches: ['#010610', '#222d40', '#f8fafc'],
   },
   {
     name: 'Orbit',

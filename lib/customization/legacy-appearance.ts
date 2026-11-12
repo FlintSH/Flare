@@ -32,8 +32,8 @@ export const ORIGINAL_CLASSIC_PALETTE = {
   ring: '212.7 26.8% 83.9%',
 }
 
-/** Distinct canvas, raised surfaces, hover fills and separators in the default navy palette. */
-export const CLASSIC_PALETTE = {
+/** The first higher-contrast defaults, recognized so installations that saved them move on too. */
+const LIFTED_CLASSIC_PALETTE = {
   ...ORIGINAL_CLASSIC_PALETTE,
   card: '221.5 52% 9.8%',
   popover: '221.3 42.1% 14.9%',
@@ -45,15 +45,41 @@ export const CLASSIC_PALETTE = {
   input: '216.6 26.1% 30.8%',
 }
 
-/** Upgrade only the complete untouched classic palette; never rewrite custom colors. */
+/**
+ * The default dark palette: a deeper page so panels separate without getting
+ * lighter, menus and dialogs one soft step above panels, and separate fills
+ * for hover and selection. Lines, quiet fills and secondary text stay close
+ * to the original slate.
+ */
+export const CLASSIC_PALETTE = {
+  ...ORIGINAL_CLASSIC_PALETTE,
+  background: '220 88.2% 3.3%',
+  card: '219.1 74.2% 6.1%',
+  popover: '220 65.9% 8%',
+  secondary: '219 30.8% 25.5%',
+  mutedForeground: '215.3 20.2% 67.1%',
+  accent: '218.9 32.7% 22.2%',
+  border: '218 30.6% 19.2%',
+}
+
+export const SUPERSEDED_CLASSIC_PALETTES = [
+  ORIGINAL_CLASSIC_PALETTE,
+  LIFTED_CLASSIC_PALETTE,
+]
+
+/** Upgrade only a complete untouched earlier default; never rewrite custom colors. */
 export function defaultClassicColors(
   colors: Record<string, string>
 ): Record<string, string> {
-  const entries = Object.entries(ORIGINAL_CLASSIC_PALETTE)
-  return Object.keys(colors).length === entries.length &&
-    entries.every(([key, value]) => colors[key] === value)
-    ? { ...CLASSIC_PALETTE }
-    : colors
+  const size = Object.keys(colors).length
+  const untouched = SUPERSEDED_CLASSIC_PALETTES.some((palette) => {
+    const entries = Object.entries(palette)
+    return (
+      size === entries.length &&
+      entries.every(([key, value]) => colors[key] === value)
+    )
+  })
+  return untouched ? { ...CLASSIC_PALETTE } : colors
 }
 
 /** Classic palettes have 19 tokens; leave room without allowing unbounded maps. */

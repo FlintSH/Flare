@@ -37,7 +37,8 @@ export function SaveBar({
       className={cn(
         'flex flex-col gap-4 rounded-2xl border border-border/60 bg-panel px-6 py-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between',
         // Floating over the form, it takes the opaque lifted surface.
-        sticky && 'sticky bottom-4 z-30 bg-overlay shadow-lg shadow-black/20',
+        sticky &&
+          'sticky bottom-4 z-30 bg-overlay shadow-lg shadow-black/20 dark:shadow-black/60',
         className
       )}
     >

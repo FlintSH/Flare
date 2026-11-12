@@ -29,24 +29,24 @@ export const paletteSchema = z.object(paletteShape).strict()
 export type Palette = z.infer<typeof paletteSchema>
 
 export const DARK_PALETTE: Palette = {
-  background: '#020817',
+  background: '#010610',
   foreground: '#f8fafc',
-  card: '#0c1426',
+  card: '#040c1b',
   cardForeground: '#f8fafc',
-  popover: '#162036',
+  popover: '#071022',
   popoverForeground: '#f8fafc',
   primary: '#f8fafc',
   primaryForeground: '#0f172a',
-  secondary: '#33445f',
+  secondary: '#2d3b55',
   secondaryForeground: '#f8fafc',
-  muted: '#26334d',
-  mutedForeground: '#a8b5c9',
-  accent: '#33445f',
+  muted: '#1e293b',
+  mutedForeground: '#9aa8bc',
+  accent: '#26334b',
   accentForeground: '#f8fafc',
   destructive: '#991b1b',
   destructiveForeground: '#f8fafc',
-  border: '#303f59',
-  input: '#3a4a63',
+  border: '#222d40',
+  input: '#1e293b',
   ring: '#cbd5e1',
 }
 
