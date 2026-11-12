@@ -149,6 +149,7 @@ test('default handbook matches the exact stable tag and excludes unreleased guid
 test('every release has dated archives, original source snapshots, and accessible pages', async ({
   page,
   request,
+  baseURL,
 }) => {
   const { manifest } = await releaseData(request)
   for (const release of manifest.releases) {
@@ -176,6 +177,21 @@ test('every release has dated archives, original source snapshots, and accessibl
     }
     await page.goto(`./${release.path}`, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('h1')).toHaveCount(1)
+    await page.evaluate(() => document.fonts.ready)
+    expect(
+      await page.evaluate(() =>
+        [...document.fonts].some(
+          (font) => font.family === 'Inter' && font.status === 'loaded'
+        )
+      ),
+      `${release.tag}: bundled handbook font`
+    ).toBe(true)
+    const palette = await request.get(`./${release.path}flare-theme.css`)
+    expect(palette.ok(), `${release.tag}: shared palette`).toBe(true)
+    await expect(page.locator('link[href$="flare-theme.css"]')).toHaveAttribute(
+      'href',
+      resolveSitePath(baseURL, `./${release.path}flare-theme.css`)
+    )
     const stamp = page.getByLabel('Documentation version and source revision')
     await expect(stamp).toContainText(`Flare ${release.tag}`)
     if (release.version !== release.tag.slice(1)) {

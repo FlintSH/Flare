@@ -31,6 +31,8 @@ The archives contain the documentation available in each release's Git tag. The 
 
 Archived examples, screenshots, and instructions describe their original release. An old example using `latest`, an external badge, or a link to a third-party service may refer to something that has since changed. Use an explicit release image tag when reproducing an older installation, and read that release's upgrade notes before changing an existing server.
 
+The website's shared navigation, colors, typography, and page layout follow the current handbook design across stable, archived, and rolling pages. This presentation does not update an archive's original guides or screenshots. **Build details** records the website tooling revision separately from the release's documentation source.
+
 ## See what changed
 
 Under **Compare documentation**, choose **From release** and **To release**, then select **Show changes**. The comparison shows added and removed lines in the original documentation sources. For handbook releases, this includes the guides, interactive Vue components, and downloadable JSON contracts such as OpenAPI; legacy releases include their README and earlier guides. It can compare any two listed releases, in either direction. A page that moved can appear as a removed file and an added file.

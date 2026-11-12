@@ -43,8 +43,8 @@ const buttonUnavailable = ref(false)
 <style scoped>
 .project-credit {
   border-top: 1px solid var(--flare-line);
-  padding: 28px 24px;
-  background: var(--vp-c-bg);
+  padding: 24px 16px;
+  background: transparent;
 }
 .project-credit-inner {
   display: flex;
@@ -52,7 +52,7 @@ const buttonUnavailable = ref(false)
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 20px 32px;
-  max-width: 1232px;
+  max-width: 1248px;
   margin: 0 auto;
 }
 .creator-link {

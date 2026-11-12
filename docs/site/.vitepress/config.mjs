@@ -31,7 +31,18 @@ export default defineConfig({
   srcExclude: ['test-results/**', 'playwright-report/**'],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}icon.svg` }],
-    ['meta', { name: 'theme-color', content: '#080d18' }],
+    ['link', { rel: 'stylesheet', href: `${base}flare-theme.css` }],
+    [
+      'link',
+      {
+        rel: 'preload',
+        href: `${base}fonts/Inter-VariableFont_opsz_wght.ttf`,
+        as: 'font',
+        type: 'font/ttf',
+        crossorigin: '',
+      },
+    ],
+    ['meta', { name: 'theme-color', content: '#010610' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { name: 'flare:version', content: buildInfo.version }],
     ...(buildInfo.commit
@@ -40,7 +51,10 @@ export default defineConfig({
   ],
   markdown: {
     lineNumbers: false,
-    theme: { light: 'github-light-high-contrast', dark: 'github-dark' },
+    theme: {
+      light: 'github-light-high-contrast',
+      dark: 'github-dark-high-contrast',
+    },
   },
   // Do not inherit the application's PostCSS/Tailwind configuration.
   vite: { css: { postcss: { plugins: [] } } },

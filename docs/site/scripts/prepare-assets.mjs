@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 import { getBuildInfo } from './build-info.mjs'
+import { prepareAppearance } from './appearance-assets.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 async function walk(path) {
@@ -97,6 +98,7 @@ for (const [name, location, output] of [...images]
   outputBytes += (await stat(target)).size
 }
 await mkdir(resolve(root, 'public'), { recursive: true })
+await prepareAppearance(root)
 await writeFile(
   resolve(root, 'public/build-info.json'),
   JSON.stringify(getBuildInfo(), null, 2) + '\n'

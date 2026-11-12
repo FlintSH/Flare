@@ -1,38 +1,35 @@
 <script setup>
 import { withBase } from 'vitepress'
+import DocIcon from './DocIcon.vue'
 
 const paths = [
   {
-    number: '01',
     title: 'Use Flare',
-    text: 'Upload, organize, and share your files. Learn folders, tags, pastes, upload profiles, and screenshot tools.',
+    text: 'Upload, organize, and share. Find your way around files, folders, tags, and screenshot tools.',
     link: '/guide/index.html',
     action: 'Read the user guide',
-    icon: '⌘',
+    icon: 'files',
   },
   {
-    number: '02',
     title: 'Self-host Flare',
-    text: 'Install with Docker or Railway, choose storage, connect a domain, and plan backups and upgrades.',
+    text: 'Bring your own server. Set up Docker or Railway, choose storage, and connect your domain.',
     link: '/hosting/index.html',
     action: 'Set up your server',
-    icon: '↗',
+    icon: 'server',
   },
   {
-    number: '03',
     title: 'Administer an instance',
-    text: 'Complete setup, manage users and access, configure email and single sign-on, and customize your instance.',
+    text: 'Manage accounts and permissions, configure email and sign-in, and make the instance your own.',
     link: '/admin/index.html',
     action: 'Open the admin guide',
-    icon: '◎',
+    icon: 'settings',
   },
   {
-    number: '04',
     title: 'Build integrations',
-    text: 'Create scoped API tokens, automate uploads, receive signed webhook events, and follow working examples.',
+    text: 'Connect your tools with scoped API tokens, automated uploads, signed webhooks, and working examples.',
     link: '/api/index.html',
     action: 'Explore the API',
-    icon: '{ }',
+    icon: 'code',
   },
 ]
 
@@ -41,21 +38,25 @@ const references = [
     title: 'Server configuration',
     text: 'Environment variables, defaults, and precedence',
     link: '/hosting/configuration.html',
+    icon: 'server',
   },
   {
     title: 'API authentication',
     text: 'Tokens, scopes, and supported operations',
     link: '/api/authentication.html',
+    icon: 'shield',
   },
   {
     title: 'Webhooks',
     text: 'Events, signatures, retries, and delivery',
     link: '/api/webhooks.html',
+    icon: 'code',
   },
   {
     title: 'Troubleshooting',
-    text: 'Diagnose common setup and upload problems',
+    text: 'Help with setup and upload problems',
     link: '/hosting/troubleshooting.html',
+    icon: 'terminal',
   },
 ]
 </script>
@@ -65,38 +66,46 @@ const references = [
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-copy">
         <span class="eyebrow">THE FLARE HANDBOOK</span>
-        <h1 id="home-title">Flare <span>docs</span></h1>
+        <h1 id="home-title">Flare documentation</h1>
         <p class="hero-description">
-          Guides and reference for running Flare, sharing files, and building
-          integrations. Start with a walkthrough or find the setting or endpoint
-          you need.
+          Your files. Your server. Your rules. Learn to share, customize,
+          automate, and run your own Flare instance.
         </p>
         <div class="hero-actions">
-          <a class="button-primary" :href="withBase('/hosting/index.html')"
-            >Set up Flare <span aria-hidden="true">→</span></a
-          >
-          <a class="button-secondary" :href="withBase('/guide/index.html')"
-            >Read the user guide <span aria-hidden="true">→</span></a
-          >
+          <a class="button-primary" :href="withBase('/hosting/index.html')">
+            <DocIcon name="server" />Set up Flare<DocIcon name="arrow" />
+          </a>
+          <a class="button-secondary" :href="withBase('/guide/index.html')">
+            <DocIcon name="book" />Read the user guide
+          </a>
         </div>
         <p class="hero-footnote">
-          New to Flare?
-          <a :href="withBase('/features.html')">Explore the feature guide →</a>
+          New here?
+          <a :href="withBase('/features.html')"
+            >See what Flare can do<DocIcon name="arrow"
+          /></a>
         </p>
       </div>
       <nav class="home-reference" aria-labelledby="reference-title">
-        <span class="eyebrow">QUICK REFERENCE</span>
-        <h2 id="reference-title">Find an answer</h2>
+        <div class="panel-title">
+          <span class="icon-tile"><DocIcon name="search" /></span>
+          <div>
+            <span class="eyebrow">QUICK REFERENCE</span>
+            <h2 id="reference-title">Find an answer</h2>
+          </div>
+        </div>
         <div class="quick-links">
           <a
             v-for="reference in references"
             :key="reference.link"
             :href="withBase(reference.link)"
           >
+            <DocIcon :name="reference.icon" />
             <span
               ><b>{{ reference.title }}</b
               ><small>{{ reference.text }}</small></span
-            ><span aria-hidden="true">→</span>
+            >
+            <DocIcon name="arrow" />
           </a>
         </div>
       </nav>
@@ -106,62 +115,59 @@ const references = [
       <div class="section-heading">
         <div>
           <span class="eyebrow">GUIDES BY TASK</span>
-          <h2 id="paths-title">Where would you like to start?</h2>
+          <h2 id="paths-title">What would you like to do?</h2>
         </div>
-        <p>Step-by-step help for every part of Flare.</p>
+        <p>Start with what you want to do.</p>
       </div>
       <div class="path-grid">
         <a
           v-for="path in paths"
-          :key="path.number"
+          :key="path.link"
           :href="withBase(path.link)"
           class="path-card"
         >
-          <div class="path-top">
-            <span>{{ path.number }} /</span
-            ><span class="path-icon" aria-hidden="true">{{ path.icon }}</span>
-          </div>
+          <span class="icon-tile"><DocIcon :name="path.icon" /></span>
           <h3>{{ path.title }}</h3>
           <p>{{ path.text }}</p>
           <span class="path-action"
-            >{{ path.action }} <span aria-hidden="true">→</span></span
-          >
+            >{{ path.action }}<DocIcon name="arrow"
+          /></span>
         </a>
       </div>
     </section>
 
     <section class="home-lower" aria-labelledby="walkthroughs-title">
-      <div>
+      <div class="walkthrough-copy">
         <span class="eyebrow">WALKTHROUGHS & EXAMPLES</span>
-        <h2 id="walkthroughs-title">Learn with the real interface.</h2>
+        <h2 id="walkthroughs-title">See it in Flare.</h2>
         <p>
-          Follow a screenshot tour, watch a recorded workflow, or explore upload
-          settings and build API request examples in your browser.
+          Follow the real interface, watch a workflow, or try upload settings
+          and API requests in the browser.
         </p>
         <a :href="withBase('/demos.html')" class="text-link"
-          >Open the interactive walkthroughs →</a
-        >
+          >Open the interactive walkthroughs<DocIcon name="arrow"
+        /></a>
         <div class="quick-links walkthrough-links">
           <a :href="withBase('/guide/screenshot-tools.html')"
             ><span
               ><b>Connect your screenshot tool</b
               ><small>ShareX, iTake, Flameshot, Spectacle & Bash</small></span
-            ><span aria-hidden="true">→</span></a
-          >
+            ><DocIcon name="arrow"
+          /></a>
           <a :href="withBase('/guide/upload-profiles.html')"
             ><span
-              ><b>Configure upload profiles</b
-              ><small>Saved defaults, recipes, and token bindings</small></span
-            ><span aria-hidden="true">→</span></a
-          >
+              ><b>Save your upload preferences</b
+              ><small>Profiles, recipes, and token bindings</small></span
+            ><DocIcon name="arrow"
+          /></a>
           <a :href="withBase('/hosting/maintenance.html')"
             ><span
-              ><b>Back up and update your instance</b
+              ><b>Keep your instance running</b
               ><small
                 >Backups, restores, upgrades & daily operations</small
               ></span
-            ><span aria-hidden="true">→</span></a
-          >
+            ><DocIcon name="arrow"
+          /></a>
         </div>
       </div>
       <div class="hero-visual">
@@ -171,9 +177,8 @@ const references = [
           aria-label="Explore real Flare screenshots and walkthroughs"
         >
           <div class="browser-toolbar">
-            <span class="window-dots" aria-hidden="true"><i /><i /><i /></span
-            ><span>Inside Flare · the file library</span
-            ><span aria-hidden="true">↗</span>
+            <span><DocIcon name="files" />Inside Flare</span
+            ><span>The file library<DocIcon name="external" /></span>
           </div>
           <img
             :src="withBase('/screenshots/image-gallery/files-by-month.webp')"
@@ -184,20 +189,19 @@ const references = [
           />
         </a>
         <div class="visual-caption">
-          <span class="status-dot" /> REAL APP SCREENSHOTS
-          <a :href="withBase('/guide/library.html')"
-            >Read the library guide →</a
-          >
+          <span>Real app · demonstration data</span
+          ><a :href="withBase('/guide/library.html')"
+            >Explore the library<DocIcon name="arrow"
+          /></a>
         </div>
       </div>
     </section>
     <div class="home-help">
-      <span>Looking for something specific?</span
+      <span><DocIcon name="search" />Looking for something specific?</span
       ><span
-        >Use search <kbd>Ctrl / ⌘ K</kbd> or visit
-        <a :href="withBase('/hosting/troubleshooting.html')"
-          >troubleshooting →</a
-        ></span
+        >Search with <kbd>Ctrl / ⌘ K</kbd> or open
+        <a :href="withBase('/hosting/troubleshooting.html')">troubleshooting</a
+        >.</span
       >
     </div>
   </div>

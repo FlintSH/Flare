@@ -33,6 +33,14 @@ npm run preview --prefix docs/site
 
 The output is `docs/site/.vitepress/dist/`. `build` checks links, anchor targets, assets, and OpenAPI references after rendering. A missing guide or image should fail the build instead of becoming a broken page for readers.
 
+### Keep the handbook visually aligned with Flare
+
+The handbook uses Flare's default light and dark palettes, its bundled Inter typeface, rounded panels, and compact controls. Use the appearance switch in the header to change the handbook's theme. This is the documentation site's preference; it does not change your Flare instance or load an instance's custom appearance pack.
+
+`npm run assets` generates `public/flare-theme.css` from `LIGHT_PALETTE` and `DARK_PALETTE` in `lib/customization/schema.ts` and prepares the existing fonts from `public/fonts/inter/`. Do not maintain a second palette or commit the generated assets. If the palette data stops being literal colors, asset preparation fails so the reader can be updated instead of silently shipping stale defaults. Docs-only surface, spacing, and VitePress mappings live in `.vitepress/theme/style.css`.
+
+The release builder applies the current shared stylesheet, layout, fonts, and palettes to stable, archived, and rolling pages. Each release retains its original guide text, screenshots, and interactive content. Source and website-tooling revisions remain separate in **Build details**. When changing this presentation, check both themes, mobile navigation, search, tables, code blocks, screenshot dialogs, interactive labs, and the release browser, including a non-root base path.
+
 This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below: the homepage follows stable, and readers must explicitly open the rolling preview for development prerelease instructions.
 
 ### Build the release site
@@ -104,7 +112,7 @@ npx playwright install chromium
 npm test
 ```
 
-Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
+Tests start a fresh production preview on port 4175 and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. Stop any previous preview on that port before running them. Reusing a preview after rebuilding can serve stale asset paths. Layout and WCAG checks visit every handbook page; font and palette checks verify the generated Flare defaults. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
 
 The separate `npm run test:releases` suite verifies the assembled stable site, release archives, and rolling preview after `npm run build:releases`. Run both suites when changing version navigation, comparisons, or publishing. Source-preview tests cannot establish that deployment selected the correct stable and rolling revisions.
 
