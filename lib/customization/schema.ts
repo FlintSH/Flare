@@ -139,6 +139,8 @@ export const appearanceDocumentSchema = z
           showUploader: z.boolean(),
           showFilename: z.boolean(),
           showSize: z.boolean(),
+          /** Tell visitors how long a file with a scheduled expiry has left. */
+          showExpiry: z.boolean().default(true),
           showFooter: z.boolean().nullable(),
           imageFit: z.enum(['contain', 'cover']).default('contain'),
           embedMode: z.enum(EMBED_MODES).default('direct'),
@@ -188,6 +190,7 @@ export const DEFAULT_APPEARANCE: AppearanceDocument = {
     showUploader: true,
     showFilename: true,
     showSize: true,
+    showExpiry: true,
     showFooter: null,
     imageFit: 'contain',
     embedMode: 'direct',

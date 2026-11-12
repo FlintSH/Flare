@@ -51,20 +51,22 @@ A personal mode choice does not select a completely separate color palette or ov
 
 An [upload profile](./upload-profiles) can set the share-page style for its new uploads:
 
-- **Minimal:** emphasize the uploaded content.
-- **Framed:** show the content within a more structured share page.
-- **Delivery:** give the handoff and file actions a prominent role.
+- **Minimal:** set the file's header and preview on the page itself, without a card.
+- **Framed:** show the file in a card in the middle of the page.
+- **Delivery:** use a full-width card that opens with **A file for you** and names the uploader inside it.
 - **Inherit:** use the instance's starting style when the upload's settings are resolved.
 
 <Screenshot src="/screenshots/customization/share-framed.png" alt="Framed share-page layout" caption="Framed is one of three presentation choices available for sharing files." />
 
-<Screenshot src="/screenshots/customization/share-delivery.png" alt="Delivery share-page layout with prominent file actions" caption="Delivery gives a file handoff its own presentation." />
+<Screenshot src="/screenshots/customization/share-delivery.png" alt="Delivery share-page layout: a full-width card that opens with A file for you and the uploader's name" caption="Delivery gives a file handoff its own presentation." />
+
+Every style keeps the same parts in the same order: the file's name, type, size, and actions, then its preview. [What a share page shows](./sharing#what-a-share-page-shows) describes them.
 
 Changing a profile applies to future uploads; it does not redesign every existing file. A file with a stored share style keeps that style. Files without a stored style inherit the instance's default.
 
 ## Presentation and access are independent
 
-The administrator can choose whether share pages show uploader attribution, filename, file size, and a footer. They can also set image fit and social-preview text.
+The administrator can choose whether share pages show uploader attribution, filename, file size, the expiration notice, and a footer. They can also set image fit and social-preview text.
 
 These choices affect what a page presents. Hiding a name does not remove it from an existing URL or the downloaded file. A Minimal page can be private, and a Delivery page can be public: choose [visibility and passwords](./sharing) separately.
 

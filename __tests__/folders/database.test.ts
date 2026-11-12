@@ -390,7 +390,7 @@ suite('vault folders against disposable PostgreSQL', () => {
         expect.objectContaining({
           name: 'Password-protected file',
           href: `/s/folders/${enabled.shareToken}/files/${protectedFile.id}`,
-          rawUrl: null,
+          thumbnail: null,
           mimeType: null,
           size: null,
           hasPassword: true,

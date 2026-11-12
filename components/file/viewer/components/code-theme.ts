@@ -9,9 +9,11 @@ import {
 } from '@uiw/react-codemirror'
 
 /** The height of one line, in pixels. */
-const LINE_HEIGHT = 20
+export const CODE_LINE_HEIGHT = 20
 /** The space above the first line and below the last, in pixels. */
-const EDGE = 12
+export const CODE_EDGE = 12
+/** The tallest the text grows: the share layout's stage height. */
+const MAX_HEIGHT = 'var(--stage-max, 60vh)'
 
 /**
  * CodeMirror's frame in Flare's colours: no background of its own, a tinted
@@ -31,15 +33,15 @@ function frame(dark: boolean) {
       '&.cm-focused': { outline: 'none' },
       '.cm-scroller': {
         fontFamily: 'inherit',
-        lineHeight: `${LINE_HEIGHT}px`,
+        lineHeight: `${CODE_LINE_HEIGHT}px`,
         // Room for whole lines plus both paddings, so a file that fits doesn't
         // scroll by its padding alone.
-        maxHeight: `calc(round(nearest, 60vh - ${2 * EDGE}px, ${LINE_HEIGHT}px) + ${2 * EDGE}px)`,
+        maxHeight: `calc(round(down, ${MAX_HEIGHT} - ${2 * CODE_EDGE}px, ${CODE_LINE_HEIGHT}px) + ${2 * CODE_EDGE}px)`,
       },
-      '@supports not (height: round(nearest, 1px, 1px))': {
-        '.cm-scroller': { maxHeight: '60vh' },
+      '@supports not (height: round(down, 1px, 1px))': {
+        '.cm-scroller': { maxHeight: MAX_HEIGHT },
       },
-      '.cm-content': { padding: `${EDGE}px 0` },
+      '.cm-content': { padding: `${CODE_EDGE}px 0` },
       '.cm-line': { padding: '0 1rem 0 0.75rem' },
       // Opaque, so code scrolled sideways doesn't show through the numbers.
       '.cm-gutters': {
@@ -102,7 +104,7 @@ function frame(dark: boolean) {
       '.cm-bottomFade': {
         position: 'absolute',
         left: '0',
-        height: `${EDGE}px`,
+        height: `${CODE_EDGE}px`,
         pointerEvents: 'none',
         background: 'linear-gradient(to top, hsl(var(--card)), transparent)',
       },
@@ -111,7 +113,7 @@ function frame(dark: boolean) {
       '.cm-gutterFade': {
         position: 'absolute',
         left: '0',
-        height: `${EDGE}px`,
+        height: `${CODE_EDGE}px`,
         pointerEvents: 'none',
         background: `linear-gradient(to top, ${gutterTint}, transparent), linear-gradient(to top, hsl(var(--card)), transparent)`,
       },

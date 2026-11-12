@@ -1,35 +1,27 @@
 'use client'
 
-import { Archive } from 'lucide-react'
-
 import { ArchiveBrowserContent } from '@/components/archives/archive-browser-content'
 
 import type { ArchiveFormat } from '@/lib/archives/shared'
 
 import type { FileViewerFile } from '../types'
 
-/** `format` is null for an archive Flare can't open. */
+/** An archive Flare can browse. The file's header already says what it is. */
 export function ArchiveViewer({
   file,
   format,
   password,
 }: {
   file: FileViewerFile
-  format: ArchiveFormat | null
+  format: ArchiveFormat
   password?: string
 }) {
   return (
     <section
       aria-labelledby="archive-contents-title"
-      className="w-[64rem] min-w-0 max-w-full space-y-3 px-6 pt-1"
+      className="w-full min-w-0 p-4 sm:p-5"
     >
-      {/* A section label, quieter than the file's name above it. The
-          preview panel explains what can be opened. */}
-      <h2
-        id="archive-contents-title"
-        className="flex items-center gap-2 text-sm font-medium"
-      >
-        <Archive className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      <h2 id="archive-contents-title" className="sr-only">
         Archive contents
       </h2>
       <ArchiveBrowserContent

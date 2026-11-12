@@ -125,6 +125,18 @@ Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup a
 
 This change doesn't touch the database, so going back needs only the earlier image.
 
+### Share page layout
+
+Builds after Flare 3.0.1 also lay out [share pages](/guide/sharing#what-a-share-page-shows), shared folders, and file password pages differently. There is one new appearance setting, **Show expiration**, and no new environment variable or database migration. Every link keeps working. Review these after updating:
+
+- **Custom CSS.** A share page's markup changed: the file's name, type, size, and actions are now a header above the preview, the card has one width for every previewable type, and the page centers it. Custom CSS written against the earlier structure may no longer match. Open a public file in each [share style](/admin/appearance#sharing) you use and adjust your rules. The `data-share-style` attribute on the page and `data-flare-surface` on its card are unchanged.
+- **View counts.** Opening a shared folder no longer adds a view to each image in it, because its tiles now load thumbnails instead of raw links. Totals already recorded stay as they are. See [view counts](/guide/sharing#view-counts).
+- **Shared folder images.** Those tiles are resized by the same image optimizer as public library previews, through `/_next/image` and `/api/files/{id}/thumbnail`. A proxy or CDN rule that already lets the library load its previews covers them. If tiles show file icons instead of pictures, follow [Image thumbnails fail](./troubleshooting#image-thumbnails-fail).
+- **Expiration notice.** A share page now tells visitors how long a file with a scheduled expiration has left. **Settings → Appearance → Sharing → Show expiration** turns it off; it starts on for every existing appearance.
+- **Files stored with a generic type.** Text and code uploaded without a type, which Flare stores as `application/octet-stream`, now open in the text viewer when their name says what they are. Nothing is rewritten in the database; the stored type is unchanged. See [what recipients can preview](/guide/sharing#what-recipients-can-preview).
+
+Once any setting or appearance is saved on the new version, the saved appearance names the **Show expiration** setting. An older image refuses that document, so settings and share pages fail to load there. As with any [rollback](#rollback), return to the old image only together with the database backup taken before upgrading.
+
 ### Upgrading from 3.0 to 3.0.1
 
 Flare 3.0.1 is a security release. Use the normal backup and upgrade steps above. There are no database migrations, and nobody is signed out unless you change `NEXTAUTH_SECRET`. Then work through the items that apply to your installation:

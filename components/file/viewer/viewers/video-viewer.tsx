@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { cn } from '@/lib/utils'
 
 import { ErrorState } from '../components/error-state'
-import { LoadingState } from '../components/loading-state'
+import {
+  LoadingState,
+  stageMaxHeightClassName,
+} from '../components/loading-state'
 
 const LOOKUP_FAILED = 'This video couldn’t be loaded.'
+
+/** The frame held for a video until it reports its own. */
+const DEFAULT_RATIO = 16 / 9
 
 /** `lookupUrl` answers with where the video plays from. */
 export function VideoViewer({
@@ -17,6 +24,7 @@ export function VideoViewer({
 }) {
   const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
   const [failedUrl, setFailedUrl] = useState<string>()
+  const [ratio, setRatio] = useState(DEFAULT_RATIO)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -44,7 +52,12 @@ export function VideoViewer({
   }
 
   if (!direct.url) {
-    return <LoadingState message="Loading video…" />
+    return (
+      <LoadingState
+        message="Loading video…"
+        className={cn('aspect-video', stageMaxHeightClassName)}
+      />
+    )
   }
 
   if (failedUrl === direct.url) {
@@ -52,15 +65,24 @@ export function VideoViewer({
   }
 
   return (
-    // The same stage between hairlines as images and text: the video uses
-    // the card's full width.
-    <div className="w-[56rem] min-w-0 max-w-full border-y border-border/60 bg-muted/60 dark:bg-muted/30">
+    // The player keeps the loading frame's shape until the video reports its
+    // own, so a 16:9 video starts without moving the page. Bars beside a
+    // narrower video are black in both themes, like the player's own.
+    <div className="w-full bg-black">
       <video
         src={direct.url}
         controls
         aria-label={`${file.name} video player`}
+        onLoadedMetadata={({ currentTarget: video }) => {
+          if (video.videoWidth && video.videoHeight)
+            setRatio(video.videoWidth / video.videoHeight)
+        }}
         onError={() => setFailedUrl(direct.url)}
-        className="block max-h-[60vh] w-full object-contain focus-visible:outline-offset-[-2px]"
+        className={cn(
+          'mx-auto block w-full object-contain focus-visible:outline-offset-[-2px]',
+          stageMaxHeightClassName
+        )}
+        style={{ aspectRatio: ratio }}
         controlsList="nodownload"
         preload="metadata"
         muted={false}

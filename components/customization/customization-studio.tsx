@@ -1081,6 +1081,18 @@ export function CustomizationStudio({
                             }
                           />
                         </SettingRow>
+                        <SettingRow
+                          label="Show expiration"
+                          description="Tell visitors how long a file with a scheduled expiration has left."
+                        >
+                          <Switch
+                            aria-label="Show expiration"
+                            checked={document.sharing.showExpiry}
+                            onCheckedChange={(showExpiry) =>
+                              change('sharing', { showExpiry })
+                            }
+                          />
+                        </SettingRow>
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="sharing-footer">

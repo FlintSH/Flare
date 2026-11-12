@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 
+import { Lock } from 'lucide-react'
+
 import {
   FILE_PASSWORD_DESCRIPTION,
   FILE_PASSWORD_TITLE,
@@ -78,6 +80,7 @@ export default async function SharedFolderFilePage({
 
   return (
     <PublicState
+      icon={<Lock aria-hidden="true" />}
       title={FILE_PASSWORD_TITLE}
       description={FILE_PASSWORD_DESCRIPTION}
       footer={showFooter ? <Footer /> : undefined}

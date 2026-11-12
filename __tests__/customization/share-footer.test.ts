@@ -56,6 +56,26 @@ describe('share-page footer', () => {
     expect(preview(true)).toContain(text)
     expect(preview(false)).not.toContain(text)
   })
+
+  // Every switch in the studio's sharing details changes its preview.
+  it('previews the expiry notice only while Show expiration is on', () => {
+    const preview = (showExpiry: boolean) =>
+      renderToStaticMarkup(
+        React.createElement(AppearancePreview, {
+          document: {
+            ...DEFAULT_APPEARANCE,
+            sharing: { ...DEFAULT_APPEARANCE.sharing, showExpiry },
+          },
+          creditsFooter: true,
+          mode: 'dark',
+          onModeChange: () => {},
+          protectedPreview: false,
+          onProtectedChange: () => {},
+        })
+      )
+    expect(preview(true)).toContain('Expires in 3 days')
+    expect(preview(false)).not.toContain('Expires in')
+  })
 })
 
 describe('appearance studio links', () => {

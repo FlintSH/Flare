@@ -124,7 +124,7 @@ This is a real stored ZIP generated from two private fixture files. The explicit
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse and download a shared archive: silent Flare recording" :src="withBase('/demos/archive-share-browse.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-1. Open the public **Field kit.zip** share page while signed out. **Archive contents** shows four files and four folders inline, above the whole-file **Download** action.
+1. Open the public **Field kit.zip** share page while signed out. The whole-file **Download** action sits beside the archive's name, and the page lists four files and four folders inline below it.
 2. Open **guide** and select **README.md**. The text appears beside the folder contents.
 3. Choose **Download entry**. The browser saves the actual **README.md** bytes and keeps the share page open.
 4. Search for **flare-icon** and select **images/flare-icon.png**. The verified image appears without extracting files into an account.
@@ -240,7 +240,7 @@ Moving a file preserves its individual share link. [Read the folders guide](./gu
 
 ### Share a collection, then revoke access
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 14-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 12-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 1. Open a folder, choose **Share**, and choose **Create share link**.
 2. Open the shared folder link. It shows what any recipient sees: the public files, and a password-protected file as a generic locked tile.
@@ -251,7 +251,7 @@ Disabling a folder link does not revoke a file’s separate public URL. [Underst
 
 ### Open a protected file
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Protected-file handoff: 11-second silent Flare recording" :src="withBase('/demos/protected-file-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Protected-file handoff: 10-second silent Flare recording" :src="withBase('/demos/protected-file-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 1. Open a locked tile from a shared folder. The password page links back to the folder.
 2. Enter an incorrect password; the file stays locked and its name stays hidden.

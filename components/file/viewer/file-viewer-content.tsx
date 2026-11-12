@@ -34,7 +34,12 @@ export function FileViewerContent({
         />
       )
     case 'unsupported-archive':
-      return <ArchiveViewer file={file} format={null} password={password} />
+      return (
+        <UnsupportedState>
+          Flare can browse ZIP, TAR, TAR.GZ (TGZ), and GZIP archives. Download
+          this one to open it on your device.
+        </UnsupportedState>
+      )
     case 'image':
       return <ImageViewer file={file} src={src} />
     case 'pdf':
@@ -44,7 +49,13 @@ export function FileViewerContent({
     case 'audio':
       return <AudioViewer file={file} src={src} />
     case 'csv':
-      return <CsvViewer url={urls.content} />
+      return (
+        <CsvViewer
+          url={urls.content}
+          bytes={file.size}
+          delimiter={file.delimiter}
+        />
+      )
     case 'code':
     case 'text':
       return (
@@ -52,9 +63,10 @@ export function FileViewerContent({
           name={file.name}
           url={urls.content}
           language={file.language}
+          bytes={file.size}
         />
       )
     default:
-      return <UnsupportedState mimeType={file.mimeType} />
+      return <UnsupportedState />
   }
 }

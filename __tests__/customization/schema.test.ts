@@ -223,6 +223,19 @@ describe('appearance publication', () => {
   })
 })
 
+describe('share page details', () => {
+  // Appearances and packs saved before the setting existed have no value
+  // for it, and the notice is on unless an administrator turns it off.
+  it('shows the expiration notice unless it is turned off', () => {
+    expect(DEFAULT_APPEARANCE.sharing.showExpiry).toBe(true)
+    const { showExpiry: _unset, ...earlier } = DEFAULT_APPEARANCE.sharing
+    const parse = (sharing: object) =>
+      appearanceDocumentSchema.parse({ ...DEFAULT_APPEARANCE, sharing }).sharing
+    expect(parse(earlier).showExpiry).toBe(true)
+    expect(parse({ ...earlier, showExpiry: false }).showExpiry).toBe(false)
+  })
+})
+
 describe('public disclosure and personal scope', () => {
   it('omits hidden fields from both the default and a custom embed card', () => {
     const design = structuredClone(DEFAULT_APPEARANCE)
