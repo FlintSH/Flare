@@ -25,15 +25,24 @@ const failedContent = (status?: number) =>
 const BYTES_PER_LINE = 32
 const WIDTHS = ['62%', '38%', '81%', '54%', '70%', '24%', '47%', '76%']
 
+/** The most lines the skeleton draws: more than the tallest preview shows. */
+const SKELETON_MAX_LINES = 48
+
 /**
  * Lines the size of the text that is loading: as many as a file of `bytes`
- * probably has, up to the tallest the preview grows.
+ * probably has, up to the tallest the preview grows. The page leaves the
+ * size out when it hides sizes; the skeleton then takes the whole stage,
+ * since most shared text is longer than a screen, and a short file eases
+ * down to its own height.
  */
 function TextSkeleton({ bytes }: { bytes?: number }) {
-  const lines = Math.min(
-    Math.max(Math.ceil((bytes ?? 2048) / BYTES_PER_LINE), 2),
-    48
-  )
+  const lines =
+    bytes === undefined
+      ? SKELETON_MAX_LINES
+      : Math.min(
+          Math.max(Math.ceil(bytes / BYTES_PER_LINE), 2),
+          SKELETON_MAX_LINES
+        )
   return (
     <div
       role="status"

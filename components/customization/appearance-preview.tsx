@@ -205,11 +205,16 @@ export function AppearancePreview({
                       <span className="block truncate text-xs font-semibold">
                         {sharing.showFilename ? sampleName : sampleType}
                       </span>
-                      {(sharing.showFilename || sharing.showSize) && (
+                      {(sharing.showFilename ||
+                        sharing.showSize ||
+                        sharing.showExpiry) && (
                         <span className="block truncate text-[10px] text-muted-foreground">
                           {[
                             sharing.showFilename && sampleType,
                             sharing.showSize && sampleSize,
+                            // The sample stands for a file with a scheduled
+                            // expiration, so the switch has something to show.
+                            sharing.showExpiry && 'Expires in 3 days',
                           ]
                             .filter(Boolean)
                             .join(' · ')}

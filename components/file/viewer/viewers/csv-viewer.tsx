@@ -110,7 +110,10 @@ export function CsvViewer({
                     key={column}
                     className="border-r border-border/60 px-3 py-2 align-top last:border-r-0"
                   >
-                    {cell}
+                    {/* A date or a code stays on one line and long text
+                        wraps at a readable width; the table scrolls
+                        sideways when its columns need more than the page. */}
+                    <div className="w-max max-w-xs break-words">{cell}</div>
                   </td>
                 ))}
               </tr>
