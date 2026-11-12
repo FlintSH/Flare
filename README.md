@@ -8,7 +8,7 @@
 [![Discord](https://img.shields.io/discord/1006668059936829511?style=flat-square&color=5865F2&logo=discord&logoColor=white)](https://discord.gg/mwVAjKwPus)
 [![MIT license](https://img.shields.io/github/license/FlintSH/Flare?style=flat-square)](LICENSE)
 
-[**Documentation**](https://flintsh.github.io/Flare/) · [Install](#quick-start) · [Demos](https://flintsh.github.io/Flare/demos.html) · [API](https://flintsh.github.io/Flare/api/)
+[**Website**](https://flintsh.github.io/Flare/) · [Documentation](https://flintsh.github.io/Flare/guide/) · [Install](#quick-start) · [Demos](https://flintsh.github.io/Flare/demos.html) · [API](https://flintsh.github.io/Flare/api/)
 
 </div>
 
@@ -155,7 +155,7 @@ More screens and recorded walkthroughs are in the [interactive demos](https://fl
 
 ## Documentation
 
-The [Flare handbook](https://flintsh.github.io/Flare/) covers using, running and
+The [Flare handbook](https://flintsh.github.io/Flare/guide/) covers using, running and
 extending Flare, with docs archived for every stable release.
 
 | I want to…               | Start with                                                                                                                                |

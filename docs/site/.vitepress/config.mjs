@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { getBuildInfo } from '../scripts/build-info.mjs'
+import { productNavigation } from '../scripts/product-home.mjs'
 
 let buildInfo
 try {
@@ -62,13 +63,7 @@ export default defineConfig({
     buildInfo,
     logo: '/icon.svg',
     siteTitle: 'Flare',
-    nav: [
-      { text: 'Explore', link: '/features' },
-      { text: 'Use Flare', link: '/guide/' },
-      { text: 'Self-host', link: '/hosting/' },
-      { text: 'API', link: '/api/' },
-      { text: 'Versions', link: '/versions' },
-    ],
+    nav: productNavigation,
     search: { provider: 'local', options: { detailedView: true } },
     outline: { level: [2, 3], label: 'On this page' },
     socialLinks: [
@@ -86,7 +81,7 @@ export default defineConfig({
     },
     sidebar: [
       group('Discover', [
-        ['Welcome', '/'],
+        ['Flare home', '/'],
         ['Feature explorer', '/features'],
         ['Interactive demos', '/demos'],
         ['Frequently asked questions', '/faq'],

@@ -1,0 +1,242 @@
+.Layout:has(.product-home) .VPNavBarTitle .title::after {
+  display: none;
+}
+
+.product-home {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px;
+  color: var(--foreground);
+}
+
+.product-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  align-items: center;
+  gap: 48px;
+  padding: 64px 0 48px;
+}
+
+.product-hero h1 {
+  margin: 0 0 20px;
+  color: var(--foreground);
+  font-size: clamp(40px, 4.5vw, 60px);
+  font-weight: 650;
+  letter-spacing: -2px;
+  line-height: 1.12;
+}
+
+.product-intro {
+  max-width: 400px;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.product-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.product-picture {
+  display: block;
+  min-width: 0;
+  max-height: 400px;
+  overflow: hidden;
+  border: 1px solid var(--flare-line);
+  border-radius: 16px;
+  background: var(--background);
+  box-shadow: var(--flare-shadow);
+}
+
+.product-picture img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.product-features {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.product-feature {
+  display: block;
+  padding: 24px;
+  border: 1px solid var(--flare-line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow: var(--flare-shadow);
+  transition:
+    background-color 150ms,
+    border-color 150ms;
+}
+
+.product-feature:hover {
+  border-color: var(--control);
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel));
+}
+
+.product-feature-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.product-feature-title h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.25px;
+}
+
+.product-feature-title > .doc-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted-foreground);
+}
+
+.product-feature-title > .doc-icon:last-child {
+  width: 15px;
+  height: 15px;
+  margin-left: auto;
+}
+
+.product-feature p {
+  margin: 12px 0 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.product-project-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 28px 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.product-project-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.product-project-links a:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.product-project-links .doc-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.home-build-stamp.product-build-stamp {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 24px 24px;
+}
+
+.home-build-stamp.product-build-stamp .build-stamp {
+  margin: 0;
+  padding: 20px 0 0;
+  border-top: 1px solid var(--flare-line);
+  border-bottom: 0;
+}
+
+@media (max-width: 1000px) {
+  .product-hero {
+    gap: 28px;
+  }
+  .product-feature {
+    padding: 20px;
+  }
+}
+
+@media (max-width: 800px) {
+  .product-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding-top: 40px;
+  }
+  .product-hero-copy {
+    max-width: 540px;
+  }
+  .product-hero h1 {
+    font-size: 48px;
+  }
+  .product-intro {
+    max-width: 480px;
+  }
+  .product-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .product-home {
+    padding: 0 16px;
+  }
+  .product-hero {
+    gap: 24px;
+    padding: 32px 0;
+  }
+  .product-hero h1 {
+    margin-bottom: 16px;
+    font-size: 40px;
+    letter-spacing: -1.4px;
+  }
+  .product-intro {
+    font-size: 15px;
+  }
+  .product-actions {
+    margin-top: 22px;
+  }
+  .product-actions > a {
+    min-height: 40px;
+  }
+  .product-picture {
+    max-height: 300px;
+  }
+  .product-picture img {
+    height: 300px;
+    object-fit: cover;
+    object-position: center;
+  }
+  .product-features {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  .product-feature {
+    padding: 20px;
+  }
+  .product-feature p {
+    margin-top: 8px;
+  }
+  .product-project-links {
+    gap: 8px;
+    font-size: 11px;
+  }
+  .home-build-stamp.product-build-stamp {
+    padding: 0 16px 24px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .product-feature {
+    transition: none;
+  }
+}

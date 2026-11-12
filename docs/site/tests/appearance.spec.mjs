@@ -61,9 +61,38 @@ for (const theme of ['dark', 'light']) {
       await stylesheet.getAttribute('href')
     )
     expect(response.ok()).toBe(true)
-    await expect(page.getByRole('link', { name: /Set up Flare/ })).toBeVisible()
+    await expect(
+      page.getByRole('link', { name: 'Get Flare', exact: true }).first()
+    ).toBeVisible()
   })
 }
+
+test('product homepage introduces Flare and leads into installation and documentation', async ({
+  page,
+}) => {
+  await page.goto('./')
+  await expect(page.locator('.product-home')).toBeVisible()
+  await expect(page.locator('h1')).toHaveText('Your own file host.')
+  for (const image of await page.locator('.product-home img').all()) {
+    await image.scrollIntoViewIfNeeded()
+    await expect
+      .poll(() => image.evaluate((element) => element.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  await page
+    .getByRole('link', { name: 'Read the docs', exact: true })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/guide\/(?:index\.html)?$/)
+  await expect(page.locator('h1')).toContainText('Your first')
+  await page.goto('./')
+  await page
+    .getByRole('link', { name: 'Get Flare', exact: true })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/hosting\/(?:index\.html)?$/)
+  await expect(page.locator('h1')).toBeVisible()
+})
 
 test('mobile readers can open the sidebar and navigate', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })

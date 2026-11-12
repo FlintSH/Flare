@@ -5,7 +5,7 @@ description: Read the documentation for a dated Flare release and compare what c
 
 # Documentation versions and changes
 
-The public handbook opens on the **current stable release**. Find your installed Flare version in **Settings → General → Instance information**, then choose the matching documentation below or use **Documentation release → View docs** on any page. Ask your instance administrator for the version if you cannot open Settings. Development changes appear in the stable handbook when they ship in a stable release; the rolling preview is available separately through an explicit link below.
+Flare's project homepage introduces the product. Its **Read the docs** link opens the handbook for the **current stable release**. Find your installed Flare version in **Settings → General → Instance information**, then choose the matching documentation below or use **Documentation release → View docs** on any page. Ask your instance administrator for the version if you cannot open Settings. Development changes appear in the stable handbook when they ship in a stable release; the rolling preview is available separately through an explicit link below.
 
 <VersionHistory />
 
@@ -13,7 +13,7 @@ The public handbook opens on the **current stable release**. Find your installed
 
 Choose **Open rolling docs (unreleased)** to read the guides for the current published rolling build. Its pages display **Rolling preview · Unreleased**, the exact source commit, and a banner explaining that these docs describe a rolling build. Use **Read stable docs** in that banner to return to the stable handbook.
 
-The rolling preview lives at `/rolling/` below the website's base path, such as `/Flare/rolling/`. Opening that URL or choosing its link is required: the homepage always opens stable docs, and visiting rolling does not change the default. Rolling pages ask search engines not to index them; they are still public and can be opened by anyone with the URL.
+The rolling preview lives at `/rolling/` below the website's base path, such as `/Flare/rolling/`. Opening that URL or choosing its link is required: the project homepage's documentation links always open stable docs, and visiting rolling does not change that default. Rolling pages ask search engines not to index them; they are still public and can be opened by anyone with the URL.
 
 The preview follows the commit identified by the published **Rolling Release**, after its Docker images have been published. It can lag behind `main` while a rolling build is running or after a failed build. Its update date comes from the rolling release's latest metadata update in UTC. `/rolling/` moves forward as rolling builds are published; it is not a permanent archive of every development commit. Rolling docs are separate from the dated stable archives and stable release comparisons. Check your rolling installation's commit against **Build details** before following its instructions.
 
@@ -31,7 +31,7 @@ The archives contain the documentation available in each release's Git tag. The 
 
 Archived examples, screenshots, and instructions describe their original release. An old example using `latest`, an external badge, or a link to a third-party service may refer to something that has since changed. Use an explicit release image tag when reproducing an older installation, and read that release's upgrade notes before changing an existing server.
 
-The website's shared navigation, colors, typography, and page layout follow the current handbook design across stable, archived, and rolling pages. This presentation does not update an archive's original guides or screenshots. **Build details** records the website tooling revision separately from the release's documentation source.
+The website's shared navigation, colors, typography, and page layout follow the current handbook design across stable, archived, and rolling pages. This presentation does not update an archive's original homepage, guides, or screenshots. The public project landing page is maintained with the website tooling. **Build details** records the website tooling revision separately from the release's documentation source.
 
 ## See what changed
 

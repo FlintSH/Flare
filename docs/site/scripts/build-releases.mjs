@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getBuildInfo } from './build-info.mjs'
 import { prepareAppearance } from './appearance-assets.mjs'
+import { productNavigation, withProductHome } from './product-home.mjs'
 import {
   discoverReleases,
   releaseBuildInfo,
@@ -138,7 +139,15 @@ async function overlayChrome(target, legacy) {
   }
 }
 
-async function configure(target, release, manifest, info, releaseBase, legacy) {
+async function configure(
+  target,
+  release,
+  manifest,
+  info,
+  releaseBase,
+  legacy,
+  productHome = false
+) {
   const rolling = info.channel === 'rolling'
   const replacedMeta = [
     'flare:version',
@@ -178,7 +187,7 @@ async function configure(target, release, manifest, info, releaseBase, legacy) {
     buildInfo: ${JSON.stringify(info)},
     docsVersions: ${JSON.stringify(manifest)},
     docsRoot: ${JSON.stringify(base)},
-    nav: [...(source.themeConfig?.nav || []).filter(item => item.link !== '/versions'), { text: 'Versions', link: '/versions' }],
+    nav: ${productHome ? JSON.stringify(productNavigation) : "[...(source.themeConfig?.nav || []).filter(item => item.link !== '/versions'), { text: 'Versions', link: '/versions' }]"},
     sidebar: ${sidebar},
     search: { provider: 'local', options: { detailedView: true } },
     editLink: undefined,
@@ -274,6 +283,7 @@ try {
           ]
         : [{ path: release.path, base: `${base}${release.path}` }]
     for (const destination of destinations) {
+      const productHome = destination.path === '' && !legacy
       if (legacy)
         await prepareLegacy({
           repo,
@@ -281,17 +291,28 @@ try {
           release,
           base: destination.base,
         })
-      await configure(target, release, manifest, info, destination.base, legacy)
-      await run(
-        process.execPath,
-        [
-          resolve(site, 'node_modules/vitepress/bin/vitepress.js'),
-          'build',
-          target,
-        ],
+      await configure(
         target,
-        { DOCS_BASE: destination.base }
+        release,
+        manifest,
+        info,
+        destination.base,
+        legacy,
+        productHome
       )
+      const build = () =>
+        run(
+          process.execPath,
+          [
+            resolve(site, 'node_modules/vitepress/bin/vitepress.js'),
+            'build',
+            target,
+          ],
+          target,
+          { DOCS_BASE: destination.base }
+        )
+      if (productHome) await withProductHome({ site, target, repo }, build)
+      else await build()
       await cp(
         resolve(target, '.vitepress/dist'),
         resolve(assembled, destination.path),

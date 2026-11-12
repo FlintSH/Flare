@@ -8,6 +8,14 @@ const releases = computed(() => theme.value.docsVersions?.releases || [])
 const root = computed(() => theme.value.docsRoot || withBase('/'))
 const current = computed(() => theme.value.buildInfo.release)
 const rolling = computed(() => theme.value.buildInfo.channel === 'rolling')
+const stableDocs = computed(() => {
+  const latest = releases.value.find(
+    (release) => release.tag === theme.value.docsVersions?.latest
+  )
+  return latest?.pages.some((entry) => entry.path === 'guide/index.html')
+    ? `${root.value}guide/index.html`
+    : root.value
+})
 const destination = computed(() => {
   const release = releases.value.find((item) => item.tag === selected.value)
   if (!release) return null
@@ -82,7 +90,7 @@ const destination = computed(() => {
     >
       <strong>Rolling preview · Unreleased</strong>
       <p>These docs describe a rolling build, not a stable release.</p>
-      <a :href="root" target="_self">Read stable docs</a>
+      <a :href="stableDocs" target="_self">Read stable docs</a>
     </div>
     <div v-if="releases.length" class="release-picker">
       <label :for="selectorId">Documentation release</label>
