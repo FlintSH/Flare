@@ -29,10 +29,10 @@ interface AudioPlayerProps {
 }
 
 /**
- * Flare's audio player, in the theme's colours: a timeline with the position
- * and the length under it, then speed, skip, play and volume. Every row has a
- * fixed height, so the player is the same size before and after the file
- * loads.
+ * Flare's audio player, in the theme's colours: one inset deck with the play
+ * button beside the timeline, and skip, speed and volume along its foot.
+ * Every row has a fixed height, so the player is the same size before and
+ * after the file loads.
  */
 export function AudioPlayer({
   src,
@@ -51,11 +51,12 @@ export function AudioPlayer({
       role="group"
       aria-label={`${name} audio player`}
       data-flare-player="audio"
+      data-playing={state.playing ? '' : undefined}
       // Focusable like the video player, so a click anywhere on it, or a
       // drag of a slider, leaves the keys with the player.
       tabIndex={idle ? undefined : 0}
       className={cn(
-        'w-full rounded-md outline-none [container-type:inline-size] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring',
+        'w-full rounded-xl border border-border/60 bg-muted/40 text-left shadow-inner outline-none [container-type:inline-size] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
         className
       )}
       onKeyDown={(event) => {
@@ -70,53 +71,53 @@ export function AudioPlayer({
     >
       {/* Without controls of its own the element takes no space. */}
       <audio ref={audio} src={src} preload="metadata" onError={onError} />
-      <Timeline audio={audio} media={media} disabled={idle} />
-      <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-        <div className="flex justify-start">
-          <SpeedButton media={media} tone="surface" disabled={idle} />
+      <div className="flex items-center gap-3 px-3 pb-2 pt-3 sm:gap-4 sm:px-4 sm:pt-4">
+        <button
+          type="button"
+          onClick={media.toggle}
+          disabled={idle}
+          aria-label={playLabel}
+          title={`${playLabel} (K)`}
+          className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-[background-color,transform] hover:bg-primary/90 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50"
+        >
+          {state.waiting ? (
+            <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
+          ) : state.playing ? (
+            <Pause className="h-5 w-5 fill-current" aria-hidden="true" />
+          ) : (
+            <Play
+              className="h-5 w-5 translate-x-px fill-current"
+              aria-hidden="true"
+            />
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <Timeline audio={audio} media={media} disabled={idle} />
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => media.seekBy(-SEEK_JUMP)}
-            disabled={idle}
-            aria-label={`Back ${SEEK_JUMP} seconds`}
-            title={`Back ${SEEK_JUMP} seconds (J)`}
-            className={mediaButtonClassName('surface')}
-          >
-            <Rewind className="h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={media.toggle}
-            disabled={idle}
-            aria-label={playLabel}
-            title={`${playLabel} (K)`}
-            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50"
-          >
-            {state.waiting ? (
-              <Loader2 className="h-5 w-5 animate-spin" aria-hidden="true" />
-            ) : state.playing ? (
-              <Pause className="h-5 w-5 fill-current" aria-hidden="true" />
-            ) : (
-              <Play
-                className="h-5 w-5 translate-x-px fill-current"
-                aria-hidden="true"
-              />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => media.seekBy(SEEK_JUMP)}
-            disabled={idle}
-            aria-label={`Forward ${SEEK_JUMP} seconds`}
-            title={`Forward ${SEEK_JUMP} seconds (L)`}
-            className={mediaButtonClassName('surface')}
-          >
-            <FastForward className="h-[18px] w-[18px]" aria-hidden="true" />
-          </button>
-        </div>
-        <div className="flex min-w-0 items-center justify-end">
+      </div>
+      <div className="flex items-center gap-0.5 border-t border-border/60 px-1.5 py-1 sm:px-2.5">
+        <button
+          type="button"
+          onClick={() => media.seekBy(-SEEK_JUMP)}
+          disabled={idle}
+          aria-label={`Back ${SEEK_JUMP} seconds`}
+          title={`Back ${SEEK_JUMP} seconds (J)`}
+          className={mediaButtonClassName('surface')}
+        >
+          <Rewind className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          onClick={() => media.seekBy(SEEK_JUMP)}
+          disabled={idle}
+          aria-label={`Forward ${SEEK_JUMP} seconds`}
+          title={`Forward ${SEEK_JUMP} seconds (L)`}
+          className={mediaButtonClassName('surface')}
+        >
+          <FastForward className="h-[18px] w-[18px]" aria-hidden="true" />
+        </button>
+        <SpeedButton media={media} tone="surface" disabled={idle} />
+        <div className="ml-auto flex min-w-0 items-center">
           <MuteButton media={media} tone="surface" disabled={idle} />
           {/* A phone sets the volume with its own buttons. */}
           <MediaSlider
@@ -128,7 +129,7 @@ export function AudioPlayer({
             valueText={`${Math.round((state.muted ? 0 : state.volume) * 100)}%`}
             onChange={media.setVolume}
             disabled={idle}
-            className="ml-1 hidden w-14 shrink-0 [@container(min-width:21rem)]:[@media(pointer:fine)]:flex"
+            className="ml-1 mr-1.5 hidden w-16 shrink-0 [@container(min-width:20rem)]:[@media(pointer:fine)]:flex"
           />
         </div>
       </div>
