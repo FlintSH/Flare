@@ -2,7 +2,7 @@ import type { AppearanceDocument } from '@/lib/customization/schema'
 import { fileTypeLabel } from '@/lib/files/file-kind'
 
 import { EMBED_LIMITS, type EmbedCardTemplates } from './schema'
-import { type EmbedValues, renderTemplate } from './template'
+import { type EmbedValues, cutToLimit, renderTemplate } from './template'
 
 /** What a card can say about one file. */
 export interface EmbedFile {
@@ -57,8 +57,11 @@ export function renderEmbedCard(
   return {
     siteName: line('siteName'),
     author: line('author'),
-    // A title names the file even when its name is hidden.
-    title: line('title', { ...values, filename: name }) || name,
+    // A title names the file even when its name is hidden. The name is cut
+    // like any line: uploads can carry names longer than a title may be.
+    title:
+      line('title', { ...values, filename: name }) ||
+      cutToLimit(name, EMBED_LIMITS.title),
     description: line('description'),
     color: templates.color,
   }
@@ -69,5 +72,7 @@ export function embedFileLabel(
   file: Pick<EmbedFile, 'name'>,
   sharing: AppearanceDocument['sharing']
 ) {
-  return sharing.showFilename ? file.name : HIDDEN_NAME
+  return sharing.showFilename
+    ? cutToLimit(file.name, EMBED_LIMITS.title)
+    : HIDDEN_NAME
 }

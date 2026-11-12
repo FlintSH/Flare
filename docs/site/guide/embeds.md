@@ -59,7 +59,7 @@ Your choice applies to every link you own, including files you uploaded before. 
 
 Leave a line empty to leave it off the card. The title is the exception: an empty title shows the file's name. WhatsApp and Signal show no preview without a description, so for them an empty description is filled with the instance's tagline.
 
-A line that comes out longer than its limit once the placeholders are filled in is cut at the limit and ends with `…`. The accent color goes to the apps Flare knows by name; an app it doesn't know reads the share page, which leaves the color out so it can't tint a visitor's browser.
+A line that comes out longer than its limit once the placeholders are filled in is cut at the limit and ends with `…`. The same goes for a long file name that stands in for an empty title or describes the image to screen readers: it is cut at the title's 500 characters. The accent color goes to the apps Flare knows by name; an app it doesn't know reads the share page, which leaves the color out so it can't tint a visitor's browser.
 
 ### Placeholders
 

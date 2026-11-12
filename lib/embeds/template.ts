@@ -72,6 +72,11 @@ function renderLine(line: string, values: EmbedValues, limit: number) {
   return tidied.replaceAll(FILLED, () => filled[next++] ?? '')
 }
 
+/** `text`, ending in an ellipsis at `limit` characters when it is longer. */
+export function cutToLimit(text: string, limit: number): string {
+  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text
+}
+
 /**
  * Fill a template in, at most `limit` characters long. A field can be empty,
  * for example a filename the instance hides: a line whose fields are all
@@ -83,10 +88,12 @@ export function renderTemplate(
   values: EmbedValues,
   limit: number
 ): string {
-  const text = template
-    .split(/\r?\n/)
-    .map((line) => renderLine(line, values, limit))
-    .filter(Boolean)
-    .join('\n')
-  return text.length > limit ? `${text.slice(0, limit - 1).trimEnd()}…` : text
+  return cutToLimit(
+    template
+      .split(/\r?\n/)
+      .map((line) => renderLine(line, values, limit))
+      .filter(Boolean)
+      .join('\n'),
+    limit
+  )
 }

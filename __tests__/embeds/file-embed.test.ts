@@ -237,6 +237,30 @@ describe('rich embeds', () => {
   })
 })
 
+describe('names longer than a title may be', () => {
+  // A single-request upload can keep a name of several thousand characters.
+  const long = { ...image, name: `${'n'.repeat(5000)}.png` }
+
+  it('are cut when the name stands in for an empty title', () => {
+    const { title } = page({
+      file: long,
+      crawler: TWITTER,
+      personal: personalEmbedSchema.parse({ design: 'custom' }),
+    }).card
+    expect(title).toHaveLength(500)
+    expect(title.endsWith('…')).toBe(true)
+  })
+
+  it('are cut in the title and in the image description alike', () => {
+    const document = page({ file: long, crawler: TWITTER })
+    expect(document.card.title).toHaveLength(500)
+    expect(document.media).toMatchObject({ kind: 'image' })
+    const alt = document.media?.kind === 'image' ? document.media.alt : ''
+    expect(alt).toHaveLength(500)
+    expect(alt.endsWith('…')).toBe(true)
+  })
+})
+
 describe('addresses in a preview', () => {
   it('points a video at the media address when storage signs its URLs', () => {
     const document = page({
