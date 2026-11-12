@@ -15,6 +15,8 @@ import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getBuildInfo } from './build-info.mjs'
+import { prepareAppearance } from './appearance-assets.mjs'
+import { productNavigation, withProductHome } from './product-home.mjs'
 import {
   discoverReleases,
   releaseBuildInfo,
@@ -97,6 +99,14 @@ async function overlayChrome(target, legacy) {
       resolve(target, '.vitepress/theme/components', name)
     )
   }
+  // Presentation follows the publishing revision; the release's guides and
+  // interactive content remain at their original source revision.
+  for (const name of ['style.css', 'Layout.vue']) {
+    await copy(
+      resolve(site, '.vitepress/theme', name),
+      resolve(target, '.vitepress/theme', name)
+    )
+  }
   await copy(resolve(site, 'versions.md'), resolve(target, 'versions.md'))
   for (const screenshot of [
     'handbook/docs-versions.webp',
@@ -111,14 +121,6 @@ async function overlayChrome(target, legacy) {
     }
   }
   if (legacy) {
-    await copy(
-      resolve(site, '.vitepress/theme/style.css'),
-      resolve(target, '.vitepress/theme/style.css')
-    )
-    await copy(
-      resolve(site, '.vitepress/theme/Layout.vue'),
-      resolve(target, '.vitepress/theme/Layout.vue')
-    )
     await writeFile(
       resolve(target, '.vitepress/theme/index.js'),
       `import DefaultTheme from 'vitepress/theme'\nimport Layout from './Layout.vue'\nimport VersionHistory from './components/VersionHistory.vue'\nimport Screenshot from './components/Screenshot.vue'\nimport './style.css'\nexport default { extends: DefaultTheme, Layout, enhanceApp({ app }) { app.component('VersionHistory', VersionHistory); app.component('Screenshot', Screenshot) } }\n`
@@ -137,11 +139,20 @@ async function overlayChrome(target, legacy) {
   }
 }
 
-async function configure(target, release, manifest, info, releaseBase, legacy) {
+async function configure(
+  target,
+  release,
+  manifest,
+  info,
+  releaseBase,
+  legacy,
+  productHome = false
+) {
   const rolling = info.channel === 'rolling'
   const replacedMeta = [
     'flare:version',
     'flare:commit',
+    'theme-color',
     ...(rolling ? ['robots'] : []),
   ]
   const historical = legacy ? '{}' : 'historical'
@@ -159,11 +170,15 @@ async function configure(target, release, manifest, info, releaseBase, legacy) {
   appearance: source.appearance || 'dark',
   lastUpdated: false,
   outDir: ${JSON.stringify(resolve(target, '.vitepress/dist'))},
-  head: [...(source.head || []).filter(([tag, attrs]) => !(tag === 'meta' && ${JSON.stringify(replacedMeta)}.includes(attrs?.name)) && !(tag === 'link' && attrs?.rel === 'icon')),
+  head: [...(source.head || []).filter(([tag, attrs]) => !(tag === 'meta' && ${JSON.stringify(replacedMeta)}.includes(attrs?.name)) && !(tag === 'link' && (attrs?.rel === 'icon' || attrs?.href?.endsWith('flare-theme.css') || attrs?.as === 'font'))),
     ${rolling ? "['meta', { name: 'robots', content: 'noindex,follow' }]," : ''}
     ['link', { rel: 'icon', type: 'image/svg+xml', href: ${JSON.stringify(`${releaseBase}icon.svg`)} }],
+    ['link', { rel: 'stylesheet', href: ${JSON.stringify(`${releaseBase}flare-theme.css`)} }],
+    ['link', { rel: 'preload', as: 'font', type: 'font/ttf', crossorigin: '', href: ${JSON.stringify(`${releaseBase}fonts/Inter-VariableFont_opsz_wght.ttf`)} }],
+    ['meta', { name: 'theme-color', content: '#010610' }],
     ['meta', { name: 'flare:version', content: ${JSON.stringify(info.version)} }],
     ['meta', { name: 'flare:commit', content: ${JSON.stringify(info.commit)} }]],
+  markdown: { ...(source.markdown || {}), theme: { light: 'github-light-high-contrast', dark: 'github-dark-high-contrast' } },
   vite: { ...(source.vite || {}), css: { postcss: { plugins: [] } } },
   ${legacy ? 'vue: { template: { transformAssetUrls: false } },' : ''}
   themeConfig: {
@@ -172,7 +187,7 @@ async function configure(target, release, manifest, info, releaseBase, legacy) {
     buildInfo: ${JSON.stringify(info)},
     docsVersions: ${JSON.stringify(manifest)},
     docsRoot: ${JSON.stringify(base)},
-    nav: [...(source.themeConfig?.nav || []).filter(item => item.link !== '/versions'), { text: 'Versions', link: '/versions' }],
+    nav: ${productHome ? JSON.stringify(productNavigation) : "[...(source.themeConfig?.nav || []).filter(item => item.link !== '/versions'), { text: 'Versions', link: '/versions' }]"},
     sidebar: ${sidebar},
     search: { provider: 'local', options: { detailedView: true } },
     editLink: undefined,
@@ -255,6 +270,7 @@ try {
         target
       )
     }
+    await prepareAppearance(target, repo)
     const info =
       channel === 'rolling'
         ? rollingBuildInfo(release, renderer, builtAt)
@@ -267,6 +283,7 @@ try {
           ]
         : [{ path: release.path, base: `${base}${release.path}` }]
     for (const destination of destinations) {
+      const productHome = destination.path === '' && !legacy
       if (legacy)
         await prepareLegacy({
           repo,
@@ -274,17 +291,28 @@ try {
           release,
           base: destination.base,
         })
-      await configure(target, release, manifest, info, destination.base, legacy)
-      await run(
-        process.execPath,
-        [
-          resolve(site, 'node_modules/vitepress/bin/vitepress.js'),
-          'build',
-          target,
-        ],
+      await configure(
         target,
-        { DOCS_BASE: destination.base }
+        release,
+        manifest,
+        info,
+        destination.base,
+        legacy,
+        productHome
       )
+      const build = () =>
+        run(
+          process.execPath,
+          [
+            resolve(site, 'node_modules/vitepress/bin/vitepress.js'),
+            'build',
+            target,
+          ],
+          target,
+          { DOCS_BASE: destination.base }
+        )
+      if (productHome) await withProductHome({ site, target, repo }, build)
+      else await build()
       await cp(
         resolve(target, '.vitepress/dist'),
         resolve(assembled, destination.path),

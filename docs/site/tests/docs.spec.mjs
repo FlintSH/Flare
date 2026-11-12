@@ -1,5 +1,16 @@
 import { expect, test } from '@playwright/test'
 import axe from 'axe-core'
+import { readdir } from 'node:fs/promises'
+
+const handbookPaths = (
+  await Promise.all(
+    ['', 'guide/', 'hosting/', 'admin/', 'api/'].map(async (directory) =>
+      (await readdir(new URL(`../${directory}`, import.meta.url)))
+        .filter((file) => file.endsWith('.md'))
+        .map((file) => `./${directory}${file.replace(/\.md$/, '.html')}`)
+    )
+  )
+).flat()
 
 test('visible version and source commit match the build metadata', async ({
   page,
@@ -189,7 +200,7 @@ for (const width of [390, 1440]) {
   test(`pages fit the ${width}px viewport and load without browser errors`, async ({
     page,
   }) => {
-    test.setTimeout(60_000)
+    test.setTimeout(180_000)
     await page.setViewportSize({ width, height: 900 })
     const errors = []
     page.on('pageerror', (error) => errors.push(error.message))
@@ -197,31 +208,7 @@ for (const width of [390, 1440]) {
       if (response.status() >= 400)
         errors.push(`${response.status()} ${response.url()}`)
     })
-    for (const url of [
-      './',
-      './features.html',
-      './versions.html',
-      './demos.html',
-      './contributing.html',
-      './guide/index.html',
-      './hosting/docker.html',
-      './api/files.html',
-      './admin/roles.html',
-      './api/roles.html',
-      './guide/account.html',
-      './guide/library.html',
-      './guide/folders.html',
-      './guide/tags.html',
-      './guide/security.html',
-      './api/security.html',
-      './admin/audit.html',
-      './api/activity.html',
-      './guide/archives.html',
-      './api/archives.html',
-      './guide/invites.html',
-      './api/invites.html',
-      './admin/users.html',
-    ]) {
+    for (const url of handbookPaths) {
       await page.goto(url)
       await page.waitForLoadState('networkidle')
       expect(
@@ -253,7 +240,7 @@ for (const theme of ['dark', 'light']) {
   test(`${theme} theme has no detected WCAG accessibility violations`, async ({
     page,
   }) => {
-    test.setTimeout(60_000)
+    test.setTimeout(180_000)
     await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: theme })
     await page.addInitScript(
       (value) => localStorage.setItem('vitepress-theme-appearance', value),
@@ -263,32 +250,7 @@ for (const theme of ['dark', 'light']) {
       width: theme === 'dark' ? 1440 : 390,
       height: 900,
     })
-    for (const path of [
-      './',
-      './features.html',
-      './versions.html',
-      './demos.html',
-      './contributing.html',
-      './guide/index.html',
-      './api/files.html',
-      './admin/roles.html',
-      './api/roles.html',
-      './guide/account.html',
-      './guide/library.html',
-      './guide/folders.html',
-      './guide/tags.html',
-      './guide/security.html',
-      './api/security.html',
-      './admin/audit.html',
-      './api/activity.html',
-      './guide/archives.html',
-      './api/archives.html',
-      './hosting/docker.html',
-      './guide/sharing.html',
-      './guide/invites.html',
-      './api/invites.html',
-      './admin/users.html',
-    ]) {
+    for (const path of handbookPaths) {
       await page.goto(path)
       await page.waitForLoadState('networkidle')
       await page.addScriptTag({ content: axe.source })

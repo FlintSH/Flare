@@ -270,7 +270,7 @@ onMounted(() => {
 .version-notice,
 .file-diff {
   border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: 20px;
 }
 .version-notice {
@@ -293,7 +293,7 @@ label {
 select,
 input {
   background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
+  border: 1px solid var(--control);
   border-radius: 6px;
   color: var(--vp-c-text-1);
   padding: 9px 10px;
@@ -306,8 +306,8 @@ select {
 }
 button {
   border-radius: 6px;
-  background: var(--vp-c-brand-3);
-  color: white;
+  background: var(--primary);
+  color: var(--primary-foreground);
   font-weight: 600;
   padding: 8px 18px;
   min-height: 42px;
@@ -316,8 +316,8 @@ button:disabled {
   opacity: 0.65;
   cursor: wait;
 }
-.dark button {
-  color: #111a2a;
+button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--primary) 90%, var(--background));
 }
 select:focus-visible,
 input:focus-visible,

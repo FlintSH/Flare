@@ -33,7 +33,19 @@ npm run preview --prefix docs/site
 
 The output is `docs/site/.vitepress/dist/`. `build` checks links, anchor targets, assets, and OpenAPI references after rendering. A missing guide or image should fail the build instead of becoming a broken page for readers.
 
-This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below: the homepage follows stable, and readers must explicitly open the rolling preview for development prerelease instructions.
+### Keep the handbook visually aligned with Flare
+
+The handbook uses Flare's default light and dark palettes, its bundled Inter typeface, rounded panels, and compact controls. Use the appearance switch in the header to change the handbook's theme. This is the documentation site's preference; it does not change your Flare instance or load an instance's custom appearance pack.
+
+`npm run assets` generates `public/flare-theme.css` from `LIGHT_PALETTE` and `DARK_PALETTE` in `lib/customization/schema.ts` and prepares the existing fonts from `public/fonts/inter/`. Do not maintain a second palette or commit the generated assets. If the palette data stops being literal colors, asset preparation fails so the reader can be updated instead of silently shipping stale defaults. Docs-only surface, spacing, and VitePress mappings live in `.vitepress/theme/style.css`.
+
+The release builder applies the current shared stylesheet, layout, fonts, and palettes to stable, archived, and rolling pages. Each release retains its original guide text, screenshots, and interactive content. The public root is Flare's product landing page, built from the publishing checkout. Its **Read the docs** and **Get Flare** links lead into the stable handbook. Archived homepages keep their original content. Source and website-tooling revisions remain separate in **Build details**. When changing this presentation, check both themes, mobile navigation, search, tables, code blocks, screenshot dialogs, interactive labs, and the release browser, including a non-root base path.
+
+Product screenshots are prepared separately in `public/landing/` from the existing demonstration captures. They show the current product presentation; they are not substituted into historical guides. The release builder temporarily installs the product homepage only for the public root, then restores the original page, component, and image bytes before rendering its archive. The homepage keeps the version/source stamp below its product content and above the creator credit.
+
+The hero's interactive showcase is a local illustration using sample files, with no audio or connection to an instance. Keep its demo label, manual chapter controls, pause behavior, and reduced-motion support. Actual app recordings remain separate in [Interactive demos](./demos#watch-real-workflows). The release overlay includes the showcase component and its styles; archived homepages keep their original content.
+
+This preview describes the checked-out source, including unreleased changes. The public site uses the separate release build below: the product homepage links to stable documentation, and readers must explicitly open the rolling preview for development prerelease instructions.
 
 ### Build the release site
 
@@ -46,7 +58,7 @@ DOCS_BASE=/Flare/ npm run build:releases --prefix docs/site
 DOCS_BASE=/Flare/ npm run test:releases --prefix docs/site
 ```
 
-The release builder reads GitHub's published release metadata and resolves each stable release tag to its source commit. The latest stable release supplies the root handbook; every published stable release also has an archive at `/versions/TAG/` below `DOCS_BASE`. A release without the handbook uses the README and any earlier guides from its own tag. The builder does not fill missing historical guides with current instructions.
+The release builder reads GitHub's published release metadata and resolves each stable release tag to its source commit. The latest stable release supplies the default guides, with the current project landing page at the public root. Every published stable release also has an archive at `/versions/TAG/` below `DOCS_BASE`, including its original homepage. A release without the handbook uses the README and any earlier guides from its own tag. The builder does not fill missing historical guides with current instructions.
 
 The same build adds `/rolling/` from the immutable commit recorded in the published rolling release's `flare-commit-sha` marker. The application uses this marker for rolling update checks too. The mutable local `rolling` tag and the publishing checkout are not substitutes: a local tag can be stale, and `main` can be ahead of published Docker images. The fetch command retrieves version tags without attempting to overwrite an existing local `rolling` tag. The builder fetches the published rolling commit if it is missing locally. Drafts and other prereleases are excluded; rolling is separate from the stable archive list and comparisons.
 
@@ -104,7 +116,7 @@ npx playwright install chromium
 npm test
 ```
 
-Tests use the production build and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
+Tests start a fresh production preview on port 4175 and cover local search, feature filtering, screenshot keyboard dismissal, upload-option precedence, additive role permissions and token scope intersection, safe API code generation, version/commit provenance, desktop/mobile overflow, failed asset requests, and automated WCAG checks in light and dark themes. Stop any previous preview on that port before running them. Reusing a preview after rebuilding can serve stale asset paths. Layout and WCAG checks visit every handbook page; font and palette checks verify the generated Flare defaults. The Git policy fixture also proves that a later documentation commit cannot cover an earlier undocumented feature commit. Linux machines may need Playwright's system dependencies; CI uses `npx playwright install --with-deps chromium`.
 
 The separate `npm run test:releases` suite verifies the assembled stable site, release archives, and rolling preview after `npm run build:releases`. Run both suites when changing version navigation, comparisons, or publishing. Source-preview tests cannot establish that deployment selected the correct stable and rolling revisions.
 
@@ -590,7 +602,7 @@ The repository includes `.github/workflows/docs.yml`. On pull requests and pushe
 3. The workflow defaults to the repository subpath, such as `/Flare/`. If you use a custom domain at its root, set the Actions variable `DOCS_BASE` to `/` and configure that domain in Pages settings.
 4. Run the **Documentation** workflow on `main`, or push a docs change to `main`.
 
-The build job uploads only `docs/site/.vitepress/releases/` as the Pages artifact, and the deployment job reports the actual published URL. The root content comes from GitHub's latest stable release, even when the workflow runs after a push containing unreleased application changes. `/rolling/` comes from the published rolling commit. The navigation and archive tooling can improve independently while application guidance remains tied to its release or rolling commit.
+The build job uploads only `docs/site/.vitepress/releases/` as the Pages artifact, and the deployment job reports the actual published URL. The product homepage comes from the publishing checkout; its documentation links open guides from GitHub's latest stable release, even when the workflow runs after a push containing unreleased application changes. `/rolling/` comes from the published rolling commit. The project homepage, navigation, and archive tooling can improve independently while application guidance remains tied to its release or rolling commit.
 
 Publishing runs after a successful **Release** or **Rolling Release** workflow from this repository's `main`, when a stable or rolling release is manually published or edited, on pushes to `main`, and on manual **Documentation** runs from `main`. The `workflow_run` trigger is necessary because tags and releases created with `GITHUB_TOKEN` do not trigger another push/release workflow. Failed release workflows, draft releases, and other prereleases do not publish docs. A push may build before rolling images are ready; the successful **Rolling Release** completion rebuilds the website with the newly published rolling commit. Publishing runs are serialized across trigger types so their builds and deployments cannot overtake one another. A failed build or browser check leaves the previous Pages deployment in place; fix the failure and rerun **Documentation** on `main`.
 

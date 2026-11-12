@@ -1,8 +1,14 @@
 ---
 layout: page
 sidebar: false
-title: Flare documentation
-description: User guides, self-hosting instructions, administration, API reference, and practical walkthroughs for Flare.
+productHome: true
+title: Flare · Your own file host
+titleTemplate: false
+description: Your own home for screenshots, files, pastes and short links. Upload from your browser or screenshot tool and share links on your domain.
 ---
+
+<script setup>
+import Home from './.vitepress/theme/components/Home.vue'
+</script>
 
 <Home />

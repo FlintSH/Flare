@@ -13,6 +13,8 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 
 import { getBuildInfo } from './build-info.mjs'
+import { prepareAppearance } from './appearance-assets.mjs'
+import { prepareLandingAssets } from './landing-assets.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 async function walk(path) {
@@ -60,7 +62,7 @@ for (const file of files) {
 }
 let sourceBytes = 0
 let outputBytes = 0
-for (const directory of ['screenshots', 'evidence', 'demos']) {
+for (const directory of ['screenshots', 'evidence', 'demos', 'landing']) {
   await rm(resolve(root, 'public', directory), { recursive: true, force: true })
 }
 const prepared = new Set()
@@ -97,6 +99,8 @@ for (const [name, location, output] of [...images]
   outputBytes += (await stat(target)).size
 }
 await mkdir(resolve(root, 'public'), { recursive: true })
+await prepareAppearance(root)
+await prepareLandingAssets(root)
 await writeFile(
   resolve(root, 'public/build-info.json'),
   JSON.stringify(getBuildInfo(), null, 2) + '\n'

@@ -39,7 +39,7 @@ async function expectRollingNotice(page, rolling, baseURL) {
   )
   await expect(
     notice.getByRole('link', { name: 'Read stable docs', exact: true })
-  ).toHaveAttribute('href', resolveSitePath(baseURL, './'))
+  ).toHaveAttribute('href', resolveSitePath(baseURL, './guide/index.html'))
   await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
     'content',
     /noindex,\s*follow/
@@ -95,7 +95,7 @@ async function expectA11y(page) {
   expect(violations).toEqual([])
 }
 
-test('default handbook matches the exact stable tag and excludes unreleased guidance', async ({
+test('product root links to stable documentation and preserves archive content', async ({
   page,
   request,
 }) => {
@@ -118,6 +118,20 @@ test('default handbook matches the exact stable tag and excludes unreleased guid
   })
   expect(build.renderer).toHaveProperty('commit')
   expect(Number.isNaN(Date.parse(build.builtAt))).toBe(false)
+  await page.goto('./')
+  await expect(page.locator('.product-home')).toBeVisible()
+  await expect(
+    page.getByRole('link', { name: 'Get Flare', exact: true }).first()
+  ).toBeVisible()
+  await page
+    .getByRole('link', { name: 'Read the docs', exact: true })
+    .first()
+    .click()
+  await expect(page).toHaveURL(/guide\/(?:index\.html)?$/)
+  await expect(page.locator('.product-home')).toHaveCount(0)
+  await page.goto(`./${latest.path}`)
+  if (!source(taggedCommit, 'docs/site/index.md').includes('productHome: true'))
+    await expect(page.locator('.product-home')).toHaveCount(0)
   await page.goto('./')
   const stamp = page.getByLabel('Documentation version and source revision')
   await expect(stamp).toContainText(`Flare ${latest.tag}`)
@@ -149,6 +163,7 @@ test('default handbook matches the exact stable tag and excludes unreleased guid
 test('every release has dated archives, original source snapshots, and accessible pages', async ({
   page,
   request,
+  baseURL,
 }) => {
   const { manifest } = await releaseData(request)
   for (const release of manifest.releases) {
@@ -176,6 +191,21 @@ test('every release has dated archives, original source snapshots, and accessibl
     }
     await page.goto(`./${release.path}`, { waitUntil: 'domcontentloaded' })
     await expect(page.locator('h1')).toHaveCount(1)
+    await page.evaluate(() => document.fonts.ready)
+    expect(
+      await page.evaluate(() =>
+        [...document.fonts].some(
+          (font) => font.family === 'Inter' && font.status === 'loaded'
+        )
+      ),
+      `${release.tag}: bundled handbook font`
+    ).toBe(true)
+    const palette = await request.get(`./${release.path}flare-theme.css`)
+    expect(palette.ok(), `${release.tag}: shared palette`).toBe(true)
+    await expect(page.locator('link[href$="flare-theme.css"]')).toHaveAttribute(
+      'href',
+      resolveSitePath(baseURL, `./${release.path}flare-theme.css`)
+    )
     const stamp = page.getByLabel('Documentation version and source revision')
     await expect(stamp).toContainText(`Flare ${release.tag}`)
     if (release.version !== release.tag.slice(1)) {
@@ -666,7 +696,7 @@ test('rolling docs require an explicit link and clearly return readers to stable
     window.__rollingNavigationSentinel = true
   })
   await exit.click()
-  await expect(page).toHaveURL(new URL('./', baseURL).href)
+  await expect(page).toHaveURL(new URL('./guide/index.html', baseURL).href)
   await page.waitForLoadState('networkidle')
   expect(
     await page.evaluate(() => window.__rollingNavigationSentinel)

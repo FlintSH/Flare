@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
 import { getBuildInfo } from '../scripts/build-info.mjs'
+import { productNavigation } from '../scripts/product-home.mjs'
 
 let buildInfo
 try {
@@ -31,7 +32,18 @@ export default defineConfig({
   srcExclude: ['test-results/**', 'playwright-report/**'],
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}icon.svg` }],
-    ['meta', { name: 'theme-color', content: '#080d18' }],
+    ['link', { rel: 'stylesheet', href: `${base}flare-theme.css` }],
+    [
+      'link',
+      {
+        rel: 'preload',
+        href: `${base}fonts/Inter-VariableFont_opsz_wght.ttf`,
+        as: 'font',
+        type: 'font/ttf',
+        crossorigin: '',
+      },
+    ],
+    ['meta', { name: 'theme-color', content: '#010610' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { name: 'flare:version', content: buildInfo.version }],
     ...(buildInfo.commit
@@ -40,7 +52,10 @@ export default defineConfig({
   ],
   markdown: {
     lineNumbers: false,
-    theme: { light: 'github-light-high-contrast', dark: 'github-dark' },
+    theme: {
+      light: 'github-light-high-contrast',
+      dark: 'github-dark-high-contrast',
+    },
   },
   // Do not inherit the application's PostCSS/Tailwind configuration.
   vite: { css: { postcss: { plugins: [] } } },
@@ -48,13 +63,7 @@ export default defineConfig({
     buildInfo,
     logo: '/icon.svg',
     siteTitle: 'Flare',
-    nav: [
-      { text: 'Explore', link: '/features' },
-      { text: 'Use Flare', link: '/guide/' },
-      { text: 'Self-host', link: '/hosting/' },
-      { text: 'API', link: '/api/' },
-      { text: 'Versions', link: '/versions' },
-    ],
+    nav: productNavigation,
     search: { provider: 'local', options: { detailedView: true } },
     outline: { level: [2, 3], label: 'On this page' },
     socialLinks: [
@@ -72,7 +81,7 @@ export default defineConfig({
     },
     sidebar: [
       group('Discover', [
-        ['Welcome', '/'],
+        ['Flare home', '/'],
         ['Feature explorer', '/features'],
         ['Interactive demos', '/demos'],
         ['Frequently asked questions', '/faq'],
