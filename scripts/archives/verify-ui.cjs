@@ -1047,7 +1047,10 @@ async function largeArchiveChecks(browser, state) {
     await page
       .getByRole('button', { name: 'Preview media/share-walkthrough.webm' })
       .click()
-    const video = page.getByLabel('share-walkthrough.webm video player')
+    // Flare's player is the labelled group; the element inside it plays.
+    const video = page
+      .getByLabel('share-walkthrough.webm video player')
+      .locator('video')
     await expect(video).toBeVisible()
     await expect
       .poll(() => video.evaluate((element) => element.readyState))

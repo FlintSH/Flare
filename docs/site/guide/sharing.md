@@ -88,8 +88,8 @@ Earlier builds sized each card to its content, so every type had a different wid
 | Content       | Viewer experience                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Images        | An inline preview; select the picture or the button on its corner to open the expanded viewer for zoom and pan. Images with see-through areas inside them, such as logos and icons on a clear background, show a checkerboard there: light behind dark artwork and dark behind light artwork, so they stay visible in either theme. Images that are only rounded or shadowed at their edges sit on the page without one.                                                                                                                        |
-| Video         | In-browser video controls for every video type. Whether it plays depends on the browser's support for the format and codec; if it can't, the page says so.                                                                                                                                                                                                                                                                                                                                                                                      |
-| Audio         | In-browser playback controls for every audio type, such as MP3, FLAC, or M4A, when the browser can play it, on a small card with the file's name and actions.                                                                                                                                                                                                                                                                                                                                                                                   |
+| Video         | [Flare's player](#the-video-and-audio-player) for every video type, with the same controls in every browser. Whether a file plays depends on the browser's support for its format and codec; if it can't, the page says so.                                                                                                                                                                                                                                                                                                                     |
+| Audio         | [Flare's player](#the-video-and-audio-player) for every audio type, such as MP3, FLAC, or M4A, when the browser can play it, on a small card with the file's name and actions.                                                                                                                                                                                                                                                                                                                                                                  |
 | PDF           | The browser's own PDF viewer inside the page. A browser that can't show a PDF inside a page, such as Chrome on Android, shows **Open PDF**, which opens the document in its own tab, instead of an empty frame.                                                                                                                                                                                                                                                                                                                                 |
 | Text and code | A read-only view with line numbers for any text type. Markdown wraps to fit the screen; code, logs, and other plain text keep their lines and scroll sideways. Code types receive syntax highlighting in [the languages Flare colors](./pastes#choose-a-useful-filename); other text is highlighted by its file extension, like a paste. On wider screens code can be folded from the line-number gutter.                                                                                                                                       |
 | CSV and TSV   | A scrollable table for files with a CSV or tab-separated type or a `.csv` or `.tsv` name, up to 1 MiB, with a count of its rows and columns under it. The first row is the header. A short value such as a date or an order number stays on one line and long text wraps; a table wider than the page scrolls sideways, on phones too. A tab-separated file is split on its tabs alone, so commas inside its cells stay in the cell; a CSV's delimiter is detected, which also reads semicolon-separated files. Larger files can be downloaded. |
@@ -106,9 +106,46 @@ Text, code, and CSV previews load at most 1 MiB of a file. A larger file shows *
 
 Before a video plays, the page asks Flare where to play it from. If that fails, for example because the file was deleted or the connection dropped, the page shows **Preview unavailable** with **This video couldn’t be loaded.**, or Flare's own message when it sends one. Earlier builds showed the request's status instead, such as **Failed to fetch direct URL: 404**.
 
+### The video and audio player
+
+Video and audio play in Flare's own player instead of the browser's built-in one, so the controls look and work the same in every browser and follow the instance's theme. The browser still decodes and streams the file: which formats play, and how far a file can seek while it loads, are unchanged.
+
+**Video.** The controls sit over the picture and step aside about two and a half seconds after the pointer rests on a playing video. Move the pointer, press a key, or tap to bring them back. They also stay up while one of them has keyboard focus, so the control you tabbed to is never hidden; clicking a control doesn't hold them.
+
+- A large play button in the middle starts the video; clicking the picture plays and pauses it. On a touch screen a tap shows or hides the controls and the button in the middle plays and pauses.
+- The timeline shows how much has played and how much has loaded. Click or drag it to seek; hovering shows the time under the pointer.
+- **Mute** and a volume slider. Phones show only **Mute**, because they set the volume with their own buttons.
+- The speed button steps through 1×, 1.25×, 1.5×, 2×, 0.5× and 0.75×.
+- **Picture-in-picture**, in browsers that offer it to pages, and **Full screen**, which a double-click on the picture also toggles. Full screen keeps Flare's controls; on an iPhone, Safari opens its own full-screen player instead.
+- At the end, the play button becomes **Replay**.
+
+**Audio.** The player shows a timeline with the position and the length under it, then the speed button, **Back 10 seconds**, play, **Forward 10 seconds**, **Mute**, and the volume slider. It is on the page before the file loads and doesn't change size when it does.
+
+Keyboard shortcuts work while the player or one of its controls has focus. Click a player, or tab to it, to give it focus:
+
+| Key                  | Action                       |
+| -------------------- | ---------------------------- |
+| **Space** or **K**   | Play or pause                |
+| **←** and **→**      | Back or forward 5 seconds    |
+| **J** and **L**      | Back or forward 10 seconds   |
+| **↑** and **↓**      | Volume up or down            |
+| **M**                | Mute or unmute               |
+| **F**                | Full screen (video)          |
+| **Home** and **End** | Jump to the start or the end |
+
+On a focused button, **Space** presses that button; every other key in the table still works from there, so the arrows seek right after you click **Play** or **Mute**. On a slider you tabbed to, the arrow keys, **Home**, and **End** move that slider. Dragging a slider with the pointer leaves focus on the player, so the keys keep the meanings in the table. Every control has a name for screen readers, and the timeline reads its position as words, such as "1 minute 5 seconds of 3 minutes 25 seconds".
+
+The player remembers nothing between visits: volume and speed start at their defaults each time. The browser's own menu on a video (right-click or long press) still offers what the browser provides there, such as saving the file or looping it.
+
+Earlier builds showed each browser's built-in controls, which differ between Chrome, Firefox, and Safari and ignore the instance's theme.
+
+<Screenshot src="/screenshots/sharing/player-video.webp" alt="Flare's video player paused on a share page: a play button in the middle, and under it the timeline with a time hint, play, mute, volume, the position, speed, picture-in-picture and full screen" caption="The video player's controls sit over the picture and hide while it plays." />
+
+<Screenshot src="/screenshots/sharing/player-audio.webp" alt="Flare's audio player on a share page: a timeline with 0:11 and 3:25 under it, then speed, back 10 seconds, pause, forward 10 seconds, mute and volume" caption="The audio player takes the instance's colors and keeps its size while the file loads." />
+
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
-<Screenshot src="/screenshots/workspace/share-video.png" alt="Video share page with playback controls" caption="Recordings can play directly in the browser when their codec is supported." />
+<Screenshot src="/screenshots/workspace/share-video.png" alt="Video share page with Flare's player paused at 0:01: a play button over the picture and the timeline, volume, speed and full screen controls along the bottom" caption="Recordings can play directly in the browser when their codec is supported." />
 
 Browser preview support is separate from upload support. If a preview fails, try downloading the file and opening it in an appropriate application. A share page expanded image viewer shows that shared image; it does not reveal the owner's surrounding library.
 

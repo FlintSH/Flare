@@ -10,6 +10,8 @@ import {
   checkerToneFor,
 } from '@/components/file/checker-tone'
 import { ExpandImageButton } from '@/components/file/viewer/components/expand-image-button'
+import { AudioPlayer } from '@/components/media/audio-player'
+import { VideoPlayer } from '@/components/media/video-player'
 import { Button } from '@/components/ui/button'
 
 import { ARCHIVE_ISSUE_MESSAGES } from '@/lib/archives/shared'
@@ -127,24 +129,14 @@ function MediaPreview({
     )
   // Range requests let the browser stream and seek without the whole member.
   return kind === 'video' ? (
-    <video
+    <VideoPlayer
       src={src}
-      controls
-      playsInline
-      preload="metadata"
-      aria-label={`${name} video player`}
+      name={name}
       onError={() => setFailed(true)}
-      className="max-h-80 w-full rounded-lg bg-black"
+      className="max-h-80 rounded-lg"
     />
   ) : (
-    <audio
-      src={src}
-      controls
-      preload="metadata"
-      aria-label={`${name} audio player`}
-      onError={() => setFailed(true)}
-      className="w-full"
-    />
+    <AudioPlayer src={src} name={name} onError={() => setFailed(true)} />
   )
 }
 

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 
+import { VideoPlayer } from '@/components/media/video-player'
+
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { cn } from '@/lib/utils'
 
@@ -11,20 +13,16 @@ import {
 
 const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 
-/** The frame held for a video until it reports its own. */
-const DEFAULT_RATIO = 16 / 9
-
 /** `lookupUrl` answers with where the video plays from. */
 export function VideoViewer({
   file,
   lookupUrl,
 }: {
-  file: { name: string; mimeType: string }
+  file: { name: string }
   lookupUrl: string
 }) {
   const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
   const [failedUrl, setFailedUrl] = useState<string>()
-  const [ratio, setRatio] = useState(DEFAULT_RATIO)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -66,31 +64,12 @@ export function VideoViewer({
 
   return (
     // The player keeps the loading frame's shape until the video reports its
-    // own, so a 16:9 video starts without moving the page. Bars beside a
-    // narrower video are black in both themes, like the player's own.
-    <div className="w-full bg-black">
-      <video
-        src={direct.url}
-        controls
-        aria-label={`${file.name} video player`}
-        onLoadedMetadata={({ currentTarget: video }) => {
-          if (video.videoWidth && video.videoHeight)
-            setRatio(video.videoWidth / video.videoHeight)
-        }}
-        onError={() => setFailedUrl(direct.url)}
-        className={cn(
-          'mx-auto block w-full object-contain focus-visible:outline-offset-[-2px]',
-          stageMaxHeightClassName
-        )}
-        style={{ aspectRatio: ratio }}
-        controlsList="nodownload"
-        preload="metadata"
-        muted={false}
-        playsInline
-      >
-        <source src={direct.url} type={file.mimeType} />
-        Your browser does not support the video tag.
-      </video>
-    </div>
+    // own, so a 16:9 video starts without moving the page.
+    <VideoPlayer
+      src={direct.url}
+      name={file.name}
+      onError={() => setFailedUrl(direct.url)}
+      className={stageMaxHeightClassName}
+    />
   )
 }
