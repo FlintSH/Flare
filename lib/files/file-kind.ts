@@ -447,10 +447,15 @@ const DOCUMENT_TYPES = new Map(
   })
 )
 
-/** An extension short and plain enough to name a format, in capitals. */
+/**
+ * An extension short and plain enough to name a format, in capitals. One made
+ * only of digits, as on a rotated `app.log.1` or a `backup.001`, names nothing.
+ */
 function formatFromName(name: string) {
   const extension = extensionOf(name)
-  return /^[a-z0-9]{1,5}$/.test(extension) ? extension.toUpperCase() : ''
+  return /^[a-z0-9]{1,5}$/.test(extension) && /[a-z]/.test(extension)
+    ? extension.toUpperCase()
+    : ''
 }
 
 /** "PNG image" from `image/png`; the name's extension when the type is vague. */

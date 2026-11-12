@@ -221,6 +221,9 @@ describe('fileTypeDescription', () => {
     expect(describes('README', 'text/plain')).toBe('Plain text')
     expect(describes('server.log', 'text/x-log')).toBe('Log file')
     expect(describes('deploy.sh', 'text/x-sh')).toBe('SH file')
+    // A number is not a format: a rotated log is still plain text.
+    expect(describes('app.log.1', 'text/plain')).toBe('Plain text')
+    expect(describes('notes.2026', 'text/plain')).toBe('Plain text')
   })
 
   it('names archives by their format', () => {
@@ -243,6 +246,8 @@ describe('fileTypeDescription', () => {
       'BIN file'
     )
     expect(describes('data', 'application/octet-stream')).toBe('File')
+    expect(describes('backup.001', 'application/octet-stream')).toBe('File')
+    expect(describes('disk.7z2', 'application/octet-stream')).toBe('7Z2 file')
     // Never a member of Object, and never an extension that isn't one.
     expect(describes('notes.constructor', 'constructor')).toBe('File')
     expect(describes('a.b c', 'application/octet-stream')).toBe('File')
