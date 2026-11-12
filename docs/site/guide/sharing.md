@@ -119,7 +119,9 @@ Video and audio play in Flare's own player instead of the browser's built-in one
 - **Picture-in-picture**, in browsers that offer it to pages, and **Full screen**, which a double-click on the picture also toggles. Full screen keeps Flare's controls; on an iPhone, Safari opens its own full-screen player instead.
 - At the end, the play button becomes **Replay**.
 
-**Audio.** The player shows a timeline with the position and the length under it, then the speed button, **Back 10 seconds**, play, **Forward 10 seconds**, **Mute**, and the volume slider. It is on the page before the file loads and doesn't change size when it does.
+**Audio.** The player is one inset panel under the file's name. The play button sits beside the timeline, with the position and the length under the timeline. Along the bottom of the panel are **Back 10 seconds**, **Forward 10 seconds**, the speed button, **Mute**, and the volume slider. Phones and narrow panels show only **Mute**. The player is on the page before the file loads and doesn't change size when it does. The same panel plays audio inside an [archive preview](./archives).
+
+Earlier builds placed the audio controls directly on the card in two loose rows, with play in the middle of the second row.
 
 Keyboard shortcuts work while the player or one of its controls has focus. Click a player, or tab to it, to give it focus:
 
@@ -141,7 +143,7 @@ Earlier builds showed each browser's built-in controls, which differ between Chr
 
 <Screenshot src="/screenshots/sharing/player-video.webp" alt="Flare's video player paused on a share page: a play button in the middle, and under it the timeline with a time hint, play, mute, volume, the position, speed, picture-in-picture and full screen" caption="The video player's controls sit over the picture and hide while it plays." />
 
-<Screenshot src="/screenshots/sharing/player-audio.webp" alt="Flare's audio player on a share page: a timeline with 0:11 and 3:25 under it, then speed, back 10 seconds, pause, forward 10 seconds, mute and volume" caption="The audio player takes the instance's colors and keeps its size while the file loads." />
+<Screenshot src="/screenshots/sharing/player-audio.webp" alt="Flare's audio player on a share page: an inset panel under the file name with a pause button beside the timeline, 0:11 and 3:25 under it, and back 10 seconds, forward 10 seconds, speed, mute and volume along its bottom" caption="The audio player is one panel in the card, takes the instance's colors, and keeps its size while the file loads." />
 
 <Screenshot src="/screenshots/workspace/share-code.png" alt="Public code file with syntax highlighting and file actions" caption="Text and code are displayed as read-only content on the share page." />
 
