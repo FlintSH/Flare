@@ -4,6 +4,7 @@ import {
   type AppearanceCommand,
   type AppearanceDocument,
   type CustomizationState,
+  DEFAULT_APPEARANCE,
   appearanceCommandSchema,
   appearancePackSchema,
   customizationSchema,
@@ -45,6 +46,17 @@ export function transitionAppearance(
         previous: current.published,
         published: command.document,
         draft: null,
+        publishedAt: now,
+      })
+    case 'reset-theme':
+      return customizationSchema.parse({
+        ...next,
+        previous: current.published,
+        published: { ...current.published, theme: DEFAULT_APPEARANCE.theme },
+        // A saved draft keeps its identity and sharing edits.
+        draft: current.draft
+          ? { ...current.draft, theme: DEFAULT_APPEARANCE.theme }
+          : null,
         publishedAt: now,
       })
     case 'restore':
