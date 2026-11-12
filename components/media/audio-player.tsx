@@ -13,6 +13,7 @@ import {
   SEEK_STEP,
   formatMediaTime,
   mediaKeyAction,
+  mediaKeyTarget,
   spokenMediaTime,
 } from './media-utils'
 import { useMedia, useMediaProgress } from './use-media'
@@ -50,9 +51,18 @@ export function AudioPlayer({
       role="group"
       aria-label={`${name} audio player`}
       data-flare-player="audio"
-      className={cn('w-full [container-type:inline-size]', className)}
+      // Focusable like the video player, so a click anywhere on it, or a
+      // drag of a slider, leaves the keys with the player.
+      tabIndex={idle ? undefined : 0}
+      className={cn(
+        'w-full rounded-md outline-none [container-type:inline-size] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring',
+        className
+      )}
       onKeyDown={(event) => {
-        const action = mediaKeyAction(event, { video: false, onControl: true })
+        const action = mediaKeyAction(event, {
+          video: false,
+          on: mediaKeyTarget(event.target),
+        })
         if (!action) return
         event.preventDefault()
         media.perform(action)

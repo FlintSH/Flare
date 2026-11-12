@@ -121,7 +121,7 @@ Video and audio play in Flare's own player instead of the browser's built-in one
 
 **Audio.** The player shows a timeline with the position and the length under it, then the speed button, **Back 10 seconds**, play, **Forward 10 seconds**, **Mute**, and the volume slider. It is on the page before the file loads and doesn't change size when it does.
 
-Keyboard shortcuts work while the player or one of its controls has focus:
+Keyboard shortcuts work while the player or one of its controls has focus. Click a player, or tab to it, to give it focus:
 
 | Key                  | Action                       |
 | -------------------- | ---------------------------- |
@@ -133,7 +133,7 @@ Keyboard shortcuts work while the player or one of its controls has focus:
 | **F**                | Full screen (video)          |
 | **Home** and **End** | Jump to the start or the end |
 
-On a focused button, **Space** presses that button, and on a focused slider the arrow keys move that slider. The letter keys work from any control. Every control has a name for screen readers, and the timeline reads its position as words, such as "1 minute 5 seconds of 3 minutes 25 seconds".
+On a focused button, **Space** presses that button; every other key in the table still works from there, so the arrows seek right after you click **Play** or **Mute**. On a slider you tabbed to, the arrow keys, **Home**, and **End** move that slider. Dragging a slider with the pointer leaves focus on the player, so the keys keep the meanings in the table. Every control has a name for screen readers, and the timeline reads its position as words, such as "1 minute 5 seconds of 3 minutes 25 seconds".
 
 The player remembers nothing between visits: volume and speed start at their defaults each time. The browser's own menu on a video (right-click or long press) still offers what the browser provides there, such as saving the file or looping it.
 

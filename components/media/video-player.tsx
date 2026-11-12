@@ -20,6 +20,7 @@ import {
   SEEK_STEP,
   formatMediaTime,
   mediaKeyAction,
+  mediaKeyTarget,
   spokenMediaTime,
 } from './media-utils'
 import { useMedia, useMediaProgress } from './use-media'
@@ -75,6 +76,9 @@ export function VideoPlayer({
   // What the press that became a click was: a mouse plays and pauses, a
   // touch brings the controls up or sends them away.
   const press = useRef({ pointer: 'mouse', controlsShown: true })
+  // When the controls were last asked for. The timer below reads it, so a
+  // pointer that keeps moving holds them up without a render per movement.
+  const lastWake = useRef(0)
 
   useEffect(() => {
     const element = video.current as NativeFullscreenVideo | null
@@ -100,14 +104,26 @@ export function VideoPlayer({
     }
   }, [])
 
-  // The pointer resting over a playing video lets the controls go.
+  // The pointer resting over a playing video lets the controls go. The wait
+  // counts from the last movement, key or tap, not from the first.
   useEffect(() => {
     if (!active || !state.playing) return
-    const timer = window.setTimeout(() => setActive(false), CONTROLS_LINGER_MS)
+    const started = performance.now()
+    let timer = 0
+    const rest = () => {
+      const since = Math.max(lastWake.current, started)
+      const left = CONTROLS_LINGER_MS - (performance.now() - since)
+      if (left <= 0) setActive(false)
+      else timer = window.setTimeout(rest, left)
+    }
+    timer = window.setTimeout(rest, CONTROLS_LINGER_MS)
     return () => window.clearTimeout(timer)
   }, [active, state.playing])
 
-  const wake = () => setActive(true)
+  const wake = () => {
+    lastWake.current = performance.now()
+    setActive(true)
+  }
 
   const toggleFullscreen = () => {
     const element = frame.current
@@ -156,7 +172,7 @@ export function VideoPlayer({
         wake()
         const action = mediaKeyAction(event, {
           video: true,
-          onControl: event.target !== event.currentTarget,
+          on: mediaKeyTarget(event.target),
         })
         if (!action) return
         event.preventDefault()

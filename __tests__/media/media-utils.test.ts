@@ -6,6 +6,7 @@ import {
   formatMediaTime,
   formatPlaybackRate,
   mediaKeyAction,
+  mediaKeyTarget,
   nextPlaybackRate,
   spokenMediaTime,
 } from '@/components/media/media-utils'
@@ -91,8 +92,11 @@ describe('playback rates', () => {
 })
 
 describe('mediaKeyAction', () => {
-  const on = (key: string, onControl = false, video = true) =>
-    mediaKeyAction({ key }, { video, onControl })
+  const on = (
+    key: string,
+    target: 'player' | 'button' | 'slider' = 'player',
+    video = true
+  ) => mediaKeyAction({ key }, { video, on: target })
 
   it('maps the keys video sites use', () => {
     expect(on(' ')).toEqual({ type: 'toggle' })
@@ -112,17 +116,34 @@ describe('mediaKeyAction', () => {
 
   // A focused button activates on Space and a focused slider moves on the
   // arrows; taking those keys would make each control do two things.
-  it('leaves Space and the arrows to a focused button or slider', () => {
-    for (const key of [' ', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'Home'])
-      expect(on(key, true), key).toBeNull()
-    expect(on('k', true)).toEqual({ type: 'toggle' })
-    expect(on('l', true)).toEqual({ type: 'seek', by: 10 })
-    expect(on('m', true)).toEqual({ type: 'mute' })
+  it('leaves Space to a focused button, and keeps every other key', () => {
+    expect(on(' ', 'button')).toBeNull()
+    expect(on('ArrowRight', 'button')).toEqual({ type: 'seek', by: 5 })
+    expect(on('ArrowUp', 'button')).toEqual({ type: 'volume', by: 0.1 })
+    expect(on('End', 'button')).toEqual({ type: 'seekTo', fraction: 1 })
+    expect(on('k', 'button')).toEqual({ type: 'toggle' })
+  })
+
+  it('leaves the arrows, Home and End to a focused slider', () => {
+    for (const key of ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Home', 'End'])
+      expect(on(key, 'slider'), key).toBeNull()
+    expect(on(' ', 'slider')).toEqual({ type: 'toggle' })
+    expect(on('l', 'slider')).toEqual({ type: 'seek', by: 10 })
+    expect(on('m', 'slider')).toEqual({ type: 'mute' })
+  })
+
+  it('tells buttons and sliders from the rest of the player', () => {
+    const target = (tagName: string) =>
+      mediaKeyTarget({ tagName } as unknown as EventTarget)
+    expect(target('BUTTON')).toBe('button')
+    expect(target('INPUT')).toBe('slider')
+    expect(target('DIV')).toBe('player')
+    expect(target('VIDEO')).toBe('player')
   })
 
   it('has no full screen for audio', () => {
-    expect(on('f', false, false)).toBeNull()
-    expect(on('k', false, false)).toEqual({ type: 'toggle' })
+    expect(on('f', 'player', false)).toBeNull()
+    expect(on('k', 'player', false)).toEqual({ type: 'toggle' })
   })
 
   it('leaves browser and system shortcuts alone', () => {
@@ -130,7 +151,7 @@ describe('mediaKeyAction', () => {
       expect(
         mediaKeyAction(
           { key: 'f', [modifier]: true },
-          { video: true, onControl: false }
+          { video: true, on: 'player' }
         ),
         modifier
       ).toBeNull()

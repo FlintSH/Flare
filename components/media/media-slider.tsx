@@ -49,6 +49,11 @@ const tones = {
  * The player's seek and volume sliders. A visually hidden range input gives
  * it the keyboard and screen-reader behaviour of a native slider; the pointer
  * is read here, so a click lands exactly where it points.
+ *
+ * A click or a drag doesn't move focus to the range input on purpose: focus
+ * lands on the player, so after setting the volume with the pointer the
+ * arrow keys still seek and change the volume as they do everywhere else on
+ * the player. Tabbing to a slider is what hands it the arrow keys.
  */
 export function MediaSlider({
   label,

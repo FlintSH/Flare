@@ -179,7 +179,7 @@ describe('AudioPlayer', () => {
     expect(button(/Playback speed 1.25×/).textContent).toBe('1.25×')
   })
 
-  it('takes the letter shortcuts from any of its controls', async () => {
+  it('takes the shortcuts from any of its controls', async () => {
     const { audio, announce } = open()
     await announce('loadedmetadata', { duration: 205 })
     fireEvent.keyDown(button('Mute'), { key: 'l' })
@@ -188,9 +188,38 @@ describe('AudioPlayer', () => {
     expect(audio.currentTime).toBe(0)
     await act(async () => fireEvent.keyDown(button('Mute'), { key: 'k' }))
     expect(audio.play).toHaveBeenCalledTimes(1)
-    // Space belongs to the focused button.
+    // Space belongs to the focused button; the arrows don't.
     fireEvent.keyDown(button('Mute'), { key: ' ' })
     expect(audio.play).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(button('Mute'), { key: 'ArrowRight' })
+    expect(audio.currentTime).toBe(5)
+    fireEvent.keyDown(button('Mute'), { key: 'ArrowDown' })
+    expect(audio.volume).toBeCloseTo(0.9)
+    // A slider keeps its arrows, and Space plays and pauses from it.
+    await act(async () => fireEvent.keyDown(slider('Volume'), { key: ' ' }))
+    expect(audio.pause).toHaveBeenCalledTimes(1)
+  })
+
+  // A click on the player, or a drag of a slider, leaves focus on the player.
+  it('takes focus itself, and every shortcut from there', async () => {
+    const { audio, announce } = open()
+    const player = screen.getByRole('group', { name: 'Chime.mp3 audio player' })
+    expect(player.tabIndex).toBe(0)
+    await announce('loadedmetadata', { duration: 205 })
+    fireEvent.keyDown(player, { key: 'End' })
+    expect(audio.currentTime).toBe(205)
+    fireEvent.keyDown(player, { key: 'Home' })
+    expect(audio.currentTime).toBe(0)
+    fireEvent.keyDown(player, { key: 'ArrowDown' })
+    expect(audio.volume).toBeCloseTo(0.9)
+    await act(async () => fireEvent.keyDown(player, { key: ' ' }))
+    expect(audio.play).toHaveBeenCalledTimes(1)
+  })
+
+  it('is no tab stop while it waits for its file', () => {
+    open({ idle: true })
+    const player = screen.getByRole('group', { name: 'Chime.mp3 audio player' })
+    expect(player.hasAttribute('tabindex')).toBe(false)
   })
 
   it('reports a file the browser can’t play', () => {
@@ -261,6 +290,39 @@ describe('VideoPlayer', () => {
     expect(video.volume).toBeCloseTo(0.9)
     fireEvent.keyDown(frame, { key: 'm' })
     expect(video.muted).toBe(true)
+  })
+
+  it('seeks with the arrows from a focused button', async () => {
+    const { video, announce } = open()
+    await announce('loadedmetadata', { duration: 42 })
+    fireEvent.keyDown(button('Mute'), { key: 'ArrowRight' })
+    expect(video.currentTime).toBe(5)
+    // Space would press the button instead.
+    fireEvent.keyDown(button('Mute'), { key: ' ' })
+    expect(video.play).not.toHaveBeenCalled()
+  })
+
+  // The controls go 2.5 seconds after the pointer rests, not 2.5 seconds
+  // after it first moved.
+  it('keeps its controls up while the pointer keeps moving', async () => {
+    vi.useFakeTimers()
+    try {
+      const { frame } = open()
+      const hidden = () => frame.className.includes('cursor-none')
+      await act(async () => fireEvent.keyDown(frame, { key: 'k' }))
+      expect(hidden()).toBe(false)
+      await act(async () => void vi.advanceTimersByTime(2000))
+      fireEvent.pointerMove(frame)
+      await act(async () => void vi.advanceTimersByTime(2000))
+      // Four seconds in, but two since the pointer last moved.
+      expect(hidden()).toBe(false)
+      await act(async () => void vi.advanceTimersByTime(600))
+      expect(hidden()).toBe(true)
+      await act(async () => void fireEvent.pointerMove(frame))
+      expect(hidden()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('plays and pauses on a mouse click, but not on a tap', async () => {

@@ -82,6 +82,15 @@ export type MediaKeyAction =
   | { type: 'mute' }
   | { type: 'fullscreen' }
 
+/** The part of a player a key was pressed on. */
+export type MediaKeyTarget = 'player' | 'button' | 'slider'
+
+/** Tells a player's buttons and sliders (range inputs) from the rest of it. */
+export function mediaKeyTarget(target: EventTarget): MediaKeyTarget {
+  const tag = (target as Partial<Element>).tagName
+  return tag === 'BUTTON' ? 'button' : tag === 'INPUT' ? 'slider' : 'player'
+}
+
 /** Seconds the arrow keys and the J and L keys move by. */
 export const SEEK_STEP = 5
 export const SEEK_JUMP = 10
@@ -91,8 +100,9 @@ export const SEEK_JUMP = 10
  * people: Space or K plays and pauses, the arrows seek and change the volume,
  * J and L jump ten seconds, M mutes and F toggles full screen.
  *
- * `onControl` is true when the key was pressed on a button or a slider, which
- * keep Space, Enter and the arrow keys for themselves.
+ * `on` is what the key was pressed on. A button keeps Space for itself, and
+ * a slider keeps the arrows, Home and End; every other key works from there
+ * as it does from the player.
  */
 export function mediaKeyAction(
   event: {
@@ -101,7 +111,7 @@ export function mediaKeyAction(
     ctrlKey?: boolean
     metaKey?: boolean
   },
-  { video, onControl }: { video: boolean; onControl: boolean }
+  { video, on }: { video: boolean; on: MediaKeyTarget }
 ): MediaKeyAction | null {
   if (event.altKey || event.ctrlKey || event.metaKey) return null
   const key = event.key.length === 1 ? event.key.toLowerCase() : event.key
@@ -117,10 +127,9 @@ export function mediaKeyAction(
     case 'f':
       return video ? { type: 'fullscreen' } : null
   }
-  if (onControl) return null
+  if (key === ' ') return on === 'button' ? null : { type: 'toggle' }
+  if (on === 'slider') return null
   switch (key) {
-    case ' ':
-      return { type: 'toggle' }
     case 'ArrowLeft':
       return { type: 'seek', by: -SEEK_STEP }
     case 'ArrowRight':
