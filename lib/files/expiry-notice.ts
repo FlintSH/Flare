@@ -5,6 +5,9 @@ import { formatDistanceStrict } from 'date-fns'
  * replacing and cancelling an expiry all rewrite this record, so a share page
  * can read it without looking up the expiry job. Files uploaded before
  * upload options recorded an expiry have none here.
+ *
+ * Earlier versions stored the upload request's own ISO form (`+02:00`, no
+ * seconds), so the record is read as an instant, never compared as text.
  */
 export function recordedExpiry(uploadOptions: unknown): Date | null {
   if (!uploadOptions || typeof uploadOptions !== 'object') return null

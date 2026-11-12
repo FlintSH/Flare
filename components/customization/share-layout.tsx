@@ -143,7 +143,10 @@ export function ShareLayout({
   const facts = [sharing.showFilename && type, sharing.showSize && size].filter(
     Boolean
   )
-  const expiry = expiresAt && expiryNotice(expiresAt)
+  // On unless the instance turned it off; appearances saved before the
+  // setting existed have no value for it.
+  const expiry =
+    sharing.showExpiry !== false && expiresAt && expiryNotice(expiresAt)
 
   const heading = (
     <h1

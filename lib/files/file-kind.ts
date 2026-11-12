@@ -50,7 +50,9 @@ export type Language = (typeof LANGUAGES)[number]
 export type FileKindInfo =
   | { kind: 'code' | 'text'; language: Language }
   | { kind: 'archive'; archiveFormat: ArchiveFormat }
-  | { kind: Exclude<FileKind, 'code' | 'text' | 'archive'> }
+  /** `delimiter` is set for a tab-separated file; a CSV's is detected. */
+  | { kind: 'csv'; delimiter?: '\t' }
+  | { kind: Exclude<FileKind, 'code' | 'text' | 'archive' | 'csv'> }
 
 export interface FileTypeInput {
   /** The real filename; without it only the stored type counts. */
@@ -276,6 +278,8 @@ function textFromFilename(name: string): FileKindInfo | null {
     : null
 }
 
+const TSV_TYPE = 'text/tab-separated-values'
+
 // Systems type TypeScript sources by their extension as MPEG transport
 // streams, which no browser's video player opens.
 const MPEG_TS_TYPES = new Set(['video/mp2t', 'video/vnd.dlna.mpeg-tts'])
@@ -292,12 +296,11 @@ export function fileKind({ name = '', mimeType }: FileTypeInput): FileKindInfo {
   if (archiveFormat) return { kind: 'archive', archiveFormat }
   if (/\.(rar|7z)$/i.test(name) || /rar|7z-compressed/i.test(mimeType))
     return { kind: 'unsupported-archive' }
-  if (
-    mimeType.includes('csv') ||
-    mimeType === 'text/tab-separated-values' ||
-    /\.[ct]sv$/i.test(name)
-  )
-    return { kind: 'csv' }
+  // Tabs are named, not guessed: a guess takes the commas inside the cells
+  // of a tab-separated file for its delimiter.
+  if (mimeType === TSV_TYPE || /\.tsv$/i.test(name))
+    return { kind: 'csv', delimiter: '\t' }
+  if (mimeType.includes('csv') || /\.csv$/i.test(name)) return { kind: 'csv' }
   const language = CODE_TYPES.get(mimeType)
   if (language) return { kind: 'code', language }
   if (mimeType.startsWith('text/'))
@@ -479,10 +482,7 @@ export function fileTypeDescription(file: FileTypeInput): string {
     case 'pdf':
       return 'PDF document'
     case 'csv':
-      return /\.tsv$/i.test(name) ||
-        file.mimeType === 'text/tab-separated-values'
-        ? 'TSV spreadsheet'
-        : 'CSV spreadsheet'
+      return info.delimiter ? 'TSV spreadsheet' : 'CSV spreadsheet'
     case 'code':
     case 'text': {
       if (info.language !== 'text') return LANGUAGE_NAMES[info.language]

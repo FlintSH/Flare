@@ -171,8 +171,11 @@ export default async function FilePage({
     urlPath: file.urlPath,
     visibility: file.visibility,
     mimeType: file.mimeType,
-    // Stored in megabytes.
-    size: Math.round(file.size * 1024 * 1024),
+    // Stored in megabytes. It only sizes a loading state, so a page that
+    // hides the size doesn't send it either.
+    ...(appearance.sharing.showSize && {
+      size: Math.round(file.size * 1024 * 1024),
+    }),
     ...type,
   }
 

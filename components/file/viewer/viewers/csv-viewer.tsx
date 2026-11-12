@@ -18,6 +18,19 @@ const failedSpreadsheet = () => 'This spreadsheet couldn’t be loaded.'
 const count = (value: number, noun: string) =>
   `${value.toLocaleString('en-US')} ${noun}${value === 1 ? '' : 's'}`
 
+/**
+ * A CSV or TSV file's rows. A tab-separated file names its delimiter; a
+ * guess would take the commas inside its cells for the delimiter. A CSV's is
+ * detected, so semicolon-separated files read too.
+ */
+export function parseTable(text: string, delimiter?: '\t'): string[][] {
+  return Papa.parse<string[]>(text, {
+    header: false,
+    skipEmptyLines: true,
+    delimiter: delimiter ?? '',
+  }).data
+}
+
 /** A table row's height and a typical row's size, for the loading state. */
 const ROW_HEIGHT = 37
 const BYTES_PER_ROW = 48
@@ -25,22 +38,19 @@ const BYTES_PER_ROW = 48
 export function CsvViewer({
   url,
   bytes,
+  delimiter,
 }: {
   url: string
   /** The file's size, which sizes the loading state. */
   bytes?: number
+  /** Set for a tab-separated file. */
+  delimiter?: '\t'
 }) {
   const preview = usePreviewText(url, failedSpreadsheet)
   const csvData = useMemo(
     () =>
-      preview.status === 'ready'
-        ? // The delimiter is detected, so tab-separated files read too.
-          Papa.parse<string[]>(preview.text, {
-            header: false,
-            skipEmptyLines: true,
-          }).data
-        : [],
-    [preview]
+      preview.status === 'ready' ? parseTable(preview.text, delimiter) : [],
+    [preview, delimiter]
   )
 
   if (preview.status === 'loading')

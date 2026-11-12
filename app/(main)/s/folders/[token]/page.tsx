@@ -141,8 +141,9 @@ export default async function SharedFolderPage({
                           )}
                         >
                           {image ? (
-                            // The thumbnail route checks file access again if
-                            // visibility changes.
+                            // A resized thumbnail, cached like the library's:
+                            // see "Browser and CDN caching" in the sharing
+                            // guide for what changing access does to it.
                             <SharedTilePreview
                               src={image.url}
                               optimize={image.optimize}

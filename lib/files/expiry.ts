@@ -12,6 +12,8 @@ import { getStorageProvider } from '@/lib/storage'
 import { isMissingObject } from '@/lib/storage/missing'
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
+import { recordedExpiry } from './expiry-notice'
+
 const logger = createLogger('file-expiry')
 
 // Expiry jobs are rows of the Event table. Versions before #199 wrote
@@ -59,14 +61,6 @@ function jsonObject(value: Prisma.JsonValue): Prisma.JsonObject {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? value
     : {}
-}
-
-// Earlier versions stored the upload request's own ISO form (`+02:00`, no
-// seconds), so the record is read as an instant, never compared as text.
-function recordedExpiry(options: Prisma.JsonObject): Date | null {
-  if (typeof options.expiresAt !== 'string') return null
-  const instant = new Date(options.expiresAt)
-  return Number.isNaN(instant.getTime()) ? null : instant
 }
 
 // False once the owner cancelled or replaced the expiry, or it was applied.

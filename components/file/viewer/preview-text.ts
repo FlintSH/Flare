@@ -33,7 +33,22 @@ export async function loadPreviewText(
     PREVIEW_TEXT_BYTES
   )
   if (truncated) throw new Error(TOO_LARGE)
-  return new TextDecoder().decode(bytes)
+  return decodeText(bytes)
+}
+
+/**
+ * A text file's bytes as text. UTF-8, except for a file that starts with a
+ * UTF-16 byte order mark, as Windows tools write when asked for "Unicode":
+ * read as UTF-8, that text is a NUL after every character.
+ */
+export function decodeText(bytes: Uint8Array) {
+  const encoding =
+    bytes[0] === 0xff && bytes[1] === 0xfe
+      ? 'utf-16le'
+      : bytes[0] === 0xfe && bytes[1] === 0xff
+        ? 'utf-16be'
+        : 'utf-8'
+  return new TextDecoder(encoding).decode(bytes)
 }
 
 /**

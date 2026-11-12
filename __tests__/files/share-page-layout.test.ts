@@ -100,9 +100,8 @@ async function render(file: typeof image) {
   )
 }
 
-/** The page's one heading, as text. */
-const heading = (html: string) =>
-  /<h1[^>]*>(.*?)<\/h1>/.exec(html)?.[1].replace(/<[^>]+>/g, '')
+/** The page's one heading, which holds text alone. */
+const heading = (html: string) => /<h1[^>]*>([^<]*)<\/h1>/.exec(html)?.[1]
 
 beforeEach(() => {
   configureAuditWriter(async () => undefined)
@@ -169,6 +168,18 @@ describe('share page layout', () => {
     })
     expect(past).not.toContain('Expires')
     expect(await render(image)).not.toContain('Expires')
+  })
+
+  it('leaves the expiry out when the instance hides it', async () => {
+    mocks.sharing = { showExpiry: false }
+    const html = await render({
+      ...image,
+      uploadOptions: {
+        expiresAt: new Date(Date.now() + 5 * 3600_000).toISOString(),
+      },
+    })
+    expect(html).not.toContain('Expires')
+    expect(html).toContain('PNG image')
   })
 
   it('gives a file without a preview a small card with named actions', async () => {

@@ -265,6 +265,7 @@ The studio's published document lives under `settings.customization.published`. 
 | `sharing.showUploader`        | `true`                                                   | Show uploader attribution                                                      |
 | `sharing.showFilename`        | `true`                                                   | Show filename                                                                  |
 | `sharing.showSize`            | `true`                                                   | Show formatted file size                                                       |
+| `sharing.showExpiry`          | `true`                                                   | Show **Expires in …** on a file with a scheduled expiration                    |
 | `sharing.showFooter`          | `null`                                                   | `null` inherits `general.credits.showFooter`; `true`/`false` override          |
 | `sharing.imageFit`            | `contain`                                                | `contain` shows the whole image; `cover` fills the frame                       |
 | `sharing.embedMode`           | `direct`                                                 | `direct` shows media on its own where an app can; `rich` always shows the card |

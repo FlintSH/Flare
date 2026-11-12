@@ -13,9 +13,16 @@ import {
   ScanText,
 } from 'lucide-react'
 
+import { decodeText } from '@/components/file/viewer/preview-text'
 import type { FileViewerFile } from '@/components/file/viewer/types'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 import { type FileUrls, fileUrls } from '@/lib/files/urls'
 import { cn } from '@/lib/utils'
@@ -111,7 +118,10 @@ export function FileActions({
     try {
       const response = await fetch(urls.content)
       if (!response.ok) throw new Error('Could not load file content')
-      await navigator.clipboard.writeText(await response.text())
+      // Decoded as the preview decodes it, so a UTF-16 file copies as text.
+      await navigator.clipboard.writeText(
+        decodeText(new Uint8Array(await response.arrayBuffer()))
+      )
       setCopied('text')
       confirm('Text copied', 'File content is ready to paste.')
     } catch {
@@ -126,8 +136,9 @@ export function FileActions({
   }
 
   // In the toolbar the secondary actions are icons until there is room for
-  // their names; the name is always the button's accessible name and its
-  // tooltip. On the small card they keep their names at every width.
+  // their names. Until then the name is the button's accessible name and a
+  // tooltip that hover and keyboard focus both open. On the small card they
+  // keep their names at every width.
   const secondary = (
     label: string,
     Icon: LucideIcon,
@@ -141,87 +152,98 @@ export function FileActions({
       /** More of the name for screen readers only. */
       hint?: string
     } = {}
-  ) => (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={onClick}
-      disabled={!urls || options.disabled}
-      title={toolbar ? label : undefined}
-      aria-live={options.live ? 'polite' : undefined}
-      className={cn(
-        'h-9 sm:h-8',
-        toolbar ? 'w-9 shrink-0 px-0 sm:w-8 lg:w-auto lg:px-3' : 'w-full'
-      )}
-    >
-      <Icon
-        className={cn(
-          'h-4 w-4',
-          options.spinning && 'animate-spin',
-          options.done && 'text-success'
-        )}
-        aria-hidden="true"
-      />
-      <span className={cn(toolbar && 'sr-only lg:not-sr-only')}>{label}</span>
-      {options.hint && <span className="sr-only">{options.hint}</span>}
-    </Button>
-  )
-
-  return (
-    <div
-      className={cn(
-        'flex w-full gap-2',
-        toolbar ? 'items-center sm:w-auto' : 'flex-col'
-      )}
-      role="group"
-      aria-label="File actions"
-    >
+  ) => {
+    const button = (
       <Button
+        variant="outline"
         size="sm"
-        onClick={download}
-        disabled={!urls}
+        onClick={onClick}
+        disabled={!urls || options.disabled}
+        aria-live={options.live ? 'polite' : undefined}
         className={cn(
-          toolbar ? 'h-9 min-w-0 flex-1 sm:h-8 sm:flex-none' : 'h-10 w-full'
+          'h-9 sm:h-8',
+          toolbar ? 'w-9 shrink-0 px-0 sm:w-8 lg:w-auto lg:px-3' : 'w-full'
         )}
       >
-        <Download className="h-4 w-4" aria-hidden="true" />
-        Download
+        <Icon
+          className={cn(
+            'h-4 w-4',
+            options.spinning && 'animate-spin',
+            options.done && 'text-success'
+          )}
+          aria-hidden="true"
+        />
+        <span className={cn(toolbar && 'sr-only lg:not-sr-only')}>{label}</span>
+        {options.hint && <span className="sr-only">{options.hint}</span>}
       </Button>
-      <div className={cn(toolbar ? 'contents' : 'grid grid-cols-2 gap-2')}>
-        {secondary(
-          copied === 'link' ? 'Link copied' : 'Copy link',
-          copied === 'link' ? Check : Link,
-          () => void handleCopyLink(),
-          { live: true, done: copied === 'link' }
+    )
+    if (!toolbar) return button
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>{button}</TooltipTrigger>
+        {/* Not where the name is already on the button. */}
+        <TooltipContent className="lg:hidden">{label}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
+  return (
+    <TooltipProvider delayDuration={200}>
+      <div
+        className={cn(
+          'flex w-full gap-2',
+          toolbar ? 'items-center sm:w-auto' : 'flex-col'
         )}
-        {isTextBased &&
-          secondary(
-            isCopyingText
-              ? 'Copying…'
-              : copied === 'text'
-                ? 'Text copied'
-                : 'Copy text',
-            isCopyingText ? Loader2 : copied === 'text' ? Check : Copy,
-            () => void handleCopyText(),
-            {
-              disabled: isCopyingText,
-              live: true,
-              spinning: isCopyingText,
-              done: copied === 'text',
-            }
+        role="group"
+        aria-label="File actions"
+      >
+        <Button
+          size="sm"
+          onClick={download}
+          disabled={!urls}
+          className={cn(
+            toolbar ? 'h-9 min-w-0 flex-1 sm:h-8 sm:flex-none' : 'h-10 w-full'
           )}
-        {showOcr &&
-          secondary(
-            ocr.loading ? 'Reading image…' : 'Extract text',
-            ocr.loading ? Loader2 : ScanText,
-            () => void ocr.extract(),
-            { disabled: ocr.loading, spinning: ocr.loading }
+        >
+          <Download className="h-4 w-4" aria-hidden="true" />
+          Download
+        </Button>
+        <div className={cn(toolbar ? 'contents' : 'grid grid-cols-2 gap-2')}>
+          {secondary(
+            copied === 'link' ? 'Link copied' : 'Copy link',
+            copied === 'link' ? Check : Link,
+            () => void handleCopyLink(),
+            { live: true, done: copied === 'link' }
           )}
-        {secondary('Open original', ExternalLink, openRaw, {
-          hint: ' in a new tab',
-        })}
+          {isTextBased &&
+            secondary(
+              isCopyingText
+                ? 'Copying…'
+                : copied === 'text'
+                  ? 'Text copied'
+                  : 'Copy text',
+              isCopyingText ? Loader2 : copied === 'text' ? Check : Copy,
+              () => void handleCopyText(),
+              {
+                disabled: isCopyingText,
+                live: true,
+                spinning: isCopyingText,
+                done: copied === 'text',
+              }
+            )}
+          {showOcr &&
+            secondary(
+              ocr.loading ? 'Reading image…' : 'Extract text',
+              ocr.loading ? Loader2 : ScanText,
+              () => void ocr.extract(),
+              { disabled: ocr.loading, spinning: ocr.loading }
+            )}
+          {secondary('Open original', ExternalLink, openRaw, {
+            hint: ' in a new tab',
+          })}
+        </div>
+        <OcrDialog {...ocr.dialog} />
       </div>
-      <OcrDialog {...ocr.dialog} />
-    </div>
+    </TooltipProvider>
   )
 }

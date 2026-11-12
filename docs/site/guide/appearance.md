@@ -66,7 +66,7 @@ Changing a profile applies to future uploads; it does not redesign every existin
 
 ## Presentation and access are independent
 
-The administrator can choose whether share pages show uploader attribution, filename, file size, and a footer. They can also set image fit and social-preview text.
+The administrator can choose whether share pages show uploader attribution, filename, file size, the expiration notice, and a footer. They can also set image fit and social-preview text.
 
 These choices affect what a page presents. Hiding a name does not remove it from an existing URL or the downloaded file. A Minimal page can be private, and a Delivery page can be public: choose [visibility and passwords](./sharing) separately.
 

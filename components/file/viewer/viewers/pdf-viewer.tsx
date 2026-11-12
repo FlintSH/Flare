@@ -1,6 +1,10 @@
+import { useState } from 'react'
+
 import { ExternalLink, FileText } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
+
+import { cn } from '@/lib/utils'
 
 import { LoadingState } from '../components/loading-state'
 import { PreviewPlaceholder } from '../components/preview-placeholder'
@@ -20,6 +24,8 @@ function showsPdfInline() {
 
 /** `src` is set once the page is interactive, so this only runs in a browser. */
 export function PdfViewer({ name, src }: { name: string; src?: string }) {
+  const [loadedSrc, setLoadedSrc] = useState<string>()
+
   if (src && !showsPdfInline())
     return (
       <div className="w-full p-4 sm:p-5">
@@ -30,7 +36,8 @@ export function PdfViewer({ name, src }: { name: string; src?: string }) {
           description="Open the document to read it, or download it to keep a copy."
           className="py-10"
         >
-          <Button asChild size="sm" className="mt-2">
+          {/* Outline, so Download stays the page's one filled button. */}
+          <Button asChild size="sm" variant="outline" className="mt-2">
             <a href={src} target="_blank" rel="noopener noreferrer">
               <ExternalLink aria-hidden="true" />
               Open PDF
@@ -41,19 +48,25 @@ export function PdfViewer({ name, src }: { name: string; src?: string }) {
       </div>
     )
 
+  const loaded = !!src && loadedSrc === src
+
   return (
-    // The browser draws its own viewer over the loading state, in its own
-    // colours.
-    <div className="relative w-full">
-      <LoadingState
-        message="Loading document…"
-        className={stageHeightClassName}
-      />
+    // The frame has the stage's height from the start. The loading state
+    // fills it until the browser's own viewer has loaded, then leaves the
+    // page, so nothing keeps announcing a document that is already open.
+    <div className={cn('relative w-full', stageHeightClassName)}>
+      {!loaded && (
+        <LoadingState
+          message="Loading document…"
+          className="absolute inset-0 h-full"
+        />
+      )}
       {src && (
         // Chromium otherwise opens a thumbnail sidebar that shrinks the page.
         <iframe
           src={`${src}#navpanes=0&view=FitH`}
-          className="absolute inset-0 block h-full w-full"
+          onLoad={() => setLoadedSrc(src)}
+          className="relative block h-full w-full"
           title={`${name} document preview`}
         />
       )}

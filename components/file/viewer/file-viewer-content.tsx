@@ -49,7 +49,13 @@ export function FileViewerContent({
     case 'audio':
       return <AudioViewer file={file} src={src} />
     case 'csv':
-      return <CsvViewer url={urls.content} bytes={file.size} />
+      return (
+        <CsvViewer
+          url={urls.content}
+          bytes={file.size}
+          delimiter={file.delimiter}
+        />
+      )
     case 'code':
     case 'text':
       return (

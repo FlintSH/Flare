@@ -162,13 +162,23 @@ describe('fileKind', () => {
     ).toBe('other')
   })
 
-  it('shows tab-separated files as tables', () => {
+  // The delimiter is named for the viewer: a guess would take the commas
+  // inside a tab-separated file's cells for it.
+  it('shows tab-separated files as tables and names their delimiter', () => {
+    const tabs = { kind: 'csv', delimiter: '\t' }
     expect(
       fileKind({ name: 'cities.tsv', mimeType: 'text/tab-separated-values' })
-    ).toEqual({ kind: 'csv' })
+    ).toEqual(tabs)
     expect(
       fileKind({ name: 'cities.TSV', mimeType: 'application/octet-stream' })
-    ).toEqual({ kind: 'csv' })
+    ).toEqual(tabs)
+    expect(
+      fileKind({ name: 'export', mimeType: 'text/tab-separated-values' })
+    ).toEqual(tabs)
+    // A CSV's delimiter is detected, so semicolon files keep working.
+    expect(fileKind({ name: 'cities.csv', mimeType: 'text/csv' })).toEqual({
+      kind: 'csv',
+    })
     expect(fileIcon({ name: 'cities.tsv', mimeType: 'text/plain' })).toBe(
       'table'
     )
