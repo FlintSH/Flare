@@ -40,7 +40,7 @@ Browsing and downloading an entry do not create new library files or folders. Pr
 | File type                                                                   | What the preview shows                                                                                                                                                                                                                      |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Images: PNG, JPEG, GIF, WebP, AVIF, BMP, ICO                                | The image, once Flare has checked from its bytes that it really is one. **Expand** opens the full-screen viewer; the arrow keys move between images in the open folder or search results. Images over **50 MiB** wait for **Load preview**. |
-| Video: MP4, WebM, MOV, MKV, OGV. Audio: MP3, M4A, AAC, WAV, FLAC, OGG, Opus | A player that streams and seeks inside the archive. Your browser decides which codecs it can play.                                                                                                                                          |
+| Video: MP4, WebM, MOV, MKV, OGV. Audio: MP3, M4A, AAC, WAV, FLAC, OGG, Opus | [Flare's player](./sharing#the-video-and-audio-player), which streams and seeks inside the archive. Your browser decides which codecs it can play.                                                                                          |
 | Text, code, data, and logs                                                  | The first **256 KiB**. **Load more** adds the next 256 KiB. HTML and SVG are displayed as text rather than active documents. A file that looks like binary data is not shown as text.                                                       |
 | Anything else                                                               | **Download entry**.                                                                                                                                                                                                                         |
 
@@ -62,7 +62,7 @@ Flare keeps recently read file lists in memory, so reopening an archive is immed
 
 <Screenshot src="/screenshots/archives/large-browse.webp" alt="Studio handoff.zip, a 906 MB ZIP with 20,025 files and 114 folders, open in the archive browser with Extract all unavailable" caption="A 906 MB ZIP with 20,025 files lists at once. Extraction limits are explained before you try." />
 
-<Screenshot src="/screenshots/archives/video-preview.webp" alt="share-walkthrough.webm playing at 0:04 of 0:06 inside Studio handoff.zip" caption="Video plays and seeks inside the archive without extracting it." />
+<Screenshot src="/screenshots/archives/video-preview.webp" alt="share-walkthrough.webm in Flare's player at 0:03 of 0:05 inside Studio handoff.zip, with the timeline, volume, speed, picture-in-picture and full screen controls" caption="Video plays and seeks inside the archive without extracting it." />
 
 ::: details See text, gallery, and TAR.GZ previews
 <Screenshot src="/screenshots/archives/text-preview-more.webp" alt="A 6 MB server log inside the archive showing the first 512 KB with a Load more button" caption="Long logs load in 256 KiB steps." />

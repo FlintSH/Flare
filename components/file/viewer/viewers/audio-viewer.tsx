@@ -1,12 +1,14 @@
 import { useState } from 'react'
 
+import { AudioPlayer } from '@/components/media/audio-player'
+
 import { ErrorState } from '../components/error-state'
 
 export function AudioViewer({
   file,
   src,
 }: {
-  file: { name: string; mimeType: string }
+  file: { name: string }
   src?: string
 }) {
   const [failedUrl, setFailedUrl] = useState<string>()
@@ -16,19 +18,12 @@ export function AudioViewer({
   }
 
   return (
-    // The browser draws the controls, in the theme's colour scheme. They are
-    // on the page from the start, idle until the file's address is known, so
-    // the player never changes size.
-    <audio
+    // The player is on the page from the start, idle until the file's address
+    // is known, so it never changes size.
+    <AudioPlayer
       src={src}
-      controls
-      aria-label={`${file.name} audio player`}
-      className="block w-full rounded-full focus-visible:outline-offset-[-2px]"
-      controlsList="nodownload"
-      preload="metadata"
+      name={file.name}
       onError={() => src && setFailedUrl(src)}
-    >
-      Your browser does not support audio playback. Download the file to listen.
-    </audio>
+    />
   )
 }
