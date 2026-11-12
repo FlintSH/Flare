@@ -163,6 +163,50 @@ describe('appearance publication', () => {
     ).toThrow('no previous')
   })
 
+  it('resets only the theme, publishes it, and keeps the old theme restorable', () => {
+    const custom = structuredClone(DEFAULT_APPEARANCE)
+    custom.brand.name = 'Orbit'
+    custom.sharing.defaultStyle = 'delivery'
+    custom.theme = {
+      ...custom.theme,
+      enabled: true,
+      defaultMode: 'light',
+      radius: 0,
+      background: 'grid',
+      font: 'mono',
+      dark: { ...custom.theme.dark, primary: '#ff0000' },
+    }
+    const draft = structuredClone(custom)
+    draft.brand.name = 'Orbit draft'
+    const current = {
+      ...DEFAULT_CUSTOMIZATION,
+      revision: 4,
+      published: custom,
+      draft,
+    }
+    const reset = transitionAppearance(
+      current,
+      { action: 'reset-theme', revision: 4 },
+      '2026-11-12T10:00:00.000Z'
+    )
+    expect(reset.revision).toBe(5)
+    expect(reset.published.theme).toEqual(DEFAULT_APPEARANCE.theme)
+    expect(reset.published.brand.name).toBe('Orbit')
+    expect(reset.published.sharing.defaultStyle).toBe('delivery')
+    expect(reset.draft?.theme).toEqual(DEFAULT_APPEARANCE.theme)
+    expect(reset.draft?.brand.name).toBe('Orbit draft')
+    expect(reset.previous).toEqual(custom)
+    expect(reset.publishedAt).toBe('2026-11-12T10:00:00.000Z')
+    const restored = transitionAppearance(reset, {
+      action: 'restore',
+      revision: 5,
+    })
+    expect(restored.published.theme.font).toBe('mono')
+    expect(() =>
+      transitionAppearance(current, { action: 'reset-theme', revision: 3 })
+    ).toThrow('another tab')
+  })
+
   it('discards only the draft', () => {
     const saved = transitionAppearance(DEFAULT_CUSTOMIZATION, {
       action: 'save',

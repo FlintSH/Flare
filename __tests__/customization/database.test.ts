@@ -186,6 +186,42 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(saved.settings.email).toEqual(config.DEFAULT_CONFIG.settings.email)
   })
 
+  it('resets the studio theme and classic colors together, keeping other settings', async () => {
+    await config.updateConfig({
+      settings: {
+        appearance: { theme: 'light', customColors: { primary: '#ff0000' } },
+        advanced: { customCSS: 'body { color: red }' },
+      },
+    })
+    const before = await config.getConfig()
+    const { revision, published } = before.settings.customization
+    const themed = structuredClone(published)
+    themed.theme = { ...themed.theme, enabled: true, font: 'mono' }
+    await appearances.saveAppearance({
+      action: 'publish',
+      revision,
+      document: themed,
+    })
+    const state = await appearances.saveAppearance({
+      action: 'reset-theme',
+      revision: revision + 1,
+    })
+    expect(state.published.theme).toEqual(
+      config.DEFAULT_CONFIG.settings.customization.published.theme
+    )
+    expect(state.published.brand).toEqual(themed.brand)
+    expect(state.previous?.theme.font).toBe('mono')
+    const saved = await config.getConfig()
+    expect(saved.settings.appearance.theme).toBe('dark')
+    expect(saved.settings.appearance.customColors).toEqual(
+      config.DEFAULT_CONFIG.settings.appearance.customColors
+    )
+    expect(saved.settings.advanced.customCSS).toBe('body { color: red }')
+    expect(saved.settings.appearance.favicon).toBe(
+      before.settings.appearance.favicon
+    )
+  })
+
   it('keeps profile defaults owned by the user and resolves instance share defaults', async () => {
     await config.updateConfig({
       settings: {

@@ -23,6 +23,17 @@ import {
 import { colorSwatchClassName } from '@/components/shared/form-styles'
 import { SaveBar } from '@/components/shared/save-bar'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -50,6 +61,7 @@ import {
   type AppearanceCommand,
   type AppearanceDocument,
   type CustomizationState,
+  DEFAULT_APPEARANCE,
   type Palette,
   appearanceDocumentSchema,
   appearancePackSchema,
@@ -192,6 +204,9 @@ export function CustomizationStudio({
   recovery = false,
   onStateChange,
   onDirtyChange,
+  onThemeReset,
+  onThemeResetPending,
+  themeResetBlocked = false,
 }: {
   initialState: CustomizationState
   /** The instance's saved Show credits footer setting, for the preview. */
@@ -199,6 +214,12 @@ export function CustomizationStudio({
   recovery?: boolean
   onStateChange?: (state: CustomizationState) => void
   onDirtyChange?: (dirty: boolean) => void
+  /** Called after the theme and classic colors are reset to Flare's defaults. */
+  onThemeReset?: () => void
+  /** Reports a reset in flight, so the page can hold its own settings save. */
+  onThemeResetPending?: (pending: boolean) => void
+  /** Set while the page saves settings; the reset waits for that save. */
+  themeResetBlocked?: boolean
 }) {
   const router = useRouter()
   const { toast } = useToast()
@@ -215,6 +236,7 @@ export function CustomizationStudio({
   const [mode, setMode] = useState<'light' | 'dark'>('dark')
   const [protectedPreview, setProtectedPreview] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [resetOpen, setResetOpen] = useState(false)
   const [error, setError] = useState('')
   const importRef = useRef<HTMLInputElement>(null)
   const sectionNav = useRef<HTMLElement | null>(null)
@@ -256,7 +278,9 @@ export function CustomizationStudio({
   }
 
   async function act(command: AppearanceCommand) {
+    const reset = command.action === 'reset-theme'
     setBusy(true)
+    if (reset) onThemeResetPending?.(true)
     setError('')
     try {
       const next = await apiRequest<CustomizationState>('/api/customization', {
@@ -265,11 +289,22 @@ export function CustomizationStudio({
       })
       setState(next)
       onStateChange?.(next)
-      setDocument(next.draft || next.published)
+      if (command.action === 'reset-theme') {
+        // Keep unsaved identity and sharing edits; only the theme is reset.
+        setDocument((previous) =>
+          previous
+            ? { ...previous, theme: DEFAULT_APPEARANCE.theme }
+            : next.draft || next.published
+        )
+        onThemeReset?.()
+      } else {
+        setDocument(next.draft || next.published)
+      }
       const messages = {
         save: 'Draft saved',
         publish: 'Your new appearance is live',
         restore: 'Previous appearance restored',
+        'reset-theme': 'Flare theme restored',
         discard: 'Draft discarded',
         import: 'Pack imported into your draft',
       }
@@ -278,14 +313,21 @@ export function CustomizationStudio({
         description:
           command.action === 'save' || command.action === 'import'
             ? 'Preview your changes, then publish when you are ready.'
-            : undefined,
+            : command.action === 'reset-theme'
+              ? 'Your instance uses the default colors, typeface, and background again.'
+              : undefined,
       })
-      if (command.action === 'publish' || command.action === 'restore')
+      if (
+        command.action === 'publish' ||
+        command.action === 'restore' ||
+        command.action === 'reset-theme'
+      )
         router.refresh()
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong.')
     } finally {
       setBusy(false)
+      if (reset) onThemeResetPending?.(false)
     }
   }
 
@@ -845,6 +887,79 @@ export function CustomizationStudio({
                               ))}
                           </div>
                         </details>
+                      </div>
+                      <div className="flex flex-col gap-3 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="space-y-1">
+                          <p className="text-sm font-medium">
+                            Start over with Flare&apos;s theme
+                          </p>
+                          <p className="text-pretty text-sm text-muted-foreground">
+                            Reset the palettes, typeface, background, corners,
+                            and classic colors for everyone.
+                          </p>
+                        </div>
+                        <AlertDialog
+                          open={resetOpen}
+                          onOpenChange={setResetOpen}
+                        >
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="shrink-0"
+                              disabled={busy || themeResetBlocked}
+                            >
+                              <RotateCcw aria-hidden="true" />
+                              Reset to Flare defaults
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>
+                                Reset the theme to Flare&apos;s defaults?
+                              </AlertDialogTitle>
+                              <AlertDialogDescription asChild>
+                                <div className="space-y-2">
+                                  <p>
+                                    This publishes right away. Everyone sees
+                                    Flare&apos;s default palettes, typeface,
+                                    background, and corners, and the classic
+                                    colors return to their defaults.
+                                  </p>
+                                  <p>
+                                    Your identity, logos, sharing choices,
+                                    favicon, and custom CSS stay as they are.
+                                    Choose Restore previous afterwards to bring
+                                    back the current studio theme; customized
+                                    classic colors can&apos;t be restored.
+                                  </p>
+                                </div>
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel disabled={busy}>
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                disabled={busy || themeResetBlocked}
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  void act({
+                                    action: 'reset-theme',
+                                    revision: state.revision,
+                                  }).then(() => setResetOpen(false))
+                                }}
+                              >
+                                {busy && (
+                                  <Loader2
+                                    className="animate-spin"
+                                    aria-hidden="true"
+                                  />
+                                )}
+                                Reset theme
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       </div>
                     </CardContent>
                   </>

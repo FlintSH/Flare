@@ -71,6 +71,7 @@ import {
   faviconProblem,
   faviconUrl,
 } from '@/lib/customization/favicon'
+import { CLASSIC_PALETTE } from '@/lib/customization/legacy-appearance'
 import type { CustomizationState } from '@/lib/customization/schema'
 import { getDocumentationUrl } from '@/lib/documentation'
 import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
@@ -143,6 +144,9 @@ export function InstanceSettings({
     SETTINGS_SECTION_ALIASES
   )
   const [studioDirty, setStudioDirty] = useState(false)
+  // A save finishing after a reset would put the old classic colors back in
+  // savedConfig, so the two never run at once.
+  const [themeResetting, setThemeResetting] = useState(false)
   const handleStudioStateChange = useCallback(
     (customization: CustomizationState) => {
       setSavedConfig((previous) => ({
@@ -162,6 +166,23 @@ export function InstanceSettings({
   const [workingConfig, setWorkingConfig] = useState<FlareConfig>(() =>
     structuredClone(initialConfig)
   )
+  // The studio's theme reset also returns the classic colors to Flare's
+  // defaults on the server; show that here without a reload.
+  const handleThemeReset = useCallback(() => {
+    const reset = (config: FlareConfig): FlareConfig => ({
+      ...config,
+      settings: {
+        ...config.settings,
+        appearance: {
+          ...config.settings.appearance,
+          theme: 'dark',
+          customColors: { ...CLASSIC_PALETTE },
+        },
+      },
+    })
+    setSavedConfig(reset)
+    setWorkingConfig(reset)
+  }, [])
   const [pendingFaviconFile, setPendingFaviconFile] = useState<File | null>(
     null
   )
@@ -1662,6 +1683,9 @@ export function InstanceSettings({
                 recovery={recovery}
                 onStateChange={handleStudioStateChange}
                 onDirtyChange={setStudioDirty}
+                onThemeReset={handleThemeReset}
+                onThemeResetPending={setThemeResetting}
+                themeResetBlocked={isSaving}
               />
               <Card>
                 <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
@@ -1981,12 +2005,12 @@ export function InstanceSettings({
             <Button
               variant="outline"
               onClick={discardChanges}
-              disabled={isSaving}
+              disabled={isSaving || themeResetting}
             >
               <XCircle aria-hidden="true" />
               Discard
             </Button>
-            <Button onClick={saveChanges} disabled={isSaving}>
+            <Button onClick={saveChanges} disabled={isSaving || themeResetting}>
               {isSaving ? (
                 <Icons.spinner className="animate-spin" aria-hidden="true" />
               ) : (

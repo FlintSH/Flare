@@ -216,6 +216,14 @@ export const appearanceCommandSchema = z.discriminatedUnion('action', [
       revision: z.number().int().nonnegative(),
     })
     .strict(),
+  // Puts the studio theme and classic colors back to Flare's defaults and
+  // publishes that at once. Identity and sharing choices are kept.
+  z
+    .object({
+      action: z.literal('reset-theme'),
+      revision: z.number().int().nonnegative(),
+    })
+    .strict(),
   z
     .object({
       action: z.literal('discard'),

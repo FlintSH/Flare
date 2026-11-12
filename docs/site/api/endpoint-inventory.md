@@ -227,7 +227,7 @@ These operations require a browser session and the permission listed below. Admi
 | `/api/settings/email/impact`     | GET, POST      | `settings.email`; preview email-policy impact.                                                                                                            |
 | `/api/settings/email/test`       | POST           | `settings.email`; test SMTP or send a test message.                                                                                                       |
 | `/api/settings/email/retry`      | POST           | `settings.email`; retry an eligible outbox entry.                                                                                                         |
-| `/api/customization`             | POST           | `appearance.manage`; save/import/publish/restore appearance.                                                                                              |
+| `/api/customization`             | POST           | `appearance.manage`; save/import/publish/restore appearance, or `reset-theme` to publish Flare's default theme and classic colors.                        |
 | `/api/customization/assets`      | POST           | `appearance.manage`; turn a multipart `file`, a PNG, JPEG, or WebP of at most 256 KB, into a data URL, else `413`, `415` or `400`, as for the favicon.    |
 | `/api/updates/check`             | GET            | `settings.read`; check release availability.                                                                                                              |
 

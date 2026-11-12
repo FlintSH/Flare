@@ -1,4 +1,5 @@
 import { changeConfig } from '@/lib/config'
+import { CLASSIC_PALETTE } from '@/lib/customization/legacy-appearance'
 import { prisma } from '@/lib/database/prisma'
 
 import type { AppearanceCommand } from './schema'
@@ -14,6 +15,16 @@ export async function saveAppearance(command: AppearanceCommand) {
           config.settings.customization,
           command
         ),
+        // The classic colors apply while the studio theme is off, so a reset
+        // returns them to Flare's defaults as well.
+        appearance:
+          command.action === 'reset-theme'
+            ? {
+                ...config.settings.appearance,
+                theme: 'dark',
+                customColors: { ...CLASSIC_PALETTE },
+              }
+            : config.settings.appearance,
       },
     }))
     return saved.settings.customization

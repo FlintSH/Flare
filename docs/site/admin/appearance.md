@@ -54,6 +54,16 @@ A few colors are derived from the palette so they stay readable whatever it hold
 | Typeface      | Inter, System, Mono |
 | Corner radius | 0–1.5               |
 
+### Reset to Flare's theme
+
+To start over, choose **Reset to Flare defaults** at the bottom of the **Theme** section, then **Reset theme** to confirm. Choose **Cancel** to leave everything as it is. The reset publishes immediately, without **Publish appearance**:
+
+- The studio theme returns to Flare's defaults: **Use studio theme** off, **Dark** default mode, **Inter**, **Soft glow**, a corner radius of 0.75, and the default light and dark palettes.
+- The classic colors return to their defaults and the classic theme mode to `dark`, so the instance looks like a fresh Flare installation.
+- Identity, logos, sharing choices, the favicon, and custom CSS/head HTML are unchanged. A saved draft keeps its identity and sharing edits with the default theme, and unsaved identity or sharing edits stay in the studio for you to save or publish.
+
+**Restore previous** brings back the studio theme you had before the reset. Customized classic colors are not kept, so note them first if you might want them again. If another administrator changed the appearance since you opened the page, the reset is refused with a message to reload, and nothing changes. The button waits while **Save settings** is saving, and **Save settings** and **Discard** wait while a reset is in progress, so one can't put back what the other changed.
+
 <Screenshot src="/screenshots/customization/appearance-theme.png" alt="Appearance studio theme controls and a live preview" caption="Theme presets are starting points; paired palettes let both modes stay intentional." />
 
 Every account can separately choose **Inherit**, **System**, **Light**, or **Dark** under **Profile → Account → Workspace appearance**. That preference follows the account in the workspace. Public share pages use the instance appearance rather than the uploader's personal preference.
