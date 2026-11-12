@@ -244,8 +244,11 @@ export function VideoPlayer({
       <div
         className={cn(
           'absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/45 to-transparent px-2 pb-1.5 pt-10 transition-opacity duration-200 sm:px-3 sm:pb-2',
+          // A control focused from the keyboard keeps them up, so the focus
+          // ring is never hidden. One that was clicked doesn't: the button
+          // keeps focus after a click, and the controls would never leave.
           !controlsShown &&
-            'pointer-events-none opacity-0 focus-within:pointer-events-auto focus-within:opacity-100'
+            'pointer-events-none opacity-0 has-[:focus-visible]:pointer-events-auto has-[:focus-visible]:opacity-100'
         )}
       >
         <Timeline

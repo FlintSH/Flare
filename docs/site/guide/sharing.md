@@ -110,7 +110,7 @@ Before a video plays, the page asks Flare where to play it from. If that fails, 
 
 Video and audio play in Flare's own player instead of the browser's built-in one, so the controls look and work the same in every browser and follow the instance's theme. The browser still decodes and streams the file: which formats play, and how far a file can seek while it loads, are unchanged.
 
-**Video.** The controls sit over the picture and step aside about two and a half seconds after the pointer rests on a playing video. Move the pointer, press a key, or tap to bring them back.
+**Video.** The controls sit over the picture and step aside about two and a half seconds after the pointer rests on a playing video. Move the pointer, press a key, or tap to bring them back. They also stay up while one of them has keyboard focus, so the control you tabbed to is never hidden; clicking a control doesn't hold them.
 
 - A large play button in the middle starts the video; clicking the picture plays and pauses it. On a touch screen a tap shows or hides the controls and the button in the middle plays and pauses.
 - The timeline shows how much has played and how much has loaded. Click or drag it to seek; hovering shows the time under the pointer.
