@@ -1,0 +1,46 @@
+[
+  {
+    "source": ".github/assets/perf/summary.webp",
+    "name": "performance-summary.webp"
+  },
+  {
+    "source": ".github/assets/perf/library-filmstrip.webp",
+    "name": "performance-library-filmstrip.webp"
+  },
+  {
+    "source": "docs/images/embeds/studio-embeds.webp",
+    "name": "demo-studio-embeds.webp"
+  },
+  {
+    "source": "docs/images/embeds/profile-embeds.webp",
+    "name": "demo-profile-embeds.webp"
+  },
+  {
+    "source": "docs/images/sharing/share-page-image.webp",
+    "name": "demo-share-page.webp"
+  },
+  {
+    "source": "docs/images/sharing/player-video.webp",
+    "name": "demo-video-player.webp"
+  },
+  {
+    "source": "docs/images/sharing/player-audio.webp",
+    "name": "demo-audio-player.webp"
+  },
+  {
+    "source": ".github/assets/release-3.1/compare-library-desktop.webp",
+    "name": "compare-library-desktop.webp"
+  },
+  {
+    "source": ".github/assets/release-3.1/compare-settings-appearance.webp",
+    "name": "compare-settings-appearance.webp"
+  },
+  {
+    "source": ".github/assets/release-3.1/compare-share-video.webp",
+    "name": "compare-share-video.webp"
+  },
+  {
+    "source": ".github/assets/release-3.1/compare-share-audio.webp",
+    "name": "compare-share-audio.webp"
+  }
+]

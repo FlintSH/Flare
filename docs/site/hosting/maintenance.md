@@ -101,9 +101,28 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Upgrading from 3.0.1 to 3.1
+
+Flare 3.1 makes the app sturdier and faster, adds embed controls, and reworks much of the interface. Use the normal backup and upgrade steps above. The official image applies one database migration, which only adds indexes. Nobody is signed out, and no environment variable is required. The optional `FLARE_CORS_ORIGINS` lets web apps on other sites call the token API; see [cross-origin browser access](./configuration#cross-origin-browser-access).
+
+Work through the items that apply to your installation. The sections after this one have the details.
+
+- **Every installation.** Allow a short pause in writes while the [index migration](#faster-library-uploads-and-previews) runs. Then open the library, a share page, and a video or audio file. Previews are now resized by Flare itself, share pages have a new layout, and media plays in [Flare's own player](#share-page-layout).
+- **Default dark theme.** If you never changed your instance's dark colors, it moves to the new, deeper default palette on its own, including an unedited **Midnight**. Changed palettes and the other presets keep their colors. To adopt the new one, choose **Midnight** again in the Theme tab and publish, which also resets the light palette; **Reset to Flare defaults** also works, but resets the whole theme, classic colors included. See [default dark-mode contrast](/guide/appearance#default-dark-mode-contrast).
+- **Browsers.** Flare 3.1 runs on [Next.js 16 and React 19](#next-js-16-and-react-19) and supports Chrome, Edge, and Firefox 111 or later and Safari 16.4 or later.
+- **A CDN, caching proxy, or reverse proxy sits in front of Flare.** Keep the query string in the cache key for thumbnails, pass `User-Agent` through, and don't cache share pages by address alone. See [faster library, uploads and previews](#faster-library-uploads-and-previews) and [embeds and link previews](#embeds-and-link-previews).
+- **You use custom CSS.** Share page markup, the media players, and the bundled font files changed. Check each share style you use; the [share page layout](#share-page-layout) and [faster library](#faster-library-uploads-and-previews) sections list the selectors and files.
+- **Embeds.** Social preview text you set carries over as the [embed card](/guide/embeds)'s title and description. Pick a mode and card in **Settings → Appearance → Embeds**. **Let people design their own** starts on, so accounts with `files.share` can write their own card; turn it off there if you want one embed for every link.
+- **You use S3 storage.** Earlier versions could save incomplete S3 settings and then quietly write new files to local disk. Those settings now stop uploads, downloads, and previews until you complete them in **Settings → Storage**. Check your settings before inviting people back, and keep the local `uploads` volume: files written there by the fallback still need [copying to the bucket](./storage#changing-backend-or-bucket). See [S3-compatible storage](./storage#s3-compatible-storage).
+- **Custom API clients and scripts.** Requests Flare can't read now answer `400`, `413`, or `415` with a JSON `{ "error" }` instead of `500` or plain text, and some refusal messages changed. Uploads, expiration changes, short-link creation, and upload-token replacement now refuse a browser-cookie request from another origin, sibling subdomains included, with `403`, as other session writes already did; see [browser-session writes](/api/authentication#browser-session-writes). [Named tokens](/api/authentication#send-a-token) can upload and create short links, but can't change an existing file's expiration or replace the upload token. See [answers and errors](/api/endpoint-inventory#answers-and-errors).
+- **You watch container health.** The image's health check ignores failures for the first 150 seconds instead of 10, so a start that waits for the database or runs migrations no longer shows `unhealthy`. A failed migration stops the container with its own error; see [The container never becomes healthy](./troubleshooting#the-container-never-becomes-healthy).
+- **You build the image or run from source.** The Dockerfile uses `node:24` instead of `node:lts`, which moved to Node.js 26 without Corepack. See [build or run from source](./docker#build-or-run-from-source).
+
+Rollback: the migration only adds indexes, but once any setting or appearance is saved on 3.1, an older image refuses the saved appearance, so settings and share pages fail to load there. Go back to 3.0.1 only together with the database backup taken before upgrading, as described in [Rollback](#rollback).
+
 ### Faster library, uploads and previews
 
-Builds after Flare 3.0.1 also do less work for each request and send browsers less. Use the normal backup and upgrade steps above. There is no new setting or environment variable, and links, API responses and saved settings keep their meaning. Review these after updating:
+Flare 3.1 does less work for each request and sends browsers less. Use the normal backup and upgrade steps above. There is no new setting or environment variable, and links, API responses and saved settings keep their meaning. Review these after updating:
 
 - **Database migration.** `20261112000000_hot_path_indexes` adds four indexes and changes no rows: files by storage path, an account's files by type, pending expiry jobs by their file, and an account's short links by date. Normal image startup applies it; source deployments run `npx prisma migrate deploy` before starting the updated app. On a database of 120,000 files and 5,000 pending expirations it took under two seconds. Writes to files, expiry jobs and short links wait while their index is built, so allow a short pause and some database disk space on a larger instance.
 - **Previews.** Library cards, shared folder tiles and **View content** now ask `/api/files/{id}/thumbnail?w=…`, and Flare resizes the image itself, for private and password-protected images too. `/_next/image` no longer serves them. Each app process keeps the copies it made in memory, up to 64 MiB, and makes them again after a restart, which takes some CPU the first time a screen of images is shown. See [thumbnails](/api/files#thumbnails), and [Image thumbnails fail](./troubleshooting#image-thumbnails-fail) if cards show file icons.
@@ -129,7 +148,7 @@ Once any setting or appearance is saved on the new version, the saved appearance
 
 ### Next.js 16 and React 19
 
-Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup and upgrade steps above. There are no new settings, environment variables, or database migrations, and existing sessions stay signed in.
+Flare 3.1 runs on Next.js 16 and React 19. This change adds no settings, environment variables, or database migrations, and existing sessions stay signed in.
 
 - **Browsers.** Flare supports Chrome, Edge, and Firefox 111 or later and Safari 16.4 or later. Earlier builds also targeted browsers back to Chrome 64 and Safari 12. Ask people on older devices to update; see [Use a current browser](/guide/#a-few-things-to-know-early).
 - **Source installs.** Node.js 22.13 or later is still required, because the pinned pnpm release needs it; Next.js 16 itself needs 20.9. Builds no longer copy `uploads/` into `.next/standalone`. Keep starting Flare with `pnpm start` from the project root, which reads uploads from there.
@@ -137,15 +156,15 @@ Builds after Flare 3.0.1 run on Next.js 16 and React 19. Use the normal backup a
 - **Custom CSS.** The bundled Inter fonts are now `/fonts/inter/Inter-VariableFont_opsz_wght.ttf` and `/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf`, without the comma in their old names. Update custom CSS that loads them by URL.
 - **Modified builds.** `middleware.ts` is now `proxy.ts`, and `next dev` and `next build` use Turbopack. Move your changes to `middleware.ts` into `proxy.ts`. A fork that adds a webpack configuration must port it to Turbopack options or build with `next build --webpack`.
 
-This change doesn't touch the database, so going back needs only the earlier image.
+This change on its own doesn't touch the database, but the rest of 3.1 does: follow the rollback note under [Upgrading from 3.0.1 to 3.1](#upgrading-from-3-0-1-to-3-1).
 
 ### Share page layout
 
-Builds after Flare 3.0.1 also lay out [share pages](/guide/sharing#what-a-share-page-shows), shared folders, and file password pages differently. There is one new appearance setting, **Show expiration**, and no new environment variable or database migration. Every link keeps working. Review these after updating:
+Flare 3.1 also lays out [share pages](/guide/sharing#what-a-share-page-shows), shared folders, and file password pages differently. There is one new appearance setting, **Show expiration**, and no new environment variable or database migration. Every link keeps working. Review these after updating:
 
 - **Custom CSS.** A share page's markup changed: the file's name, type, size, and actions are now a header above the preview, the card has one width for every previewable type, and the page centers it. Custom CSS written against the earlier structure may no longer match. Open a public file in each [share style](/admin/appearance#sharing) you use and adjust your rules. The `data-share-style` attribute on the page and `data-flare-surface` on its card are unchanged.
 - **View counts.** Opening a shared folder no longer adds a view to each image in it, because its tiles now load thumbnails instead of raw links. Totals already recorded stay as they are. See [view counts](/guide/sharing#view-counts).
-- **Shared folder images.** Those tiles are resized by the same image optimizer as public library previews, through `/_next/image` and `/api/files/{id}/thumbnail`. A proxy or CDN rule that already lets the library load its previews covers them. If tiles show file icons instead of pictures, follow [Image thumbnails fail](./troubleshooting#image-thumbnails-fail).
+- **Shared folder images.** Those tiles load the same resized previews as the library, from `/api/files/{id}/thumbnail?w=…`. A proxy or CDN rule that already lets the library load its previews covers them. If tiles show file icons instead of pictures, follow [Image thumbnails fail](./troubleshooting#image-thumbnails-fail).
 - **Expiration notice.** A share page now tells visitors how long a file with a scheduled expiration has left. **Settings → Appearance → Sharing → Show expiration** turns it off; it starts on for every existing appearance.
 - **Video and audio player.** Video and audio on share pages and in archive previews play in Flare's own player instead of each browser's built-in controls. Nothing needs configuring. Custom CSS that styled the `video` or `audio` elements' native controls no longer has anything to style; the player's root elements carry `data-flare-player="video"` and `data-flare-player="audio"`.
 - **Files stored with a generic type.** Text and code uploaded without a type, which Flare stores as `application/octet-stream`, now open in the text viewer when their name says what they are. Nothing is rewritten in the database; the stored type is unchanged. See [what recipients can preview](/guide/sharing#what-recipients-can-preview).
