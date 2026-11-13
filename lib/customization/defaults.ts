@@ -29,6 +29,82 @@ export const DARK_PALETTE: Palette = {
   ring: '#cbd5e1',
 }
 
+/**
+ * Earlier default dark palettes, written out in full so they stay frozen when
+ * DARK_PALETTE changes. Add the outgoing palette here whenever the default
+ * changes, or themes saved with it keep the old look.
+ */
+export const SUPERSEDED_DARK_PALETTES: readonly Palette[] = [
+  // The first studio default, and Midnight until the contrast work.
+  {
+    background: '#020817',
+    foreground: '#f8fafc',
+    card: '#020817',
+    cardForeground: '#f8fafc',
+    popover: '#020817',
+    popoverForeground: '#f8fafc',
+    primary: '#f8fafc',
+    primaryForeground: '#0f172a',
+    secondary: '#1e293b',
+    secondaryForeground: '#f8fafc',
+    muted: '#1e293b',
+    mutedForeground: '#94a3b8',
+    accent: '#1e293b',
+    accentForeground: '#f8fafc',
+    destructive: '#991b1b',
+    destructiveForeground: '#f8fafc',
+    border: '#1e293b',
+    input: '#1e293b',
+    ring: '#cbd5e1',
+  },
+  // The lifted higher-contrast default that the deeper one replaced.
+  {
+    background: '#020817',
+    foreground: '#f8fafc',
+    card: '#0c1426',
+    cardForeground: '#f8fafc',
+    popover: '#162036',
+    popoverForeground: '#f8fafc',
+    primary: '#f8fafc',
+    primaryForeground: '#0f172a',
+    secondary: '#33445f',
+    secondaryForeground: '#f8fafc',
+    muted: '#26334d',
+    mutedForeground: '#a8b5c9',
+    accent: '#33445f',
+    accentForeground: '#f8fafc',
+    destructive: '#991b1b',
+    destructiveForeground: '#f8fafc',
+    border: '#303f59',
+    input: '#3a4a63',
+    ring: '#cbd5e1',
+  },
+]
+
+/**
+ * Move a saved dark palette that is an untouched earlier default onto the
+ * current one. Midnight is the default with the focus ring set to the primary
+ * colour, so that ring is recognized and kept. Any other change, even one
+ * colour, means the palette was customized and it is returned as saved.
+ */
+export function defaultDarkPalette(palette: Palette): Palette {
+  const keys = Object.keys(palette) as (keyof Palette)[]
+  for (const earlier of SUPERSEDED_DARK_PALETTES) {
+    const ring = palette.ring.toLowerCase()
+    const untouched =
+      (ring === earlier.ring || ring === earlier.primary) &&
+      keys.every(
+        (key) => key === 'ring' || palette[key].toLowerCase() === earlier[key]
+      )
+    if (untouched)
+      return {
+        ...DARK_PALETTE,
+        ring: ring === earlier.ring ? DARK_PALETTE.ring : DARK_PALETTE.primary,
+      }
+  }
+  return palette
+}
+
 export const LIGHT_PALETTE: Palette = {
   background: '#f8fafc',
   foreground: '#0f172a',
