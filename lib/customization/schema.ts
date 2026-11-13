@@ -8,7 +8,12 @@ import {
   embedTemplateSchema,
 } from '@/lib/embeds/schema'
 
-import { DARK_PALETTE, DEFAULT_APPEARANCE, LIGHT_PALETTE } from './defaults'
+import {
+  DARK_PALETTE,
+  DEFAULT_APPEARANCE,
+  LIGHT_PALETTE,
+  defaultDarkPalette,
+} from './defaults'
 import { LOGO_DATA_URL_MAX_LENGTH, isLogoDataUrl } from './logo'
 
 export { DARK_PALETTE, DEFAULT_APPEARANCE, LIGHT_PALETTE }
@@ -84,7 +89,8 @@ export const appearanceDocumentSchema = z
         enabled: z.boolean(),
         defaultMode: z.enum(['system', 'light', 'dark']),
         light: paletteSchema,
-        dark: paletteSchema,
+        // A theme saved with an earlier default palette reads as today's.
+        dark: paletteSchema.transform(defaultDarkPalette),
         radius: z.number().min(0).max(1.5),
         background: z.enum(['glow', 'plain', 'grid']),
         font: z.enum(['inter', 'system', 'mono']),

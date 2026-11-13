@@ -178,7 +178,7 @@ Text is escaped into Flare's HTML and plain-text messages. These settings are no
 
 ## Settings stored in the database
 
-These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades. A complete untouched earlier default classic palette is recognized when configuration is read and resolves to the current dark defaults, including in the Settings controls. Customized classic palettes and published studio palettes keep their saved colors. No environment variable or database migration is needed; see [appearance administration](../admin/appearance) for reset and preset controls.
+These defaults describe a new instance before your setup choices. Existing instances retain saved settings during upgrades. A complete untouched earlier default palette is recognized when configuration is read and resolves to the current dark defaults, including in the Settings controls. This applies to the classic palette and to the studio's `theme.dark` in the published, draft and previous appearance and in imported packs; a studio palette that matches an earlier default except for a focus ring set to the primary color (the **Midnight** preset) resolves to the current Midnight. Customized palettes keep their saved colors. No environment variable or database migration is needed; see [appearance administration](../admin/appearance) for reset and preset controls.
 
 | Setting                         | Default                                                               | Guide                                                             |
 | ------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -284,7 +284,7 @@ The customization wrapper also contains `version` (currently `1`), `revision` (i
 
 ### Palette fields and defaults
 
-The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are below. Two earlier sets of dark defaults are kept only to recognize untouched installations, which then resolve to the current values: the original (`#020817` for the page, cards and popovers, and `#1e293b` for secondary, accent and borders, `#94a3b8` secondary text) and a lighter set (`#0c1426` cards, `#162036` popovers, `#33445f` secondary and accent, `#26334d` muted, `#303f59` borders, `#3a4a63` inputs and `#a8b5c9` secondary text on the `#020817` page).
+The studio uses the same field names for `theme.light` and `theme.dark`. The legacy `appearance.customColors` map uses these names too, with HSL components rather than hex values. The full starting values are below. Two earlier sets of dark defaults, in both the classic and studio forms, are kept only to recognize untouched installations, which then resolve to the current values: the original (`#020817` for the page, cards and popovers, and `#1e293b` for secondary, accent and borders, `#94a3b8` secondary text) and a lighter set (`#0c1426` cards, `#162036` popovers, `#33445f` secondary and accent, `#26334d` muted, `#303f59` borders, `#3a4a63` inputs and `#a8b5c9` secondary text on the `#020817` page).
 
 | Field                   | Studio light | Studio dark | Legacy HSL          |
 | ----------------------- | ------------ | ----------- | ------------------- |
