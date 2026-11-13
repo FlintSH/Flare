@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { setImmediate } from 'node:timers/promises'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { S3StorageProvider } from '@/lib/storage/providers/s3'
 
 const state = vi.hoisted(() => ({
@@ -95,6 +95,9 @@ describe('S3 thumbnail response bytes', () => {
     )
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('image/png')
+    // The event is written after the response. Wait for that write before
+    // reading, so the reader attaches as late as when the route awaited it.
+    await auditSettled()
     expect(Buffer.from(await response.arrayBuffer())).toEqual(png)
   })
 })

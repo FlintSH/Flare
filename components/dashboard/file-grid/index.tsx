@@ -24,12 +24,10 @@ import {
 } from 'lucide-react'
 import type { DateRange } from 'react-day-picker'
 
-import { ArchiveBrowserDialog } from '@/components/archives/archive-browser-dialog'
 import {
   type ArchiveFileRef,
   isArchiveCandidate,
 } from '@/components/archives/archive-utils'
-import { CreateArchiveDialog } from '@/components/archives/create-archive-dialog'
 import { FileCard } from '@/components/dashboard/file-card'
 import {
   BATCH_ACTIONS,
@@ -41,13 +39,17 @@ import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-ske
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
 import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { VirtualFiles } from '@/components/dashboard/file-grid/virtual-files'
-import { ImageLightbox } from '@/components/file/image-lightbox'
+import {
+  ArchiveBrowserDialog,
+  CreateArchiveDialog,
+  FileTagsDialog,
+  ImageLightbox,
+  MoveFilesDialog,
+  TagManager,
+} from '@/components/dashboard/library-dialogs'
 import { FolderBrowser } from '@/components/folders/folder-browser'
-import { MoveFilesDialog } from '@/components/folders/move-files-dialog'
 import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
-import { FileTagsDialog } from '@/components/tags/file-tags-dialog'
 import { TagFilter } from '@/components/tags/tag-filter'
-import { TagManager } from '@/components/tags/tag-manager'
 import { Button } from '@/components/ui/button'
 
 import { fileTypeLabel } from '@/lib/files/file-kind'
@@ -111,6 +113,13 @@ function FilterChip({
       <X className="h-3 w-3 shrink-0" aria-hidden="true" />
     </button>
   )
+}
+
+/** What each selection action opens. */
+const BATCH_DIALOGS: Record<BatchAction, { preload: () => void }> = {
+  editTags: FileTagsDialog,
+  move: MoveFilesDialog,
+  createArchive: CreateArchiveDialog,
 }
 
 function emptyFolderHint(user: PermissionSubject | null | undefined) {
@@ -221,6 +230,15 @@ function FileLibrary({ scope }: { scope: string }) {
     useFileLibraryPosition(filters, pathname, urlQuery, refreshFiles, scope)
   const library = useFileTimeline(filters, refreshKey, scope)
   const selection = useFreshFileSelection(selectedFiles, [scope, filters])
+  /**
+   * For a dialog whose code may arrive after the click: whether the library
+   * the click was made in is still on the page, which it isn't once the
+   * account changes.
+   */
+  const sameLibrary = () => {
+    const { signal } = lifetime.current
+    return () => !signal.aborted
+  }
   const openSelection = async (action: BatchAction) => {
     const { signal } = lifetime.current
     if (signal.aborted) return
@@ -228,9 +246,16 @@ function FileLibrary({ scope }: { scope: string }) {
       const fresh = await selection.refresh()
       if (!fresh || signal.aborted) return
       setSelectedFiles(fresh)
-      if (action === 'editTags') setTaggingFiles(fresh)
-      if (action === 'move') setMovingFiles(fresh)
-      if (action === 'createArchive') setCreatingArchive(fresh)
+      // The dialog's code may still be on its way. It opens only if these
+      // are still the selected files: choosing Done, other files or another
+      // filter in the meantime withdraws the request.
+      const stillSelected = () => !signal.aborted && selection.isCurrent()
+      if (action === 'editTags')
+        FileTagsDialog.show(() => setTaggingFiles(fresh), stillSelected)
+      if (action === 'move')
+        MoveFilesDialog.show(() => setMovingFiles(fresh), stillSelected)
+      if (action === 'createArchive')
+        CreateArchiveDialog.show(() => setCreatingArchive(fresh), stillSelected)
     } catch (error) {
       if (signal.aborted) return
       toast({
@@ -409,7 +434,9 @@ function FileLibrary({ scope }: { scope: string }) {
               <TagFilter
                 value={filters.tag || null}
                 onChange={setTag}
-                onManage={() => setManagingTags(true)}
+                onManage={() =>
+                  TagManager.show(() => setManagingTags(true), sameLibrary())
+                }
               />
             }
           />
@@ -543,6 +570,9 @@ function FileLibrary({ scope }: { scope: string }) {
                     !selectedIds.length || isLoading || selection.loading
                   }
                   onClick={() => void openSelection(action)}
+                  // Fetched while the pointer travels to the button.
+                  onPointerEnter={BATCH_DIALOGS[action].preload}
+                  onFocus={BATCH_DIALOGS[action].preload}
                 >
                   <Icon className="mr-2 h-4 w-4" />
                   {batch}
@@ -674,14 +704,30 @@ function FileLibrary({ scope }: { scope: string }) {
                   refreshFiles()
                 }}
                 onUpdate={refreshFiles}
-                onPreview={open}
+                onPreview={(image) =>
+                  ImageLightbox.show(() => open(image), sameLibrary())
+                }
                 onBrowseArchive={
                   isArchiveCandidate(file.name, file.mimeType)
-                    ? () => setBrowsingArchive(file)
+                    ? () =>
+                        ArchiveBrowserDialog.show(
+                          () => setBrowsingArchive(file),
+                          sameLibrary()
+                        )
                     : undefined
                 }
-                onEditTags={() => setTaggingFiles([file])}
-                onMove={() => setMovingFiles([file])}
+                onEditTags={() =>
+                  FileTagsDialog.show(
+                    () => setTaggingFiles([file]),
+                    sameLibrary()
+                  )
+                }
+                onMove={() =>
+                  MoveFilesDialog.show(
+                    () => setMovingFiles([file]),
+                    sameLibrary()
+                  )
+                }
                 folder={
                   // Inside a folder, every card would repeat the open folder.
                   file.folderId === filters.folder
@@ -728,7 +774,12 @@ function FileLibrary({ scope }: { scope: string }) {
             setCreatingArchive(null)
             clearSelection()
           }}
-          onOpenArchive={setBrowsingArchive}
+          onOpenArchive={(archive) =>
+            ArchiveBrowserDialog.show(
+              () => setBrowsingArchive(archive),
+              sameLibrary()
+            )
+          }
         />
       )}
       {taggingFiles && (

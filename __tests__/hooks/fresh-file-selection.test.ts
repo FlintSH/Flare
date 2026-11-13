@@ -204,4 +204,23 @@ describe('fresh retained file selections', () => {
     expect(await pending).toBeNull()
     expect(requests).toHaveLength(1)
   })
+  it('says whether the files it refreshed are still the selection, for work that finishes later', async () => {
+    const opened = render()
+    const pending = opened.refresh()
+    complete(0)
+    const fresh = (await pending)!
+    // The refreshed copies replace the selection: same files, same request.
+    expect(render({ ...initial, files: fresh }).isCurrent()).toBe(true)
+    expect(opened.isCurrent()).toBe(true)
+
+    // Done clears the selection.
+    render({ ...initial, files: [] })
+    expect(opened.isCurrent()).toBe(false)
+    // Selecting the same files again is a new request for whoever asks now.
+    const again = render()
+    expect(again.isCurrent()).toBe(true)
+    // Another filter or another account's library withdraws it too.
+    render({ ...initial, scope: { ...(initial.scope as object), tag: null } })
+    expect(again.isCurrent()).toBe(false)
+  })
 })

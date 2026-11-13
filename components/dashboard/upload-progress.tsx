@@ -10,7 +10,7 @@ import {
   ToastTitle,
 } from '@/components/ui/toast'
 
-import { uploadActivity } from '@/lib/uploads/queue'
+import { uploadActivity } from '@/lib/uploads/activity'
 import { formatTransfer } from '@/lib/uploads/speed'
 
 /**

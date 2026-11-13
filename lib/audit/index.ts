@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 
+import { withRequestScope } from '@/lib/runtime/request-scope'
+
 import { auditContext } from './context'
 import { auditedModels } from './models'
 import { auditText, sanitizeAuditDetails } from './sanitize'
@@ -9,15 +11,26 @@ import type { AuditInput } from './types'
 export { setAuditActor, setAuditTarget, setAuditOutcome } from './context'
 export type { AuditInput, AuditOutcome } from './types'
 
+/** An event, and when it happened if it is written later than that. */
+type QueuedEvent = AuditInput & { createdAt?: Date }
 type AuditWriter = (data: Prisma.AuditEventCreateManyInput) => Promise<unknown>
 type AuditBatchWriter = (
   data: Prisma.AuditEventCreateManyInput[]
 ) => Promise<unknown>
 const AUDIT_BATCH_SIZE = 500
+/**
+ * Events that may wait to be written. With this many waiting, the database is
+ * not keeping up, and a request records its own event before it answers, as
+ * every request once did, which slows requests down to what it can take.
+ */
+const AUDIT_QUEUE_LIMIT = 2_000
 const globalAudit = globalThis as typeof globalThis & {
   flareAuditWriter?: AuditWriter
   flareAuditBatchWriter?: AuditBatchWriter
+  flareAuditDeferred?: { events: QueuedEvent[]; draining?: Promise<void> }
 }
+// Route bundles each load their own copy of this module; they share one queue.
+const deferred = (globalAudit.flareAuditDeferred ??= { events: [] })
 
 /** The base Prisma client is injected to avoid recursive audit interception. */
 export function configureAuditWriter(
@@ -114,28 +127,72 @@ export async function recordAuditMany(
     for (const event of events) context.pending.push(event)
     return
   }
+  for (let offset = 0; offset < events.length; offset += AUDIT_BATCH_SIZE)
+    await writeEvents(
+      events.slice(offset, offset + AUDIT_BATCH_SIZE),
+      events.length > 1
+    )
+}
+
+/**
+ * One bounded write. A failure, whether in building a row or in storing it,
+ * is reported and never thrown.
+ */
+async function writeEvents(events: readonly QueuedEvent[], together: boolean) {
   const write = globalAudit.flareAuditWriter
   const writeMany = globalAudit.flareAuditBatchWriter
   if (!write) {
     reportAuditFailure(new Error('Audit writer unavailable'))
     return
   }
-  for (let offset = 0; offset < events.length; offset += AUDIT_BATCH_SIZE) {
-    try {
-      const data = events.slice(offset, offset + AUDIT_BATCH_SIZE).map(auditRow)
-      if (writeMany && events.length > 1) await writeMany(data)
-      else
-        for (const event of data) {
-          try {
-            await write(event)
-          } catch (error) {
-            reportAuditFailure(error)
-          }
+  try {
+    const rows = events.map(({ createdAt, ...event }) => ({
+      ...auditRow(event),
+      ...(createdAt && { createdAt }),
+    }))
+    if (writeMany && together) await writeMany(rows)
+    else
+      for (const row of rows) {
+        try {
+          await write(row)
+        } catch (error) {
+          reportAuditFailure(error)
         }
-    } catch (error) {
-      reportAuditFailure(error)
-    }
+      }
+  } catch (error) {
+    reportAuditFailure(error)
   }
+}
+
+async function drainDeferred() {
+  try {
+    // Start after the current turn, so the response that queued the first
+    // event is on its way and events queued beside it share the write.
+    await new Promise((resolve) => setImmediate(resolve))
+    while (deferred.events.length) {
+      const events = deferred.events.splice(0, AUDIT_BATCH_SIZE)
+      await writeEvents(events, events.length > 1)
+    }
+  } finally {
+    // Whatever happened, the next event starts a new drain.
+    deferred.draining = undefined
+  }
+}
+
+/**
+ * Records an event without waiting for the write. Events queued while a write
+ * is in progress go out together in the next one, so a burst of requests
+ * costs a few inserts rather than one each. The event keeps the request,
+ * actor and time it was queued under; the write runs outside that request.
+ */
+function recordAuditLater(input: AuditInput) {
+  deferred.events.push({ ...inRequest(input), createdAt: new Date() })
+  deferred.draining ??= auditContext.exit(drainDeferred)
+}
+
+/** Resolves once every event `recordAuditLater` queued has been written. */
+export async function auditSettled(): Promise<void> {
+  while (deferred.draining) await deferred.draining
 }
 
 /**
@@ -226,38 +283,49 @@ export async function auditRequest(
   const category = options.category ?? 'requests'
   return auditContext.run(
     { requestId: randomUUID(), method, route: options.route },
-    async () => {
-      try {
-        const response = await handle()
-        const outcome =
-          auditContext.getStore()?.outcome ??
-          (response.status === 401 || response.status === 403
-            ? 'denied'
-            : response.status >= 400
-              ? 'failure'
-              : 'success')
-        if (options.skipSuccess && outcome === 'success') return response
-        await recordAudit({
-          action,
-          category,
-          outcome,
-          status: response.status,
-          details: { durationMs: Date.now() - started },
-        })
-        return response
-      } catch (error) {
-        await recordAudit({
-          action,
-          category,
-          outcome: 'failure',
-          status: 500,
-          details: {
-            durationMs: Date.now() - started,
-            reason: 'Unhandled request error',
-          },
-        })
-        throw error
-      }
-    }
+    () =>
+      withRequestScope(async () => {
+        try {
+          const response = await handle()
+          const outcome =
+            auditContext.getStore()?.outcome ??
+            (response.status === 401 || response.status === 403
+              ? 'denied'
+              : response.status >= 400
+                ? 'failure'
+                : 'success')
+          if (options.skipSuccess && outcome === 'success') return response
+          const event = {
+            action,
+            category,
+            outcome,
+            status: response.status,
+            details: { durationMs: Date.now() - started },
+          }
+          // A read that succeeded answers without waiting for its own log
+          // entry, unless too many already wait. Changes, refusals and
+          // failures are recorded first.
+          if (
+            outcome === 'success' &&
+            (method === 'GET' || method === 'HEAD') &&
+            deferred.events.length < AUDIT_QUEUE_LIMIT
+          )
+            recordAuditLater(event)
+          else await recordAudit(event)
+          return response
+        } catch (error) {
+          await recordAudit({
+            action,
+            category,
+            outcome: 'failure',
+            status: 500,
+            details: {
+              durationMs: Date.now() - started,
+              reason: 'Unhandled request error',
+            },
+          })
+          throw error
+        }
+      })
   )
 }

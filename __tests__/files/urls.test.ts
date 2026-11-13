@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
-  canOptimizeThumbnail,
   fileUrls,
   sharedFolderFileUrl,
   sharedFolderUrl,
+  thumbnailLoader,
   withPassword,
 } from '@/lib/files/urls'
 
@@ -161,36 +161,19 @@ describe('shared folder URLs', () => {
   })
 })
 
-describe('thumbnail optimization', () => {
-  const image = { visibility: 'PUBLIC', hasPassword: false }
-
-  it('lets the optimizer fetch only what anyone may read', () => {
-    expect(canOptimizeThumbnail({ ...image, mimeType: 'image/png' })).toBe(true)
+describe('thumbnail widths', () => {
+  it('asks the thumbnail route for the width the browser picked', () => {
     expect(
-      canOptimizeThumbnail({
-        ...image,
-        visibility: 'PRIVATE',
-        mimeType: 'image/png',
-      })
-    ).toBe(false)
-    expect(
-      canOptimizeThumbnail({
-        ...image,
-        hasPassword: true,
-        mimeType: 'image/png',
-      })
-    ).toBe(false)
+      thumbnailLoader({ src: '/api/files/cmfile01/thumbnail', width: 384 })
+    ).toBe('/api/files/cmfile01/thumbnail?w=384')
   })
 
-  it('loads SVG previews directly instead of sending them to the raster optimizer', () => {
-    expect(canOptimizeThumbnail({ ...image, mimeType: 'image/svg+xml' })).toBe(
-      false
-    )
-  })
-
-  it('keeps GIFs animated', () => {
-    expect(canOptimizeThumbnail({ ...image, mimeType: 'image/gif' })).toBe(
-      false
-    )
+  it('keeps a file password in the address', () => {
+    expect(
+      thumbnailLoader({
+        src: '/api/files/cmfile01/thumbnail?password=open+sesame',
+        width: 640,
+      })
+    ).toBe('/api/files/cmfile01/thumbnail?password=open+sesame&w=640')
   })
 })

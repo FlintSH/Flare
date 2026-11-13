@@ -1,0 +1,526 @@
+{
+  "kind": "browser",
+  "measuredAt": "2026-11-13T01:32:26.217Z",
+  "host": {
+    "cpus": 4,
+    "memoryGiB": 31,
+    "loadAverageAtStart": [2.66, 4.11, 4.08],
+    "node": "v24.21.0"
+  },
+  "runs": 5,
+  "viewport": "1440x900",
+  "results": [
+    {
+      "id": "library-open",
+      "label": "Open a 100,000-file library",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 8051,
+        "min": 8000,
+        "max": 10058,
+        "runs": 5,
+        "errors": 0,
+        "shown": 8,
+        "bytes": {
+          "total": 8002180,
+          "requests": 64,
+          "html": 14352,
+          "css": 18961,
+          "script": 435651,
+          "image": 1679,
+          "font": 973086,
+          "data": 87278,
+          "thumbnail": 6471173
+        }
+      },
+      "after": {
+        "median": 2503,
+        "min": 2332,
+        "max": 2517,
+        "runs": 5,
+        "errors": 0,
+        "shown": 8,
+        "bytes": {
+          "total": 783885,
+          "requests": 61,
+          "html": 14175,
+          "css": 20146,
+          "script": 380336,
+          "image": 1679,
+          "font": 106398,
+          "data": 84815,
+          "thumbnail": 176336
+        }
+      }
+    },
+    {
+      "id": "library-scroll",
+      "label": "Scroll ten screens into the library",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 15777,
+        "min": 14848,
+        "max": 18114,
+        "runs": 5,
+        "errors": 0,
+        "shown": 120,
+        "bytes": {
+          "total": 24808296,
+          "requests": 155,
+          "html": 14352,
+          "css": 18961,
+          "script": 435651,
+          "image": 1679,
+          "font": 973086,
+          "data": 147862,
+          "thumbnail": 23216705
+        }
+      },
+      "after": {
+        "median": 3068,
+        "min": 2932,
+        "max": 3250,
+        "runs": 5,
+        "errors": 0,
+        "shown": 114,
+        "bytes": {
+          "total": 1632167,
+          "requests": 154,
+          "html": 14175,
+          "css": 20146,
+          "script": 380336,
+          "image": 1679,
+          "font": 106398,
+          "data": 149109,
+          "thumbnail": 960324
+        }
+      }
+    },
+    {
+      "id": "share-image",
+      "label": "Open a shared screenshot",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 2771,
+        "min": 2738,
+        "max": 2791,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 2101244,
+          "requests": 30,
+          "html": 11536,
+          "script": 727890,
+          "css": 17825,
+          "image": 369186,
+          "font": 973086,
+          "data": 1721
+        }
+      },
+      "after": {
+        "median": 1244,
+        "min": 1219,
+        "max": 1633,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 773920,
+          "requests": 28,
+          "html": 11370,
+          "script": 264796,
+          "css": 19010,
+          "image": 369186,
+          "font": 106398,
+          "data": 3160
+        }
+      }
+    },
+    {
+      "id": "share-photo",
+      "label": "Open a shared photo",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 4782,
+        "min": 4774,
+        "max": 4804,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 4431725,
+          "requests": 31,
+          "html": 11534,
+          "script": 727890,
+          "css": 17825,
+          "image": 2698211,
+          "font": 973086,
+          "data": 3179
+        }
+      },
+      "after": {
+        "median": 3411,
+        "min": 3401,
+        "max": 3434,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 3102941,
+          "requests": 28,
+          "html": 11369,
+          "script": 264796,
+          "css": 19010,
+          "image": 2698211,
+          "font": 106398,
+          "data": 3157
+        }
+      }
+    },
+    {
+      "id": "share-text",
+      "label": "Open a shared text file",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 2164,
+        "min": 2152,
+        "max": 2339,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 1772397,
+          "requests": 30,
+          "html": 11524,
+          "script": 727890,
+          "css": 17825,
+          "image": 1679,
+          "font": 973086,
+          "data": 40393
+        }
+      },
+      "after": {
+        "median": 1481,
+        "min": 1472,
+        "max": 1492,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 576124,
+          "requests": 31,
+          "html": 11296,
+          "script": 396571,
+          "css": 19010,
+          "image": 1679,
+          "font": 106398,
+          "data": 41170
+        }
+      }
+    },
+    {
+      "id": "sign-in",
+      "label": "Open the sign-in page",
+      "network": "fast4g",
+      "unit": "ms",
+      "before": {
+        "median": 566,
+        "min": 562,
+        "max": 572,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 1263053,
+          "requests": 24,
+          "html": 9188,
+          "script": 259552,
+          "css": 17825,
+          "image": 1679,
+          "font": 973086,
+          "data": 1723
+        }
+      },
+      "after": {
+        "median": 566,
+        "min": 559,
+        "max": 579,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 374844,
+          "requests": 25,
+          "html": 9006,
+          "script": 234747,
+          "css": 19010,
+          "image": 1679,
+          "font": 106398,
+          "data": 4004
+        }
+      }
+    },
+    {
+      "id": "library-open",
+      "label": "Open a 100,000-file library",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 860,
+        "min": 824,
+        "max": 1014,
+        "runs": 5,
+        "errors": 0,
+        "shown": 8,
+        "bytes": {
+          "total": 8000418,
+          "requests": 62,
+          "html": 14352,
+          "css": 18961,
+          "script": 435651,
+          "image": 1679,
+          "font": 973086,
+          "data": 85516,
+          "thumbnail": 6471173
+        }
+      },
+      "after": {
+        "median": 707,
+        "min": 694,
+        "max": 794,
+        "runs": 5,
+        "errors": 0,
+        "shown": 8,
+        "bytes": {
+          "total": 781730,
+          "requests": 60,
+          "html": 14175,
+          "css": 20146,
+          "font": 106398,
+          "script": 380336,
+          "image": 1679,
+          "data": 82660,
+          "thumbnail": 176336
+        }
+      }
+    },
+    {
+      "id": "library-scroll",
+      "label": "Scroll ten screens into the library",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 2322,
+        "min": 2040,
+        "max": 2746,
+        "runs": 5,
+        "errors": 0,
+        "shown": 115,
+        "bytes": {
+          "total": 24805003,
+          "requests": 152,
+          "html": 14352,
+          "css": 18961,
+          "script": 435651,
+          "image": 1679,
+          "font": 973086,
+          "data": 144569,
+          "thumbnail": 23216705
+        }
+      },
+      "after": {
+        "median": 2109,
+        "min": 1718,
+        "max": 2303,
+        "runs": 5,
+        "errors": 0,
+        "shown": 120,
+        "bytes": {
+          "total": 1630893,
+          "requests": 154,
+          "html": 14175,
+          "font": 106398,
+          "css": 20146,
+          "image": 1679,
+          "script": 380336,
+          "data": 147835,
+          "thumbnail": 960324
+        }
+      }
+    },
+    {
+      "id": "share-image",
+      "label": "Open a shared screenshot",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 719,
+        "min": 660,
+        "max": 740,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 2101244,
+          "requests": 30,
+          "html": 11536,
+          "css": 17825,
+          "script": 727890,
+          "image": 369186,
+          "font": 973086,
+          "data": 1721
+        }
+      },
+      "after": {
+        "median": 289,
+        "min": 267,
+        "max": 327,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 772479,
+          "requests": 27,
+          "html": 11370,
+          "font": 106398,
+          "script": 264796,
+          "css": 19010,
+          "image": 369186,
+          "data": 1719
+        }
+      }
+    },
+    {
+      "id": "share-photo",
+      "label": "Open a shared photo",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 761,
+        "min": 744,
+        "max": 792,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 4430925,
+          "requests": 30,
+          "html": 11533,
+          "css": 17825,
+          "image": 2698211,
+          "script": 727890,
+          "font": 973086,
+          "data": 2380
+        }
+      },
+      "after": {
+        "median": 397,
+        "min": 361,
+        "max": 426,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 3100702,
+          "requests": 26,
+          "html": 11367,
+          "font": 106398,
+          "script": 264796,
+          "css": 19010,
+          "image": 2698211,
+          "data": 920
+        }
+      }
+    },
+    {
+      "id": "share-text",
+      "label": "Open a shared text file",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 407,
+        "min": 382,
+        "max": 451,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 1771738,
+          "requests": 30,
+          "html": 11524,
+          "css": 17825,
+          "script": 727890,
+          "image": 1679,
+          "font": 973086,
+          "data": 39734
+        }
+      },
+      "after": {
+        "median": 347,
+        "min": 306,
+        "max": 356,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 574686,
+          "requests": 30,
+          "html": 11296,
+          "font": 106398,
+          "script": 396571,
+          "css": 19010,
+          "image": 1679,
+          "data": 39732
+        }
+      }
+    },
+    {
+      "id": "sign-in",
+      "label": "Open the sign-in page",
+      "network": "local",
+      "unit": "ms",
+      "before": {
+        "median": 154,
+        "min": 152,
+        "max": 195,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 1263053,
+          "requests": 24,
+          "html": 9188,
+          "css": 17825,
+          "image": 1679,
+          "script": 259552,
+          "font": 973086,
+          "data": 1723
+        }
+      },
+      "after": {
+        "median": 105,
+        "min": 87,
+        "max": 135,
+        "runs": 5,
+        "errors": 0,
+        "shown": 1,
+        "bytes": {
+          "total": 374846,
+          "requests": 25,
+          "html": 9006,
+          "font": 106398,
+          "css": 19010,
+          "script": 234747,
+          "image": 1679,
+          "data": 4006
+        }
+      }
+    }
+  ]
+}

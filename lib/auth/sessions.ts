@@ -66,31 +66,50 @@ export async function createBrowserSession(
   return result.session
 }
 
-export async function validateBrowserSession(
+/** The record of a browser session that is still signed in, or null. */
+export async function findBrowserSession(
   userId: string,
   id: string | undefined,
   sessionVersion: number
+) {
+  if (!id) return null
+  return prisma.browserSession.findFirst({
+    where: {
+      id,
+      userId,
+      sessionVersion,
+      revokedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+  })
+}
+
+/**
+ * Refuses a session that is no longer signed in and notes a live one's
+ * activity, at most once a minute. Pass `found` when `findBrowserSession`
+ * already read the session, as a caller that reads it beside the account does.
+ */
+export async function validateBrowserSession(
+  userId: string,
+  id: string | undefined,
+  sessionVersion: number,
+  found?: Awaited<ReturnType<typeof findBrowserSession>>
 ) {
   if (!id)
     throw new SecurityError(
       'Session invalidated: Sign in again after upgrading.',
       401
     )
-  const now = new Date()
-  const session = await prisma.browserSession.findFirst({
-    where: {
-      id,
-      userId,
-      sessionVersion,
-      revokedAt: null,
-      expiresAt: { gt: now },
-    },
-  })
+  const session =
+    found === undefined
+      ? await findBrowserSession(userId, id, sessionVersion)
+      : found
   if (!session)
     throw new SecurityError(
       'Session invalidated: Session revoked or expired',
       401
     )
+  const now = new Date()
   if (now.getTime() - session.lastSeenAt.getTime() >= 60_000) {
     // Updating activity must never resurrect a concurrently revoked record.
     await prisma.browserSession.updateMany({

@@ -39,12 +39,28 @@ export function folderView(
 }
 
 export async function listFolders(userId: string) {
-  const folders = await prisma.vaultFolder.findMany({
-    where: { userId },
-    orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
-    select: folderViewSelect,
-  })
-  return folders.map(folderView)
+  // The counts come from a second query limited to this account's files.
+  // Selecting `_count` with the list made PostgreSQL group the files of every
+  // account on the instance before joining this account's folders.
+  const { _count: _, ...fields } = folderViewSelect
+  const [folders, counts] = await Promise.all([
+    prisma.vaultFolder.findMany({
+      where: { userId },
+      orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
+      select: fields,
+    }),
+    prisma.file.groupBy({
+      by: ['folderId'],
+      where: { userId, folderId: { not: null } },
+      _count: { _all: true },
+    }),
+  ])
+  const files = new Map(
+    counts.map((count) => [count.folderId, count._count._all])
+  )
+  return folders.map((folder) =>
+    folderView({ ...folder, _count: { files: files.get(folder.id) ?? 0 } })
+  )
 }
 
 /** The caller must hold the owner's row lock when using this before a write. */

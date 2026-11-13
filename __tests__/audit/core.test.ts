@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   auditRequest,
+  auditSettled,
   configureAuditWriter,
   recordAudit,
   recordAuditMany,
@@ -168,6 +169,8 @@ describe('safe durable audit events', () => {
     await withAuditRoute(async () => new Response(null), { skipSuccess: true })(
       new Request('http://localhost/api/audit')
     )
+    // Nothing was queued for later either.
+    await auditSettled()
     expect(events).toHaveLength(0)
     await withAuditRoute(async () => new Response(null, { status: 403 }), {
       skipSuccess: true,
@@ -322,6 +325,8 @@ describe('safe durable audit events', () => {
       new Request('http://localhost/api/files')
     )
     expect(await response.text()).toBe('done')
+    // A read that succeeded is recorded after its response.
+    await auditSettled()
     expect(error).toHaveBeenCalledOnce()
     expect(error.mock.calls.flat().join(' ')).not.toContain(
       'secret database URL'

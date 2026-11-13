@@ -293,6 +293,22 @@ export type Delivery = {
 }
 
 /**
+ * `Cache-Control` for bytes of `file`: `publicCache` for a public file without
+ * a password, and `private, no-store` for every other file, because shared
+ * caches key on the URL alone.
+ */
+export function cacheHeaders(
+  file: Pick<DeliveredFile, 'visibility' | 'password'>,
+  publicCache?: string
+): Record<string, string> {
+  const cache =
+    file.visibility === 'PRIVATE' || file.password
+      ? 'private, no-store'
+      : publicCache
+  return cache ? { 'Cache-Control': cache } : {}
+}
+
+/**
  * Send the stored bytes of a file the requester may read, honoring one
  * `Range` header. A stored object that is gone answers 404; other storage
  * failures are thrown.
@@ -302,13 +318,7 @@ export async function serveFile(
   file: DeliveredFile,
   delivery: Delivery
 ): Promise<Response> {
-  const cache =
-    file.visibility === 'PRIVATE' || file.password
-      ? 'private, no-store'
-      : delivery.publicCache
-  const cacheControl: Record<string, string> = cache
-    ? { 'Cache-Control': cache }
-    : {}
+  const cacheControl = cacheHeaders(file, delivery.publicCache)
   if (delivery.count === 'downloads') await count(file.id, 'downloads')
   const storage = await getStorageProvider()
   const guard: Record<string, string> = {

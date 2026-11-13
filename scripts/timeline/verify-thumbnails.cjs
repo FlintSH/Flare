@@ -73,34 +73,41 @@ async function checkPreviews(page, scope, moderation = false) {
       .toBe(true)
     const source = await image.evaluate((img) => img.currentSrc)
     const url = new URL(source)
-    const thumbnailPath = `/api/files/${file.id}/thumbnail`
-    if (
-      moderation ||
-      file.visibility === 'PRIVATE' ||
-      file.password ||
-      file.mimeType === 'image/gif'
-    ) {
-      assert.equal(url.pathname, thumbnailPath)
+    // Flare resizes every preview itself, whatever the file's access, so
+    // each one names the thumbnail route and the width the browser picked.
+    assert.equal(url.pathname, `/api/files/${file.id}/thumbnail`)
+    assert.match(url.searchParams.get('w') ?? '', /^[1-9]\d*$/)
+    const response = await page.context().request.get(source)
+    assert.equal(response.status(), 200)
+    if (file.mimeType === 'image/gif') {
+      // An animation keeps its frames: the original bytes.
+      assert.equal(response.headers()['content-type'], 'image/gif')
+      assert.deepEqual(await response.body(), file.buffer)
     } else {
-      assert.equal(url.pathname, '/_next/image')
-      assert.equal(url.searchParams.get('url'), thumbnailPath)
+      assert.equal(response.headers()['content-type'], 'image/webp')
+      assert.ok(
+        (await response.body()).length < file.buffer.length,
+        `${file.name} should be sent as a smaller copy`
+      )
     }
-  }
-  if (moderation)
     assert.equal(
-      await page.evaluate(
-        () =>
-          performance.getEntriesByType('resource').filter((entry) => {
-            const url = new URL(entry.name)
-            return (
-              url.pathname === '/_next/image' &&
-              url.searchParams.get('url')?.includes('/thumbnail')
-            )
-          }).length
-      ),
-      0,
-      'Moderation thumbnails must not pass through the headerless image optimizer'
+      response.headers()['cache-control'],
+      file.visibility === 'PRIVATE' || file.password
+        ? 'private, no-store'
+        : 'public, max-age=31536000, immutable'
     )
+  }
+  assert.equal(
+    await page.evaluate(
+      () =>
+        performance
+          .getEntriesByType('resource')
+          .filter((entry) => new URL(entry.name).pathname === '/_next/image')
+          .length
+    ),
+    0,
+    `${moderation ? 'Moderation' : 'Library'} thumbnails must not pass through the sessionless image optimizer`
+  )
 }
 
 async function capture(page, name) {
@@ -203,6 +210,11 @@ async function main() {
       )
       if (file.visibility === 'PRIVATE' || file.password)
         assert.equal(response.headers()['cache-control'], 'private, no-store')
+      // A width changes the bytes sent, never who may have them.
+      const resized = await anonymous.request.get(`${route}?w=384`)
+      assert.equal(resized.status(), response.status())
+      if (file.visibility === 'PRIVATE' || file.password)
+        assert.equal(resized.headers()['cache-control'], 'private, no-store')
     }
     await anonymous.close()
     console.log(

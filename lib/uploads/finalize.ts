@@ -104,6 +104,9 @@ export async function prepareUpload(
   return { ...input, passwordHash, [validatedUpload]: true }
 }
 
+/** How long publishing an upload may wait for a database connection. */
+const PUBLISH_WAIT_MS = 10_000
+
 export async function publishPreparedUpload(input: PreparedUpload) {
   if (!input[validatedUpload]) throw new UploadError('Upload is not validated.')
   const { user, storage, filePath, displayName, mimeType, size, options } =
@@ -217,9 +220,12 @@ export async function publishPreparedUpload(input: PreparedUpload) {
     await enqueueFileReady(tx, file)
     return { file, created: true }
   }
+  // The file is already stored, so a busy moment is worth waiting out: with
+  // the default two seconds, uploads that arrived together and found every
+  // connection taken were answered 500 and their bytes thrown away.
   const result = input.transaction
     ? await persist(input.transaction)
-    : await prisma.$transaction(persist)
+    : await prisma.$transaction(persist, { maxWait: PUBLISH_WAIT_MS })
   setAuditTarget({ type: 'file', id: result.file.id, name: result.file.name })
   if (result.created && !input.transaction) enqueueUploadProcessing(result.file)
   return result.file

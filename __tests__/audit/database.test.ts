@@ -13,6 +13,7 @@ import {
   vi,
 } from 'vitest'
 
+import { auditSettled } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
 import { withPrismaAudit } from '@/lib/audit/prisma'
 import { pruneAuditEvents } from '@/lib/audit/retention'
@@ -812,6 +813,8 @@ suite.sequential('audit against disposable PostgreSQL', () => {
     })
     const eventsFor = async (response: Response) => {
       await response.arrayBuffer()
+      // A read that succeeded is recorded after its response.
+      await auditSettled()
       const events = await base.auditEvent.findMany({
         select: {
           action: true,

@@ -1,5 +1,5 @@
 import FilePage from '@/app/(main)/[userUrlId]/[filename]/page'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { renderToReadableStream } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configureAuditWriter } from '@/lib/audit'
@@ -87,9 +87,13 @@ vi.mock('@/components/layout/dynamic-background', () => ({
   DynamicBackground: () => null,
 }))
 
+/**
+ * The page as the server sends it. Each viewer's code is loaded on demand, so
+ * the render waits for it, as a streamed response does.
+ */
 async function render(file: typeof image) {
   mocks.file = file
-  return renderToStaticMarkup(
+  const stream = await renderToReadableStream(
     await FilePage({
       params: Promise.resolve({
         userUrlId: 'owner',
@@ -98,6 +102,8 @@ async function render(file: typeof image) {
       searchParams: Promise.resolve({}),
     })
   )
+  await stream.allReady
+  return new Response(stream).text()
 }
 
 /** The page's one heading, which holds text alone. */
@@ -137,7 +143,12 @@ describe('share page layout', () => {
     expect(heading(html)).toBe('PNG image')
     expect(html).toContain('1.50 MB')
     expect(html).not.toContain('Lisbon')
-    expect(html).not.toContain('lisbon')
+    expect(html).toContain('alt="Shared file"')
+    // The stored name is part of the file's address, as it is of the page's
+    // own. The picture loads from that address and the name is shown nowhere.
+    const address = '/api/files/owner/lisbon-rooftops.png'
+    expect(html).toContain(`src="${address}"`)
+    expect(html.replaceAll(address, '')).not.toContain('lisbon')
   })
 
   it('leaves out the details an instance hides', async () => {

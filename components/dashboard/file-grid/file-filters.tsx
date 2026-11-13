@@ -12,10 +12,10 @@ import {
   Lock,
   SlidersHorizontal,
 } from 'lucide-react'
-import { DateRange } from 'react-day-picker'
+import type { DateRange } from 'react-day-picker'
 
+import { Calendar } from '@/components/dashboard/library-dialogs'
 import { Button } from '@/components/ui/button'
-import { Calendar } from '@/components/ui/calendar'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -100,6 +100,7 @@ export const FileFilters = memo(function FileFilters({
   // The chosen days are named in the reader's time zone, which the server lacks.
   const hydrated = useHydrated()
   const [expanded, setExpanded] = useState(false)
+  const [dateOpen, setDateOpen] = useState(false)
   const controlsId = useId()
   const [typeSearch, setTypeSearch] = useState('')
   const typeQuery = typeSearch.trim().toLowerCase()
@@ -316,11 +317,21 @@ export const FileFilters = memo(function FileFilters({
             </div>
           </PopoverContent>
         </Popover>
-        <Popover>
+        {/* The calendar is fetched on first use, and the popover opens once
+            it is here, so it never opens short and then grows. */}
+        <Popover
+          open={dateOpen}
+          onOpenChange={(open) => {
+            if (open) Calendar.show(() => setDateOpen(true))
+            else setDateOpen(false)
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               variant="outline"
               aria-label="Upload date"
+              onPointerEnter={Calendar.preload}
+              onFocus={Calendar.preload}
               className={cn(
                 filterClass,
                 (date?.from || groupBy !== 'none') &&

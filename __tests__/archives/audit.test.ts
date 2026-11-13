@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ArchiveError } from '@/lib/archives/errors'
 import { archiveRoutes } from '@/lib/archives/http'
-import { configureAuditWriter, setAuditTarget } from '@/lib/audit'
+import { auditSettled, configureAuditWriter, setAuditTarget } from '@/lib/audit'
 import { auditContext } from '@/lib/audit/context'
 import { routes } from '@/lib/http/route'
 
@@ -29,7 +29,8 @@ vi.mock('@/lib/database/prisma', () => ({
     file: { findUnique: async () => state.file },
   },
 }))
-vi.mock('@/lib/permissions/server', () => ({
+vi.mock('@/lib/permissions/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/permissions/server')>()),
   getUserAccess: async () => ({ roles: [], permissions: ['files.read'] }),
   PermissionError: class extends Error {
     status = 403
@@ -153,6 +154,8 @@ describe('archive route audit integration', () => {
       params
     )
     expect(response.status).toBe(200)
+    // A read that succeeded is recorded after its response.
+    await auditSettled()
     expect(events[0]).toMatchObject({
       action: 'archive.browse',
       actorId: 'owner',

@@ -1,6 +1,7 @@
 import { type ReactElement, type ReactNode, createElement } from 'react'
 
 import RootLayout from '@/app/layout'
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -14,8 +15,12 @@ const { advanced, passThrough, nothing } = vi.hoisted(() => ({
   nothing: () => null,
 }))
 
+// Each family's class is named after the CSS variable it defines.
 vi.mock('next/font/local', () => ({
-  default: () => ({ variable: 'inter-variable', className: 'inter' }),
+  default: ({ variable }: { variable: string }) => ({
+    variable: `defines${variable}`,
+    className: 'inter',
+  }),
 }))
 vi.mock('@/lib/config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/config')>()
@@ -211,14 +216,22 @@ describe('custom code on the page', () => {
       expect(body.type).toBe('body')
       return { html: page.props.className, body: body.props.className }
     }
+    // Inter is two families, one for each of its font files.
+    const inter = 'defines--font-inter-latin defines--font-inter-other'
     expect(await render()).toEqual({
-      html: 'inter-variable',
+      html: inter,
       body: 'font-sans min-h-screen flex flex-col',
     })
     advanced.customCSS = 'code { font-family: monospace }'
     expect(await render()).toEqual({
-      html: 'inter-variable',
+      html: inter,
       body: 'min-h-screen flex flex-col',
     })
+    // --font-inter, which the studio's Typeface reads, is made of both on the
+    // element that carries their classes.
+    const stylesheet = readFileSync('app/globals.css', 'utf8')
+    expect(stylesheet).toMatch(
+      /html \{[^}]*--font-inter: var\(--font-inter-other\), var\(--font-inter-latin\);/
+    )
   })
 })

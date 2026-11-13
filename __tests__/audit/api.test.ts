@@ -1,7 +1,7 @@
 import { GET } from '@/app/api/audit/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 
 const mocks = vi.hoisted(() => ({
   permissions: ['audit.read'] as string[],
@@ -95,6 +95,8 @@ describe('session-only audit endpoint', () => {
       })
     )
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    // Successful reads of the log are not logged, now or after the response.
+    await auditSettled()
     expect(mocks.auditWrite).not.toHaveBeenCalled()
     expect(await response.json()).toMatchObject({
       total: 85,

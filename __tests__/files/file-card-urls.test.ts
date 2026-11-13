@@ -39,8 +39,8 @@ describe('library file card addresses', () => {
     const html = render()
     expect(html).toContain('href="/Ab3dE/photo.png"')
     expect(html).toContain('href="/api/files/cmfilecard0001/download"')
-    expect(thumbnail(html)).toContain(
-      encodeURIComponent('/api/files/cmfilecard0001/thumbnail')
+    expect(thumbnail(html)).toMatch(
+      /^\/api\/files\/cmfilecard0001\/thumbnail\?w=\d+$/
     )
   })
 
@@ -52,16 +52,18 @@ describe('library file card addresses', () => {
     expect(html).not.toContain('href="/Ab3dE/notes.h"')
   })
 
-  it('lets the image optimizer resize only thumbnails anyone may read', () => {
-    const optimized = thumbnail(render())
-    expect(optimized).toMatch(/^\/_next\/image\?url=/)
+  // Next's optimizer fetches without the viewer's session, so it could only
+  // resize what anyone may read. Flare's own thumbnail route resizes for
+  // whoever may see the file.
+  it("asks Flare for a resized thumbnail whatever the file's access", () => {
     for (const overrides of [
+      {},
       { visibility: 'PRIVATE' as const },
       { hasPassword: true },
       { mimeType: 'image/gif' },
     ])
-      expect(thumbnail(render(overrides)), JSON.stringify(overrides)).toBe(
-        '/api/files/cmfilecard0001/thumbnail'
+      expect(thumbnail(render(overrides)), JSON.stringify(overrides)).toMatch(
+        /^\/api\/files\/cmfilecard0001\/thumbnail\?w=\d+$/
       )
   })
 })

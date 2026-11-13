@@ -1,6 +1,6 @@
 import FilePage from '@/app/(main)/[userUrlId]/[filename]/page'
 import { hashSync } from 'bcryptjs'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { renderToReadableStream } from 'react-dom/server'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { configureAuditWriter } from '@/lib/audit'
@@ -71,8 +71,12 @@ vi.mock('@/components/layout/dynamic-background', () => ({
   DynamicBackground: () => null,
 }))
 
+/**
+ * The page as the server sends it. Each viewer's code is loaded on demand, so
+ * the render waits for it, as a streamed response does.
+ */
 async function render(guess?: string) {
-  return renderToStaticMarkup(
+  const stream = await renderToReadableStream(
     await FilePage({
       params: Promise.resolve({ userUrlId: 'owner', filename: 'photo.png' }),
       searchParams: Promise.resolve(
@@ -80,6 +84,8 @@ async function render(guess?: string) {
       ),
     })
   )
+  await stream.allReady
+  return new Response(stream).text()
 }
 
 const viewer = (html: string) => html.includes('Loading image…')

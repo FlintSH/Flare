@@ -31,7 +31,8 @@ vi.mock('@/lib/http/access', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/http/access')>()),
   requireSession: mocks.requirePermission,
 }))
-vi.mock('@/lib/permissions/server', () => ({
+vi.mock('@/lib/permissions/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/permissions/server')>()),
   requireActorPermission: vi.fn(),
   assertCanManageUser: vi.fn(),
   validateRoleAssignment: vi.fn(),

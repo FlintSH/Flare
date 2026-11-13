@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { paletteCSS, readPalette } from './appearance-assets.mjs'
 
 const source = await readFile(
-  new URL('../../../lib/customization/schema.ts', import.meta.url),
+  new URL('../../../lib/customization/defaults.ts', import.meta.url),
   'utf8'
 )
 

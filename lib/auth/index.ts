@@ -17,11 +17,10 @@ import {
 } from '@/lib/config/oidc'
 import { prisma } from '@/lib/database/prisma'
 import { getEmailConfig } from '@/lib/email/config'
-import { requiresEmailVerification } from '@/lib/email/policy'
 import type { Permission, RoleSummary } from '@/lib/permissions/catalog'
-import { getUserAccess } from '@/lib/permissions/server'
 import { clientIp, headerRecord } from '@/lib/security/client-ip'
 
+import { sessionAccount } from './account'
 import {
   OidcProfile,
   type OidcResolveResult,
@@ -42,6 +41,7 @@ import {
 import {
   BROWSER_SESSION_SECONDS,
   createBrowserSession,
+  findBrowserSession,
   loginMetadata,
   recordFailedLogin,
   signOutBrowserSession,
@@ -442,10 +442,12 @@ export const authOptions: NextAuthOptions = {
         token.sessionId = browserSession.id
       }
 
-      const freshUser = await prisma.user.findUnique({
-        where: { id: token.id },
-        select: userSelect,
-      })
+      // The account and the browser session are independent reads, so one
+      // round trip answers both. Later checks of this request reuse the account.
+      const [freshUser, browserSession] = await Promise.all([
+        sessionAccount(token.id),
+        findBrowserSession(token.id, token.sessionId, token.sessionVersion),
+      ])
 
       if (!freshUser) {
         throw new Error('Session invalidated: User not found')
@@ -465,7 +467,8 @@ export const authOptions: NextAuthOptions = {
       const activeSession = await validateBrowserSession(
         token.id,
         token.sessionId,
-        token.sessionVersion
+        token.sessionVersion,
+        browserSession
       )
       token.sessionExpiresAt = activeSession.expiresAt.toISOString()
       setAuditActor({ id: freshUser.id, name: freshUser.name })
@@ -476,10 +479,7 @@ export const authOptions: NextAuthOptions = {
       token.name = freshUser.name
       token.email = freshUser.email
       token.sessionVersion = freshUser.sessionVersion
-      token.emailAccessRequired = requiresEmailVerification(
-        freshUser,
-        await getEmailConfig()
-      )
+      token.emailAccessRequired = freshUser.emailAccessRequired
 
       return token
     },
@@ -487,9 +487,9 @@ export const authOptions: NextAuthOptions = {
       if (token) {
         if (token.sessionExpiresAt) session.expires = token.sessionExpiresAt
         session.user.id = token.id
-        const access = await getUserAccess(token.id)
-        session.user.roles = access.roles
-        session.user.permissions = access.permissions
+        const access = (await sessionAccount(token.id))?.access
+        session.user.roles = access?.roles ?? []
+        session.user.permissions = access?.permissions ?? []
         session.user.image = token.image || null
         session.user.name = token.name || ''
         session.user.email = token.email || ''

@@ -4,6 +4,7 @@ import {
   createFolder,
   deleteFolder,
   insertFolder,
+  listFolders,
   moveFilesToFolder,
   updateFolder,
   validateOwnedFolderId,
@@ -12,11 +13,12 @@ import {
 const mocks = vi.hoisted(() => ({
   vaultFolder: {
     findFirst: vi.fn(),
+    findMany: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   },
-  file: { count: vi.fn(), updateMany: vi.fn() },
+  file: { count: vi.fn(), groupBy: vi.fn(), updateMany: vi.fn() },
   $queryRaw: vi.fn(),
   transaction: vi.fn(),
 }))
@@ -46,6 +48,63 @@ beforeEach(() => {
   }))
   mocks.file.count.mockResolvedValue(1)
   mocks.file.updateMany.mockResolvedValue({ count: 1 })
+})
+
+describe('an account’s folder list', () => {
+  const stored = (
+    id: string,
+    name: string,
+    parentId: string | null = null
+  ) => ({
+    id,
+    name,
+    parentId,
+    shareToken: null,
+  })
+
+  it('counts each folder’s files, and nothing for a folder without any', async () => {
+    mocks.vaultFolder.findMany.mockResolvedValue([
+      stored('archive', 'Archive'),
+      stored('empty', 'Empty'),
+      stored('photos', 'Photos', 'archive'),
+    ])
+    // Only folders that hold files have a group.
+    mocks.file.groupBy.mockResolvedValue([
+      { folderId: 'photos', _count: { _all: 4 } },
+      { folderId: 'archive', _count: { _all: 1 } },
+    ])
+    expect(await listFolders('owner')).toEqual([
+      { ...stored('archive', 'Archive'), fileCount: 1 },
+      { ...stored('empty', 'Empty'), fileCount: 0 },
+      { ...stored('photos', 'Photos', 'archive'), fileCount: 4 },
+    ])
+  })
+
+  it('reads the folders and the counts for the owner alone, in name order', async () => {
+    mocks.vaultFolder.findMany.mockResolvedValue([])
+    mocks.file.groupBy.mockResolvedValue([])
+    expect(await listFolders('owner')).toEqual([])
+    expect(mocks.vaultFolder.findMany).toHaveBeenCalledWith({
+      where: { userId: 'owner' },
+      orderBy: [{ normalizedName: 'asc' }, { id: 'asc' }],
+      select: { id: true, name: true, parentId: true, shareToken: true },
+    })
+    expect(mocks.file.groupBy).toHaveBeenCalledWith({
+      by: ['folderId'],
+      where: { userId: 'owner', folderId: { not: null } },
+      _count: { _all: true },
+    })
+  })
+
+  it('leaves out a count whose folder is not in the list', async () => {
+    mocks.vaultFolder.findMany.mockResolvedValue([stored('photos', 'Photos')])
+    mocks.file.groupBy.mockResolvedValue([
+      { folderId: 'deleted-meanwhile', _count: { _all: 9 } },
+    ])
+    expect(await listFolders('owner')).toEqual([
+      { ...stored('photos', 'Photos'), fileCount: 0 },
+    ])
+  })
 })
 
 describe('owner-isolated folder mutations', () => {

@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   recordAudit: vi.fn(),
   transaction: vi.fn(),
   findDue: vi.fn(),
+  findPending: vi.fn(),
   updateEvents: vi.fn(),
   storageDelete: vi.fn(),
   tx: {
@@ -43,6 +44,7 @@ vi.mock('@/lib/audit', () => ({
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     $transaction: mocks.transaction,
+    $queryRaw: mocks.findPending,
     event: { findMany: mocks.findDue, updateMany: mocks.updateEvents },
   },
 }))
@@ -207,7 +209,7 @@ describe('pending expirations for a list of files', () => {
     const soon = new Date('2030-01-01T10:00:00Z')
     const later = new Date('2030-02-01T10:00:00Z')
     // Earliest first, as the query orders them.
-    mocks.findDue.mockResolvedValue([
+    mocks.findPending.mockResolvedValue([
       { payload: { fileId: 'a', action: 'SET_PRIVATE' }, scheduledAt: soon },
       { payload: { fileId: 'a', action: 'DELETE' }, scheduledAt: later },
       { payload: { fileId: 'b', action: 'DELETE' }, scheduledAt: later },
@@ -222,6 +224,34 @@ describe('pending expirations for a list of files', () => {
         ['d', null],
       ])
     )
+    // One query asks for every file, both job types and the pending statuses.
+    expect(mocks.findPending).toHaveBeenCalledOnce()
+    const [sql, ...values] = mocks.findPending.mock.calls[0] as [
+      TemplateStringsArray,
+      ...unknown[],
+    ]
+    expect(values).toEqual([
+      ['a', 'b', 'c', 'd'],
+      ['file.schedule-expiration', 'file.expired'],
+      ['SCHEDULED', 'PENDING', 'PROCESSING'],
+    ])
+    expect(sql.join('?')).toContain('ORDER BY "scheduledAt" ASC')
+    expect(mocks.findDue).not.toHaveBeenCalled()
+  })
+
+  it('ignores a job whose payload names no file', async () => {
+    const later = new Date('2030-02-01T10:00:00Z')
+    mocks.findPending.mockResolvedValue([
+      { payload: { fileId: 7 }, scheduledAt: later },
+      { payload: ['a'], scheduledAt: later },
+      { payload: null, scheduledAt: later },
+    ])
+    expect(await getFilesExpirationInfo(['a'])).toEqual(new Map())
+  })
+
+  it('asks the database nothing for an empty list', async () => {
+    expect(await getFilesExpirationInfo([])).toEqual(new Map())
+    expect(mocks.findPending).not.toHaveBeenCalled()
   })
 })
 

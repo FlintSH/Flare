@@ -263,6 +263,97 @@ suite('file expiry against disposable PostgreSQL', () => {
     expect(await expiry.getFilesExpirationInfo([row.id])).toEqual(new Map())
   })
 
+  it('lists the earliest pending expiry of every file on a page in one read', async () => {
+    const soon = new Date('2031-01-01T10:00:00.000Z')
+    const later = new Date('2031-02-01T10:00:00.000Z')
+    const twice = await file()
+    const once = await file()
+    const legacy = await file()
+    const claimed = await file()
+    const untimed = await file()
+    const none = await file()
+    const finished = await file()
+    const unlisted = await file()
+    // Two pending jobs: the earlier one counts, whichever was written first.
+    await job(twice.id, later, 'DELETE')
+    await job(twice.id, soon, 'SET_PRIVATE')
+    await job(once.id, later, 'DELETE')
+    await job(legacy.id, soon, 'DELETE', {
+      type: 'file.expired',
+      status: 'PENDING',
+    })
+    await job(claimed.id, later, 'SET_PRIVATE', { status: 'PROCESSING' })
+    await job(untimed.id, soon, 'DELETE', { scheduledAt: null })
+    // Jobs that are over, of a file that isn't asked for, or of another kind.
+    await job(finished.id, soon, 'DELETE', { status: 'COMPLETED' })
+    await job(finished.id, soon, 'DELETE', { status: 'FAILED' })
+    await job(unlisted.id, soon, 'DELETE')
+    await job(none.id, soon, 'DELETE', { type: 'webhook.delivery' })
+    // Jobs whose payload doesn't name a file with a string are ignored, even
+    // one whose number reads like the ID of a file on the page.
+    const numbered = await prisma.file.create({
+      data: {
+        id: '42',
+        name: 'numbered.txt',
+        path: `${prefix}/numbered.txt`,
+        urlPath: `/${owner}/numbered.txt`,
+        userId: owner,
+        mimeType: 'text/plain',
+        size: 1,
+      },
+    })
+    for (const payload of [
+      { fileId: 42, action: 'DELETE' },
+      { fileId: [once.id], action: 'DELETE' },
+      { fileId: { id: none.id }, action: 'DELETE' },
+      { fileId: null },
+      { action: 'DELETE' },
+      [none.id],
+      none.id,
+    ])
+      await prisma.event.create({
+        data: {
+          type: 'file.schedule-expiration',
+          status: 'SCHEDULED',
+          // Earlier than every real job, so it would win if it counted.
+          scheduledAt: new Date('2030-01-01T00:00:00.000Z'),
+          payload,
+        },
+      })
+
+    expect(
+      await expiry.getFilesExpirationInfo([
+        none.id,
+        twice.id,
+        numbered.id,
+        once.id,
+        legacy.id,
+        finished.id,
+        claimed.id,
+        untimed.id,
+        'no-such-file',
+      ])
+    ).toEqual(
+      new Map<string, unknown>([
+        [twice.id, { expiresAt: soon, action: 'SET_PRIVATE' }],
+        [once.id, { expiresAt: later, action: 'DELETE' }],
+        [legacy.id, { expiresAt: soon, action: 'DELETE' }],
+        [claimed.id, { expiresAt: later, action: 'SET_PRIVATE' }],
+        // A pending job without a time.
+        [untimed.id, null],
+      ])
+    )
+    expect(await expiry.getFilesExpirationInfo([none.id, numbered.id])).toEqual(
+      new Map()
+    )
+    expect(await expiry.getFilesExpirationInfo([])).toEqual(new Map())
+    // A job with a time counts before one without.
+    await job(untimed.id, later, 'SET_PRIVATE')
+    expect(await expiry.getFilesExpirationInfo([untimed.id])).toEqual(
+      new Map([[untimed.id, { expiresAt: later, action: 'SET_PRIVATE' }]])
+    )
+  })
+
   it('reclaims a job a stopped process left claimed after 5 minutes', async () => {
     const deadline = new Date('2030-01-01T10:00:00.000Z')
     const row = await file({

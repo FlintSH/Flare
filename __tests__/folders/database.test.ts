@@ -97,6 +97,7 @@ suite('vault folders against disposable PostgreSQL', () => {
       password?: string
       name?: string
       urlPath?: string
+      mimeType?: string
     } = {}
   ) {
     return prisma.file.create({
@@ -139,6 +140,95 @@ suite('vault folders against disposable PostgreSQL', () => {
     authentication.userId = 'folder-other'
     expect((await (await folders.GET(request())).json()).data).toEqual([])
     await newFolder('Photos')
+  })
+
+  it('counts the files directly in each folder, never another account’s', async () => {
+    const list = async () => (await (await folders.GET(request())).json()).data
+    const photos = await newFolder('Photos')
+    const week = await newFolder('Week 1', photos.id)
+    const empty = await newFolder('archive')
+    await file({ folderId: photos.id })
+    await file({ folderId: photos.id })
+    await file({ folderId: week.id })
+    await file()
+
+    // Another account has a folder of the same name with more files.
+    authentication.userId = 'folder-other'
+    const theirs = await newFolder('Photos')
+    for (let count = 0; count < 3; count++)
+      await file({ userId: 'folder-other', folderId: theirs.id })
+    await file({ userId: 'folder-other' })
+    // No route puts a file in another account's folder. Even if the database
+    // held one there, it would not be one of that account's files.
+    await file({ userId: 'folder-other', folderId: photos.id })
+    expect(await list()).toEqual([
+      {
+        id: theirs.id,
+        name: 'Photos',
+        parentId: null,
+        shareToken: null,
+        fileCount: 3,
+      },
+    ])
+
+    authentication.userId = 'folder-owner'
+    expect(await list()).toEqual([
+      {
+        id: empty.id,
+        name: 'archive',
+        parentId: null,
+        shareToken: null,
+        fileCount: 0,
+      },
+      {
+        id: photos.id,
+        name: 'Photos',
+        parentId: null,
+        shareToken: null,
+        fileCount: 2,
+      },
+      {
+        id: week.id,
+        name: 'Week 1',
+        parentId: photos.id,
+        shareToken: null,
+        fileCount: 1,
+      },
+    ])
+  })
+
+  it('lists the types of each account’s own files, each once and in order', async () => {
+    const types = await import('@/app/api/files/types/route')
+    const list = async () => {
+      const response = await types.GET(request('/api/files/types'))
+      expect(response.status).toBe(200)
+      return (await response.json()).data.types as string[]
+    }
+    expect(await list()).toEqual([])
+
+    const generated = Array.from(
+      { length: 12 },
+      (_, index) => `application/x-fixture-${index}`
+    )
+    const own = [
+      'video/mp4',
+      'image/png',
+      'application/pdf',
+      'text/plain; charset=utf-8',
+      'Image/HEIC',
+      ...generated,
+    ]
+    // Several files of one type, in a folder and outside one.
+    const photos = await newFolder('Photos')
+    for (const mimeType of [...own, 'image/png', 'image/png', 'video/mp4'])
+      await file({ mimeType })
+    await file({ mimeType: 'image/png', folderId: photos.id })
+    for (const mimeType of ['audio/mpeg', 'image/png', 'application/zip'])
+      await file({ userId: 'folder-other', mimeType })
+
+    expect(await list()).toEqual([...own].sort())
+    authentication.userId = 'folder-other'
+    expect(await list()).toEqual(['application/zip', 'audio/mpeg', 'image/png'])
   })
 
   it('rejects cross-owner nesting, edits, deletion and mixed-file moves even for admins', async () => {

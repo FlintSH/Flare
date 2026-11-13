@@ -1,0 +1,493 @@
+{
+  "kind": "api",
+  "measuredAt": "2026-11-13T01:35:24.877Z",
+  "host": {
+    "cpus": 4,
+    "memoryGiB": 31,
+    "loadAverageAtStart": [3.3, 3.09, 3.51],
+    "node": "v24.21.0"
+  },
+  "runs": 15,
+  "results": [
+    {
+      "id": "session",
+      "label": "Check a signed-in session",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 9.25,
+        "min": 7.11,
+        "max": 15.15,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 1590
+      },
+      "after": {
+        "median": 5.67,
+        "min": 4.24,
+        "max": 8.49,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 1590
+      }
+    },
+    {
+      "id": "library-page",
+      "label": "Load a library page, 100,000 files",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 99.06,
+        "min": 87.16,
+        "max": 116.22,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 19703
+      },
+      "after": {
+        "median": 11.69,
+        "min": 9.04,
+        "max": 15.22,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 19703
+      }
+    },
+    {
+      "id": "library-first-page",
+      "label": "List the newest files through the API",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 103.71,
+        "min": 95.48,
+        "max": 122.84,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 20073
+      },
+      "after": {
+        "median": 19.14,
+        "min": 12.92,
+        "max": 37.21,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 20073
+      }
+    },
+    {
+      "id": "library-largest",
+      "label": "Sort 100,000 files by size",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 134.9,
+        "min": 118.54,
+        "max": 202.28,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 19528
+      },
+      "after": {
+        "median": 50.99,
+        "min": 42.39,
+        "max": 57.05,
+        "runs": 15,
+        "errors": 0,
+        "work": 48,
+        "bytes": 19528
+      }
+    },
+    {
+      "id": "timeline",
+      "label": "Build the library timeline",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 81.62,
+        "min": 77.26,
+        "max": 102.04,
+        "runs": 15,
+        "errors": 0,
+        "work": 100004,
+        "bytes": 12623
+      },
+      "after": {
+        "median": 74.85,
+        "min": 60.85,
+        "max": 82.29,
+        "runs": 15,
+        "errors": 0,
+        "work": 100004,
+        "bytes": 12623
+      }
+    },
+    {
+      "id": "search-name",
+      "label": "Search 100,000 files by name",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 149.13,
+        "min": 136.59,
+        "max": 316.13,
+        "runs": 15,
+        "errors": 0,
+        "work": 156,
+        "bytes": 4521
+      },
+      "after": {
+        "median": 105.98,
+        "min": 103.46,
+        "max": 147.26,
+        "runs": 15,
+        "errors": 0,
+        "work": 156,
+        "bytes": 4521
+      }
+    },
+    {
+      "id": "search-text",
+      "label": "Search 100,000 files by text inside images",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 271.93,
+        "min": 139.91,
+        "max": 444.14,
+        "runs": 15,
+        "errors": 0,
+        "work": 440,
+        "bytes": 986
+      },
+      "after": {
+        "median": 250.85,
+        "min": 111.51,
+        "max": 289.05,
+        "runs": 15,
+        "errors": 0,
+        "work": 440,
+        "bytes": 986
+      }
+    },
+    {
+      "id": "search-miss",
+      "label": "Search 100,000 files, nothing matches",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 248.32,
+        "min": 235.81,
+        "max": 270.34,
+        "runs": 15,
+        "errors": 0,
+        "work": 0,
+        "bytes": 133
+      },
+      "after": {
+        "median": 232.11,
+        "min": 100.01,
+        "max": 259.49,
+        "runs": 15,
+        "errors": 0,
+        "work": 0,
+        "bytes": 133
+      }
+    },
+    {
+      "id": "types",
+      "label": "List the file types in a library",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 147.22,
+        "min": 121.63,
+        "max": 162.39,
+        "runs": 15,
+        "errors": 0,
+        "work": 7,
+        "bytes": 134
+      },
+      "after": {
+        "median": 7.07,
+        "min": 5,
+        "max": 15.4,
+        "runs": 15,
+        "errors": 0,
+        "work": 7,
+        "bytes": 134
+      }
+    },
+    {
+      "id": "tags",
+      "label": "List 200 tags with their file counts",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 47.54,
+        "min": 37.61,
+        "max": 67.91,
+        "runs": 15,
+        "errors": 0,
+        "work": 200,
+        "bytes": 18355
+      },
+      "after": {
+        "median": 18.12,
+        "min": 14.76,
+        "max": 26.79,
+        "runs": 15,
+        "errors": 0,
+        "work": 200,
+        "bytes": 18355
+      }
+    },
+    {
+      "id": "folders",
+      "label": "List 300 folders with their file counts",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 43.55,
+        "min": 28.65,
+        "max": 50.45,
+        "runs": 15,
+        "errors": 0,
+        "work": 300,
+        "bytes": 31457
+      },
+      "after": {
+        "median": 19.84,
+        "min": 13.72,
+        "max": 21.54,
+        "runs": 15,
+        "errors": 0,
+        "work": 300,
+        "bytes": 31457
+      }
+    },
+    {
+      "id": "audit",
+      "label": "Open the audit log, 300,000 events",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 50.35,
+        "min": 48.59,
+        "max": 55.79,
+        "runs": 15,
+        "errors": 0,
+        "work": 50,
+        "bytes": 18683
+      },
+      "after": {
+        "median": 46.97,
+        "min": 42.94,
+        "max": 75.46,
+        "runs": 15,
+        "errors": 0,
+        "work": 50,
+        "bytes": 18651
+      }
+    },
+    {
+      "id": "thumbnail",
+      "label": "Fetch the thumbnail of a private photo",
+      "unit": "ms",
+      "report": "bytes",
+      "before": {
+        "median": 16.68,
+        "min": 13.68,
+        "max": 21.02,
+        "runs": 15,
+        "errors": 0,
+        "work": 2695819,
+        "bytes": 2695819
+      },
+      "after": {
+        "median": 4.79,
+        "min": 3.07,
+        "max": 7.74,
+        "runs": 15,
+        "errors": 0,
+        "work": 18806,
+        "bytes": 18806
+      }
+    },
+    {
+      "id": "raw",
+      "label": "Serve a public image",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 9.2,
+        "min": 6.42,
+        "max": 14.56,
+        "runs": 15,
+        "errors": 0,
+        "work": 366786,
+        "bytes": 366786
+      },
+      "after": {
+        "median": 7.55,
+        "min": 5.76,
+        "max": 30.1,
+        "runs": 15,
+        "errors": 0,
+        "work": 366786,
+        "bytes": 366786
+      }
+    },
+    {
+      "id": "revisit",
+      "label": "Revisit an image the browser already has",
+      "unit": "ms",
+      "report": "bytes",
+      "before": {
+        "median": 4.54,
+        "min": 3.96,
+        "max": 10.44,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 366786
+      },
+      "after": {
+        "median": 3.51,
+        "min": 2.76,
+        "max": 28.35,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 366786
+      }
+    },
+    {
+      "id": "share-page",
+      "label": "Render a share page",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 13.01,
+        "min": 10.7,
+        "max": 14.71,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 42822
+      },
+      "after": {
+        "median": 13.51,
+        "min": 10.61,
+        "max": 33.29,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 42181
+      }
+    },
+    {
+      "id": "short-link",
+      "label": "Follow a short link",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 7.44,
+        "min": 5.45,
+        "max": 9.35,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 0
+      },
+      "after": {
+        "median": 5.75,
+        "min": 3.96,
+        "max": 8.1,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 0
+      }
+    },
+    {
+      "id": "upload",
+      "label": "Upload a screenshot to a 100,000-file library",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 72.19,
+        "min": 59.78,
+        "max": 109.91,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 487
+      },
+      "after": {
+        "median": 29.48,
+        "min": 25.66,
+        "max": 61.54,
+        "runs": 15,
+        "errors": 0,
+        "work": 1,
+        "bytes": 487
+      }
+    },
+    {
+      "id": "upload-burst",
+      "label": "Upload 48 screenshots at once",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 2755.17,
+        "min": 2694.71,
+        "max": 2854.11,
+        "runs": 5,
+        "errors": 0,
+        "work": 36,
+        "bytes": 0
+      },
+      "after": {
+        "median": 849.24,
+        "min": 719.01,
+        "max": 1007.96,
+        "runs": 5,
+        "errors": 0,
+        "work": 48,
+        "bytes": 0
+      }
+    },
+    {
+      "id": "library-busy",
+      "label": "Serve 480 library pages to 16 people at once",
+      "unit": "ms",
+      "report": "time",
+      "before": {
+        "median": 11183.96,
+        "min": 10440.4,
+        "max": 16669,
+        "runs": 5,
+        "errors": 0,
+        "work": 480,
+        "bytes": 0
+      },
+      "after": {
+        "median": 1647.06,
+        "min": 1488.98,
+        "max": 1684.31,
+        "runs": 5,
+        "errors": 0,
+        "work": 480,
+        "bytes": 0
+      }
+    }
+  ]
+}

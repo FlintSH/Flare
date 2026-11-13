@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { codeGrammar } from '@/components/file/viewer/components/code-grammar'
+import { loadCodeGrammar } from '@/components/file/viewer/components/code-grammar'
 
 import {
   LANGUAGES,
@@ -288,11 +288,12 @@ describe('languageFromFilename', () => {
   })
 })
 
-describe('codeGrammar', () => {
-  it('has a grammar for every language but plain text', () => {
+describe('loadCodeGrammar', () => {
+  it('has a grammar for every language but plain text', async () => {
     for (const language of LANGUAGES)
-      if (language === 'text') expect(codeGrammar(language)).toEqual([])
-      else expect(codeGrammar(language), language).not.toEqual([])
+      if (language === 'text')
+        expect(await loadCodeGrammar(language)).toEqual([])
+      else expect(await loadCodeGrammar(language), language).not.toEqual([])
   })
 })
 

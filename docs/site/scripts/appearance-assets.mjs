@@ -35,7 +35,7 @@ export async function prepareAppearance(
   applicationRoot = resolve(root, '../..')
 ) {
   const source = await readFile(
-    resolve(applicationRoot, 'lib/customization/schema.ts'),
+    resolve(applicationRoot, 'lib/customization/defaults.ts'),
     'utf8'
   )
   await writeFile(

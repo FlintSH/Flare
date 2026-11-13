@@ -1,6 +1,5 @@
 import { prisma } from '@/lib/database/prisma'
 import {
-  canOptimizeThumbnail,
   fileUrls,
   sharedFolderFileUrl,
   sharedFolderUrl,
@@ -52,16 +51,7 @@ export async function getSharedFolder(token: string, page = 1) {
         href: file.password ? sharedFolderFileUrl(token, file.id) : urls.page,
         // An image's tile shows its thumbnail, which the browser can ask
         // Flare to resize and which adds no view, unlike its raw link.
-        thumbnail: image
-          ? {
-              url: urls.thumbnail,
-              optimize: canOptimizeThumbnail({
-                visibility: 'PUBLIC',
-                hasPassword: false,
-                mimeType: file.mimeType,
-              }),
-            }
-          : null,
+        thumbnail: image ? { url: urls.thumbnail } : null,
         mimeType: file.password ? null : file.mimeType,
         size: file.password ? null : file.size,
         hasPassword: Boolean(file.password),

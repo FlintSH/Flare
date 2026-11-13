@@ -8,7 +8,11 @@ vi.mock('@/lib/auth/api-auth', () => ({
   getAuthenticatedUser: mocks.authenticate,
 }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { vaultFolder: { findMany: mocks.query }, $transaction: mocks.query },
+  prisma: {
+    vaultFolder: { findMany: mocks.query },
+    file: { groupBy: mocks.query },
+    $transaction: mocks.query,
+  },
 }))
 
 const sessionUser = {
@@ -130,8 +134,16 @@ describe('folder API permission boundaries', () => {
     const response = await GET(new Request('https://flare.test/api/folders'))
     expect(response.status).toBe(200)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    // The folders and the file counts are each read for this owner alone.
+    expect(mocks.query).toHaveBeenCalledTimes(2)
     expect(mocks.query).toHaveBeenCalledWith(
       expect.objectContaining({ where: { userId: 'owner' } })
+    )
+    expect(mocks.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        by: ['folderId'],
+        where: { userId: 'owner', folderId: { not: null } },
+      })
     )
   })
 })

@@ -119,6 +119,81 @@ suite('vault tags against disposable PostgreSQL', () => {
     expect(await prisma.vaultTag.count()).toBe(2)
   })
 
+  it('counts the files each tag labels, never an excluded link or another account’s files', async () => {
+    const list = async () => (await (await tags.GET(request())).json()).data
+    const work = await newTag({
+      name: 'Work',
+      ruleSource: 'filename',
+      ruleText: 'quarterly',
+    })
+    const unused = await newTag({ name: 'archive' })
+    const invoices = await newTag({ name: 'beta' })
+    const [first, second, removed] = [await file(), await file(), await file()]
+    await prisma.vaultFileTag.createMany({
+      data: [
+        { fileId: first.id, tagId: work.id },
+        { fileId: second.id, tagId: work.id },
+        // A tag taken off a file stays as an excluded link.
+        { fileId: removed.id, tagId: work.id, excluded: true },
+        { fileId: first.id, tagId: invoices.id },
+        { fileId: removed.id, tagId: invoices.id, excluded: true },
+      ],
+    })
+
+    // Another account has a tag of the same name on more files.
+    authentication.userId = 'tag-other'
+    const theirs = await newTag({ name: 'work' })
+    const foreign = await Promise.all(
+      Array.from({ length: 5 }, () => file('tag-other'))
+    )
+    await prisma.vaultFileTag.createMany({
+      data: foreign.map((entry) => ({ fileId: entry.id, tagId: theirs.id })),
+    })
+    expect(await list()).toEqual([
+      {
+        id: theirs.id,
+        name: 'work',
+        ruleSource: null,
+        ruleText: null,
+        fileCount: 5,
+      },
+    ])
+
+    authentication.userId = 'tag-owner'
+    // Ordered by name without regard to case.
+    expect(await list()).toEqual([
+      {
+        id: unused.id,
+        name: 'archive',
+        ruleSource: null,
+        ruleText: null,
+        fileCount: 0,
+      },
+      {
+        id: invoices.id,
+        name: 'beta',
+        ruleSource: null,
+        ruleText: null,
+        fileCount: 1,
+      },
+      {
+        id: work.id,
+        name: 'Work',
+        ruleSource: 'filename',
+        ruleText: 'quarterly',
+        fileCount: 2,
+      },
+    ])
+    // Putting the tag back on the file counts it again.
+    await prisma.vaultFileTag.update({
+      where: { fileId_tagId: { fileId: removed.id, tagId: work.id } },
+      data: { excluded: false },
+    })
+    expect(
+      (await list()).map((entry: { fileCount: number }) => entry.fileCount)
+    ).toEqual([0, 1, 3])
+  })
+
   it('rejects cross-account CRUD and mixed file selection, even for administrators', async () => {
     const saved = await newTag({ name: 'Work' })
     const ownFile = await file()

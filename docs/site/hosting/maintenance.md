@@ -101,6 +101,20 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Faster library, uploads and previews
+
+Builds after Flare 3.0.1 also do less work for each request and send browsers less. Use the normal backup and upgrade steps above. There is no new setting or environment variable, and links, API responses and saved settings keep their meaning. Review these after updating:
+
+- **Database migration.** `20261112000000_hot_path_indexes` adds four indexes and changes no rows: files by storage path, an account's files by type, pending expiry jobs by their file, and an account's short links by date. Normal image startup applies it; source deployments run `npx prisma migrate deploy` before starting the updated app. On a database of 120,000 files and 5,000 pending expirations it took under two seconds. Writes to files, expiry jobs and short links wait while their index is built, so allow a short pause and some database disk space on a larger instance.
+- **Previews.** Library cards, shared folder tiles and **View content** now ask `/api/files/{id}/thumbnail?w=…`, and Flare resizes the image itself, for private and password-protected images too. `/_next/image` no longer serves them. Each app process keeps the copies it made in memory, up to 64 MiB, and makes them again after a restart, which takes some CPU the first time a screen of images is shown. See [thumbnails](/api/files#thumbnails), and [Image thumbnails fail](./troubleshooting#image-thumbnails-fail) if cards show file icons.
+- **A CDN or caching proxy sits in front of Flare.** Public thumbnails stay cacheable for a year, now under addresses that include `?w=`. Keep the query string in the cache key, as CDNs do by default: a rule that ignores it would answer every width, and the request for the original, with whichever copy was cached first.
+- **Fonts.** Pages load Inter from two WOFF2 files, `/fonts/inter/Inter-latin.woff2` on every page and `/fonts/inter/Inter-other.woff2` only on a page that shows other scripts, such as a Cyrillic or Greek file name. Text looks the same. The two TTF files stay at their addresses for custom CSS that loads them. Flare's own pages use no italic text and no longer load Inter's italic face: custom CSS that sets `font-style: italic` gets the browser's slanted Inter unless it also loads `/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf`.
+- **Custom CSS.** `--font-inter` still names Inter. It is now built from `--font-inter-other` and `--font-inter-latin`, which Flare sets on `<html>`.
+- **Audit log.** The request event of a read that succeeded is written just after its response rather than before it. See [retention and operational limits](/admin/audit#retention-and-operational-limits).
+- **Uploads.** Publishing an upload no longer reads every file the account has, and an upload whose bytes are stored now waits up to ten seconds for a database connection instead of two. Before, a burst of uploads to a large library ran out of time waiting on one another, some answered `500`, and their files were discarded.
+
+The migration only adds indexes, which an earlier build leaves unused. Going back still follows [Rollback](#rollback).
+
 ### Embeds and link previews
 
 This change needs no database migration and no new environment variable. After upgrading:

@@ -2,10 +2,10 @@
 
 import { createContext, useContext } from 'react'
 
-import {
-  type AppearanceDocument,
-  DEFAULT_APPEARANCE,
-} from '@/lib/customization/schema'
+// From the defaults alone: the schema module brings its validator, which
+// every page would then download.
+import { DEFAULT_APPEARANCE } from '@/lib/customization/defaults'
+import type { AppearanceDocument } from '@/lib/customization/schema'
 
 /**
  * The published instance appearance. The root layout provides it through
