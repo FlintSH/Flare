@@ -146,7 +146,6 @@ export default async function SharedFolderPage({
                             // guide for what changing access does to it.
                             <SharedTilePreview
                               src={image.url}
-                              optimize={image.optimize}
                               fallback={icon}
                             />
                           ) : file.hasPassword ? (

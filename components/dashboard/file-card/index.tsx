@@ -29,8 +29,14 @@ import {
   type FileActionId,
   fileActionAllowed,
 } from '@/components/dashboard/file-card/actions'
+import {
+  ArchiveBrowserDialog,
+  ExpiryModal,
+  FileTagsDialog,
+  ImageLightbox,
+  MoveFilesDialog,
+} from '@/components/dashboard/library-dialogs'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
-import { ExpiryModal } from '@/components/shared/expiry-modal'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -57,7 +63,7 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import { fileTypeLabel } from '@/lib/files/file-kind'
 import { filePasswordHint } from '@/lib/files/password-policy'
-import { canOptimizeThumbnail, fileUrls } from '@/lib/files/urls'
+import { fileUrls, thumbnailLoader } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
 
@@ -319,7 +325,9 @@ export function FileCard({
       },
     },
     password: { run: () => handlePasswordDialogOpenChange(true) },
-    expiration: { run: () => setIsExpiryModalOpen(true) },
+    expiration: {
+      run: () => ExpiryModal.show(() => setIsExpiryModalOpen(true)),
+    },
     ...(isImage && {
       ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
     }),
@@ -329,9 +337,21 @@ export function FileCard({
     permitted(id) ? handlers[id] : undefined
   // The tag count opens the editor only where the menu offers it.
   const editTags = offered('editTags')
+  // The dialogs this card opens are fetched on first use. That starts when
+  // the pointer or the keyboard reaches a card, so they are usually here by
+  // the time one is asked for.
+  const preloadDialogs = () => {
+    if (browseArchive) ArchiveBrowserDialog.preload()
+    else if (isImage && onPreview) ImageLightbox.preload()
+    if (editTags) FileTagsDialog.preload()
+    if (offered('move')) MoveFilesDialog.preload()
+    if (offered('expiration')) ExpiryModal.preload()
+  }
 
   return (
     <Card
+      onPointerEnter={preloadDialogs}
+      onFocus={preloadDialogs}
       className={cn(
         'group relative min-w-0 overflow-hidden rounded-xl border-border/60 bg-panel shadow-sm transition-colors',
         // Selected cards keep a 2px edge inside the column: the border plus a
@@ -368,6 +388,7 @@ export function FileCard({
         >
           {isImage && !previewFailed ? (
             <Image
+              loader={thumbnailLoader}
               src={urls.thumbnail}
               alt={file.name}
               fill
@@ -375,7 +396,6 @@ export function FileCard({
               sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
               loading="lazy"
               onError={() => setPreviewFailed(true)}
-              unoptimized={!canOptimizeThumbnail(file)}
             />
           ) : (
             // The icon steps aside for the hover and focus controls, so it
@@ -566,7 +586,7 @@ export function FileCard({
         {file.expiresAt && !onSelect && permitted('expiration') && (
           <button
             type="button"
-            onClick={() => setIsExpiryModalOpen(true)}
+            onClick={() => ExpiryModal.show(() => setIsExpiryModalOpen(true))}
             title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
             className="absolute left-2 top-2 inline-flex h-8 max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >

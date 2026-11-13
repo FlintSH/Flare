@@ -4,9 +4,13 @@ import { POST as create, GET as listOwn } from '@/app/api/urls/route'
 import { DELETE as moderate } from '@/app/api/users/[id]/urls/[urlId]/route'
 import { GET as listAccount } from '@/app/api/users/[id]/urls/route'
 import { Prisma } from '@prisma/client'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { type AuditInput, configureAuditWriter } from '@/lib/audit'
+import {
+  type AuditInput,
+  auditSettled,
+  configureAuditWriter,
+} from '@/lib/audit'
 import { loggers } from '@/lib/logger'
 
 const mocks = vi.hoisted(() => ({
@@ -68,6 +72,8 @@ beforeEach(() => {
     user: { id: 'moderator', permissions: ['content.read', 'content.delete'] },
   })
 })
+// A successful read is recorded after its response; keep it in its own test.
+afterEach(auditSettled)
 
 describe('owner short-link API', () => {
   it('creates a link and sends the stored record', async () => {
@@ -267,6 +273,7 @@ describe('public redirect', () => {
       where: { id: 'cm_link' },
       data: { clicks: { increment: 1 } },
     })
+    await auditSettled()
     expect(events).toEqual([
       expect.objectContaining({
         action: 'http.get',

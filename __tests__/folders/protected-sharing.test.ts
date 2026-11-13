@@ -235,7 +235,7 @@ describe('protected shared-folder links', () => {
 
   // The tile's picture is the file's thumbnail, which can be resized and
   // adds no view; the raw link it used to load is the whole original.
-  it('shows an image by its thumbnail, resized unless it is a GIF or SVG', async () => {
+  it('shows an image by its thumbnail', async () => {
     const image = { ...file, password: null, mimeType: 'image/jpeg' }
     mocks.folder.mockResolvedValueOnce({
       name: 'Marketing assets',
@@ -244,8 +244,8 @@ describe('protected shared-folder links', () => {
     })
     const data = await getSharedFolder(token)
     expect(data!.files.map((entry) => entry.thumbnail)).toEqual([
-      { url: `/api/files/${fileId}/thumbnail`, optimize: true },
-      { url: `/api/files/${fileId}/thumbnail`, optimize: false },
+      { url: `/api/files/${fileId}/thumbnail` },
+      { url: `/api/files/${fileId}/thumbnail` },
       null,
     ])
   })
@@ -268,7 +268,7 @@ describe('protected shared-folder links', () => {
     // The rendered attributes, where React writes & as &amp;.
     expect(html).toContain('href="/recipient-slug/Q&amp;A%20notes%20%232.png"')
     // The tile's picture is named by the file's ID, never by its name.
-    expect(html).toContain(encodeURIComponent(`/api/files/${fileId}/thumbnail`))
+    expect(html).toContain(`src="/api/files/${fileId}/thumbnail?w=`)
     expect(html).not.toContain('/raw"')
 
     mocks.file.mockResolvedValueOnce({ ...file, urlPath })

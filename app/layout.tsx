@@ -1,7 +1,6 @@
 import { cache } from 'react'
 
 import type { Metadata } from 'next'
-import localFont from 'next/font/local'
 
 import { AppearanceProvider } from '@/components/customization/appearance-provider'
 import { CustomHead } from '@/components/layout/custom-head'
@@ -20,27 +19,8 @@ import { isAppearanceRecovery } from '@/lib/customization/recovery'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 import { pageSetupStatus } from '@/lib/setup/status'
 
+import { interLatin, interOther } from './fonts'
 import './globals.css'
-
-// Keep commas out of font file names. Next.js 16 preloads such a file with the
-// comma percent-encoded while the stylesheet requests it unencoded, so
-// browsers download the font twice.
-const inter = localFont({
-  src: [
-    {
-      path: '../public/fonts/inter/Inter-VariableFont_opsz_wght.ttf',
-      weight: '100 900',
-      style: 'normal',
-    },
-    {
-      path: '../public/fonts/inter/Inter-Italic-VariableFont_opsz_wght.ttf',
-      weight: '100 900',
-      style: 'italic',
-    },
-  ],
-  display: 'swap',
-  variable: '--font-inter',
-})
 
 const requestConfig = cache(getConfigOrDefaults)
 
@@ -90,7 +70,11 @@ export default async function RootLayout({
 
   // Inter is defined on <html>, where the studio's Typeface reads --font-inter.
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${interLatin.variable} ${interOther.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />

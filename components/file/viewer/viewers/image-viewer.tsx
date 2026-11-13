@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { flushSync } from 'react-dom'
 
 import {
-  type CheckerTone,
   checkerClassName,
   checkerToneFor,
 } from '@/components/file/checker-tone'
@@ -20,6 +19,20 @@ import {
   stageSurfaceClassName,
 } from '../components/loading-state'
 
+/** How a loaded picture sits on its stage. */
+function measured(image: HTMLImageElement, src: string) {
+  const stage = image.parentElement?.parentElement
+  return {
+    src,
+    /** Smaller than the stage both ways, so it gets a margin on the stage. */
+    small:
+      !!stage &&
+      image.naturalWidth < stage.clientWidth &&
+      image.naturalHeight < window.innerHeight * 0.5,
+    tone: checkerToneFor(image),
+  }
+}
+
 export function ImageViewer({
   file,
   src,
@@ -28,14 +41,37 @@ export function ImageViewer({
   src?: string
 }) {
   const { sharing } = useAppearance()
+  const image = useRef<HTMLImageElement>(null)
   const [failedUrl, setFailedUrl] = useState<string>()
   const [expanded, setExpanded] = useState(false)
-  const [loaded, setLoaded] = useState<{
-    src: string
-    /** Smaller than the stage both ways, so it gets a margin on the stage. */
-    small: boolean
-    tone: CheckerTone
-  }>()
+  const [loaded, setLoaded] = useState<ReturnType<typeof measured>>()
+
+  // The page arrives with the picture's address, so the browser fetches it
+  // alongside the app instead of after it. A picture that finished, or
+  // failed, before the app was listening never reports it here, so its state
+  // is read once instead.
+  useEffect(() => {
+    const element = image.current
+    if (!src || !element?.complete) return
+    if (element.naturalWidth > 0) {
+      setLoaded(measured(element, src))
+      return
+    }
+    // Finished without a width: broken, or a drawing that states no size.
+    // Decoding tells them apart without asking for the file again.
+    let current = true
+    element.decode().then(
+      () => {
+        if (current) setLoaded(measured(element, src))
+      },
+      () => {
+        if (current) setFailedUrl(src)
+      }
+    )
+    return () => {
+      current = false
+    }
+  }, [src])
 
   if (src && failedUrl === src) {
     return (
@@ -77,23 +113,14 @@ export function ImageViewer({
           )}
         >
           <img
+            ref={image}
             src={src}
             alt={file.name}
             decoding="async"
             onClick={() => setExpanded(true)}
-            onLoad={({ currentTarget: image }) => {
-              const stage = image.parentElement?.parentElement
+            onLoad={({ currentTarget }) => {
               // Before the first paint at the new size.
-              flushSync(() =>
-                setLoaded({
-                  src,
-                  small:
-                    !!stage &&
-                    image.naturalWidth < stage.clientWidth &&
-                    image.naturalHeight < window.innerHeight * 0.5,
-                  tone: checkerToneFor(image),
-                })
-              )
+              flushSync(() => setLoaded(measured(currentTarget, src)))
             }}
             onError={() => setFailedUrl(src)}
             className={cn(

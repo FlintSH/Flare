@@ -2,7 +2,7 @@ import { GET } from '@/app/api/files/tags/route'
 import type { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { hashApiToken } from '@/lib/integrations/tokens'
 
 const mocks = vi.hoisted(() => ({
@@ -67,11 +67,14 @@ function request(token?: string, ids = fileId) {
   })
 }
 
-function auditResult(
+async function auditResult(
   status: number,
   outcome: 'success' | 'denied' | 'failure',
   authenticated = true
 ) {
+  // Only a read that succeeded is recorded after its response; a refusal or
+  // a failure is already written when the response arrives.
+  if (outcome === 'success') await auditSettled()
   expect(events).toHaveLength(1)
   expect(events[0]).toMatchObject({
     action: 'http.get',
@@ -165,7 +168,7 @@ describe('tag membership authentication and audit integration', () => {
         account.id,
         fileId,
       ])
-      auditResult(200, 'success')
+      await auditResult(200, 'success')
     }
   )
 
@@ -185,7 +188,7 @@ describe('tag membership authentication and audit integration', () => {
       expect(mocks.session).not.toHaveBeenCalled()
       expect(mocks.apiToken.update).not.toHaveBeenCalled()
       expect(mocks.queryRaw).not.toHaveBeenCalled()
-      auditResult(401, 'denied', false)
+      await auditResult(401, 'denied', false)
     }
   )
 
@@ -202,7 +205,7 @@ describe('tag membership authentication and audit integration', () => {
         ).status
       ).toBe(403)
       expect(mocks.queryRaw).not.toHaveBeenCalled()
-      auditResult(403, 'denied')
+      await auditResult(403, 'denied')
     }
   )
 
@@ -211,13 +214,13 @@ describe('tag membership authentication and audit integration', () => {
     expect((await GET(request())).status).toBe(401)
     expect(mocks.user.findUnique).not.toHaveBeenCalled()
     expect(mocks.queryRaw).not.toHaveBeenCalled()
-    auditResult(401, 'denied', false)
+    await auditResult(401, 'denied', false)
   })
 
   it('audits invalid queries and unavailable selections without returning partial memberships', async () => {
     expect((await GET(request(undefined, ''))).status).toBe(400)
     expect(mocks.queryRaw).not.toHaveBeenCalled()
-    auditResult(400, 'failure')
+    await auditResult(400, 'failure')
     events.length = 0
     mocks.queryRaw.mockResolvedValue([])
     const response = await GET(request())
@@ -226,12 +229,12 @@ describe('tag membership authentication and audit integration', () => {
       success: false,
       error: 'One or more files are no longer available.',
     })
-    auditResult(404, 'failure')
+    await auditResult(404, 'failure')
   })
 
   it('records a failed read without persisting raw database errors', async () => {
     mocks.queryRaw.mockRejectedValue(new Error('raw-database-error-secret'))
     expect((await GET(request())).status).toBe(500)
-    auditResult(500, 'failure')
+    await auditResult(500, 'failure')
   })
 })

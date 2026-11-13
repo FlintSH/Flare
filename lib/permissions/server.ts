@@ -79,7 +79,8 @@ export async function ensureBuiltInRoles(tx: Prisma.TransactionClient) {
   return { everyone, administrator }
 }
 
-function combineAccess(
+/** The access of an account holding `assigned`, plus the role everyone holds. */
+export function combineAccess(
   assigned: RoleSummary[],
   everyone: RoleSummary | null
 ): UserAccess {

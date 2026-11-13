@@ -71,15 +71,17 @@ export const GET = api(
       })
       if (!resultPage) throw new HttpError(404, 'Image not found')
     } else {
-      const total = await prisma.file.count({ where })
-      const files = await prisma.file.findMany({
-        where,
-        // The grid and anchored navigation share the same deterministic order.
-        orderBy: fileOrderBy(sortBy),
-        take: limit,
-        skip: offset,
-        select: fileListSelect,
-      })
+      const [total, files] = await Promise.all([
+        prisma.file.count({ where }),
+        prisma.file.findMany({
+          where,
+          // The grid and anchored navigation share the same deterministic order.
+          orderBy: fileOrderBy(sortBy),
+          take: limit,
+          skip: offset,
+          select: fileListSelect,
+        }),
+      ])
       resultPage = {
         files,
         pagination: {

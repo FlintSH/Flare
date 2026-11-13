@@ -237,15 +237,18 @@ export async function getFilesExpirationInfo(
 ): Promise<Map<string, FileExpiry | null>> {
   const expirations = new Map<string, FileExpiry | null>()
   if (!fileIds.length) return expirations
-  const rows = await prisma.event.findMany({
-    where: {
-      type: { in: JOB_TYPES },
-      status: { in: [...ACTIVE] },
-      OR: fileIds.map((fileId) => ({ payload: jobFor(fileId) })),
-    },
-    select: { payload: true, scheduledAt: true },
-    orderBy: { scheduledAt: 'asc' },
-  })
+  // One indexed probe for each file, where a JSON filter for each file made
+  // PostgreSQL compare every pending job with every file on the page.
+  const rows = await prisma.$queryRaw<
+    { payload: Prisma.JsonValue; scheduledAt: Date | null }[]
+  >`
+    SELECT payload, "scheduledAt" FROM "Event"
+    WHERE payload ->> 'fileId' = ANY(${fileIds})
+      AND jsonb_typeof(payload -> 'fileId') = 'string'
+      AND type = ANY(${JOB_TYPES})
+      AND status::text = ANY(${[...ACTIVE]})
+    ORDER BY "scheduledAt" ASC
+  `
   for (const row of rows) {
     const { fileId, action } = jsonObject(row.payload)
     if (typeof fileId === 'string' && !expirations.has(fileId))

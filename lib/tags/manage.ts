@@ -31,13 +31,21 @@ function tagView(
   }
 }
 
-export async function listTags(userId: string) {
-  const tags = await prisma.vaultTag.findMany({
-    where: { userId },
-    orderBy: { normalizedName: 'asc' },
-    select: tagViewSelect,
-  })
-  return tags.map(tagView)
+export async function listTags(userId: string): Promise<TagView[]> {
+  // Count each of this account's tags through the (tagId, excluded) index.
+  // Selecting `_count` with the list made PostgreSQL count the files of every
+  // tag on the instance before joining this account's.
+  const tags = await prisma.$queryRaw<
+    (Omit<TagView, 'fileCount'> & { fileCount: bigint })[]
+  >`
+    SELECT tag.id, tag.name, tag."ruleSource", tag."ruleText",
+      (SELECT COUNT(*) FROM "VaultFileTag" link
+        WHERE link."tagId" = tag.id AND link.excluded = false) AS "fileCount"
+    FROM "VaultTag" tag
+    WHERE tag."userId" = ${userId}
+    ORDER BY tag."normalizedName" ASC
+  `
+  return tags.map((tag) => ({ ...tag, fileCount: Number(tag.fileCount) }))
 }
 
 export async function createTag(userId: string, input: TagInput) {

@@ -99,7 +99,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import type { AccountFile, FileSettings } from '@/lib/files/manage'
 import { filePasswordHint } from '@/lib/files/password-policy'
-import { fileUrls } from '@/lib/files/urls'
+import { fileUrls, thumbnailLoader } from '@/lib/files/urls'
 import {
   type AccountShortLink,
   type AccountShortLinkPage,
@@ -718,6 +718,9 @@ export function UserList() {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
           <Image
+            // Flare's own resizer reads the file with this browser's session,
+            // which moderation previews need.
+            loader={thumbnailLoader}
             src={fileUrls(file).thumbnail}
             alt={file.name}
             fill
@@ -725,8 +728,6 @@ export function UserList() {
             sizes="40px"
             priority={false}
             loading="lazy"
-            // Moderation previews need this browser's session for file access.
-            unoptimized
           />
         </div>
       )

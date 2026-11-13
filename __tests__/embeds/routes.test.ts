@@ -8,7 +8,7 @@ import {
 import { hashSync } from 'bcryptjs'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 import { DEFAULT_PERSONAL_EMBED } from '@/lib/embeds/schema'
 
@@ -40,7 +40,8 @@ vi.mock('@/lib/database/prisma', () => {
     },
   }
 })
-vi.mock('@/lib/permissions/server', () => ({
+vi.mock('@/lib/permissions/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/permissions/server')>()),
   getUserAccess: async () => ({
     roles: [],
     permissions: mocks.ownerPermissions,
@@ -254,6 +255,7 @@ describe('what a link-preview fetcher is sent', () => {
 
   it('records the request against the file', async () => {
     await embed(request('/owner/photo.png/embed', DISCORD), params('photo.png'))
+    await auditSettled()
     expect(mocks.audit).toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'file.embed',

@@ -33,7 +33,8 @@ vi.mock('@/lib/database/locks', () => ({
   lockRoleChanges: vi.fn(),
   lockSettings: vi.fn(),
 }))
-vi.mock('@/lib/permissions/server', () => ({
+vi.mock('@/lib/permissions/server', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/permissions/server')>()),
   PermissionError: class extends Error {},
   assertAccessibleAdministrator: vi.fn(),
   getUserAccess: vi.fn(),

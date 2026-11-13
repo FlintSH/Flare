@@ -185,6 +185,14 @@ describe('tags at the shared upload commit boundary', () => {
     )
   })
 
+  it('waits up to ten seconds for a connection to publish a file that is already stored', async () => {
+    await finalizeUpload(input())
+    expect(mocks.transaction).toHaveBeenCalledExactlyOnceWith(
+      expect.any(Function),
+      { maxWait: 10_000 }
+    )
+  })
+
   it('uses the existing chunk assembly transaction without opening another transaction', async () => {
     await finalizeUpload({ ...input(), transaction: mocks.tx as never })
     expect(mocks.transaction).not.toHaveBeenCalled()

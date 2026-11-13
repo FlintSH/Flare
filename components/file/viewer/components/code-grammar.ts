@@ -1,52 +1,54 @@
-import { cpp } from '@codemirror/lang-cpp'
-import { css } from '@codemirror/lang-css'
-import { go } from '@codemirror/lang-go'
-import { html } from '@codemirror/lang-html'
-import { java } from '@codemirror/lang-java'
-import { javascript } from '@codemirror/lang-javascript'
-import { json } from '@codemirror/lang-json'
-import { less } from '@codemirror/lang-less'
-import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { php } from '@codemirror/lang-php'
-import { python } from '@codemirror/lang-python'
-import { rust } from '@codemirror/lang-rust'
-import { sass } from '@codemirror/lang-sass'
-import { sql } from '@codemirror/lang-sql'
-import { wast } from '@codemirror/lang-wast'
-import { xml } from '@codemirror/lang-xml'
-import { yaml } from '@codemirror/lang-yaml'
 import type { Extension } from '@uiw/react-codemirror'
 
 import type { Language } from '@/lib/files/file-kind'
 
-const GRAMMARS: Record<Exclude<Language, 'text'>, () => Extension> = {
-  html: () => html(),
-  css: () => css(),
-  javascript: () => javascript(),
-  jsx: () => javascript({ jsx: true }),
-  typescript: () => javascript({ typescript: true }),
-  tsx: () => javascript({ jsx: true, typescript: true }),
-  json: () => json(),
-  python: () => python(),
+/**
+ * Each grammar is downloaded when a file in its language is shown, so a page
+ * carries the one it needs instead of all of them.
+ */
+const GRAMMARS: Record<Exclude<Language, 'text'>, () => Promise<Extension>> = {
+  html: async () => (await import('@codemirror/lang-html')).html(),
+  css: async () => (await import('@codemirror/lang-css')).css(),
+  javascript: async () =>
+    (await import('@codemirror/lang-javascript')).javascript(),
+  jsx: async () =>
+    (await import('@codemirror/lang-javascript')).javascript({ jsx: true }),
+  typescript: async () =>
+    (await import('@codemirror/lang-javascript')).javascript({
+      typescript: true,
+    }),
+  tsx: async () =>
+    (await import('@codemirror/lang-javascript')).javascript({
+      jsx: true,
+      typescript: true,
+    }),
+  json: async () => (await import('@codemirror/lang-json')).json(),
+  python: async () => (await import('@codemirror/lang-python')).python(),
   // GitHub-flavoured, so task boxes such as [x] aren't read as links.
-  markdown: () => markdown({ base: markdownLanguage }),
-  yaml: () => yaml(),
-  java: () => java(),
-  sql: () => sql(),
-  xml: () => xml(),
-  wasm: () => wast(),
-  c: () => cpp(),
-  cpp: () => cpp(),
-  rust: () => rust(),
-  php: () => php(),
-  go: () => go(),
-  sass: () => sass(),
-  scss: () => sass(),
-  less: () => less(),
+  markdown: async () => {
+    const { markdown, markdownLanguage } =
+      await import('@codemirror/lang-markdown')
+    return markdown({ base: markdownLanguage })
+  },
+  yaml: async () => (await import('@codemirror/lang-yaml')).yaml(),
+  java: async () => (await import('@codemirror/lang-java')).java(),
+  sql: async () => (await import('@codemirror/lang-sql')).sql(),
+  xml: async () => (await import('@codemirror/lang-xml')).xml(),
+  wasm: async () => (await import('@codemirror/lang-wast')).wast(),
+  c: async () => (await import('@codemirror/lang-cpp')).cpp(),
+  cpp: async () => (await import('@codemirror/lang-cpp')).cpp(),
+  rust: async () => (await import('@codemirror/lang-rust')).rust(),
+  php: async () => (await import('@codemirror/lang-php')).php(),
+  go: async () => (await import('@codemirror/lang-go')).go(),
+  sass: async () => (await import('@codemirror/lang-sass')).sass(),
+  scss: async () => (await import('@codemirror/lang-sass')).sass(),
+  less: async () => (await import('@codemirror/lang-less')).less(),
 }
 
-/** CodeMirror's grammar for a language. Plain text gets none, so prose and
- * logs aren't coloured as code. */
-export function codeGrammar(language: Language): Extension {
-  return language === 'text' ? [] : GRAMMARS[language]()
+/** Plain text gets no grammar, so prose and logs aren't coloured as code. */
+export const NO_GRAMMAR: Extension = []
+
+/** CodeMirror's grammar for a language. */
+export async function loadCodeGrammar(language: Language): Promise<Extension> {
+  return language === 'text' ? NO_GRAMMAR : GRAMMARS[language]()
 }

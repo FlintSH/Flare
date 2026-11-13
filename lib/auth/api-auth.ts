@@ -1,10 +1,6 @@
-import type { Prisma } from '@prisma/client'
-
 import { setAuditActor } from '@/lib/audit'
 import { getAccessSession } from '@/lib/auth'
 import { prisma } from '@/lib/database/prisma'
-import { getEmailConfig } from '@/lib/email/config'
-import { requiresEmailVerification } from '@/lib/email/policy'
 import {
   TOKEN_PREFIX,
   hashApiToken,
@@ -12,7 +8,15 @@ import {
   tokenUsable,
 } from '@/lib/integrations/tokens'
 import type { RoleSummary } from '@/lib/permissions/catalog'
-import { getUserAccess } from '@/lib/permissions/server'
+
+import {
+  type Account,
+  accountFrom,
+  accountPolicy,
+  accountSelect,
+  loadAccount,
+  sessionAccount,
+} from './account'
 
 export type AuthenticatedUser = {
   id: string
@@ -36,35 +40,24 @@ export async function getAuthenticatedUser(
   )?.[1]
   // A named bearer token always uses its own authority, even if cookies coexist.
   if (suppliedToken?.startsWith(TOKEN_PREFIX)) {
-    const token = await prisma.apiToken.findUnique({
-      where: { hash: hashApiToken(suppliedToken) },
-      include: { user: true },
-    })
-    if (
-      !token ||
-      !tokenUsable(token) ||
-      !tokenAllowsRequest(token.scopes, req) ||
-      requiresEmailVerification(token.user, await getEmailConfig())
-    )
+    const [token, policy] = await Promise.all([
+      prisma.apiToken.findUnique({
+        where: { hash: hashApiToken(suppliedToken) },
+        include: { user: { select: accountSelect } },
+      }),
+      accountPolicy(),
+    ])
+    if (!token || !tokenUsable(token) || !tokenAllowsRequest(token.scopes, req))
       return null
-    setAuditActor({
-      id: token.user.id,
-      name: token.user.name,
-      tokenId: token.id,
-    })
+    const account = accountFrom(token.user, policy)
+    if (account.emailAccessRequired) return null
+    setAuditActor({ id: account.id, name: account.name, tokenId: token.id })
     // Best-effort activity metadata must not make an otherwise valid request fail.
     await prisma.apiToken
       .update({ where: { id: token.id }, data: { lastUsedAt: new Date() } })
       .catch(() => {})
-    const { id, storageUsed, urlId, vanityId, randomizeFileUrls } = token.user
     return {
-      id,
-      storageUsed,
-      urlId,
-      vanityId,
-      ...(await getUserAccess(id)),
-      randomizeFileUrls,
-      credential: 'token',
+      ...authenticated(account, 'token'),
       apiToken: {
         id: token.id,
         scopes: token.scopes,
@@ -73,36 +66,37 @@ export async function getAuthenticatedUser(
     }
   }
   const session = await getAccessSession()
-  if (session?.user) return accountUser({ id: session.user.id }, 'session')
+  if (session?.user)
+    return accountUser(await sessionAccount(session.user.id), 'session')
   if (suppliedToken)
-    return accountUser({ uploadToken: suppliedToken }, 'upload-token')
+    return accountUser(
+      await loadAccount({ uploadToken: suppliedToken }),
+      'upload-token'
+    )
   return null
 }
 
+function authenticated(
+  { id, storageUsed, urlId, vanityId, randomizeFileUrls, access }: Account,
+  credential: AuthenticatedUser['credential']
+): AuthenticatedUser {
+  return {
+    id,
+    storageUsed,
+    urlId,
+    vanityId,
+    ...access,
+    randomizeFileUrls,
+    credential,
+  }
+}
+
 /** The account behind a browser session or the legacy upload token, unless it must verify its email first. */
-async function accountUser(
-  where: Prisma.UserWhereUniqueInput,
+function accountUser(
+  account: Account | null,
   credential: 'session' | 'upload-token'
-): Promise<AuthenticatedUser | null> {
-  const user = await prisma.user.findUnique({
-    where,
-    select: {
-      id: true,
-      name: true,
-      storageUsed: true,
-      urlId: true,
-      vanityId: true,
-      randomizeFileUrls: true,
-      email: true,
-      emailVerified: true,
-      emailVerifiedFor: true,
-      emailVerificationSource: true,
-      emailExempt: true,
-      createdAt: true,
-    },
-  })
-  if (!user || requiresEmailVerification(user, await getEmailConfig()))
-    return null
-  setAuditActor({ id: user.id, name: user.name })
-  return { ...user, ...(await getUserAccess(user.id)), credential }
+): AuthenticatedUser | null {
+  if (!account || account.emailAccessRequired) return null
+  setAuditActor({ id: account.id, name: account.name })
+  return authenticated(account, credential)
 }

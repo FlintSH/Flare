@@ -33,7 +33,8 @@ vi.mock('@/lib/database/prisma', () => {
   return {
     prisma: {
       ...tx,
-      event: { ...tx.event, findMany: mocks.findEvents },
+      // Outside a transaction the only raw query lists pending expiry jobs.
+      $queryRaw: mocks.findEvents,
       $transaction: (callback: (client: typeof tx) => unknown) => callback(tx),
     },
   }

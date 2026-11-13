@@ -2,7 +2,7 @@ import { GET } from '@/app/api/files/timeline/route'
 import type { Prisma } from '@prisma/client'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { hashApiToken } from '@/lib/integrations/tokens'
 
 const mocks = vi.hoisted(() => ({
@@ -67,24 +67,43 @@ function request(token?: string) {
   })
 }
 
+/** The account as the database holds it now, with the roles it has now. */
+const currentAccount = () => ({
+  ...account,
+  roles: [
+    {
+      id: 'reader-role',
+      name: 'Reader',
+      description: null,
+      color: '#64748b',
+      position: 10,
+      systemKey: null,
+      permissions,
+    },
+  ],
+})
+
 function namedToken(scopes: string[]) {
   const token = {
     id: 'named-read-token-id',
     hash: hashApiToken(secret),
     scopes,
-    user: account,
     profileId: null,
     revokedAt: null,
     expiresAt: null,
   }
-  // Like the database, a lookup finds the token only by its stored hash.
+  // Like the database, a lookup finds the token only by its stored hash, and
+  // answers its account in the same read.
   mocks.apiToken.findUnique.mockImplementation(
     async ({ where }: { where: { hash: string } }) =>
-      where.hash === token.hash ? token : null
+      where.hash === token.hash ? { ...token, user: currentAccount() } : null
   )
 }
 
-function auditResult(status: number, outcome: 'success' | 'denied') {
+async function auditResult(status: number, outcome: 'success' | 'denied') {
+  // Only a read that succeeded is recorded after its response; a refusal or
+  // a failure is already written when the response arrives.
+  if (outcome === 'success') await auditSettled()
   expect(events).toHaveLength(1)
   expect(events[0]).toMatchObject({
     action: 'http.get',
@@ -125,20 +144,7 @@ beforeEach(() => {
       permissions: ['administrator'],
     },
   })
-  mocks.user.findUnique.mockImplementation(async () => ({
-    ...account,
-    roles: [
-      {
-        id: 'reader-role',
-        name: 'Reader',
-        description: null,
-        color: '#64748b',
-        position: 10,
-        systemKey: null,
-        permissions,
-      },
-    ],
-  }))
+  mocks.user.findUnique.mockImplementation(async () => currentAccount())
   mocks.role.findUnique.mockResolvedValue(null)
   mocks.apiToken.findUnique.mockResolvedValue(null)
   mocks.apiToken.update.mockResolvedValue({})
@@ -168,7 +174,7 @@ describe('timeline authentication and audit integration', () => {
     const aggregate = mocks.queryRaw.mock.calls[1][0] as Prisma.Sql
     expect(aggregate.values).toContain(account.id)
     expect(aggregate.values).toContain(`%${search}%`)
-    expect(auditResult(200, 'success')).toMatchObject({
+    expect(await auditResult(200, 'success')).toMatchObject({
       actorId: account.id,
       actorName: account.name,
     })
@@ -184,7 +190,7 @@ describe('timeline authentication and audit integration', () => {
       where: { id: 'named-read-token-id' },
       data: { lastUsedAt: expect.any(Date) },
     })
-    expect(auditResult(200, 'success')).toMatchObject({
+    expect(await auditResult(200, 'success')).toMatchObject({
       actorId: account.id,
       actorName: account.name,
       details: { tokenId: 'named-read-token-id' },
@@ -199,7 +205,7 @@ describe('timeline authentication and audit integration', () => {
     expect(mocks.session).not.toHaveBeenCalled()
     expect(mocks.apiToken.update).not.toHaveBeenCalled()
     expect(mocks.queryRaw).not.toHaveBeenCalled()
-    const event = auditResult(401, 'denied')
+    const event = await auditResult(401, 'denied')
     expect(event.actorId).toBeUndefined()
     expect(event.actorName).toBe('Anonymous')
     expect(event.details).not.toHaveProperty('tokenId')
@@ -215,7 +221,7 @@ describe('timeline authentication and audit integration', () => {
       )
       expect(response.status).toBe(403)
       expect(mocks.queryRaw).not.toHaveBeenCalled()
-      const event = auditResult(403, 'denied')
+      const event = await auditResult(403, 'denied')
       expect(event).toMatchObject({
         actorId: account.id,
         actorName: account.name,
@@ -232,6 +238,6 @@ describe('timeline authentication and audit integration', () => {
     expect(response.status).toBe(401)
     expect(mocks.user.findUnique).not.toHaveBeenCalled()
     expect(mocks.queryRaw).not.toHaveBeenCalled()
-    expect(auditResult(401, 'denied').actorName).toBe('Anonymous')
+    expect((await auditResult(401, 'denied')).actorName).toBe('Anonymous')
   })
 })

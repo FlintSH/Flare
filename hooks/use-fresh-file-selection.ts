@@ -63,5 +63,12 @@ export function useFreshFileSelection(files: FileType[], scope: unknown) {
     }
   }, [files, key])
 
-  return { refresh, loading }
+  /**
+   * Whether the selection this `refresh` belongs to is still the one on
+   * screen: the same files in the same library and filters. For work that
+   * finishes after `refresh` has answered.
+   */
+  const isCurrent = useCallback(() => currentKey.current === key, [key])
+
+  return { refresh, isCurrent, loading }
 }

@@ -108,22 +108,19 @@ export function fileUrls(
 }
 
 /**
- * Whether Next's image optimizer may resize a file's thumbnail. It fetches
- * without the viewer's session, so only a public file without a password
- * qualifies. Animated GIFs would lose their animation; SVG thumbnails use
- * the browser directly because Next's optimizer intentionally rejects SVG.
+ * A `next/image` loader for thumbnail URLs: the same address with the width
+ * the browser picked, which Flare answers with a resized copy. Flare resizes
+ * its own thumbnails because Next's optimizer fetches without the viewer's
+ * session, so it could never show a private or password-protected image.
  */
-export function canOptimizeThumbnail(file: {
-  visibility: string
-  hasPassword: boolean
-  mimeType: string
+export function thumbnailLoader({
+  src,
+  width,
+}: {
+  src: string
+  width: number
 }) {
-  return (
-    file.visibility === 'PUBLIC' &&
-    !file.hasPassword &&
-    file.mimeType !== 'image/gif' &&
-    file.mimeType !== 'image/svg+xml'
-  )
+  return `${src}${src.includes('?') ? '&' : '?'}w=${width}`
 }
 
 export function sharedFolderUrl(

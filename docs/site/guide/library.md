@@ -98,7 +98,7 @@ Grouping adds headings to the continuous list and adjusts the date rail to the s
 
 ## Inspect images
 
-Image cards show previews for public images and for your private or password-protected images. Protected previews use your browser session, and GIFs retain their animation. The thumbnail endpoint reads the original image; public raster cards can be resized by the image optimizer, while protected images, GIFs, and SVG previews load directly in the browser. SVG previews bypass the raster optimizer, so a public SVG no longer falls back to a generic icon because the optimizer refuses it. Large originals can take longer to load. Only visible and nearby cards load as you scroll.
+Image cards show previews for public images and for your private or password-protected images. Protected previews use your browser session. Flare sends each preview as a small copy sized for the card, so a screen of photos downloads a few kilobytes for each card instead of every original. GIFs keep their animation and SVG images are shown as they are; both load whole, as does an image over 32 MiB. Earlier versions could resize only public images, so each private or password-protected card downloaded its whole original. Only visible and nearby cards load as you scroll.
 
 <Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
 
@@ -152,6 +152,8 @@ Choose **Select**, then select individual cards or **Select visible files**. The
 You can select up to **100 files** at a time, then choose **Edit tags**, **Move**, or **Create archive** where your permissions allow. Deselect individual files to make room, or finish the current batch before starting another.
 
 The selection bar counts your selection against that limit, for example **2 selected · up to 100**. **Select visible files** shows a dash when only some of the files on screen are selected; choose it to add the others. When it is checked, choosing it again removes the files on screen from your selection and keeps the rest.
+
+The image viewer, the archive browser, the date filter's calendar, and the tag, move, expiration and archive dialogs are downloaded the first time you use one, usually while the pointer or keyboard focus is already on its button, instead of with the library. A dialog still on its way doesn't open once you have chosen another action, changed the selected files or the filters, or pressed **Done**. If the download fails, a notification says **Couldn’t open that**; choose the action again.
 
 Before **Edit tags**, **Move**, or **Create archive** opens, Flare fetches current details for every selected file, including cards outside the visible window. If that check fails, retry the action. If a selected file is no longer available, choose **Done** and select the remaining files again.
 

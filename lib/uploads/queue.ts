@@ -1,10 +1,17 @@
 import {
+  type UploadActivity,
+  setUploadActivity,
+  uploadActivity,
+} from './activity'
+import {
   type UploadOptions,
   type UploadResponse,
   partitionBySize,
   uploadFile,
 } from './client'
 import { createSpeedMeter } from './speed'
+
+export { type UploadActivity, uploadActivity }
 
 export type QueuedFile = {
   readonly key: number
@@ -28,40 +35,7 @@ export type UploadBatch = {
   }
 }
 
-export type UploadActivity = {
-  /** The file being sent, or the last one sent. */
-  readonly file: {
-    readonly id: number
-    readonly name: string
-    readonly size: number
-    /** Bytes sent so far. */
-    readonly uploaded: number
-    readonly progress: number
-    /** Bytes per second; null before it can be measured. */
-    readonly speed: number | null
-  } | null
-  readonly uploading: boolean
-}
-
-let activity: UploadActivity = { file: null, uploading: false }
-const activityWatchers = new Set<() => void>()
 let filesStarted = 0
-
-function setActivity(next: UploadActivity) {
-  activity = next
-  for (const watch of activityWatchers) watch()
-}
-
-/** What the uploads on this page are doing, for the one progress display. */
-export const uploadActivity = {
-  get: (): UploadActivity => activity,
-  subscribe(watch: () => void) {
-    activityWatchers.add(watch)
-    return () => {
-      activityWatchers.delete(watch)
-    }
-  },
-}
 
 const percent = (file: File, uploaded: number) =>
   file.size > 0 ? Math.min(100, Math.round((uploaded / file.size) * 100)) : 100
@@ -118,7 +92,7 @@ export function createUploadQueue(send = uploadFile) {
         id = current
         const measure = createSpeedMeter()
         const show = (bytes: number, speed: number | null) =>
-          setActivity({
+          setUploadActivity({
             file: {
               id: current,
               name: file.name,
@@ -136,7 +110,7 @@ export function createUploadQueue(send = uploadFile) {
             const speed = measure(bytes)
             track(queued?.[index], bytes, speed)
             // Another uploader on the page may have started a newer file.
-            if (activity.file?.id === current) show(bytes, speed)
+            if (uploadActivity.get().file?.id === current) show(bytes, speed)
           })
         )
       }
@@ -149,7 +123,9 @@ export function createUploadQueue(send = uploadFile) {
         remaining: files.slice(uploaded.length),
       }
     }
-    if (activity.file?.id === id) setActivity({ ...activity, uploading: false })
+    const latest = uploadActivity.get()
+    if (latest.file?.id === id)
+      setUploadActivity({ ...latest, uploading: false })
     const sent = new Set(queued?.slice(0, uploaded.length))
     revoke(state.files.filter((item) => sent.has(item.key)))
     update({

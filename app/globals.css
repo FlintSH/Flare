@@ -6,6 +6,12 @@ html {
   overflow-y: scroll;
   scrollbar-gutter: stable;
   overflow-x: hidden;
+  /*
+   * Inter comes in two files (app/fonts.ts). Each family's unicode-range
+   * names its characters, so the browser skips the first for Latin text and
+   * the last entry stays the fallback sized to match Inter.
+   */
+  --font-inter: var(--font-inter-other), var(--font-inter-latin);
 }
 
 body {

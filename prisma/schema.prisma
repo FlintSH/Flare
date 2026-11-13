@@ -261,6 +261,8 @@ model File {
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
+  @@index([userId, mimeType])
+  @@index([path])
 }
 
 // Independent of retired Folder tables: folders organize existing files without
@@ -383,6 +385,8 @@ model ShortenedUrl {
   createdAt DateTime @default(now())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Config {
@@ -433,6 +437,8 @@ model Event {
   error       String?
   metadata    Json?
 
+  // The migration also indexes `payload ->> 'fileId'`, which finds a file's
+  // expiry jobs. Prisma's schema cannot describe an expression index.
   @@index([type])
   @@index([status])
   @@index([scheduledAt])

@@ -294,6 +294,27 @@ curl --fail-with-body --silent --show-error --output /dev/null \
 
 On local storage this prints `302` and the file's `/raw` address. A private file answers `404`, a missing or wrong password `401`, and too many wrong passwords `429` with `Retry-After`; none of them names a storage URL. The redirect is not a view; reading `/raw` after it is.
 
+### Thumbnails
+
+`GET /api/files/{id}/thumbnail` sends a file's image for a preview and adds no view. Access is the file's own: a public image answers anyone, a private one needs its owner's browser session, and a password-protected one needs the `password` query value. A named token does not authorize it.
+
+With `w`, Flare answers a WebP copy scaled down to that width. The library, shared folders and an administrator's **View content** ask for their previews this way:
+
+```sh
+curl --fail-with-body --silent --show-error --output preview.webp \
+  --write-out '%{http_code} %{content_type} %{size_download}\n' \
+  "$FLARE_URL/api/files/$FLARE_FILE_ID/thumbnail?w=384"
+```
+
+`FLARE_FILE_ID` is the file's `id` from a list or upload response. For a public photo this prints `200 image/webp` and a size in kilobytes.
+
+- `w` is a whole number of pixels from 1 to 999999. Flare makes copies 256, 384, 640, 828, 1080 and 1920 pixels wide and answers the first that is at least as wide as `w`, or the widest. Any other value answers `400`.
+- A copy keeps the image's proportions, is never wider than the original, is turned the way the camera recorded it, and carries none of the original's metadata.
+- Flare resizes still JPEG, PNG, WebP and AVIF images, whatever type the file was uploaded as. The original comes back unchanged under its stored `Content-Type` for an SVG, a GIF or another animation, an image over 32 MiB or 100 megapixels, bytes it can't decode, and an image that storage takes more than 20 seconds to hand over. Read the response's `Content-Type` rather than assuming WebP.
+- Without `w` the response is the original image, as in earlier versions, which ignored `w`.
+
+Both forms follow the [content caching](#content-caching) table and are sent with `Content-Security-Policy: sandbox`. Each process keeps the copies it made in memory, up to 64 MiB, and makes a copy again when it is asked for one it no longer holds. It resizes at most three images at a time; with more than 256 waiting it answers the rest with originals, and it skips a copy whose requests were all cancelled, as a browser cancels previews that scroll out of view.
+
 ### oEmbed
 
 `GET /api/oembed?url={share link}&format=json` describes a share link in [oEmbed](https://oembed.com) form. Flare links to it from a share link's [embed](/guide/embeds) when the card has an author line, because apps read that line only from here.

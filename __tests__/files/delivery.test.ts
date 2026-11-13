@@ -9,9 +9,9 @@ import { GET as ocrGET } from '@/app/api/files/[id]/ocr/route'
 import { GET as thumbnailGET } from '@/app/api/files/[id]/thumbnail/route'
 import { hashSync } from 'bcryptjs'
 import { Readable } from 'node:stream'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { configureAuditWriter } from '@/lib/audit'
+import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { LocalStorageProvider } from '@/lib/storage/providers/local'
 
 type Row = {
@@ -121,6 +121,9 @@ beforeEach(() => {
   )
   db.update.mockResolvedValue(undefined)
 })
+// A file that was served is recorded after its response; keep that event out
+// of the next test's list.
+afterEach(auditSettled)
 
 describe('finding the requested file', () => {
   it('reads a share link once, then serves it without querying it again', async () => {

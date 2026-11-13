@@ -37,7 +37,7 @@ The output is `docs/site/.vitepress/dist/`. `build` checks links, anchor targets
 
 The handbook uses Flare's default light and dark palettes, its bundled Inter typeface, rounded panels, and compact controls. Use the appearance switch in the header to change the handbook's theme. This is the documentation site's preference; it does not change your Flare instance or load an instance's custom appearance pack.
 
-`npm run assets` generates `public/flare-theme.css` from `LIGHT_PALETTE` and `DARK_PALETTE` in `lib/customization/schema.ts` and prepares the existing fonts from `public/fonts/inter/`. Do not maintain a second palette or commit the generated assets. If the palette data stops being literal colors, asset preparation fails so the reader can be updated instead of silently shipping stale defaults. Docs-only surface, spacing, and VitePress mappings live in `.vitepress/theme/style.css`.
+`npm run assets` generates `public/flare-theme.css` from `LIGHT_PALETTE` and `DARK_PALETTE` in `lib/customization/defaults.ts` and prepares the existing fonts from `public/fonts/inter/`. Do not maintain a second palette or commit the generated assets. If the palette data stops being literal colors, asset preparation fails so the reader can be updated instead of silently shipping stale defaults. Docs-only surface, spacing, and VitePress mappings live in `.vitepress/theme/style.css`.
 
 The release builder applies the current shared stylesheet, layout, fonts, and palettes to stable, archived, and rolling pages. Each release retains its original guide text, screenshots, and interactive content. The public root is Flare's product landing page, built from the publishing checkout. Its **Read the docs** and **Get Flare** links lead into the stable handbook. Archived homepages keep their original content. Source and website-tooling revisions remain separate in **Build details**. When changing this presentation, check both themes, mobile navigation, search, tables, code blocks, screenshot dialogs, interactive labs, and the release browser, including a non-root base path.
 
@@ -238,7 +238,7 @@ export FLARE_TIMELINE_TEST_ORIGIN='http://localhost:3064'
 node scripts/timeline/verify-thumbnails.cjs
 ```
 
-Keep `DATABASE_URL` set to the disposable `flare_timeline_test_local` database. The check refuses other database names and accounts. It uploads four temporary images through the real API, verifies the original thumbnail bytes and anonymous private/password access boundaries, and checks public, private, password-protected, and animated GIF previews at desktop and mobile widths. Public raster library cards retain image optimization; protected library previews, GIFs, and all moderation previews load directly. The second seeded administrator supplies the moderation session. Requests and uploads are real; the check uses no network stubs. It deletes its uploads afterward.
+Keep `DATABASE_URL` set to the disposable `flare_timeline_test_local` database. The check refuses other database names and accounts. It uploads four temporary images through the real API, verifies the original thumbnail bytes and anonymous private/password access boundaries with and without a width, and checks public, private, password-protected, and animated GIF previews at desktop and mobile widths. Every preview must ask the thumbnail route for a width and none may go through `/_next/image`: PNG previews come back as smaller WebP copies under the file's own cache policy, and the GIF comes back whole so it stays animated. The second seeded administrator supplies the moderation session. Requests and uploads are real; the check uses no network stubs. It deletes its uploads afterward.
 
 Cleanup attempts every tracked upload even when a deletion fails, then closes Chromium. Verification, deletion, and browser-shutdown failures are reported together, and the command exits unsuccessfully. If a deletion failed, restore the local server/session and remove the listed **Thumbnail check** uploads from Alex's disposable library before retrying; the next run refuses stale fixtures. Cleanup failure tests use simulated responses and rejected requests without making real deletions.
 
@@ -558,6 +558,58 @@ node scripts/embeds/verify.cjs
 ```
 
 `NEXTAUTH_URL` on the instance must equal the origin, because preview addresses follow it. The script uses local storage answers; the signed-URL path on S3 is covered by `__tests__/embeds/routes.test.ts` with a stubbed provider. It checks what Flare sends, not how an app draws it: paste a link into the app itself before promising a result there.
+
+## Performance benchmarks
+
+`scripts/perf/` measures the same requests and page loads against two running builds, so a speed claim comes with numbers anyone can reproduce. It needs a local PostgreSQL, the root dependencies and the handbook's (for Playwright and Sharp), and Chromium as in [Browser checks](#browser-checks).
+
+Seed one disposable database for each build. The seed accepts only a local database named `flare_perf` or `flare_perf_<side>` and refuses one that has accounts. It creates an account with 100,000 files among 120,000, 401 accounts, 300 folders, 200 tags, 5,000 short links, 5,000 pending expirations and 300,000 audit events, and links each file to one of a few generated images under `uploads/perf/`: 12-megapixel photos of about 2.6 MB and screenshots of 360 to 680 KB. The account's password and API token are public and written in the scripts.
+
+```sh
+export DATABASE_URL='postgresql://flare_test@127.0.0.1:5432/flare_perf_before'
+pnpm exec prisma migrate deploy
+node scripts/migrate-config.js
+node scripts/perf/seed.cjs
+```
+
+Seed the "before" database with the schema of the commit you compare against, and the "after" database the way an upgrade gets it: a copy of "before" (`CREATE DATABASE flare_perf_after TEMPLATE flare_perf_before`) migrated with the newer build. Start each production build against its own database, with `FLARE_CLIENT_IP_HEADER=x-bench-ip` so the upload limit counts the benchmark's simulated clients apart, and share one `uploads/` directory between them. A standalone copy as the Docker image runs it is closest to a real instance:
+
+```sh
+pnpm build
+cp -r .next/static .next/standalone/.next/static && cp -r public .next/standalone/public
+ln -s "$PWD/uploads" .next/standalone/uploads
+cd .next/standalone && PORT=3311 HOSTNAME=127.0.0.1 NEXTAUTH_URL=http://localhost:3311 \
+  NEXTAUTH_SECRET="$NEXTAUTH_SECRET" FLARE_CLIENT_IP_HEADER=x-bench-ip node server.js
+```
+
+Then, from the repository root:
+
+```sh
+node scripts/perf/api.cjs --before http://localhost:3311 --after http://localhost:3312 \
+  --runs 15 --out results/api.json
+node scripts/perf/browser.cjs --before http://localhost:3311 --after http://localhost:3312 \
+  --runs 5 --out results/browser.json
+node scripts/perf/chart.cjs --api results/api.json --browser results/browser.json \
+  --out .github/assets/perf
+```
+
+- `api.cjs` times requests from sign-in to the last byte and removes the files it uploads. Each sample must do all of its work, such as 48 files on a page, the 156 files a search matches, or all 480 pages of the concurrent run, counted against the seed's default sizes. A sample that falls short is an error and its time is left out. The burst of 48 uploads is the exception: it reports how many were stored.
+- `browser.cjs` loads pages in headless Chromium at 1440 × 900, each in a new profile with an empty cache, under Chrome's "Fast 4G" preset and unthrottled. It reports the time until the content shows (every thumbnail in view, the shared image, the sign-in form) and what was downloaded, by kind.
+- Both alternate between the two servers run by run and report the median with its range. Run them on an otherwise idle machine and read the range before trusting a small difference. `--only` takes scenario IDs.
+- `chart.cjs` draws the results as the two pictures a pull request can show, and `filmstrip.cjs` photographs the library opening on both servers at the same moments. The pictures under `.github/assets/perf/` come from the `api.json` and `browser.json` beside them.
+
+These are measurements of two builds on one machine with a local database. They compare builds; they don't predict the speed of a particular server, network or storage provider.
+
+## Bundled fonts
+
+The application serves Inter from `public/fonts/inter/Inter-latin.woff2` and `Inter-other.woff2`, which `scripts/fonts/split-inter.py` makes from `Inter-VariableFont_opsz_wght.ttf` in the same folder. After replacing that TTF, rebuild both files and copy the two `unicode-range` values the script prints into `app/fonts.ts`:
+
+```sh
+python3 -m venv /tmp/fonts && /tmp/fonts/bin/pip install fonttools brotli
+/tmp/fonts/bin/python scripts/fonts/split-inter.py
+```
+
+The split keeps every character, both variable axes, hinting and all layout features, so text is drawn as the TTF draws it; compare a screenshot of the sign-in page before and after to confirm. The TTF files stay in the repository: the handbook uses them, and [custom CSS](/hosting/maintenance#faster-library-uploads-and-previews) may load them by address.
 
 ## Automatic coverage checks
 

@@ -59,8 +59,9 @@ function useSettledHeight() {
 }
 
 export function FileViewer({ file, password }: FileViewerProps) {
-  // Images, PDFs and audio load once hydrated, so an image can't finish
-  // loading before React handles its onLoad, which sizes it on its stage.
+  // PDFs and audio load once hydrated: whether a PDF shows inline depends on
+  // the browser, and the audio player must be listening before its file
+  // starts to load. An image doesn't wait; its viewer reads how it ended.
   const [hydrated, setHydrated] = useState(false)
   useEffect(() => setHydrated(true), [])
   const frame = useSettledHeight()

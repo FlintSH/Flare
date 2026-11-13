@@ -77,6 +77,8 @@ Every previewable type uses the same card width, so pages keep their shape from 
 
 While a preview loads, a placeholder of its size holds its place, so the name and the actions don't move when the content arrives. An image wider or smaller than usual, or an archive's file list, eases to its final height instead of jumping. On a phone the card starts under the header and grows downward. Visitors who ask their system for reduced motion get the final size at once.
 
+A share page downloads the code for the kind of file it shows and no other, and a shared image starts downloading with the page. Earlier builds sent every viewer with every page, the code editor, media player and archive browser included, and asked for an image only after all of that had loaded, so a shared screenshot took about twice as long to appear on a phone connection.
+
 Earlier builds sized each card to its content, so every type had a different width, put the actions under the preview, where a long file pushed them off the screen, and replaced a small **Loading…** line with the content, which moved the page.
 
 <Screenshot src="/screenshots/sharing/share-page-image.webp" alt="Flare share page for a JPEG image: the file's icon, name, type and size with Download, Copy link, Extract text and Open original beside them, and the picture below" caption="The name, type, size, and actions sit above the preview on every share page." />
