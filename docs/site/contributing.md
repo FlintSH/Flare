@@ -137,7 +137,7 @@ Keep Flare's `pnpm-lock.yaml` and the handbook's `package-lock.json` separate. U
 
 The application checks that CI runs are `pnpm exec tsc --noEmit`, `pnpm test`, `pnpm lint`, and `pnpm format:check`. `pnpm lint` runs ESLint 9 directly with `eslint.config.mjs` over `app`, `components`, `lib`, `hooks`, `proxy.ts`, and `instrumentation.ts`. It replaced `next lint`, which Next.js 16 removed. `scripts`, `types`, the test files, and the handbook are not linted by it. The pre-commit hook runs the same command after formatting the staged files with Prettier. It commits only what you staged: unstaged and untracked files stay out of the commit, so run `pnpm format:check` before pushing if you edited files you didn't stage.
 
-The **Docker Test** workflow builds the image for `linux/amd64` and `linux/arm64`, starts it next to an empty PostgreSQL 16 database, and passes only when the image's own health check reports `healthy`. The container applies the migrations itself during that start, as it does for operators. If the container stops, its health check reports `unhealthy`, or it is still starting after 3 minutes, the job prints the health-check results and the container log and fails.
+The **Docker Test** workflow builds the image for `linux/amd64` and `linux/arm64`, starts it next to an empty PostgreSQL 16 database, and passes only when the image's own health check reports `healthy`. The container applies the migrations itself during that start, as it does for operators. It then runs ffmpeg inside the container and checks that the app's user can write to `/app`, `/app/uploads`, and `/app/.next`, because the image sets file owners as it copies them. The job reports the image's size in its summary. If the container stops, its health check reports `unhealthy`, or it is still starting after 3 minutes, the job prints the health-check results and the container log and fails.
 
 The gallery file-type picker has component regression tests using React Testing Library and jsdom. Run `pnpm exec vitest run __tests__/components/file-filters.test.ts` to check MIME and readable-label search, selections surviving a nonmatching query, clearing the query on close, and category order. These tests render the actual picker and popover; jsdom does not validate layout, so UI PRs still need reviewed captures from the real application.
 
@@ -166,6 +166,40 @@ gh api repos/actions/checkout/git/ref/tags/v4.4.0 --jq '.object'
 ```
 
 The result shows the target's `sha` and `type`. Pin a `commit` SHA directly. If `type` is `tag`, the tag is annotated: resolve once more with `gh api repos/<owner>/<repo>/git/tags/<sha> --jq '.object.sha'`.
+
+## How CI stays fast
+
+A push to a pull request starts every workflow at once, so the slowest job decides when the last check finishes. A newer push to the same pull request cancels the runs of the older one; runs on `main` are never cancelled. These are the jobs and what keeps each one short:
+
+| Workflow                   | Job                                 | What keeps it short                                                                                                                                                                            |
+| -------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Build Checks**           | Build Check                         | Restores Turbopack's cache in `.next/cache`, so `pnpm build` compiles only what changed, and skips the type check that Code Quality runs                                                       |
+| **Code Quality**           | Code Quality Checks                 | Starts PostgreSQL while dependencies install, applies the migrations to one database and copies it for the other 14 suites, and keeps type check, lint, and format results for unchanged files |
+| **Docker Test**            | Docker Build Test, one per platform | Builds from scratch with Docker's own builder and keeps no layer cache; the test database starts while the image builds                                                                        |
+| **Documentation**          | check, browser (two groups)         | Runs the browser tests in two jobs beside the source checks, with one worker per core, and installs the browser while the site builds                                                          |
+| **Documentation Releases** | releases                            | Builds one release per core, and is skipped when a pull request cannot change the release site                                                                                                 |
+| **PR Preview Image**       | image                               | Starts beside the preview tooling tests instead of after them, skips the repeated type check, and compresses its one-day artifact quickly rather than tightly                                  |
+
+Keep these properties when you change a workflow:
+
+- **Caches.** `actions/cache` holds two things. Build Check saves `.next/cache` after every push to `main`; a pull request reads that and saves its own copy only once, when nothing was saved for its lockfile. Code Quality saves `tsconfig.tsbuildinfo` and the lint and format caches under `node_modules/.cache` after every passing run; they total about a megabyte, and their key includes the lockfile and each tool's configuration, so a dependency or rule change starts them afresh. The repository's caches share 10 GB, and GitHub evicts the least recently used ones beyond that. To force a cold run, delete a cache with `gh cache delete`.
+- **No image layer cache.** A whole image build takes about a minute on a runner. Saving its layers to the Actions cache took over 100 seconds, restoring them was no quicker than rebuilding, and those layers filled most of the 10 GB. The release workflows build without a layer cache for the same reason. Layer order in the Dockerfile still matters for local rebuilds.
+- **One type check.** `FLARE_SKIP_BUILD_TYPECHECK=1` makes `pnpm build` skip its TypeScript pass. Only CI jobs that run beside Code Quality set it. The release workflows don't, so a release build still stops on a type error.
+- **Lint and format caches.** `pnpm lint` and `pnpm format:check` keep their results in `node_modules/.cache/eslint` and `node_modules/.cache/prettier`, by file content, on your machine as well as in CI. A second run checks only changed files, which keeps the pre-commit hook quick. Delete those two folders to recheck everything, for example after upgrading a lint plugin without changing `eslint.config.mjs`.
+- **The docs browser groups.** The two `browser` jobs run `playwright test --grep "WCAG accessibility"` and `--grep-invert "WCAG accessibility"`, a filter and its opposite, so a new test always runs in one of them. Pushes to `main` and releases still run the whole suite in the `check` job, which also builds and publishes the site.
+- **The release site filter.** `docs-releases.yml` lists the paths that cannot change the versioned site: application code, handbook pages, and screenshots, which each release takes from its own commit. A pull request that touches only those skips the workflow. If you make `build-releases.mjs` read something new from the checkout, remove it from that list in the same change. Pushes to `main` always build the release site.
+- **Dependency caches for the docs jobs stay off.** They publish the site, and the note in `docs.yml` about not sharing caches across publishing contexts still applies.
+
+To measure a change to CI, compare whole pushes with the timings GitHub records:
+
+```sh
+node scripts/ci/timings.mjs --before BASE_SHA,BASE_SHA --after HEAD_SHA \
+  --out .github/assets/ci-speed/timings.json
+node scripts/ci/chart.cjs --timings .github/assets/ci-speed/timings.json \
+  --image .github/assets/ci-speed/image.json --out .github/assets/ci-speed
+```
+
+Each side takes the head commits of pull request pushes, and every attempt of a commit's workflow runs is one sample, so re-running a commit's workflows adds a sample. The script prints the medians for the time from push to the last check, the runner time added over every job, and each job, and names any job that did not succeed, since a failed job is often a fast one. `chart.cjs` draws the comparison and a timeline of one typical push; it needs the handbook's dependencies and Chromium, as in [Browser checks](#browser-checks). Compare like with like: a commit that changes the lockfile or the Dockerfile runs colder than an ordinary one.
 
 ## Database permission and avatar regression tests
 
