@@ -167,6 +167,10 @@ export class LocalStorageProvider implements StorageProvider {
     return createReadStream(fullPath, { ...options, signal })
   }
 
+  localPath(path: string): string {
+    return workingPath(validateStoragePath(path))
+  }
+
   async openRandomAccess(path: string): Promise<RandomAccessFile> {
     const validPath = validateStoragePath(path)
     const handle = await open(workingPath(validPath), 'r')

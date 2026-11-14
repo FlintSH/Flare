@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   sharing: {} as Record<string, unknown>,
   ownerPermissions: ['files.share'] as string[],
   audit: vi.fn(),
+  poster: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getAccessSession: mocks.session }))
@@ -52,6 +53,9 @@ vi.mock('@/lib/storage', () => ({
     kind: mocks.storageKind,
     getPublicUrl: mocks.publicUrl,
   }),
+}))
+vi.mock('@/lib/files/video-poster', () => ({
+  videoPosterWithin: mocks.poster,
 }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
@@ -210,6 +214,37 @@ describe('what a link-preview fetcher is sent', () => {
     )
     expect(html).not.toContain('X-Amz')
     expect(mocks.publicUrl).not.toHaveBeenCalled()
+  })
+
+  it('previews a video with a frame from it, in its own shape', async () => {
+    mocks.findFile.mockResolvedValue(video)
+    mocks.poster.mockResolvedValue({
+      image: Buffer.alloc(1),
+      width: 405,
+      height: 720,
+    })
+    const html = await (
+      await embed(request('/owner/clip.mp4/embed', DISCORD), params('clip.mp4'))
+    ).text()
+    expect(mocks.poster).toHaveBeenCalledWith(
+      expect.objectContaining({ id: video.id, path: video.path }),
+      expect.any(Number)
+    )
+    expect(html).toContain(
+      '<meta property="og:image" content="https://flare.example/api/files/embed-file/thumbnail?w=1280">'
+    )
+    expect(html).toContain('<meta property="og:video:width" content="405">')
+    expect(html).toContain('<meta property="og:video:height" content="720">')
+  })
+
+  it('never reads a frame of a video the fetcher may not open', async () => {
+    mocks.findFile.mockResolvedValue({ ...video, visibility: 'PRIVATE' })
+    const response = await embed(
+      request('/owner/clip.mp4/embed', DISCORD),
+      params('clip.mp4')
+    )
+    expect(response.status).toBe(404)
+    expect(mocks.poster).not.toHaveBeenCalled()
   })
 
   it('answers a missing or private file with nothing', async () => {

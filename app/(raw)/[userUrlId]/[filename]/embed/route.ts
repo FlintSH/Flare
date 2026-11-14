@@ -8,6 +8,8 @@ import { requestOrigin } from '@/lib/embeds/origin'
 import { ownerEmbed } from '@/lib/embeds/owner'
 import { checkFileAccess } from '@/lib/files/access'
 import { findFile } from '@/lib/files/delivery'
+import { fileKind } from '@/lib/files/file-kind'
+import { videoPosterWithin } from '@/lib/files/video-poster'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { clientIp } from '@/lib/security/client-ip'
@@ -29,6 +31,12 @@ const headers = {
 
 // The page is tags and one link. Nothing in it may load or run, even if a
 // value ever got past the escaping.
+/**
+ * How long a preview may wait for a video's first frame. Apps give a page
+ * several seconds; past this the preview shows the generic poster instead.
+ */
+const FRAME_WAIT_MS = 6000
+
 const pageHeaders = {
   ...headers,
   'Content-Type': 'text/html; charset=utf-8',
@@ -57,6 +65,10 @@ export const GET = api(
     })
     if (!access.allowed) setAuditOutcome('denied')
     const appearance = config.settings.customization.published
+    const videoFrame =
+      access.allowed && fileKind(file).kind === 'video'
+        ? await videoPosterWithin(file, FRAME_WAIT_MS)
+        : null
     const embed = fileEmbed({
       file,
       ownerId: userUrlId,
@@ -68,6 +80,7 @@ export const GET = api(
       origin: requestOrigin(request.headers),
       appearance,
       signedStorage: storage.kind === 's3',
+      videoFrame,
       crawler: identifyCrawler(request.headers.get('user-agent')),
     })
     if (embed.kind === 'missing')

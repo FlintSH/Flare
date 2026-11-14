@@ -101,6 +101,19 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Video thumbnails
+
+Builds after 3.1.0 show a frame from each video on library cards, shared folder tiles, **View content**, the share page player, and [link previews](/guide/embeds), instead of a video icon and a generic picture. There is no database migration and no setting to change, and nothing is stored: frames are made from the stored videos when first asked for and kept in memory.
+
+- **Official image.** It now includes ffmpeg, which makes the image larger. Nothing else is needed.
+- **Source installs.** Install ffmpeg on the server, or set [`FLARE_FFMPEG_PATH`](./configuration#core-environment-variables). Without it Flare works as before, logs `Video thumbnails are off` once, and video cards keep their icon.
+- **CPU.** The first screen of videos after an update or restart takes some CPU: Flare runs at most two ffmpeg processes at a time, each on one thread, and a frame takes well under a second for most videos.
+- **S3 storage.** ffmpeg reads videos through short-lived signed URLs, so the app server must be able to reach the bucket's endpoint.
+- **A CDN or caching proxy sits in front of Flare.** Public video frames are cached for a year at `/api/files/{id}/thumbnail?w=…`, like image thumbnails. A video without a frame answers `404` that browsers may keep for ten minutes.
+- **Link previews already posted** keep the generic picture until the link is pasted again.
+
+Rollback needs nothing beyond returning to the older image.
+
 ### Upgrading from 3.0.1 to 3.1
 
 Flare 3.1 makes the app sturdier and faster, adds embed controls, and reworks much of the interface. Use the normal backup and upgrade steps above. The official image applies one database migration, which only adds indexes. Nobody is signed out, and no environment variable is required. The optional `FLARE_CORS_ORIGINS` lets web apps on other sites call the token API; see [cross-origin browser access](./configuration#cross-origin-browser-access).

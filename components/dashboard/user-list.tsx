@@ -97,6 +97,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { hasThumbnail } from '@/lib/files/file-kind'
 import type { AccountFile, FileSettings } from '@/lib/files/manage'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { fileUrls, thumbnailLoader } from '@/lib/files/urls'
@@ -489,6 +490,10 @@ export function UserList() {
   const [isViewingFiles, setIsViewingFiles] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [viewingUser, setViewingUser] = useState<User | null>(null)
+  // Files whose thumbnail didn't load show their icon instead.
+  const [failedPreviews, setFailedPreviews] = useState<ReadonlySet<string>>(
+    () => new Set()
+  )
   const rowMenuTrigger = useRef<HTMLButtonElement | null>(null)
   const restoreRowMenuFocus = (event: Event) => {
     event.preventDefault()
@@ -714,7 +719,7 @@ export function UserList() {
 
   // A hairline keeps light screenshots from dissolving into the row.
   const getFilePreview = (file: AccountFile) => {
-    if (file.mimeType.startsWith('image/')) {
+    if (hasThumbnail(file) && !failedPreviews.has(file.id)) {
       return (
         <div className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border bg-muted/30">
           <Image
@@ -728,6 +733,10 @@ export function UserList() {
             sizes="40px"
             priority={false}
             loading="lazy"
+            // A video without a frame keeps its icon.
+            onError={() =>
+              setFailedPreviews((failed) => new Set(failed).add(file.id))
+            }
           />
         </div>
       )

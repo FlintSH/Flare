@@ -93,6 +93,16 @@ An S3 stream bug in older builds could discard the image before the response sta
 
 If the direct request also fails, check that the session is still valid and has `files.read` for owned images or `content.read` for moderation. Private images are hidden with `404` from other visitors, and password-protected public images require the file password outside authorized owner/moderator sessions. For a `500`, inspect the application logs and storage availability. Keep file passwords and private file URLs out of support reports. See [library preview recovery](/guide/library#understand-activity-and-refresh) and [moderation permissions](/admin/users#moderate-files-and-shortened-links).
 
+## Video thumbnails are missing
+
+A video card that shows a video icon instead of a frame, and a link preview that shows Flare's generic play-button picture, both mean Flare had no frame of that video. Open `/api/files/{id}/thumbnail?w=384` for it in the same signed-in browser. `200` with `image/webp` is a frame; `404` with **No frame to show** means one of these:
+
+- **ffmpeg can't run.** The log has `Video thumbnails are off: ffmpeg could not be run` at `warn`, once per process. The official image includes ffmpeg. For a source install, install it or set [`FLARE_FFMPEG_PATH`](./configuration#core-environment-variables), then restart.
+- **The video can't be decoded.** ffmpeg opens MP4, MOV, WebM, Matroska, AVI, Ogg, MPEG-TS and FLV files. It refuses playlists and other formats that name further files or addresses, whatever the upload's type says. With `LOG_LEVEL=debug`, the `files` component logs `Video frame could not be made` with ffmpeg's reason.
+- **Making the frame took more than 20 seconds**, as a slow S3 bucket can. A video whose frames are over 40 megapixels, a little more than 8K, gets no frame at all. On S3, ffmpeg reads the video from a signed URL, so the app server must reach the bucket's endpoint itself, not only browsers.
+
+A `503` instead means more than 66 frames were asked for at once, as when a library of new videos first opens; that card shows its icon until the page is reloaded. Flare tries a video that gave no frame again after ten minutes, and browsers keep the `404` for ten minutes too, so reload the library after that. A link preview an app already made keeps its picture: paste the link again.
+
 ## Link previews are missing, outdated, or stop playing
 
 A chat app or social network fetches a pasted link from its own servers to draw the [embed](/guide/embeds).

@@ -37,6 +37,11 @@ export interface StorageProvider {
    * through ranged {@link getFileStream} requests instead.
    */
   openRandomAccess?(path: string): Promise<RandomAccessFile>
+  /**
+   * Where a stored object sits on this machine's disk, for tools that read
+   * files by name. Only local storage has one.
+   */
+  localPath?(path: string): string
   getFileSize(path: string): Promise<number>
   initializeMultipartUpload(path: string, mimeType: string): Promise<string>
   getPresignedPartUploadUrl(

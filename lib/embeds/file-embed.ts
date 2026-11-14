@@ -3,7 +3,12 @@ import type { Prisma } from '@prisma/client'
 import type { AppearanceDocument } from '@/lib/customization/schema'
 import type { FileAccessResult } from '@/lib/files/access'
 import { fileKind } from '@/lib/files/file-kind'
-import { fileUrls } from '@/lib/files/urls'
+import {
+  VIDEO_POSTER_SIZE,
+  fileIdUrls,
+  fileUrls,
+  thumbnailLoader,
+} from '@/lib/files/urls'
 import { formatFileSize } from '@/lib/utils'
 
 import { type EmbedCard, embedFileLabel, renderEmbedCard } from './card'
@@ -21,6 +26,7 @@ export const embedFileFields = {
   id: true,
   name: true,
   urlPath: true,
+  path: true,
   mimeType: true,
   size: true,
   visibility: true,
@@ -47,8 +53,13 @@ const IMAGE_TYPES = new Set([
 ])
 const VIDEO_TYPES = new Set(['video/mp4', 'video/webm', 'video/quicktime'])
 
-/** Shown until a video plays. Flare has no frame of the video itself. */
+/**
+ * Shown until a video plays when Flare has no frame of the video itself, as
+ * on a server without ffmpeg. Apps only play a video that has a picture.
+ */
 export const VIDEO_POSTER_PATH = '/video-poster.png'
+/** The generic poster's size, which apps also take for the video's shape. */
+const GENERIC_POSTER_SIZE = { width: 1920, height: 1080 }
 
 export interface FileEmbedRequest {
   file: EmbedFileRow
@@ -64,6 +75,11 @@ export interface FileEmbedRequest {
   appearance: AppearanceDocument
   /** Whether storage hands out its own, expiring, URLs. */
   signedStorage: boolean
+  /**
+   * The size of a video's own frame, which its preview shows, or null when
+   * there is none to show: see `videoPoster`.
+   */
+  videoFrame?: { width: number; height: number } | null
   /** The preview fetcher asking, or null for the share page itself. */
   crawler: Crawler | null
 }
@@ -75,7 +91,7 @@ export type FileEmbed =
   | { kind: 'document'; document: EmbedDocument }
 
 function media(
-  { file, appearance, signedStorage }: FileEmbedRequest,
+  { file, appearance, signedStorage, videoFrame, password }: FileEmbedRequest,
   urls: ReturnType<typeof fileUrls>,
   origin: string
 ): EmbedMedia | null {
@@ -95,7 +111,16 @@ function media(
       kind: 'video',
       url: stream,
       type: file.mimeType,
-      poster: `${origin}${VIDEO_POSTER_PATH}`,
+      ...(videoFrame
+        ? {
+            poster: thumbnailLoader({
+              src: fileIdUrls(file.id, { origin, password }).thumbnail,
+              width: VIDEO_POSTER_SIZE,
+            }),
+            width: videoFrame.width,
+            height: videoFrame.height,
+          }
+        : { poster: `${origin}${VIDEO_POSTER_PATH}`, ...GENERIC_POSTER_SIZE }),
     }
   if (kind === 'audio')
     return { kind: 'audio', url: stream, type: file.mimeType }

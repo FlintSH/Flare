@@ -90,7 +90,7 @@ A tile without an image preview shows the same icon for the file's kind as your 
 
 Under its name, each tile says what the file is, such as **JPEG image** or **Plain text**, followed by its size unless the instance hides sizes. A locked tile says **Password required** instead.
 
-An image tile shows a thumbnail that Flare resizes for the tile, as library cards do, so a folder of large photos opens without downloading every original. Animated GIFs and SVG images are shown as they are. Opening the folder adds no [views](./sharing#view-counts) to its files. Earlier versions loaded each image tile from the file's raw link at full size, which was slow for photo collections and added a view to every image on each visit.
+An image tile shows a thumbnail that Flare resizes for the tile, as library cards do, so a folder of large photos opens without downloading every original. A video tile shows a frame from the video with a play button, made the same way as on [library cards](./library#read-a-file-card); a password-protected video keeps its lock, because its frame would show what it holds. Earlier builds showed a video icon on every video tile. Animated GIFs and SVG images are shown as they are. Opening the folder adds no [views](./sharing#view-counts) to its files. Earlier versions loaded each image tile from the file's raw link at full size, which was slow for photo collections and added a view to every image on each visit.
 
 A short list sits in the middle of the page, like a shared file; a longer one starts under the header.
 

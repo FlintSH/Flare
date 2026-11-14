@@ -163,11 +163,24 @@ async function resize(source: Buffer, width: number): Promise<Thumbnail> {
   )
 }
 
+/** Where a copy is made from: the stored bytes, unless a source is given. */
+type Source = (file: { id: string; path: string }) => Promise<Buffer | null>
+
+async function stored(file: { id: string; path: string }) {
+  const deadline = AbortSignal.timeout(MAX_SECONDS * 1000)
+  const storage = await getStorageProvider()
+  return read(
+    await storage.getFileStream(file.path, undefined, deadline),
+    deadline
+  )
+}
+
 async function make(
   key: string,
   file: { id: string; path: string },
   width: number,
-  requesters: Requesters
+  requesters: Requesters,
+  load: Source
 ): Promise<Thumbnail> {
   // Every browser that asked has since given up, as when cards scroll out of
   // view while their previews wait. Don't make what nobody will see.
@@ -178,12 +191,7 @@ async function make(
   })
   let source: Buffer | null
   try {
-    const deadline = AbortSignal.timeout(MAX_SECONDS * 1000)
-    const storage = await getStorageProvider()
-    source = await read(
-      await storage.getFileStream(file.path, undefined, deadline),
-      deadline
-    )
+    source = await load(file)
   } catch (error) {
     // Storage may answer next time, so this isn't remembered. The original's
     // own route reports what is wrong.
@@ -217,7 +225,9 @@ async function make(
 export async function resizedThumbnail(
   file: { id: string; path: string; size: number },
   width: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /** For a file that isn't itself the picture, such as a video's frame. */
+  source?: Source
 ): Promise<Thumbnail> {
   const key = `${file.id}:${file.path}:${width}`
   if (state.cached.has(key)) {
@@ -228,7 +238,7 @@ export async function resizedThumbnail(
     return cached
   }
   // `size` is in megabytes.
-  if (file.size * 1024 ** 2 > MAX_SOURCE_BYTES) return null
+  if (!source && file.size * 1024 ** 2 > MAX_SOURCE_BYTES) return null
   // Requests for the same copy while it is being made share the work.
   const making = state.making.get(key)
   if (making) {
@@ -237,7 +247,7 @@ export async function resizedThumbnail(
   }
   const requesters: Requesters = [signal]
   const thumbnail = withResizeSlot(() =>
-    make(key, file, width, requesters)
+    make(key, file, width, requesters, source ?? stored)
   ).finally(() => state.making.delete(key))
   state.making.set(key, { thumbnail, requesters })
   return thumbnail

@@ -36,6 +36,7 @@ import {
   isTextKind,
 } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
+import { videoPosterWithin } from '@/lib/files/video-poster'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -85,6 +86,12 @@ export async function generateMetadata({
 
   const { access } = await checkPageAccess(file, password)
   const appearance = config.settings.customization.published
+  // Previews from fetchers Flare knows wait longer, on their own route. A
+  // visitor's page waits only briefly; the frame is kept for its player.
+  const videoFrame =
+    access.allowed && fileKind(file).kind === 'video'
+      ? await videoPosterWithin(file, 1500)
+      : null
   const embed = fileEmbed({
     file,
     ownerId: userUrlId,
@@ -96,6 +103,7 @@ export async function generateMetadata({
     origin: requestOrigin(requestHeaders),
     appearance,
     signedStorage: storage.kind === 's3',
+    videoFrame,
     crawler: null,
   })
   return embed.kind === 'document' ? embedMetadata(embed.document) : {}

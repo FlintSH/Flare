@@ -106,7 +106,7 @@ Apps keep the previews they make. A change to your embed shows on links pasted f
 
 ## What a preview can reveal
 
-A preview is built from what an anonymous visitor could see on the share page: the lines you wrote, the details the instance shows, and the file's own image or video. A file behind a password gives a preview only when the link itself carries the password, like the address in your browser after you unlock it. Treat such a link like the password; **Copy link** never includes it.
+A preview is built from what an anonymous visitor could see on the share page: the lines you wrote, the details the instance shows, and the file's own image or video. A video's preview shows a frame from the video until it plays. A file behind a password gives a preview only when the link itself carries the password, like the address in your browser after you unlock it. Treat such a link like the password; **Copy link** never includes it.
 
 An app reading the card doesn't add a view to the file. Fetching the image or video through `/raw` does, like any other [raw request](./sharing#view-counts). A video or audio file on S3 storage plays from the bucket, which adds none.
 
@@ -130,6 +130,8 @@ Check that the file is public and opens in a signed-out browser window. Apps fet
 Apps play MP4, WebM, and MOV. Other formats get the card without a player. Discord also needs the video served over HTTPS.
 :::
 
-::: details The player has black bars beside a tall video
-Flare doesn't read a video's dimensions, so it tells apps every video is 1920 × 1080. A portrait video plays inside a wide frame.
+::: details My video shows Flare's play-button picture instead of a frame
+Flare shows a frame from the video itself, taken about a second in, and tells apps the video's real shape, so a portrait video gets a tall player. It falls back to a generic picture and a 1920 × 1080 frame only when it has no frame to show: the server can't run ffmpeg, the video can't be decoded, or the frame wasn't ready in time: six seconds for the apps Flare knows by name, and a second and a half for others, which read the share page itself. Open `/api/files/{id}/thumbnail` for that video in a browser; a `404` means there is no frame, and [Video thumbnails are missing](/hosting/troubleshooting#video-thumbnails-are-missing) explains why. Apps keep a preview for a while, so paste the link again after fixing it.
+
+Earlier builds showed the generic picture for every video and told apps every video was 1920 × 1080, so a portrait video played inside a wide frame.
 :::

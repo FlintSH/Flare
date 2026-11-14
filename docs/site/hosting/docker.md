@@ -168,6 +168,8 @@ pnpm build
 pnpm start
 ```
 
+Install ffmpeg too, for example with `apt install ffmpeg`, so video cards and link previews show a frame from the video. Flare runs `ffmpeg` from the `PATH`, or the program named by [`FLARE_FFMPEG_PATH`](./configuration#core-environment-variables). Without it Flare still starts and plays videos; their cards keep a video icon and their link previews show a generic picture, and the log says `Video thumbnails are off` once. The official image includes ffmpeg.
+
 Each command exits with a non-zero status when it fails, so stop there and fix the reported error before running the next one. `pnpm start` needs a completed build and an always-running process manager. Run from the project root with writable `uploads` and `tmp` directories; `pnpm start` reads both from there. Builds leave `uploads` out of `.next/standalone`, so building next to existing uploads doesn't copy them. A `.env.local` file is loaded by Next.js, but standalone Node maintenance scripts need their environment supplied separately. For development use `pnpm dev` after setting up the database.
 
 ### Use the repository's Compose file

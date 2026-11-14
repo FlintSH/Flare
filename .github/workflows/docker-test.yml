@@ -83,6 +83,9 @@ jobs:
             state=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' flare-test) || state=missing
             if [ "$state" = 'running healthy' ]; then
               echo "Container is healthy"
+              # Video thumbnails and link previews need ffmpeg in the image.
+              docker exec --user nextjs flare-test ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=duration=1 -frames:v 1 -f image2pipe -c:v png pipe:1 > /dev/null
+              echo "ffmpeg makes frames"
               exit 0
             fi
             if [ "$state" != 'running starting' ] || [ $SECONDS -ge $deadline ]; then
