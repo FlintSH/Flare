@@ -44,9 +44,11 @@ const median = (values) => {
     : Math.round((sorted[middle - 1] + sorted[middle]) / 2)
 }
 
-// Workflows that run on a schedule or react to other workflows are not part
-// of what a push waits for.
-const IGNORED_WORKFLOWS = new Set(['PR Preview Controller'])
+// Left out of both sides: the preview controller, which runs on a schedule
+// and in reaction to other workflows, and GitHub's own code scanning, which
+// is set up outside the repository's workflows and cannot be re-run.
+const ignored = (run) =>
+  run.name === 'PR Preview Controller' || run.path?.startsWith('dynamic/')
 
 function pushes(shas) {
   const result = []
@@ -59,25 +61,25 @@ function pushes(shas) {
     ).trim()
     const runs = api(`repos/${repo}/actions/runs?head_sha=${sha}&per_page=100`)
       .flatMap((page) => page.workflow_runs)
-      .filter(
-        (run) =>
-          run.status === 'completed' && !IGNORED_WORKFLOWS.has(run.name)
-      )
-    if (!runs.length) throw new Error(`No completed workflow runs for ${sha}`)
+      .filter((run) => !ignored(run))
+    if (!runs.length) throw new Error(`No workflow runs for ${sha}`)
     const attempts = Math.max(...runs.map((run) => run.run_attempt))
     // One sample per attempt number: the first attempt of every workflow is
     // what the push itself started, the second is the first re-run, and so on.
     for (let attempt = 1; attempt <= attempts; attempt++) {
       const jobs = []
+      let workflows = 0
       for (const run of runs) {
         if (run.run_attempt < attempt) continue
-        for (const job of api(
+        const attempted = api(
           `repos/${repo}/actions/runs/${run.id}/attempts/${attempt}/jobs?per_page=100`
-        ).flatMap((page) => page.jobs)) {
+        ).flatMap((page) => page.jobs)
+        if (attempted.some((job) => job.status !== 'completed')) continue
+        workflows++
+        for (const job of attempted) {
           if (job.conclusion === 'skipped') continue
           jobs.push({
-            // GitHub names its own code scanning runs after the pull request.
-            workflow: run.path?.startsWith('dynamic/') ? 'CodeQL' : run.name,
+            workflow: run.name,
             name: job.name,
             conclusion: job.conclusion,
             created: job.created_at,
@@ -93,7 +95,9 @@ function pushes(shas) {
           })
         }
       }
-      if (!jobs.length) continue
+      // A sample counts once every workflow of the push has run in it and
+      // finished. A re-run of only some of them would look faster than it is.
+      if (workflows < runs.length) continue
       const start = Math.min(...jobs.map((job) => Date.parse(job.created)))
       const end = Math.max(...jobs.map((job) => Date.parse(job.completed)))
       result.push({

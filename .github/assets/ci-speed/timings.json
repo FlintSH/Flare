@@ -1,0 +1,421 @@
+{
+  "repository": "FlintSH/Flare",
+  "collectedAt": "2026-11-14T19:15:40.652Z",
+  "before": {
+    "commits": ["1cf709f8", "642ee238", "0fa11039", "8b0d8b9b"],
+    "pushes": 5,
+    "typical": {
+      "sha": "0fa110392ce487132b636b33c879cd0c3ae625f5",
+      "attempt": 2,
+      "jobs": [
+        {
+          "name": "Build Checks / Build Check",
+          "started": 3,
+          "completed": 76
+        },
+        {
+          "name": "Code Quality / Code Quality Checks",
+          "started": 5,
+          "completed": 214
+        },
+        {
+          "name": "Docker Test / Docker Build Test (linux/amd64)",
+          "started": 9,
+          "completed": 518
+        },
+        {
+          "name": "Docker Test / Docker Build Test (linux/arm64)",
+          "started": 11,
+          "completed": 548
+        },
+        {
+          "name": "Documentation / check",
+          "started": 8,
+          "completed": 383
+        },
+        {
+          "name": "PR Preview Image / checks",
+          "started": 6,
+          "completed": 20
+        },
+        {
+          "name": "PR Preview Image / image",
+          "started": 23,
+          "completed": 304
+        }
+      ]
+    },
+    "failed": [],
+    "wallSeconds": {
+      "median": 548,
+      "min": 517,
+      "max": 701,
+      "samples": [701, 517, 519, 548, 635]
+    },
+    "runnerSeconds": {
+      "median": 1998,
+      "min": 1972,
+      "max": 2107,
+      "samples": [2107, 1994, 1972, 1998, 2102]
+    },
+    "jobs": {
+      "Build Checks / Build Check": {
+        "median": 73,
+        "min": 65,
+        "max": 91,
+        "samples": [91, 87, 73, 73, 65],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Install pnpm": 3,
+          "Setup Node.js": 4,
+          "Install dependencies": 12,
+          "Build": 42,
+          "Post Setup Node.js": 1,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0
+        }
+      },
+      "Code Quality / Code Quality Checks": {
+        "median": 209,
+        "min": 163,
+        "max": 213,
+        "samples": [204, 212, 163, 209, 213],
+        "steps": {
+          "Set up job": 1,
+          "Initialize containers": 13,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Install pnpm": 4,
+          "Setup Node.js": 4,
+          "Install dependencies": 13,
+          "Type Check": 18,
+          "Test": 110,
+          "Lint": 15,
+          "Check formatting": 14,
+          "Post Setup Node.js": 0,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0,
+          "Stop containers": 1
+        }
+      },
+      "Docker Test / Docker Build Test (linux/amd64)": {
+        "median": 476,
+        "min": 449,
+        "max": 632,
+        "samples": [449, 476, 460, 509, 632],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Set up Docker Buildx": 7,
+          "Build Docker image": 404,
+          "Test Docker container": 13,
+          "Cleanup": 2,
+          "Post Build Docker image": 2,
+          "Post Set up Docker Buildx": 24,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0
+        }
+      },
+      "Docker Test / Docker Build Test (linux/arm64)": {
+        "median": 514,
+        "min": 467,
+        "max": 696,
+        "samples": [696, 510, 514, 537, 467],
+        "steps": {
+          "Set up job": 2,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Set up Docker Buildx": 9,
+          "Build Docker image": 458,
+          "Test Docker container": 15,
+          "Cleanup": 2,
+          "Post Build Docker image": 2,
+          "Post Set up Docker Buildx": 15,
+          "Complete job": 0
+        }
+      },
+      "Documentation / check": {
+        "median": 394,
+        "min": 354,
+        "max": 454,
+        "samples": [354, 394, 454, 375, 444],
+        "steps": {
+          "Set up job": 1,
+          "Check out the pull request or pushed source": 10,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 2,
+          "Install documentation dependencies": 4,
+          "Check documentation formatting": 3,
+          "Build and verify links and assets": 22,
+          "Install browser": 20,
+          "Test documentation interactions and responsive layouts": 136,
+          "Build stable docs, dated archives and the rolling preview": 171,
+          "Test stable content, archives, comparisons and explicit rolling access": 17,
+          "Complete job": 0,
+          "Verify reference coverage": 0,
+          "Post Check out the pull request or pushed source": 0
+        }
+      },
+      "PR Preview Image / checks": {
+        "median": 14,
+        "min": 12,
+        "max": 22,
+        "samples": [22, 12, 12, 14, 17],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 1,
+          "Test preview lifecycle and public gateway": 1,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0
+        }
+      },
+      "PR Preview Image / image": {
+        "median": 291,
+        "min": 264,
+        "max": 303,
+        "samples": [291, 303, 296, 281, 264],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 6,
+          "Checkout trusted preview support": 7,
+          "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069": 9,
+          "Build disposable preview image": 223,
+          "Upload image for the trusted controller": 5,
+          "Post Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069": 45,
+          "Post Checkout trusted preview support": 0,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0
+        }
+      }
+    }
+  },
+  "after": {
+    "commits": ["90316df1"],
+    "pushes": 3,
+    "typical": {
+      "sha": "90316df19ad8076a2704ccd0aa89ca8b9b196aaf",
+      "attempt": 2,
+      "jobs": [
+        {
+          "name": "Build Checks / Build Check",
+          "started": 2,
+          "completed": 51
+        },
+        {
+          "name": "Code Quality / Code Quality Checks",
+          "started": 7,
+          "completed": 136
+        },
+        {
+          "name": "Docker Test / Docker Build Test (linux/amd64)",
+          "started": 5,
+          "completed": 140
+        },
+        {
+          "name": "Docker Test / Docker Build Test (linux/arm64)",
+          "started": 8,
+          "completed": 90
+        },
+        {
+          "name": "Documentation / browser (accessibility)",
+          "started": 4,
+          "completed": 93
+        },
+        {
+          "name": "Documentation / browser (layout and features)",
+          "started": 4,
+          "completed": 87
+        },
+        {
+          "name": "Documentation / check",
+          "started": 4,
+          "completed": 48
+        },
+        {
+          "name": "Documentation Releases / releases",
+          "started": 10,
+          "completed": 170
+        },
+        {
+          "name": "PR Preview Image / checks",
+          "started": 8,
+          "completed": 16
+        },
+        {
+          "name": "PR Preview Image / image",
+          "started": 8,
+          "completed": 126
+        }
+      ]
+    },
+    "failed": [],
+    "wallSeconds": {
+      "median": 170,
+      "min": 170,
+      "max": 172,
+      "samples": [170, 170, 172]
+    },
+    "runnerSeconds": {
+      "median": 902,
+      "min": 897,
+      "max": 915,
+      "samples": [915, 897, 902]
+    },
+    "jobs": {
+      "Build Checks / Build Check": {
+        "median": 49,
+        "min": 43,
+        "max": 58,
+        "samples": [58, 49, 43],
+        "steps": {
+          "Set up job": 2,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Install pnpm": 5,
+          "Setup Node.js": 6,
+          "Install dependencies": 11,
+          "Restore the build cache": 2,
+          "Build": 10,
+          "Save the build cache": 0,
+          "Complete job": 0
+        }
+      },
+      "Code Quality / Code Quality Checks": {
+        "median": 106,
+        "min": 97,
+        "max": 129,
+        "samples": [97, 129, 106],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 6,
+          "Install pnpm": 8,
+          "Setup Node.js": 8,
+          "Install dependencies": 10,
+          "Restore check results": 1,
+          "Type Check": 4,
+          "Test": 60,
+          "Lint": 2,
+          "Check formatting": 2,
+          "Post Setup Node.js": 0,
+          "Post Install pnpm": 0,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0
+        }
+      },
+      "Docker Test / Docker Build Test (linux/amd64)": {
+        "median": 135,
+        "min": 124,
+        "max": 145,
+        "samples": [124, 135, 145],
+        "steps": {
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 6,
+          "Start PostgreSQL": 0,
+          "Build Docker image": 114,
+          "Test Docker container": 12,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 0,
+          "Generate platform tag suffix": 0,
+          "Set up job": 0,
+          "Report image size": 0
+        }
+      },
+      "Docker Test / Docker Build Test (linux/arm64)": {
+        "median": 92,
+        "min": 82,
+        "max": 106,
+        "samples": [92, 82, 106],
+        "steps": {
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 7,
+          "Build Docker image": 75,
+          "Report image size": 1,
+          "Test Docker container": 6,
+          "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 1,
+          "Set up job": 0,
+          "Start PostgreSQL": 0
+        }
+      },
+      "Documentation / browser (accessibility)": {
+        "median": 107,
+        "min": 89,
+        "max": 111,
+        "samples": [111, 89, 107],
+        "steps": {
+          "Check out the pull request": 11,
+          "Install documentation dependencies": 3,
+          "Start installing the browser": 5,
+          "Build the site": 18,
+          "Test documentation interactions and responsive layouts": 65,
+          "Post Check out the pull request": 0,
+          "Set up job": 0,
+          "Post Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 0
+        }
+      },
+      "Documentation / browser (layout and features)": {
+        "median": 84,
+        "min": 83,
+        "max": 99,
+        "samples": [99, 83, 84],
+        "steps": {
+          "Set up job": 1,
+          "Check out the pull request": 10,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 0,
+          "Install documentation dependencies": 3,
+          "Start installing the browser": 5,
+          "Build the site": 15,
+          "Test documentation interactions and responsive layouts": 47,
+          "Post Check out the pull request": 0
+        }
+      },
+      "Documentation / check": {
+        "median": 36,
+        "min": 31,
+        "max": 44,
+        "samples": [31, 44, 36],
+        "steps": {
+          "Set up job": 1,
+          "Check out the pull request or pushed source": 11,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 1,
+          "Install documentation dependencies": 3,
+          "Check documentation formatting": 3,
+          "Build and verify links and assets": 13,
+          "Test the documentation scripts": 1,
+          "Verify reference coverage": 0,
+          "Complete job": 0
+        }
+      },
+      "Documentation Releases / releases": {
+        "median": 162,
+        "min": 160,
+        "max": 168,
+        "samples": [168, 160, 162],
+        "steps": {
+          "Set up job": 1,
+          "Check out the pull request": 10,
+          "Install documentation dependencies": 4,
+          "Start installing the browser": 5,
+          "Build stable docs, dated archives and the rolling preview": 118,
+          "Test stable content, archives, comparisons and explicit rolling access": 21,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 0
+        }
+      },
+      "PR Preview Image / checks": {
+        "median": 7,
+        "min": 6,
+        "max": 8,
+        "samples": [7, 8, 6],
+        "steps": {
+          "Set up job": 1,
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 2,
+          "Run actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1": 0,
+          "Test preview lifecycle and public gateway": 1
+        }
+      },
+      "PR Preview Image / image": {
+        "median": 118,
+        "min": 107,
+        "max": 128,
+        "samples": [128, 118, 107],
+        "steps": {
+          "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1": 6,
+          "Checkout trusted preview support": 1,
+          "Run docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069": 6,
+          "Build disposable preview image": 97,
+          "Upload image for the trusted controller": 4,
+          "Post Checkout trusted preview support": 0,
+          "Set up job": 1
+        }
+      }
+    }
+  }
+}

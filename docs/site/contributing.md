@@ -199,7 +199,7 @@ node scripts/ci/chart.cjs --timings .github/assets/ci-speed/timings.json \
   --image .github/assets/ci-speed/image.json --out .github/assets/ci-speed
 ```
 
-Each side takes the head commits of pull request pushes, and every attempt of a commit's workflow runs is one sample, so re-running a commit's workflows adds a sample. The script prints the medians for the time from push to the last check, the runner time added over every job, and each job, and names any job that did not succeed, since a failed job is often a fast one. `chart.cjs` draws the comparison and a timeline of one typical push; it needs the handbook's dependencies and Chromium, as in [Browser checks](#browser-checks). Compare like with like: a commit that changes the lockfile or the Dockerfile runs colder than an ordinary one.
+Each side takes the head commits of pull request pushes. Every attempt of a commit's workflow runs is one sample, so re-running all of a commit's workflows adds a sample; an attempt counts only once every workflow has finished in it. GitHub's own code scanning and the preview controller are left out of both sides. The script prints the medians for the time from push to the last check, the runner time added over every job, and each job, and names any job that did not succeed, since a failed job is often a fast one. `chart.cjs` draws the comparison and a timeline of one typical push; it needs the handbook's dependencies and Chromium, as in [Browser checks](#browser-checks). Compare like with like: a commit that changes the lockfile or the Dockerfile runs colder than an ordinary one.
 
 ## Database permission and avatar regression tests
 

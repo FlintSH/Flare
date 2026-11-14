@@ -42,8 +42,10 @@ const size = (mib) =>
 const NAMES = {
   'Build Checks / Build Check': 'Production build',
   'Code Quality / Code Quality Checks': 'Tests, types, lint and format',
-  'Docker Test / Docker Build Test (linux/amd64)': 'Image build and start, amd64',
-  'Docker Test / Docker Build Test (linux/arm64)': 'Image build and start, arm64',
+  'Docker Test / Docker Build Test (linux/amd64)':
+    'Image build and start, amd64',
+  'Docker Test / Docker Build Test (linux/arm64)':
+    'Image build and start, arm64',
   'Documentation / check': 'Handbook checks',
   'Documentation / browser (accessibility)': 'Handbook accessibility tests',
   'Documentation / browser (layout and features)': 'Handbook layout tests',
@@ -51,9 +53,6 @@ const NAMES = {
   'Documentation Releases / releases': 'Handbook release site',
   'PR Preview Image / checks': 'Preview tooling tests',
   'PR Preview Image / image': 'Preview image',
-  'CodeQL / Analyze (actions)': 'Code scanning, workflows',
-  'CodeQL / Analyze (javascript-typescript)': 'Code scanning, TypeScript',
-  'CodeQL / Analyze (python)': 'Code scanning, Python',
 }
 const HANDBOOK = /^Documentation( Releases)? \//
 
@@ -106,7 +105,7 @@ const ROWS = [
   },
   {
     label: 'Tests, types, lint and format',
-    note: 'Code Quality, 2,978 tests against PostgreSQL',
+    note: 'Code Quality, the whole suite against PostgreSQL',
     before: job('before', 'Code Quality / Code Quality Checks'),
     after: job('after', 'Code Quality / Code Quality Checks'),
     format: time,
