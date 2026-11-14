@@ -8,6 +8,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises'
+import { availableParallelism } from 'node:os'
 import { dirname, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
@@ -65,7 +66,7 @@ let outputBytes = 0
 for (const directory of ['screenshots', 'evidence', 'demos', 'landing']) {
   await rm(resolve(root, 'public', directory), { recursive: true, force: true })
 }
-const prepared = new Set()
+const prepared = new Map()
 for (const [name, location, output] of [...images]
   .map((name) => [name, '../images', 'screenshots'])
   .concat(
@@ -87,17 +88,29 @@ for (const [name, location, output] of [...images]
     output,
     name.replace(/\.(png|jpg)$/, '.webp')
   )
-  if (prepared.has(target)) continue
-  prepared.add(target)
-  await mkdir(dirname(target), { recursive: true })
-  // Preserve readable text and UI edges with a bounded desktop width.
-  await sharp(source)
-    .resize({ width: 1600, withoutEnlargement: true })
-    .webp({ quality: 85, effort: 5 })
-    .toFile(target)
-  sourceBytes += (await stat(source)).size
-  outputBytes += (await stat(target)).size
+  if (!prepared.has(target)) prepared.set(target, source)
 }
+// Encoding is the slow part and each image is independent, so encode one per
+// core at a time.
+const pending = [...prepared]
+await Promise.all(
+  Array.from({ length: availableParallelism() }, async () => {
+    for (let next; (next = pending.shift());) {
+      const [target, source] = next
+      await mkdir(dirname(target), { recursive: true })
+      // Preserve readable text and UI edges with a bounded desktop width.
+      await sharp(source)
+        .resize({ width: 1600, withoutEnlargement: true })
+        .webp({ quality: 85, effort: 5 })
+        .toFile(target)
+      // Read both sizes before adding: a sum that awaits in the middle
+      // loses the additions other workers make meanwhile.
+      const [from, to] = await Promise.all([stat(source), stat(target)])
+      sourceBytes += from.size
+      outputBytes += to.size
+    }
+  })
+)
 await mkdir(resolve(root, 'public'), { recursive: true })
 await prepareAppearance(root)
 await prepareLandingAssets(root)

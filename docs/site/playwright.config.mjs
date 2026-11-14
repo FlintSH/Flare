@@ -4,7 +4,9 @@ export default defineConfig({
   testDir: './tests',
   testIgnore: '**/releases.spec.mjs',
   fullyParallel: true,
-  workers: 2,
+  // One worker per core on a CI runner, which runs nothing else. Two keeps a
+  // shared development machine responsive.
+  workers: process.env.CI ? '100%' : 2,
   use: {
     baseURL: `http://127.0.0.1:4175${process.env.DOCS_BASE || '/'}`,
     headless: true,

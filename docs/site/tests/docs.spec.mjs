@@ -12,6 +12,13 @@ const handbookPaths = (
   )
 ).flat()
 
+// The checks that visit every page are cut into parts, each its own test, so
+// the workers share them. Together the parts still cover every page.
+const SWEEP_PARTS = 4
+const sweepParts = Array.from({ length: SWEEP_PARTS }, (_, part) =>
+  handbookPaths.filter((_, index) => index % SWEEP_PARTS === part)
+)
+
 test('visible version and source commit match the build metadata', async ({
   page,
   request,
@@ -196,76 +203,88 @@ test('local full-text search finds the webhook reference', async ({ page }) => {
   await expect(page.locator('.VPLocalSearchBox')).toContainText(/webhook/i)
 })
 
+test('the page checks below cover every handbook page once', () => {
+  expect(handbookPaths.length).toBeGreaterThan(SWEEP_PARTS)
+  expect(sweepParts.flat().sort()).toEqual([...handbookPaths].sort())
+})
+
 for (const width of [390, 1440]) {
-  test(`pages fit the ${width}px viewport and load without browser errors`, async ({
-    page,
-  }) => {
-    test.setTimeout(180_000)
-    await page.setViewportSize({ width, height: 900 })
-    const errors = []
-    page.on('pageerror', (error) => errors.push(error.message))
-    page.on('response', (response) => {
-      if (response.status() >= 400)
-        errors.push(`${response.status()} ${response.url()}`)
-    })
-    for (const url of handbookPaths) {
-      await page.goto(url)
-      await page.waitForLoadState('networkidle')
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth + 1
-        ),
-        url
-      ).toBe(true)
-      expect(await page.locator('h1').count(), url).toBe(1)
-      expect(
-        await page
-          .locator('img')
-          .evaluateAll(
-            (images) =>
-              images.filter(
-                (image) =>
-                  image.loading !== 'lazy' &&
-                  (!image.complete || image.naturalWidth === 0)
-              ).length
+  for (const [part, paths] of sweepParts.entries()) {
+    test(`pages fit the ${width}px viewport and load without browser errors (part ${part + 1} of ${SWEEP_PARTS})`, async ({
+      page,
+    }) => {
+      test.setTimeout(180_000)
+      await page.setViewportSize({ width, height: 900 })
+      const errors = []
+      page.on('pageerror', (error) => errors.push(error.message))
+      page.on('response', (response) => {
+        if (response.status() >= 400)
+          errors.push(`${response.status()} ${response.url()}`)
+      })
+      for (const url of paths) {
+        await page.goto(url)
+        await page.waitForLoadState('networkidle')
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth + 1
           ),
-        url
-      ).toBe(0)
-    }
-    expect(errors).toEqual([])
-  })
+          url
+        ).toBe(true)
+        expect(await page.locator('h1').count(), url).toBe(1)
+        expect(
+          await page
+            .locator('img')
+            .evaluateAll(
+              (images) =>
+                images.filter(
+                  (image) =>
+                    image.loading !== 'lazy' &&
+                    (!image.complete || image.naturalWidth === 0)
+                ).length
+            ),
+          url
+        ).toBe(0)
+      }
+      expect(errors).toEqual([])
+    })
+  }
 }
 
 for (const theme of ['dark', 'light']) {
-  test(`${theme} theme has no detected WCAG accessibility violations`, async ({
-    page,
-  }) => {
-    test.setTimeout(180_000)
-    await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: theme })
-    await page.addInitScript(
-      (value) => localStorage.setItem('vitepress-theme-appearance', value),
-      theme
-    )
-    await page.setViewportSize({
-      width: theme === 'dark' ? 1440 : 390,
-      height: 900,
-    })
-    for (const path of handbookPaths) {
-      await page.goto(path)
-      await page.waitForLoadState('networkidle')
-      await page.addScriptTag({ content: axe.source })
-      const violations = await page.evaluate(async () => {
-        const result = await window.axe.run(document, {
-          runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] },
-        })
-        return result.violations.map((item) => ({
-          rule: item.id,
-          nodes: item.nodes.map((node) => node.target),
-        }))
+  for (const [part, paths] of sweepParts.entries()) {
+    test(`${theme} theme has no detected WCAG accessibility violations (part ${part + 1} of ${SWEEP_PARTS})`, async ({
+      page,
+    }) => {
+      test.setTimeout(180_000)
+      await page.emulateMedia({ reducedMotion: 'reduce', colorScheme: theme })
+      await page.addInitScript(
+        (value) => localStorage.setItem('vitepress-theme-appearance', value),
+        theme
+      )
+      await page.setViewportSize({
+        width: theme === 'dark' ? 1440 : 390,
+        height: 900,
       })
-      expect(violations, path).toEqual([])
-    }
-  })
+      for (const path of paths) {
+        await page.goto(path)
+        await page.waitForLoadState('networkidle')
+        await page.addScriptTag({ content: axe.source })
+        const violations = await page.evaluate(async () => {
+          const result = await window.axe.run(document, {
+            runOnly: {
+              type: 'tag',
+              values: ['wcag2a', 'wcag2aa', 'wcag21aa'],
+            },
+          })
+          return result.violations.map((item) => ({
+            rule: item.id,
+            nodes: item.nodes.map((node) => node.target),
+          }))
+        })
+        expect(violations, path).toEqual([])
+      }
+    })
+  }
 }
 
 test('role simulation explains additive grants and token scope intersection', async ({

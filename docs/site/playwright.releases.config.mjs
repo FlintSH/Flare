@@ -6,6 +6,9 @@ export default defineConfig({
   testDir: './tests',
   testMatch: '**/releases.spec.mjs',
   fullyParallel: true,
+  // One worker per core on a CI runner; Playwright's default of half the
+  // cores elsewhere.
+  workers: process.env.CI ? '100%' : undefined,
   timeout: 90_000,
   use: {
     baseURL: `http://127.0.0.1:4176${base}`,

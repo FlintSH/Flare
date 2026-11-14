@@ -1,0 +1,107 @@
+name: Documentation Releases
+
+# Builds and tests the versioned site (stable docs, dated archives, rolling
+# preview) for a pull request, beside the Documentation workflow. Pushes and
+# releases build it inside Documentation's `check` job, which also publishes.
+#
+# The release site is made from each release's own commit plus a few files of
+# this checkout: the docs theme, scripts and tests, the landing page, the
+# default palette, fonts and icon. A pull request that changes none of those
+# cannot change the result, so it skips this workflow. When the builder starts
+# reading something new from the checkout, add it below.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '**'
+      # Application code, apart from the palette the docs theme is made from.
+      - '!app/**'
+      - '!components/**'
+      - '!hooks/**'
+      - '!types/**'
+      - '!prisma/**'
+      - '!__tests__/**'
+      - '!scripts/**'
+      - '!examples/**'
+      - '!lib/**'
+      - 'lib/customization/defaults.ts'
+      # Handbook pages and pictures. A release's own come from its commit.
+      - '!docs/site/guide/**'
+      - '!docs/site/admin/**'
+      - '!docs/site/hosting/**'
+      - '!docs/site/api/**'
+      - '!docs/site/*.md'
+      - 'docs/site/index.md'
+      - 'docs/site/versions.md'
+      - '!docs/*.md'
+      - '!docs/images/**'
+      - 'docs/images/handbook/docs-versions.webp'
+      - 'docs/images/handbook/docs-rolling.webp'
+      - 'docs/images/timeline/library-desktop.webp'
+      - 'docs/images/image-gallery/after-390.png'
+      - '!.github/assets/**'
+      - '!.github/release-notes/**'
+      # Project files and the other workflows.
+      - '!*.md'
+      - '!Dockerfile*'
+      - '!docker-compose.yml'
+      - '!.dockerignore'
+      - '!next.config.ts'
+      - '!proxy.ts'
+      - '!instrumentation.ts'
+      - '!pnpm-lock.yaml'
+      - '!.github/workflows/**'
+      - '.github/workflows/docs-releases.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-releases-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  releases:
+    runs-on: ubuntu-latest
+    env:
+      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The builder reads every release tag.
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          # Do not restore or save dependency caches across publishing contexts.
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs/site
+      # Installs while the releases build; "Wait for the browser" collects it.
+      - name: Start installing the browser
+        working-directory: docs/site
+        run: |
+          (npx playwright install --with-deps --only-shell chromium > "$RUNNER_TEMP/browser-install.log" 2>&1 \
+            && echo 0 > "$RUNNER_TEMP/browser-install.status" \
+            || echo 1 > "$RUNNER_TEMP/browser-install.status") &
+      - name: Build stable docs, dated archives and the rolling preview
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:releases --prefix docs/site
+      - name: Wait for the browser
+        timeout-minutes: 10
+        run: |
+          until [ -f "$RUNNER_TEMP/browser-install.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/browser-install.log"
+          exit "$(cat "$RUNNER_TEMP/browser-install.status")"
+      - name: Test stable content, archives, comparisons and explicit rolling access
+        run: npm run test:releases --prefix docs/site
+      - name: Save archive browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-release-browser-failures
+          path: docs/site/test-results
+          if-no-files-found: ignore
