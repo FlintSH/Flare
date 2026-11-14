@@ -6,29 +6,32 @@ on:
   pull_request:
     branches: [main]
 
+# A newer push to a pull request replaces the run for the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   code-quality:
     name: Code Quality Checks
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: flare_test
-          POSTGRES_PASSWORD: public-ci-test-password
-          POSTGRES_DB: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The database for the test suites. Started here in the background, its
+      # image downloads while dependencies install; as a service container it
+      # held up every step until that download had finished.
+      - name: Start PostgreSQL
+        run: |
+          docker run --detach --name postgres \
+            --env POSTGRES_USER=flare_test \
+            --env POSTGRES_PASSWORD=public-ci-test-password \
+            --env POSTGRES_DB=postgres \
+            --publish 5432:5432 \
+            postgres:16 > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
       # Must run before setup-node so the pnpm store can be located for caching.
       - name: Install pnpm
@@ -46,6 +49,25 @@ jobs:
           timeout_minutes: 10
           max_attempts: 3
           command: pnpm install --frozen-lockfile
+
+      # The type check, lint and format check keep their results and redo only
+      # the files that changed. A change to the lockfile or to a tool's
+      # configuration starts them afresh. Restored after the install, which
+      # would otherwise replace node_modules.
+      - name: Name the check results
+        id: check-key
+        run: echo "key=checks-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'tsconfig.json', 'eslint.config.mjs', '.prettierrc', '.prettierignore') }}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore check results
+        id: check-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            tsconfig.tsbuildinfo
+            node_modules/.cache/eslint
+            node_modules/.cache/prettier
+          key: ${{ steps.check-key.outputs.key }}-${{ github.sha }}
+          restore-keys: ${{ steps.check-key.outputs.key }}-
 
       - name: Type Check
         run: pnpm tsc --noEmit
@@ -69,9 +91,25 @@ jobs:
           FLARE_INVITES_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_invites_test_ci
           FLARE_EXPIRY_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_expiry_test
         run: |
+          ready=false
+          for attempt in $(seq 1 90); do
+            if pg_isready -q -h 127.0.0.1 -U flare_test; then ready=true; break; fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "PostgreSQL did not start"
+            cat "$RUNNER_TEMP/postgres-start.log" || true
+            docker logs postgres || true
+            exit 1
+          fi
+
+          # Apply the migrations once, then copy that database for each suite.
+          # A copy takes a fraction of a second; migrating each one took over
+          # two seconds.
+          createdb -h 127.0.0.1 -U flare_test flare_migrated
+          DATABASE_URL="postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_migrated" pnpm prisma migrate deploy
           for database in flare_email_test flare_email_delivery flare_email_config_test flare_customization_test flare_setup_test flare_tags_test_ci flare_folders_test_ci flare_roles_test_ci flare_avatar_test_ci flare_security_test_ci flare_timeline_test_ci flare_audit_test flare_archive_test_ci flare_invites_test_ci flare_expiry_test; do
-            createdb -h 127.0.0.1 -U flare_test "$database"
-            DATABASE_URL="postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/$database" pnpm prisma migrate deploy
+            createdb -h 127.0.0.1 -U flare_test -T flare_migrated "$database"
           done
           pnpm test
 
@@ -80,3 +118,14 @@ jobs:
 
       - name: Check formatting
         run: pnpm format:check
+
+      # About a megabyte, so every passing run saves it and the next push to
+      # the same pull request rechecks only what changed since this one.
+      - name: Save check results
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            tsconfig.tsbuildinfo
+            node_modules/.cache/eslint
+            node_modules/.cache/prettier
+          key: ${{ steps.check-key.outputs.key }}-${{ github.sha }}

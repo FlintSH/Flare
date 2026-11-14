@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# A newer push to a pull request replaces the run for the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   build:
     name: Build Check
@@ -33,10 +38,34 @@ jobs:
           max_attempts: 3
           command: pnpm install --frozen-lockfile
 
+      # Turbopack keeps its compiled output in .next/cache and reuses whatever
+      # still matches the source, so a build compiles only what changed since
+      # the cache was saved. Pull requests read the cache main saved.
+      - name: Restore the build cache
+        id: build-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: next-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+            next-build-${{ runner.os }}-
+
       # Like the Docker image build, this needs no database: the install's
-      # postinstall script generates the Prisma client.
+      # postinstall script generates the Prisma client. Code Quality checks
+      # types, so the build skips the check it would repeat.
       - name: Build
         run: pnpm build
         env:
           NEXTAUTH_SECRET: test-secret
-          NEXTAUTH_URL: http://localhost:3000 
+          NEXTAUTH_URL: http://localhost:3000
+          FLARE_SKIP_BUILD_TYPECHECK: 1
+
+      # Main saves after every push. A pull request saves once, and only when
+      # nothing was saved for its lockfile yet, so its later pushes have a cache.
+      - name: Save the build cache
+        if: github.event_name == 'push' || !startsWith(steps.build-cache.outputs.cache-matched-key, format('next-build-{0}-{1}-', runner.os, hashFiles('pnpm-lock.yaml')))
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .next/cache
+          key: next-build-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
