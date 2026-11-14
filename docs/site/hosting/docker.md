@@ -147,7 +147,7 @@ cd Flare
 docker build -t flare:local .
 ```
 
-Use `flare:local` as `FLARE_IMAGE` in your deployment. If a build from an older checkout stops with `corepack: not found`, its Dockerfile uses `node:lts`, which became Node.js 26 without Corepack on 2026-10-28. Update the checkout, or change its three `FROM node:lts` lines to `FROM node:24`. To identify a custom rolling build in Settings:
+Use `flare:local` as `FLARE_IMAGE` in your deployment. The Dockerfile builds on `node:24-bookworm-slim`, compiles Flare with the full dependency tree, and copies only production dependencies and the compiled app into the final image; see [what the image contains](./maintenance#smaller-official-image). The handbook, screenshots, CI files, and tests are left out of the build context, so a build needs none of them. If a build from an older checkout stops with `corepack: not found`, its Dockerfile uses `node:lts`, which became Node.js 26 without Corepack on 2026-10-28. Update the checkout, or change its three `FROM node:lts` lines to `FROM node:24`. To identify a custom rolling build in Settings:
 
 ```sh
 docker build \
@@ -156,7 +156,7 @@ docker build \
   -t flare:local .
 ```
 
-For a source checkout outside Docker, use Node.js 22.13 or later and the exact pnpm release in `package.json`'s `packageManager` field. That pnpm release needs Node.js 22.13. CI and the official image use Node.js 24 (`node:24`). Node.js 25 and later no longer include Corepack: on those versions, run `npm install -g corepack` before the commands below, or use Node.js 24. Supply `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` to the shell/process manager, then:
+For a source checkout outside Docker, use Node.js 22.13 or later and the exact pnpm release in `package.json`'s `packageManager` field. That pnpm release needs Node.js 22.13. CI and the official image use Node.js 24 (`node:24-bookworm-slim` in the image). Node.js 25 and later no longer include Corepack: on those versions, run `npm install -g corepack` before the commands below, or use Node.js 24. Supply `DATABASE_URL`, `NEXTAUTH_URL`, and `NEXTAUTH_SECRET` to the shell/process manager, then:
 
 ```sh
 corepack enable pnpm

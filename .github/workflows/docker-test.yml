@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# A newer push to a pull request replaces the run for the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   docker-build-test:
     name: Docker Build Test (${{ matrix.platform }})
@@ -19,12 +24,9 @@ jobs:
             runner: ubuntu-24.04-arm
     permissions:
       contents: read
-    
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Generate platform tag suffix
         id: generate_tag
@@ -32,31 +34,54 @@ jobs:
           platform="${{ matrix.platform }}"
           echo "TAG_SUFFIX=${platform//\//-}" >> $GITHUB_OUTPUT
 
-      - name: Build Docker image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
-        with:
-          context: .
-          platforms: ${{ matrix.platform }}
-          push: false
-          load: true
-          tags: flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
-          cache-from: type=gha,scope=${{ github.workflow }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ github.workflow }}-${{ matrix.platform }}
-
-      - name: Test Docker container
+      # The database the container is tested against, downloaded and started
+      # in the background while the image builds.
+      - name: Start PostgreSQL
         run: |
           docker network create flare-network
-
           docker run -d --name postgres \
             --network flare-network \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -e POSTGRES_DB=flare_test \
-            postgres:16
+            postgres:16-alpine > "$RUNNER_TEMP/postgres-start.log" 2>&1 &
 
-          timeout=30
+      # Built from scratch with Docker's own builder, which leaves the image
+      # in the local image store. A whole build takes about a minute. Saving
+      # its layers to the Actions cache took longer than that, restoring them
+      # was no quicker than rebuilding, and a separate Buildx builder had to
+      # export the image and load it back before it could be run.
+      #
+      # Code Quality checks types; this job checks that the image builds and
+      # starts.
+      - name: Build Docker image
+        run: |
+          docker build \
+            --platform "${{ matrix.platform }}" \
+            --build-arg FLARE_SKIP_BUILD_TYPECHECK=1 \
+            --tag "flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}" \
+            --progress plain \
+            .
+
+      # Docker reports the compressed size when it keeps images in containerd,
+      # as the amd64 runner does, and the unpacked size otherwise, so compare
+      # a platform only with itself.
+      - name: Report image size
+        run: |
+          image="flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}"
+          bytes=$(docker image inspect --format '{{.Size}}' "$image")
+          store=unpacked
+          if docker info --format '{{.DriverStatus}}' | grep -q containerd.snapshotter; then store=compressed; fi
+          echo "Image size (${{ matrix.platform }}, $store): $((bytes / 1048576)) MiB" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Test Docker container
+        run: |
+          # -h makes this wait for the server that accepts network
+          # connections, not the temporary one the image starts first to
+          # create the database.
+          timeout=60
           while [ $timeout -gt 0 ]; do
-            if docker exec postgres pg_isready -U postgres; then
+            if docker exec postgres pg_isready -h 127.0.0.1 -U postgres; then
               break
             fi
             sleep 1
@@ -64,11 +89,16 @@ jobs:
           done
           if [ $timeout -eq 0 ]; then
             echo "PostgreSQL failed to become ready"
+            cat "$RUNNER_TEMP/postgres-start.log" || true
+            docker logs postgres || true
             exit 1
           fi
 
-          # The image's own startup applies the migrations.
+          # The image's own startup applies the migrations. Checking health
+          # every second while it starts shows a healthy container at once,
+          # rather than at the next of Docker's 5-second checks.
           docker run --name flare-test -d \
+            --health-start-interval 1s \
             -e DATABASE_URL=postgresql://postgres:postgres@postgres:5432/flare_test \
             -e NEXTAUTH_SECRET=flare-docker-test-disposable-session-secret \
             -e NEXTAUTH_URL=http://localhost:3000 \
@@ -76,8 +106,8 @@ jobs:
             flare:test-${{ steps.generate_tag.outputs.TAG_SUFFIX }}
 
           # The image's health check ignores failures for 150 seconds, then
-          # three failures 10 seconds apart make it unhealthy. Docker also
-          # reports a container that has stopped as unhealthy.
+          # three failures in a row make it unhealthy. Docker also reports a
+          # container that has stopped as unhealthy.
           deadline=$((SECONDS + 180))
           while :; do
             state=$(docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' flare-test) || state=missing
@@ -86,21 +116,18 @@ jobs:
               # Video thumbnails and link previews need ffmpeg in the image.
               docker exec --user nextjs flare-test ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=duration=1 -frames:v 1 -f image2pipe -c:v png pipe:1 > /dev/null
               echo "ffmpeg makes frames"
+              # The app must be able to write where it keeps uploads, upload
+              # parts and its own caches.
+              docker exec --user nextjs flare-test sh -c 'touch /app/uploads/.write-test /app/.next/.write-test && mkdir -p /app/tmp && rm /app/uploads/.write-test /app/.next/.write-test'
+              echo "The app user can write its directories"
               exit 0
             fi
             if [ "$state" != 'running starting' ] || [ $SECONDS -ge $deadline ]; then
               break
             fi
-            sleep 2
+            sleep 1
           done
           echo "Container failed to become healthy (status: $state)"
           docker inspect --format '{{json .State.Health}}' flare-test || true
           docker logs flare-test || true
           exit 1
-
-      - name: Cleanup
-        if: always()
-        run: |
-          docker stop flare-test postgres || true
-          docker rm flare-test postgres || true
-          docker network rm flare-network || true 

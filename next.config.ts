@@ -4,6 +4,11 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   reactCompiler: true,
   serverExternalPackages: ['tesseract.js'],
+  // Flare's CI checks types in a job of its own, so its builds skip the
+  // check `next build` would repeat. Everywhere else it still runs.
+  typescript: {
+    ignoreBuildErrors: process.env.FLARE_SKIP_BUILD_TYPECHECK === '1',
+  },
   // Put every page's metadata in its <head>, whoever asks. By default only
   // fetchers Next.js knows by name get that, and the rest find a share
   // page's preview tags streamed into the body, where many never look.
