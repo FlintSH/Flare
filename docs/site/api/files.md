@@ -317,7 +317,7 @@ For a video, Flare answers a WebP frame from about one second in, or from the st
 
 Both forms follow the [content caching](#content-caching) table and are sent with `Content-Security-Policy: sandbox`. Each process keeps the copies it made in memory, up to 64 MiB, and makes a copy again when it is asked for one it no longer holds. It resizes at most three images at a time; with more than 256 waiting it answers the rest with originals, and it skips a copy whose requests were all cancelled, as a browser cancels previews that scroll out of view.
 
-ffmpeg reads only the part of a video it needs: the file on local storage, or ranges of a short-lived signed URL on S3. Flare runs at most two ffmpeg processes at a time, each decoding on one thread, lets 64 more wait, and keeps up to 32 MiB of frames per process in memory. A waiting frame whose requests were all cancelled is not made. A video that gave no frame is not tried again for ten minutes.
+ffmpeg reads only the part of a video it needs: the file on local storage, or ranges of a short-lived signed URL on S3. Flare makes a video's frame right after it is uploaded, or, for a video uploaded before frames existed, the first time it is asked for, and saves it in the database with the file, so ffmpeg runs once per video. A saved frame is deleted with its file. Flare runs at most two ffmpeg processes at a time, each decoding on one thread, lets 64 more wait, and keeps up to 32 MiB of frames per process in memory in front of the saved ones. A waiting frame whose requests were all cancelled is not made. A video ffmpeg ran on but got no frame from is not tried again for a day; one whose frame failed for another reason, such as a missing ffmpeg, for ten minutes.
 
 ### oEmbed
 

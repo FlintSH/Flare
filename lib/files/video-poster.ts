@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process'
 
+import { prisma } from '@/lib/database/prisma'
 import { loggers } from '@/lib/logger'
 import { getStorageProvider } from '@/lib/storage'
 
+import { loadSharp } from './thumbnail'
 import { VIDEO_POSTER_SIZE } from './urls'
 
 const logger = loggers.files
@@ -20,14 +22,20 @@ export interface VideoPoster {
 const MAX_SECONDS = 20
 /** A frame larger than this as PNG isn't kept. */
 const MAX_FRAME_BYTES = 24 * 1024 ** 2
-/** Frames kept in memory, in bytes. */
+/** Frames kept in memory, in bytes, in front of the saved ones. */
 const CACHE_BYTES = 32 * 1024 ** 2
 /**
- * How long a video without a frame isn't tried again: long enough that a
- * library of them doesn't keep ffmpeg busy, short enough that installing
- * ffmpeg or storage recovering shows frames without a restart.
+ * How long a video without a frame isn't tried again in this process: long
+ * enough that a library of them doesn't keep ffmpeg busy, short enough that
+ * installing ffmpeg or storage recovering shows frames without a restart.
  */
 const RETRY_MS = 10 * 60 * 1000
+/**
+ * How long a video ffmpeg ran on but got no frame from is remembered across
+ * restarts. Its bytes never change, but ffmpeg also fails when S3 does, so it
+ * is tried again after this.
+ */
+const SAVED_FAILURE_MS = 24 * 60 * 60 * 1000
 /** Failures remembered at most; the oldest are forgotten first. */
 const MAX_FAILED = 10_000
 /**
@@ -44,14 +52,12 @@ const MAX_PIXELS = 40_000_000
  * the bytes claim to be.
  */
 const FORMATS = 'mov,mp4,m4a,3gp,3g2,mj2,matroska,webm,avi,ogg,mpegts,flv'
-// Shrink each frame to the shape the video plays in, non-square pixels made
-// square, within VIDEO_POSTER_SIZE and never larger than the video. Only then
-// choose the most typical of a few frames, which holds them all in memory.
+// Shrink the frame to the shape the video plays in, non-square pixels made
+// square, within VIDEO_POSTER_SIZE and never larger than the video.
 const fit = `min(1,min(${VIDEO_POSTER_SIZE}/(iw*sar),${VIDEO_POSTER_SIZE}/ih))`
 const FILTER = [
   `scale=w='max(2,trunc(iw*sar*${fit}/2)*2)':h='max(2,trunc(ih*${fit}/2)*2)'`,
   'setsar=1',
-  'thumbnail=12',
 ].join(',')
 
 type Poster = VideoPoster | null
@@ -98,6 +104,10 @@ export function ffmpegCommand() {
 }
 
 function remember(key: string, poster: VideoPoster) {
+  // Two requests that missed the cache together both remember the frame.
+  const replaced = state.cached.get(key)
+  if (replaced) state.bytes -= replaced.image.length
+  state.cached.delete(key)
   state.cached.set(key, poster)
   state.bytes += poster.image.length
   for (const [oldest, kept] of state.cached) {
@@ -156,6 +166,8 @@ async function withSlot<T>(
 }
 
 class FfmpegMissing extends Error {}
+/** ffmpeg ran on the video and gave no frame. */
+class FrameFailed extends Error {}
 
 /**
  * One PNG frame from `source` starting `seconds` in; empty when the video
@@ -174,7 +186,7 @@ function frame(
       return
     }
     const child = spawn(
-      ffmpegCommand(),
+      /* turbopackIgnore: true */ ffmpegCommand(),
       [
         ...['-nostdin', '-hide_banner', '-loglevel', 'error'],
         ...['-protocol_whitelist', source.protocols],
@@ -183,7 +195,10 @@ function frame(
         ...['-ss', String(seconds), '-i', source.input],
         // The first real video stream, never cover art.
         ...['-map', '0:V:0', '-frames:v', '1', '-an', '-sn', '-dn'],
-        ...['-vf', FILTER, '-f', 'image2pipe', '-c:v', 'png', 'pipe:1'],
+        ...['-vf', FILTER, '-f', 'image2pipe', '-c:v', 'png'],
+        // Uncompressed: sharp reads it at once, and deflating it in ffmpeg
+        // took a quarter of the whole frame's time.
+        ...['-compression_level', '0', 'pipe:1'],
       ],
       { stdio: ['ignore', 'pipe', 'pipe'] }
     )
@@ -215,7 +230,9 @@ function frame(
       else if (code === 0) resolve(Buffer.concat(chunks))
       else
         reject(
-          new Error(errors.trim().split('\n').pop() || `ffmpeg exited ${code}`)
+          new FrameFailed(
+            errors.trim().split('\n').pop() || `ffmpeg exited ${code}`
+          )
         )
     })
   })
@@ -234,11 +251,68 @@ async function make(file: { id: string; path: string }): Promise<Poster> {
   let png = await frame(source, 1, deadline)
   if (!png.length) png = await frame(source, 0, deadline)
   if (!png.length) return null
-  const { default: sharp } = await import('sharp')
+  const sharp = await loadSharp()
   const { data, info } = await sharp(png)
-    .webp({ quality: 80 })
+    // Half the time of the default effort, for a few percent more bytes.
+    .webp({ quality: 75, effort: 2 })
     .toBuffer({ resolveWithObject: true })
   return { image: data, width: info.width, height: info.height }
+}
+
+/**
+ * The frame saved for this file: a frame, null for a video ffmpeg got none
+ * from lately, or undefined when there is nothing to go by.
+ */
+async function saved(file: {
+  id: string
+  path: string
+}): Promise<Poster | undefined> {
+  let row
+  try {
+    row = await prisma.videoFrame.findUnique({ where: { fileId: file.id } })
+  } catch (error) {
+    // Treated as unknown: the frame is made, as before there was a table.
+    logger.debug('Saved video frame could not be read', {
+      fileId: file.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return undefined
+  }
+  if (!row || row.path !== file.path) return undefined
+  if (row.image && row.width && row.height)
+    return {
+      image: Buffer.from(row.image),
+      width: row.width,
+      height: row.height,
+    }
+  return Date.now() - row.createdAt.getTime() < SAVED_FAILURE_MS
+    ? null
+    : undefined
+}
+
+/** Saves a frame, or that ffmpeg got none, for every process and restart. */
+async function save(file: { id: string; path: string }, poster: Poster) {
+  const data = {
+    path: file.path,
+    image: poster ? new Uint8Array(poster.image) : null,
+    width: poster?.width ?? null,
+    height: poster?.height ?? null,
+    createdAt: new Date(),
+  }
+  try {
+    await prisma.videoFrame.upsert({
+      where: { fileId: file.id },
+      create: { fileId: file.id, ...data },
+      update: data,
+    })
+  } catch (error) {
+    // The file was deleted meanwhile, or the database is away: the frame is
+    // made again when it is next asked for.
+    logger.debug('Video frame could not be saved', {
+      fileId: file.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
 }
 
 /**
@@ -261,10 +335,11 @@ export async function videoPosterWithin(
 /**
  * A frame from a stored video, or null when there is none to show: ffmpeg
  * isn't installed, or the video can't be read or decoded in time or has no
- * picture. `busy` when too many frames are already waiting to be made. Frames
- * are kept in memory up to `CACHE_BYTES`, so ffmpeg runs once per video while
- * it is being viewed, and a video without one isn't tried again for
- * `RETRY_MS`.
+ * picture. `busy` when too many frames are already waiting to be made.
+ * ffmpeg runs once per video: the frame is saved with the file, and kept in
+ * memory up to `CACHE_BYTES` in front of that. A video ffmpeg got no frame
+ * from isn't tried again for `SAVED_FAILURE_MS`; one that failed otherwise,
+ * as when ffmpeg is missing, for `RETRY_MS`.
  *
  * `signal` is the request's: a frame every requester stopped waiting for
  * isn't made. Without one, the caller waits for the answer.
@@ -294,37 +369,77 @@ export async function videoPoster(
   }
   const requesters: Requesters = [signal]
   let leave = () => {}
-  const answer = withSlot(
-    async () => {
-      try {
-        const made = await make(file)
-        if (made) remember(key, made)
-        else fail(key)
-        return made
-      } catch (error) {
-        fail(key)
-        if (error instanceof FfmpegMissing) {
-          if (!state.warned) {
-            state.warned = true
-            logger.warn(
-              `Video thumbnails are off: ${ffmpegCommand()} could not be run. Install ffmpeg or set FLARE_FFMPEG_PATH.`
-            )
-          }
-          return null
-        }
-        logger.debug('Video frame could not be made', {
-          fileId: file.id,
-          error: error instanceof Error ? error.message : String(error),
-        })
-        return null
-      }
-    },
-    requesters,
-    (left) => {
-      leave = left
-      signal?.addEventListener('abort', left, { once: true })
+  const answer = (async (): Promise<PosterAnswer> => {
+    // A frame made before, by this process or another, or before a restart.
+    const known = await saved(file)
+    if (known !== undefined) {
+      if (known) remember(key, known)
+      else fail(key)
+      return known
     }
-  ).finally(() => state.making.delete(key))
+    return withSlot(
+      () => made(file, key),
+      requesters,
+      (left) => {
+        leave = left
+        signal?.addEventListener('abort', left, { once: true })
+      }
+    )
+  })().finally(() => state.making.delete(key))
   state.making.set(key, { answer, requesters, leave: () => leave() })
   return answer
+}
+
+/** Runs ffmpeg for a frame, and remembers and saves what came of it. */
+async function made(
+  file: { id: string; path: string },
+  key: string
+): Promise<Poster> {
+  try {
+    const poster = await make(file)
+    if (poster) remember(key, poster)
+    else fail(key)
+    await save(file, poster)
+    return poster
+  } catch (error) {
+    fail(key)
+    if (error instanceof FrameFailed) await save(file, null)
+    if (error instanceof FfmpegMissing) {
+      if (!state.warned) {
+        state.warned = true
+        logger.warn(
+          `Video thumbnails are off: ${ffmpegCommand()} could not be run. Install ffmpeg or set FLARE_FFMPEG_PATH.`
+        )
+      }
+      return null
+    }
+    logger.debug('Video frame could not be made', {
+      fileId: file.id,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+/**
+ * A frame already made for this video, without waiting for ffmpeg: from
+ * memory or the saved frames. When there is none yet, one is started in the
+ * background, so the page's own request for it finds it sooner.
+ */
+export async function readyVideoPoster(file: {
+  id: string
+  path: string
+}): Promise<VideoPoster | null> {
+  const key = `${file.id}:${file.path}`
+  const cached = state.cached.get(key)
+  if (cached) return cached
+  if (state.making.has(key) || (state.failed.get(key) ?? 0) > Date.now())
+    return null
+  const known = await saved(file)
+  if (known) {
+    remember(key, known)
+    return known
+  }
+  if (known === undefined) void videoPoster(file)
+  return null
 }

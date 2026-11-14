@@ -66,6 +66,18 @@ const state: ThumbnailState = (processState[stateKey] ??= {
 })
 
 /**
+ * The image library, loaded on first use: only thumbnails need it, and a
+ * platform without its binary still serves originals. Its operation cache is
+ * off. Every image here arrives as a new buffer, so the cache never answered
+ * a request, and it held 50 MB once a library of video frames was shown.
+ */
+export async function loadSharp() {
+  const { default: sharp } = await import('sharp')
+  sharp.cache(false)
+  return sharp
+}
+
+/**
  * The thumbnail width a `w` query value asks for; null when the value isn't
  * a positive whole number.
  */
@@ -143,9 +155,7 @@ async function read(
 async function resize(source: Buffer, width: number): Promise<Thumbnail> {
   const type = await fileTypeFromBuffer(source)
   if (!type || !RESIZABLE.has(type.mime)) return null
-  // Loaded on first use: only this route needs the image library, and a
-  // platform without its binary still serves originals.
-  const { default: sharp } = await import('sharp')
+  const sharp = await loadSharp()
   const image = sharp(source, {
     limitInputPixels: MAX_SOURCE_PIXELS,
     sequentialRead: true,

@@ -36,7 +36,7 @@ import {
   isTextKind,
 } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
-import { videoPosterWithin } from '@/lib/files/video-poster'
+import { readyVideoPoster } from '@/lib/files/video-poster'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -86,11 +86,12 @@ export async function generateMetadata({
 
   const { access } = await checkPageAccess(file, password)
   const appearance = config.settings.customization.published
-  // Previews from fetchers Flare knows wait longer, on their own route. A
-  // visitor's page waits only briefly; the frame is kept for its player.
+  // The page never waits for ffmpeg: it names a frame made before, and
+  // otherwise starts one for its player. Fetchers Flare knows wait for the
+  // frame on their own route.
   const videoFrame =
     access.allowed && fileKind(file).kind === 'video'
-      ? await videoPosterWithin(file, 1500)
+      ? await readyVideoPoster(file)
       : null
   const embed = fileEmbed({
     file,

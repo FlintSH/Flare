@@ -149,6 +149,18 @@ describe('a frame from a video', () => {
     expect(state.getFileStream).not.toHaveBeenCalled()
   })
 
+  it('sends the frame as it is when it is no wider than asked', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue({
+      image: frame,
+      width: 1280,
+      height: 720,
+    })
+    const response = await thumbnail('?w=1280')
+    expect(response.headers.get('content-type')).toBe('image/webp')
+    expect(await body(response)).toEqual(frame)
+  })
+
   it('answers with the whole frame without a width', async () => {
     state.file = { ...clip }
     state.videoPoster.mockResolvedValue({

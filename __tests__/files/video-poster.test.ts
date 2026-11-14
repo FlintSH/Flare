@@ -24,6 +24,35 @@ const storage = vi.hoisted(() => ({
   localPath: vi.fn(),
   getPublicUrl: vi.fn(),
 }))
+// The saved frames table, kept in memory.
+const frames = vi.hoisted(() => ({
+  rows: new Map<string, Record<string, unknown>>(),
+}))
+vi.mock('@/lib/database/prisma', () => ({
+  prisma: {
+    videoFrame: {
+      findUnique: vi.fn(
+        async ({ where }: { where: { fileId: string } }) =>
+          frames.rows.get(where.fileId) ?? null
+      ),
+      upsert: vi.fn(
+        async ({
+          where,
+          create,
+          update,
+        }: {
+          where: { fileId: string }
+          create: Record<string, unknown>
+          update: Record<string, unknown>
+        }) => {
+          const row = frames.rows.has(where.fileId) ? update : create
+          frames.rows.set(where.fileId, { fileId: where.fileId, ...row })
+          return row
+        }
+      ),
+    },
+  },
+}))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({
     kind: 'local',
@@ -32,7 +61,25 @@ vi.mock('@/lib/storage', () => ({
   }),
 }))
 
-const { ffmpegCommand, videoPoster } = await import('@/lib/files/video-poster')
+const { ffmpegCommand, readyVideoPoster, videoPoster } =
+  await import('@/lib/files/video-poster')
+
+/** Forgets what this process made, as a restart does. */
+function restart() {
+  const state = (
+    globalThis as unknown as Record<
+      symbol,
+      {
+        cached: Map<string, unknown>
+        bytes: number
+        failed: Map<string, number>
+      }
+    >
+  )[Symbol.for('flare.files.videoPosters')]
+  state.cached.clear()
+  state.bytes = 0
+  state.failed.clear()
+}
 
 // GitHub's Ubuntu runners and Flare's Docker image have ffmpeg; a machine
 // without it skips the checks that need one.
@@ -176,6 +223,8 @@ describe('without ffmpeg', () => {
     vi.stubEnv('FLARE_FFMPEG_PATH', join(storage.dir, 'no-such-ffmpeg'))
     writeFileSync(join(storage.dir, 'any.mp4'), 'not a video')
     expect(await poster('any.mp4')).toBeNull()
+    // Installing ffmpeg later brings frames back, so nothing is saved.
+    expect(frames.rows.has(`video-${id}`)).toBe(false)
   })
 })
 
@@ -264,5 +313,76 @@ describe('making frames under load', () => {
     expect(await second).toMatchObject({ width: 64 })
     expect(await first).toMatchObject({ width: 64 })
     await Promise.all(running)
+  })
+})
+
+describe.skipIf(!ffmpeg)('frames saved with their file', () => {
+  it('makes a frame once, and reads it back after a restart', async () => {
+    const file = { id: `saved-${++id}`, path: 'landscape.mp4' }
+    const first = await videoPoster(file)
+    expect(frames.rows.get(file.id)).toMatchObject({
+      path: 'landscape.mp4',
+      width: 1280,
+      height: 720,
+    })
+    restart()
+    storage.localPath.mockClear()
+    const again = await videoPoster(file)
+    expect(again).toMatchObject({ width: 1280, height: 720 })
+    expect(storage.localPath).not.toHaveBeenCalled()
+    if (!first || first === 'busy' || !again || again === 'busy')
+      throw new Error('No frame')
+    expect(Buffer.compare(again.image, first.image)).toBe(0)
+  })
+
+  it('makes a new frame when the file has a different path', async () => {
+    const file = { id: `moved-${++id}`, path: 'landscape.mp4' }
+    await videoPoster(file)
+    restart()
+    expect(await videoPoster({ ...file, path: 'portrait.webm' })).toMatchObject(
+      { width: 360, height: 640 }
+    )
+  })
+
+  it('remembers a video ffmpeg got no frame from, for a day', async () => {
+    const file = { id: `silent-${++id}`, path: 'silent.m4a' }
+    expect(await videoPoster(file)).toBeNull()
+    expect(frames.rows.get(file.id)).toMatchObject({ image: null })
+    restart()
+    storage.localPath.mockClear()
+    expect(await videoPoster(file)).toBeNull()
+    expect(storage.localPath).not.toHaveBeenCalled()
+
+    // A day later it is tried again.
+    frames.rows.get(file.id)!.createdAt = new Date(Date.now() - 25 * 3600_000)
+    restart()
+    expect(await videoPoster(file)).toBeNull()
+    expect(storage.localPath).toHaveBeenCalledOnce()
+  })
+
+  it('counts a frame once when two requests find it saved together', async () => {
+    const file = { id: `twice-${++id}`, path: 'landscape.mp4' }
+    const made = await videoPoster(file)
+    if (!made || made === 'busy') throw new Error('No frame')
+    restart()
+    await Promise.all([readyVideoPoster(file), readyVideoPoster(file)])
+    const state = (globalThis as unknown as Record<symbol, { bytes: number }>)[
+      Symbol.for('flare.files.videoPosters')
+    ]
+    expect(state.bytes).toBe(made.image.length)
+  })
+
+  it('gives the share page only a frame that is ready, and starts one', async () => {
+    const file = { id: `page-${++id}`, path: 'landscape.mp4' }
+    const started = Date.now()
+    expect(await readyVideoPoster(file)).toBeNull()
+    // It answered without waiting for ffmpeg.
+    expect(Date.now() - started).toBeLessThan(100)
+    // The frame it started arrives for the page's own request.
+    expect(await videoPoster(file)).toMatchObject({ width: 1280 })
+    expect(storage.localPath).toHaveBeenCalledOnce()
+    expect(await readyVideoPoster(file)).toMatchObject({ width: 1280 })
+    restart()
+    expect(await readyVideoPoster(file)).toMatchObject({ width: 1280 })
   })
 })

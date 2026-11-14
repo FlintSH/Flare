@@ -101,7 +101,7 @@ A video card that shows a video icon instead of a frame, and a link preview that
 - **The video can't be decoded.** ffmpeg opens MP4, MOV, WebM, Matroska, AVI, Ogg, MPEG-TS and FLV files. It refuses playlists and other formats that name further files or addresses, whatever the upload's type says. With `LOG_LEVEL=debug`, the `files` component logs `Video frame could not be made` with ffmpeg's reason.
 - **Making the frame took more than 20 seconds**, as a slow S3 bucket can. A video whose frames are over 40 megapixels, a little more than 8K, gets no frame at all. On S3, ffmpeg reads the video from a signed URL, so the app server must reach the bucket's endpoint itself, not only browsers.
 
-A `503` instead means more than 66 frames were asked for at once, as when a library of new videos first opens; that card shows its icon until the page is reloaded, or, in **View content**, until the dialog is opened again. Flare tries a video that gave no frame again after ten minutes, and browsers keep the `404` for ten minutes too, so reload the library after that. A link preview an app already made keeps its picture: paste the link again.
+A `503` instead means more than 66 frames were asked for at once, as when a library of new videos first opens; that card shows its icon until the page is reloaded, or, in **View content**, until the dialog is opened again. Flare tries again after ten minutes when ffmpeg couldn't run or took too long, and after a day for a video ffmpeg ran on but got no frame from. Browsers keep the `404` for ten minutes, so reload the library after that. A link preview an app already made keeps its picture: paste the link again.
 
 ## Link previews are missing, outdated, or stop playing
 

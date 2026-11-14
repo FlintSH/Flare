@@ -61,8 +61,11 @@ export const GET = api(
           // Asked again once ffmpeg may have been installed or storage is back.
           headers: { 'Cache-Control': 'private, max-age=600' },
         })
+      // The saved frame as it is when it is no wider than asked, rather
+      // than encoded again at the same size.
       const resized =
         width &&
+        width < poster.width &&
         (await resizedThumbnail(
           grant.file,
           width,
