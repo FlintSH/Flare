@@ -234,6 +234,23 @@ describe('making frames under load', () => {
     expect(runs()).toBe(2)
   })
 
+  it('turns away a request cancelled before it asked', async () => {
+    const runs = fakeFfmpeg(0.3)
+    const running = [0, 1].map((index) =>
+      videoPoster({ id: `full-${id}-${index}`, path: 'any.mp4' })
+    )
+    const controller = new AbortController()
+    controller.abort()
+    // At once, not after the running frames free a slot.
+    const answer = await Promise.race([
+      videoPoster({ id: `early-${id}`, path: 'any.mp4' }, controller.signal),
+      new Promise((resolve) => setTimeout(() => resolve('still waiting'), 100)),
+    ])
+    expect(answer).toBe('busy')
+    await Promise.all(running)
+    expect(runs()).toBe(2)
+  })
+
   it('keeps waiting while anyone who asked for the frame still waits', async () => {
     fakeFfmpeg(0.2)
     const running = [0, 1].map((index) =>

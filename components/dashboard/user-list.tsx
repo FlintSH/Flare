@@ -694,6 +694,9 @@ export function UserList() {
   }
 
   const handleViewFiles = (user: User) => {
+    // Opening the list again retries previews that failed, as when frames
+    // were busy or storage was briefly unreachable.
+    setFailedPreviews(new Set())
     filesRequest.current++
     urlsRequest.current++
     setUserFiles([])

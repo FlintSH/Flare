@@ -129,6 +129,9 @@ async function withSlot<T>(
   requesters: Requesters,
   onLeave: (leave: () => void) => void
 ): Promise<T | 'busy'> {
+  // A request can be cancelled before it gets here, while its access is
+  // checked; an abort listener added now would never fire for it.
+  if (abandoned(requesters)) return 'busy'
   if (state.running >= RUNNING) {
     if (state.waiting.length >= MAX_WAITING) return 'busy'
     const started = await new Promise<boolean>((resolve) => {
