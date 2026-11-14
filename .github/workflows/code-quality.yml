@@ -56,7 +56,7 @@ jobs:
       # would otherwise replace node_modules.
       - name: Name the check results
         id: check-key
-        run: echo "key=checks-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'tsconfig.json', 'eslint.config.mjs', '.prettierrc', '.prettierignore') }}" >> "$GITHUB_OUTPUT"
+        run: echo "key=checks-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'tsconfig.json', 'eslint.config.mjs', '.prettierrc.json', '.prettierignore') }}" >> "$GITHUB_OUTPUT"
 
       - name: Restore check results
         id: check-cache
@@ -69,8 +69,13 @@ jobs:
           key: ${{ steps.check-key.outputs.key }}-${{ github.sha }}
           restore-keys: ${{ steps.check-key.outputs.key }}-
 
+      # Next.js writes types for every page and route handler, which its own
+      # build checks. The builds in CI skip that pass, so generate them here
+      # and let this check cover them.
       - name: Type Check
-        run: pnpm tsc --noEmit
+        run: |
+          pnpm exec next typegen
+          pnpm tsc --noEmit
 
       - name: Test
         env:

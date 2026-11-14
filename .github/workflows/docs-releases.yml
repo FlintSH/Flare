@@ -83,9 +83,10 @@ jobs:
       - name: Start installing the browser
         working-directory: docs/site
         run: |
-          (npx playwright install --with-deps --only-shell chromium > "$RUNNER_TEMP/browser-install.log" 2>&1 \
-            && echo 0 > "$RUNNER_TEMP/browser-install.status" \
-            || echo 1 > "$RUNNER_TEMP/browser-install.status") &
+          (status=0
+            npx playwright install --with-deps --only-shell chromium > "$RUNNER_TEMP/browser-install.log" 2>&1 || status=1
+            echo "$status" > "$RUNNER_TEMP/browser-install.status.part"
+            mv "$RUNNER_TEMP/browser-install.status.part" "$RUNNER_TEMP/browser-install.status") &
       - name: Build stable docs, dated archives and the rolling preview
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

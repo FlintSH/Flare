@@ -359,7 +359,9 @@ try {
         } catch (error) {
           failures.push(error)
         }
-        process.stdout.write(log.map(String).join(''))
+        process.stdout.write(
+          Buffer.concat(log.map((part) => Buffer.from(part)))
+        )
       }
     })
   )

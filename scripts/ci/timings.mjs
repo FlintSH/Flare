@@ -74,7 +74,15 @@ function pushes(shas) {
         const attempted = api(
           `repos/${repo}/actions/runs/${run.id}/attempts/${attempt}/jobs?per_page=100`
         ).flatMap((page) => page.jobs)
-        if (attempted.some((job) => job.status !== 'completed')) continue
+        // "Re-run failed jobs" lists the jobs it did not run again with their
+        // earlier times, which would stretch the sample. Only a re-run of
+        // every job counts.
+        if (
+          attempted.some(
+            (job) => job.status !== 'completed' || job.run_attempt !== attempt
+          )
+        )
+          continue
         workflows++
         for (const job of attempted) {
           if (job.conclusion === 'skipped') continue

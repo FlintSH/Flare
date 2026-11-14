@@ -118,7 +118,7 @@ jobs:
               echo "ffmpeg makes frames"
               # The app must be able to write where it keeps uploads, upload
               # parts and its own caches.
-              docker exec --user nextjs flare-test sh -c 'touch /app/uploads/.write-test /app/.next/.write-test && mkdir -p /app/tmp && rm /app/uploads/.write-test /app/.next/.write-test'
+              docker exec --user nextjs flare-test sh -c 'touch /app/.write-test /app/uploads/.write-test /app/.next/.write-test && rm /app/.write-test /app/uploads/.write-test /app/.next/.write-test'
               echo "The app user can write its directories"
               exit 0
             fi
