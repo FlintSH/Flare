@@ -94,8 +94,7 @@ async function copy() {
 <template>
   <section class="interactive-panel" aria-label="API request builder">
     <div class="panel-heading">
-      <span class="eyebrow">BUILD YOUR FIRST REQUEST</span
-      ><span class="demo-badge">No requests sent</span>
+      <span class="demo-badge">No requests sent</span>
     </div>
     <p>
       Choose an operation and copy a working starting point. Set

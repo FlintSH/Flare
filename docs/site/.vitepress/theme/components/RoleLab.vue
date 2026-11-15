@@ -26,7 +26,6 @@ const source = computed(() =>
     aria-label="Role permissions demonstration"
   >
     <div class="panel-heading">
-      <span class="eyebrow">COMBINE ROLE PERMISSIONS</span>
       <span class="demo-badge">Local simulation</span>
     </div>
     <p>

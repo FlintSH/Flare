@@ -105,10 +105,6 @@ const step = computed(() => steps[current.value])
       </button>
     </div>
     <div aria-live="polite" class="tour-description">
-      <span class="eyebrow"
-        >STEP {{ current + 1 }} OF {{ steps.length }} · REAL APP
-        SCREENSHOTS</span
-      >
       <h3>{{ step.title }}</h3>
       <p>{{ step.text }}</p>
       <a :href="withBase(step.link.replace(/\/$/, '/index') + '.html')"

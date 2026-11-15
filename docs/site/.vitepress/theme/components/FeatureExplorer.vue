@@ -218,16 +218,26 @@ const filtered = computed(() =>
       item.join(' ').toLowerCase().includes(query.value.toLowerCase())
   )
 )
+// Cards sit under their area, so the area is said once instead of on each card.
+const groups = computed(() =>
+  categories
+    .slice(1)
+    .map((name) => ({
+      name,
+      items: filtered.value.filter((item) => item[0] === name),
+    }))
+    .filter((group) => group.items.length)
+)
 </script>
 
 <template>
   <section class="feature-explorer" aria-label="Filter Flare features">
-    <label class="input-label" for="feature-query">Find a capability</label>
+    <label class="visually-hidden" for="feature-query">Find a capability</label>
     <input
       id="feature-query"
       v-model="query"
       type="search"
-      placeholder="Try passwords, S3, screenshots…"
+      placeholder="Search features"
       class="demo-input"
     />
     <div class="filter-pills" aria-label="Feature categories">
@@ -240,19 +250,28 @@ const filtered = computed(() =>
         {{ item }}
       </button>
     </div>
+    <!-- A count only says something once a search or filter has changed it. -->
     <p class="result-count" role="status">
-      {{ filtered.length }} of {{ features.length }} capabilities
+      {{
+        filtered.length === features.length
+          ? ''
+          : `${filtered.length} of ${features.length} features`
+      }}
     </p>
-    <div class="feature-grid">
-      <a
-        v-for="item in filtered"
-        :key="item[1]"
-        :href="withBase(item[3] + '.html')"
-        class="feature-card"
-        ><span class="eyebrow">{{ item[0] }}</span>
-        <h3>{{ item[1] }} <span aria-hidden="true">↗</span></h3>
-        <p>{{ item[2] }}</p></a
-      >
+    <div v-for="group in groups" :key="group.name" class="feature-group">
+      <!-- A chosen area is already named by its filter. -->
+      <h2 v-if="category === 'Everything'">{{ group.name }}</h2>
+      <div class="feature-grid">
+        <a
+          v-for="item in group.items"
+          :key="item[1]"
+          :href="withBase(item[3] + '.html')"
+          class="feature-card"
+        >
+          <h3>{{ item[1] }}</h3>
+          <p>{{ item[2] }}</p>
+        </a>
+      </div>
     </div>
     <p v-if="!filtered.length">
       No matches. Try another word or choose Everything.

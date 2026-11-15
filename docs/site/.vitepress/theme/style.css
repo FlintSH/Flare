@@ -254,8 +254,8 @@ summary:focus-visible {
 }
 .VPNavScreen {
   top: 96px !important;
-  background: var(--overlay);
-  border-top: 1px solid var(--flare-line);
+  background: var(--background);
+  border-top: 0;
 }
 .VPNavScreenMenuLink {
   border-color: var(--flare-line);
@@ -343,15 +343,23 @@ summary:focus-visible {
 .Layout .VPDoc .aside-curtain {
   width: 192px;
 }
-.VPDocAsideOutline .content {
+/* The page content rule below also matches this list, so its spacing is set
+   here: without it the rail ran past the last heading and touched the text. */
+.Layout .VPDoc .VPDocAsideOutline .content {
+  padding: 0 0 0 14px;
   border-color: var(--flare-line);
 }
 .VPDocAsideOutline .outline-title {
   font-size: 12px;
   font-weight: 600;
 }
+/* Long headings wrap. One line keeps the 32px row the marker is placed by. */
 .VPDocAsideOutline .outline-link {
+  padding: 6px 0;
   font-size: 12px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .VPDocFooter .prev-next {
   border-top-color: var(--flare-line);
@@ -389,6 +397,17 @@ summary:focus-visible {
 .vp-doc li {
   font-size: 15px;
   line-height: 1.8;
+}
+.vp-doc :not(pre) > code {
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  overflow-wrap: anywhere;
+}
+.vp-doc h4 {
+  margin-top: 32px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.1px;
 }
 .vp-doc a {
   text-underline-offset: 3px;
@@ -445,6 +464,13 @@ summary:focus-visible {
 }
 .vp-doc .custom-block p {
   font-size: 14px;
+}
+.vp-doc .custom-block.details {
+  background: var(--background);
+}
+.vp-doc .custom-block.details summary {
+  font-size: 14px;
+  font-weight: 500;
 }
 .vp-doc blockquote {
   border-left-color: var(--control);
@@ -535,6 +561,13 @@ summary:focus-visible {
 }
 .build-details {
   margin-left: auto;
+}
+/* On a handbook page the stamp follows the content instead of leading it. */
+.doc-build-stamp .build-stamp {
+  margin: 24px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--flare-line);
+  border-bottom: 0;
 }
 .home-build-stamp {
   max-width: 1280px;
@@ -964,6 +997,41 @@ summary:focus-visible {
   color: var(--foreground);
   font-size: 11px;
 }
+/* A picture that opens on click needs no sign on top of it. Archived releases
+   still render the old hint, so it is hidden here for them too. */
+.enlarge-hint {
+  display: none;
+}
+/* Recording transcripts stay folded until someone wants the steps. */
+.vp-doc .demo-transcript {
+  margin: 12px 0 0;
+  border: 1px solid var(--flare-line);
+  border-radius: 12px;
+  background: var(--background);
+}
+.vp-doc .demo-transcript summary {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.vp-doc .demo-transcript summary:hover,
+.vp-doc .demo-transcript[open] summary {
+  color: var(--foreground);
+}
+.vp-doc .demo-transcript > :not(summary) {
+  margin-inline: 14px;
+}
+.vp-doc .demo-transcript > :last-child {
+  margin-bottom: 14px;
+}
+.vp-doc .demo-transcript li,
+.vp-doc .demo-transcript p {
+  font-size: 14px;
+}
 .doc-screenshot figcaption {
   margin-top: 8px;
   color: var(--muted-foreground);
@@ -1074,6 +1142,16 @@ summary:focus-visible {
   color: var(--muted-foreground);
   font-size: 13px;
 }
+.vp-doc .feature-explorer .result-count {
+  margin: 0;
+  font-size: 12px;
+}
+.vp-doc .feature-explorer .result-count:empty {
+  display: none;
+}
+.feature-group:first-of-type .feature-grid:first-child {
+  margin-top: 16px;
+}
 .feature-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1092,12 +1170,25 @@ summary:focus-visible {
     background-color 150ms;
 }
 .feature-card h3 {
-  margin: 8px 0;
-  font-size: 16px;
+  margin: 0 0 6px;
+  font-size: 15px;
 }
+/* Archived releases still mark each card with an arrow. */
 .feature-card h3 span {
   float: right;
   color: var(--muted-foreground);
+}
+.vp-doc .feature-group h2 {
+  margin: 32px 0 12px;
+  padding: 0;
+  border: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.vp-doc .feature-explorer .demo-input {
+  min-height: 40px;
 }
 .feature-card p {
   margin: 0;
@@ -1113,7 +1204,7 @@ summary:focus-visible {
   background: var(--background);
 }
 .tour-description h3 {
-  margin: 10px 0;
+  margin: 0 0 10px;
 }
 .tour-description p {
   margin: 8px 0;
@@ -1268,6 +1359,16 @@ select:disabled {
     border-radius: 16px;
     background: var(--panel);
   }
+  .Layout .VPSidebar::after {
+    content: '';
+    position: sticky;
+    bottom: -16px;
+    display: block;
+    height: 40px;
+    margin: -24px -16px -16px;
+    background: linear-gradient(transparent, var(--panel));
+    pointer-events: none;
+  }
   .Layout .VPDoc {
     padding: 16px 16px 48px 0;
   }
@@ -1326,6 +1427,11 @@ select:disabled {
     border: 1px solid var(--flare-line);
     border-radius: 10px;
     background: var(--panel);
+  }
+  /* A handbook page pins its menu under the header. A solid backdrop keeps
+     scrolling text from showing in the gap between the two. */
+  .Layout:has(.VPDoc) .VPNav {
+    background: var(--background);
   }
   .Layout .VPLocalNav .menu,
   .VPOutlineDropdown {
