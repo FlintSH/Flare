@@ -29,8 +29,8 @@ const source = computed(() =>
       <span class="demo-badge">Local simulation</span>
     </div>
     <p>
-      Model one account's upload permission. These controls are an educational
-      simulation; they never read an account or change a real role.
+      One account's upload permission. Nothing here reads an account or changes
+      a real role.
     </p>
     <label class="check-label">
       <input v-model="everyoneUpload" type="checkbox" /> Everyone grants uploads

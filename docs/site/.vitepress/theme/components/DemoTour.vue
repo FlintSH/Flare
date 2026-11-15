@@ -5,84 +5,84 @@ import Screenshot from './Screenshot.vue'
 const current = ref(0)
 const steps = [
   {
-    title: 'A home for every file',
+    title: 'File library',
     label: 'Browse',
     src: '/screenshots/timeline/library-desktop.webp',
     text: 'Scroll through every matching file without changing pages. The slim date rail lets you jump into your upload history; search, folders, and filters keep the view focused.',
     link: '/guide/library',
   },
   {
-    title: 'Upload with intention',
+    title: 'Upload options',
     label: 'Upload',
     src: '/screenshots/workspace/upload.png',
     text: 'Choose files and a saved upload profile. Visibility, passwords, and expiration let you decide how this upload is shared.',
     link: '/guide/uploading',
   },
   {
-    title: 'One link, a proper preview',
+    title: 'Share pages',
     label: 'Share',
     src: '/screenshots/workspace/share-framed-image.png',
     text: 'A share page gives recipients the file’s name, type, size, and actions above its preview. The Minimal and Delivery layouts frame the same file differently.',
     link: '/guide/sharing',
   },
   {
-    title: 'Your favorite settings, saved',
+    title: 'Upload profiles',
     label: 'Repeat',
     src: '/screenshots/handbook/upload-profiles.webp',
     text: 'Start from a recipe, review what it inherits, and save a profile for your browser or capture tool. Export its preferences to reuse them; selected tags belong to the original account.',
     link: '/guide/upload-profiles',
   },
   {
-    title: 'Put your name on it',
+    title: 'Appearance',
     label: 'Customize',
     src: '/screenshots/handbook/appearance-studio.webp',
     text: 'The appearance studio combines identity, palettes, and sharing preferences with previews. Draft your changes before publishing them.',
     link: '/admin/appearance',
   },
   {
-    title: 'Give every role a clear purpose',
+    title: 'Roles and permissions',
     label: 'Delegate',
     src: '/screenshots/roles/role-editor.webp',
     text: 'Create reusable permission groups, combine roles on an account, and delegate moderation or design. Everyone supplies the baseline; additional roles add access.',
     link: '/admin/roles',
   },
   {
-    title: 'Protect the way you sign in',
+    title: 'Two-factor and passkeys',
     label: 'Secure',
     src: '/screenshots/security/security-overview.webp',
     text: 'Add an authenticator or passkey in Profile → Account. Optionally require passkey sign-in to block password and SSO fallback, with dedicated emergency recovery codes.',
     link: '/guide/security',
   },
   {
-    title: 'Know where you are signed in',
+    title: 'Sessions and login history',
     label: 'Sessions',
     src: '/screenshots/audit/sessions-desktop.webp',
     text: 'Review active browser sessions and login history in Profile → Account. Revoke an unfamiliar session, or sign out every browser including this one.',
     link: '/guide/account',
   },
   {
-    title: 'Follow activity across the instance',
+    title: 'Audit log',
     label: 'Audit',
     src: '/screenshots/audit/audit-desktop.webp',
     text: 'Use Audit log to filter file operations, background processing, and administrative changes. Inspect the actor, filename, outcome, and recorded details.',
     link: '/admin/audit',
   },
   {
-    title: 'Keep your tools connected',
+    title: 'API tokens and webhooks',
     label: 'Automate',
     src: '/screenshots/handbook/integrations.webp',
     text: 'Create a named API token for a custom uploader or add a signed webhook receiver. Each connection belongs to your account.',
     link: '/api/',
   },
   {
-    title: 'Look inside before unpacking',
+    title: 'Archives',
     label: 'Archives',
     src: '/screenshots/archives/share-entry.webp',
     text: 'Browse archives of any size and preview images, video, audio, and text inside them without unpacking. In your own library, extract into a new folder or package files as ZIP/TAR.GZ with private defaults or an explicitly reviewed upload profile.',
     link: '/guide/archives',
   },
   {
-    title: 'Bring people in by invitation',
+    title: 'Invite links',
     label: 'Invite',
     src: '/screenshots/invites/profile-invites.webp',
     text: 'Keep registration closed and send invite links instead. Choose how many people each link admits and when it expires, see who joined, and revoke a link anytime.',
@@ -104,6 +104,11 @@ const step = computed(() => steps[current.value])
         {{ index + 1 }}. {{ item.label }}
       </button>
     </div>
+    <Screenshot
+      :src="step.src"
+      :alt="step.title"
+      :caption="'Captured from Flare with demonstration data. Your instance’s appearance and files will differ.'"
+    />
     <div aria-live="polite" class="tour-description">
       <h3>{{ step.title }}</h3>
       <p>{{ step.text }}</p>
@@ -111,11 +116,6 @@ const step = computed(() => steps[current.value])
         >Read the complete guide →</a
       >
     </div>
-    <Screenshot
-      :src="step.src"
-      :alt="step.title"
-      :caption="'Captured from Flare with demonstration data. Your instance’s appearance and files will differ.'"
-    />
     <div class="demo-navigation">
       <button :disabled="current === 0" @click="current--">← Previous</button
       ><span>{{ current + 1 }} / {{ steps.length }}</span

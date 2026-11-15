@@ -9,8 +9,6 @@ import { withBase } from 'vitepress'
 
 # Demos
 
-A click-through of the main screens, recordings of the real app, and three labs to try in your browser.
-
 ## Explore the workspace
 
 <DemoTour />
@@ -23,7 +21,7 @@ Silent recordings of the real app with demonstration data.
 
 #### Upload a file, open it, copy the link
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Upload a file, open it, copy the link: 11-second silent Flare recording" :poster="withBase('/landing/desktop-dark-poster.webp')" :src="withBase('/landing/desktop-dark.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Upload a file, open it, copy the link: 11-second silent Flare recording" :poster="withBase('/landing/desktop-dark-poster.webp')"><source type="video/mp4" :src="withBase('/landing/desktop-dark.mp4')" /><source type="video/webm" :src="withBase('/landing/desktop-dark.webm')" />Your browser does not support this video. Follow the steps below.</video>
 
 <details class="demo-transcript">
 <summary>Transcript</summary>
@@ -33,7 +31,7 @@ Silent recordings of the real app with demonstration data.
 3. **Open** shows the file on its share page, with its name, type, and size above the picture.
 4. **Copy link** on the share page changes to **Link copied**.
 
-Recorded in a real Flare instance with a disposable account and demonstration files. The pointer and the picture being dragged are drawn by the recorder. The [homepage](./) plays this recording; on a phone it plays one made at phone width, which opens **Upload** from the menu, chooses a file, sends it, opens it, and copies its link.
+Recorded in a real Flare instance with a disposable account and demonstration files. The pointer and the picture being dragged are drawn by the recorder. A second version made at phone width opens **Upload** from the menu, chooses a file, sends it, opens it, and copies its link.
 
 </details>
 
@@ -378,18 +376,18 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 ## Roles and permissions lab
 
-Try Everyone, an additional contributor role, and Administrator. Removing a permission from one role does not deny a grant from another. The simulation also shows why a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
+Removing a permission from one role does not deny a grant from another, and a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
 
 <RoleLab />
 
 ## Upload options lab
 
-Try the precedence rules behind account defaults, saved profiles, and per-upload choices. This is an educational model of the [upload profile rules](./guide/upload-profiles), with explicit inputs; it does not read your account.
+Which setting wins between account defaults, saved profiles, and per-upload choices. [Upload profiles](./guide/upload-profiles) has the full rules.
 
 <UploadLab />
 
 ## Build an API request
 
-Generate curl, JavaScript, or Python examples with your instance address. The builder never asks for a token and never sends a request.
+Generate curl, JavaScript, or Python examples with your instance address. The builder never asks for a token.
 
 <ApiPlayground />

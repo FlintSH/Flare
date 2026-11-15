@@ -2,7 +2,8 @@
 import { computed, ref, useId } from 'vue'
 import { useData, withBase } from 'vitepress'
 // A handbook page shows the notice above its title and the stamp after its
-// content. Pages without a title of their own show both together.
+// content. Other pages show the stamp where the layout puts it, with the
+// rolling notice before it; there the stamp itself says a release is archived.
 const props = defineProps({
   part: {
     type: String,

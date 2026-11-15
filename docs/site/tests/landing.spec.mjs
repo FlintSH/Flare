@@ -99,7 +99,7 @@ for (const theme of ['dark', 'light'])
       ).toBe(true)
       // The frame keeps the recording's shape, so nothing moves when it loads.
       const frame = await page.locator('.product-demo-frame').boundingBox()
-      const ratio = width <= 640 ? 780 / 1240 : 2240 / 1400
+      const ratio = width <= 900 ? 780 / 1240 : 2240 / 1400
       expect(Math.abs(frame.width / frame.height - ratio)).toBeLessThan(0.01)
     }
   })

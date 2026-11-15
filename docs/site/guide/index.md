@@ -5,11 +5,7 @@ description: Get comfortable with Flare, upload your first file, and choose how 
 
 # Your first five minutes
 
-Flare gives you a home for screenshots, recordings, files, text, and links on a server you control. Upload something, get a link, and decide who can open it.
-
-This guide is for people using an existing Flare instance. If you're installing your own, start with the [administrator guide](../admin/index).
-
-<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare file library with image previews, search, folders, and file controls" caption="Scroll through every file and use the date rail to jump through your upload history." />
+Sign in, upload a file, and share its link. This guide is for people using an existing Flare instance; if you're installing your own, start with the [administrator guide](../admin/index).
 
 ## Join your instance
 
@@ -24,11 +20,11 @@ Open the address your administrator gave you and sign in. Depending on the insta
 - **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
 - **Single sign-on:** use the provider offered by your instance. Existing local accounts are not automatically linked to SSO accounts with the same email address.
 
+<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="The sign-in page, here with a passkey option." />
+
 :::
 
 The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.
-
-<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="Use an allowed account method. Requiring passkeys disables password and SSO sign-in; dedicated passkey recovery codes remain an emergency option." />
 
 ## Upload and share your first file
 

@@ -21,6 +21,7 @@
 
 .product-hero h1 {
   margin: 0;
+  text-wrap: balance;
   color: var(--foreground);
   font-size: clamp(40px, 5vw, 56px);
   font-weight: 650;
@@ -268,6 +269,17 @@ html:not(.dark) .product-demo-still.is-dark {
   }
 }
 
+/* The phone recording, at the size it was made. */
+@media (max-width: 900px) {
+  .product-demo {
+    max-width: 390px;
+    margin-inline: auto;
+  }
+  .product-demo-frame {
+    aspect-ratio: 780 / 1240;
+  }
+}
+
 @media (max-width: 640px) {
   .product-home {
     padding: 0 16px;
@@ -286,9 +298,6 @@ html:not(.dark) .product-demo-still.is-dark {
   }
   .product-actions > a {
     min-height: 44px;
-  }
-  .product-demo-frame {
-    aspect-ratio: 780 / 1240;
   }
   .product-demo-toggle {
     min-height: 44px;

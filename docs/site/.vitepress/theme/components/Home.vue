@@ -11,16 +11,16 @@ const features = [
   },
   {
     title: 'Links that preview',
-    text: 'Images and video show up on their own in Discord and Slack. Everything else opens in a clean viewer.',
+    text: 'Images and video show up on their own in Discord and Slack. PDFs, audio and code open in the browser.',
     link: '/guide/embeds.html',
   },
   {
-    title: 'A library that stays usable',
-    text: 'Folders, tags, and search that reads the text inside your screenshots.',
+    title: 'Folders, tags and search',
+    text: 'Search reads the text inside your screenshots, so you can find one by what it says.',
     link: '/guide/library.html',
   },
   {
-    title: 'Control over every link',
+    title: 'Private and expiring links',
     text: 'Public, private or behind a password, with an expiry date when you want one.',
     link: '/guide/sharing.html',
   },

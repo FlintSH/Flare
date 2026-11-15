@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { withBase } from 'vitepress'
 const category = ref('Everything')
 const query = ref('')
@@ -206,7 +206,7 @@ const features = [
   ],
   [
     'Host & administer',
-    'Operate with confidence',
+    'Backups and upgrades',
     'Back up the database and files, preserve secrets, upgrade carefully, and diagnose failures.',
     '/hosting/maintenance',
   ],
@@ -219,20 +219,36 @@ const filtered = computed(() =>
   )
 )
 // Cards sit under their area, so the area is said once instead of on each card.
+// Every area stays in the page, hidden while it has nothing to show, so the
+// outline's links to them always have somewhere to go.
 const groups = computed(() =>
-  categories
-    .slice(1)
-    .map((name) => ({
-      name,
-      items: filtered.value.filter((item) => item[0] === name),
-    }))
-    .filter((group) => group.items.length)
+  categories.slice(1).map((name) => ({
+    name,
+    id: name.toLowerCase().replace(/[^a-z]+/g, '-'),
+    items: filtered.value.filter((item) => item[0] === name),
+  }))
 )
+
+// A link to an area that the current search or filter hides shows everything
+// again and goes there.
+async function showLinkedArea() {
+  const id = decodeURIComponent(location.hash.slice(1))
+  const group = groups.value.find((item) => item.id === id)
+  if (!group || (category.value === 'Everything' && group.items.length)) return
+  category.value = 'Everything'
+  query.value = ''
+  await nextTick()
+  // The site's own scroll for this link runs on the next frame and still has
+  // the hidden area's position, so go to the area after it.
+  requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView())
+}
+onMounted(() => window.addEventListener('hashchange', showLinkedArea))
+onUnmounted(() => window.removeEventListener('hashchange', showLinkedArea))
 </script>
 
 <template>
   <section class="feature-explorer" aria-label="Filter Flare features">
-    <label class="visually-hidden" for="feature-query">Find a capability</label>
+    <label class="visually-hidden" for="feature-query">Search features</label>
     <input
       id="feature-query"
       v-model="query"
@@ -258,9 +274,16 @@ const groups = computed(() =>
           : `${filtered.length} of ${features.length} features`
       }}
     </p>
-    <div v-for="group in groups" :key="group.name" class="feature-group">
+    <div
+      v-for="group in groups"
+      v-show="group.items.length"
+      :key="group.name"
+      class="feature-group"
+    >
       <!-- A chosen area is already named by its filter. -->
-      <h2 v-if="category === 'Everything'">{{ group.name }}</h2>
+      <h2 v-show="category === 'Everything'" :id="group.id">
+        {{ group.name }}
+      </h2>
       <div class="feature-grid">
         <a
           v-for="item in group.items"

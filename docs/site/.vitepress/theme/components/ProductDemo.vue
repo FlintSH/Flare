@@ -4,7 +4,8 @@ import { useData, withBase } from 'vitepress'
 
 // The page is rendered ahead of time without knowing the reader's theme or
 // screen, so both stills are in the markup and CSS shows the right one. The
-// recording itself is chosen in the browser.
+// recording itself is chosen in the browser. Below 900px the desktop recording
+// would be too small to read, so the phone one is shown at its own size.
 const themes = ['dark', 'light']
 const asset = (size, theme, kind) =>
   withBase(`/landing/${size}-${theme}${kind}`)
@@ -65,7 +66,7 @@ watch(sources, async () => {
 })
 
 onMounted(() => {
-  phoneQuery = window.matchMedia('(max-width: 640px)')
+  phoneQuery = window.matchMedia('(max-width: 900px)')
   phone.value = phoneQuery.matches
   phoneQuery.addEventListener('change', updatePhone)
   wanted = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -96,7 +97,7 @@ onUnmounted(() => {
         :class="`is-${theme}`"
       >
         <source
-          media="(max-width: 640px)"
+          media="(max-width: 900px)"
           :srcset="asset('mobile', theme, '-poster.webp')"
           width="780"
           height="1240"
@@ -119,7 +120,6 @@ onUnmounted(() => {
         playsinline
         preload="metadata"
         aria-label="Recording of Flare: a file is uploaded, opened, and its link is copied."
-        aria-describedby="product-demo-caption"
         @click="toggle"
         @play="playing = true"
         @pause="playing = false"
@@ -134,7 +134,7 @@ onUnmounted(() => {
       </video>
     </div>
     <figcaption>
-      <p id="product-demo-caption">Upload a file, open it, copy the link.</p>
+      <p>Upload a file, open it, copy the link.</p>
       <button
         v-if="mounted && playable"
         type="button"

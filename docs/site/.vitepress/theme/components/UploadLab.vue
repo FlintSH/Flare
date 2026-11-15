@@ -32,9 +32,8 @@ const winner = computed(() =>
       <span class="demo-badge">Local simulation</span>
     </div>
     <p>
-      Change the inputs to see which visibility setting wins. Flare starts with
-      public visibility; make a private profile your default to change your
-      everyday uploads. Nothing is uploaded or saved here.
+      Flare starts with public visibility; make a private profile your default
+      to change your everyday uploads.
     </p>
     <div class="lab-grid">
       <div>

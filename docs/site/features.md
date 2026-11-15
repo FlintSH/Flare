@@ -9,7 +9,7 @@ Everything Flare does. Pick one to see how it works.
 
 <FeatureExplorer />
 
-## Not sure where to start?
+## Not sure where to start? {#choose-your-starting-point}
 
 | You want to…                                                   | Start here                                                                                                                                                |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -29,7 +29,7 @@ Everything Flare does. Pick one to see how it works.
 | Connect your own software                                      | [API](./api/) → [signed webhooks](./api/webhooks)                                                                                                         |
 | Build a web app or PWA on top of your files                    | [Call Flare from a web app](./api/authentication#call-flare-from-a-web-app) → [`FLARE_CORS_ORIGINS`](./hosting/configuration#cross-origin-browser-access) |
 
-## Before you choose Flare
+## Before you choose Flare {#know-what-you-are-choosing}
 
 - **Flare needs a server.** It runs as an application with PostgreSQL. Local storage also needs a persistent writable disk; an S3-compatible bucket can hold the files instead. Read the [deployment guide](./hosting/) before choosing infrastructure.
 - **Private means access-controlled, not end-to-end encrypted.** Private files are limited to their owner and to accounts allowed to read other people's content. [Sharing and privacy](./guide/sharing) has the exact rules, including passwords, folder links, and storage URLs.
