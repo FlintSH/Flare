@@ -4,8 +4,8 @@ import { useData, withBase } from 'vitepress'
 
 // The page is rendered ahead of time without knowing the reader's theme or
 // screen, so both stills are in the markup and CSS shows the right one. The
-// recording itself is chosen in the browser. Below 900px the desktop recording
-// would be too small to read, so the phone one is shown at its own size.
+// recording itself is chosen in the browser. Phones get the one made at phone
+// width.
 const themes = ['dark', 'light']
 const asset = (size, theme, kind) =>
   withBase(`/landing/${size}-${theme}${kind}`)
@@ -75,7 +75,7 @@ watch(sources, async () => {
 })
 
 onMounted(() => {
-  phoneQuery = window.matchMedia('(max-width: 900px)')
+  phoneQuery = window.matchMedia('(max-width: 600px)')
   phone.value = phoneQuery.matches
   phoneQuery.addEventListener('change', updatePhone)
   motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -100,52 +100,56 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <figure class="product-demo" :data-playing="playing" :data-variant="variant">
-    <div ref="frame" class="product-demo-frame">
-      <picture
-        v-for="theme in themes"
-        :key="theme"
-        class="product-demo-still"
-        :class="`is-${theme}`"
-      >
-        <source
-          media="(max-width: 900px)"
-          :srcset="asset('mobile', theme, '-poster.webp')"
-          width="780"
-          height="1240"
-        />
-        <img
-          :src="asset('desktop', theme, '-poster.webp')"
-          width="2240"
-          height="1400"
-          alt="Flare’s file library: a search box and filters above a grid of image and code files."
-          loading="lazy"
-          decoding="async"
-        />
-      </picture>
-      <video
-        v-if="sources"
-        ref="video"
-        :key="variant"
-        muted
-        loop
-        playsinline
-        preload="metadata"
-        aria-label="Recording of Flare: a file is uploaded, opened, and its link is copied."
-        @click="toggle"
-        @play="playing = true"
-        @pause="playing = false"
-      >
-        <source
-          v-for="([type, src], index) in sources"
-          :key="type"
-          :type="type"
-          :src="src"
-          @error="index === sources.length - 1 && (playable = false)"
-        />
-      </video>
+  <div class="product-demo" :data-playing="playing" :data-variant="variant">
+    <div class="product-demo-card">
+      <!-- Whatever the page puts on top of the recording, inside the same panel. -->
+      <slot />
+      <div ref="frame" class="product-demo-frame">
+        <picture
+          v-for="theme in themes"
+          :key="theme"
+          class="product-demo-still"
+          :class="`is-${theme}`"
+        >
+          <source
+            media="(max-width: 600px)"
+            :srcset="asset('mobile', theme, '-poster.webp')"
+            width="780"
+            height="1240"
+          />
+          <img
+            :src="asset('desktop', theme, '-poster.webp')"
+            width="2240"
+            height="1400"
+            alt="Flare’s file library: a grid of image, video and code files."
+            loading="lazy"
+            decoding="async"
+          />
+        </picture>
+        <video
+          v-if="sources"
+          ref="video"
+          :key="variant"
+          muted
+          loop
+          playsinline
+          preload="metadata"
+          aria-label="Recording of Flare: a file is uploaded, opened, and its link is copied."
+          @click="toggle"
+          @play="playing = true"
+          @pause="playing = false"
+        >
+          <source
+            v-for="([type, src], index) in sources"
+            :key="type"
+            :type="type"
+            :src="src"
+            @error="index === sources.length - 1 && (playable = false)"
+          />
+        </video>
+      </div>
     </div>
-    <figcaption>
+    <div class="product-demo-caption">
       <p>Upload a file, open it, copy the link.</p>
       <button
         v-if="mounted && playable"
@@ -162,6 +166,6 @@ onUnmounted(() => {
         </svg>
         {{ playing ? 'Pause' : 'Play' }}
       </button>
-    </figcaption>
-  </figure>
+    </div>
+  </div>
 </template>

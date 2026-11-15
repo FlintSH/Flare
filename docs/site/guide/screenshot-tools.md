@@ -1,6 +1,6 @@
 ---
 title: Screenshot tools and scripts
-description: Set up ShareX, iTake, Flameshot, Spectacle, or a Bash uploader with ready-to-use Flare configurations.
+description: Set up ShareX, iTake, Flameshot, Spectacle, or a Bash uploader with ready-to-use Flare configurations, or use Ember on Android.
 ---
 
 # Screenshot tools and scripts
@@ -15,13 +15,14 @@ You do not need to create or manually paste an API key for these downloads. Flar
 
 ## Choose your tool
 
-| Your workflow                           | Flare download                |
-| --------------------------------------- | ----------------------------- |
-| Capture and upload on Windows           | ShareX `.sxcu` configuration. |
-| Screenshots and recordings on macOS     | iTake `.itup` configuration.  |
-| Annotated screenshots on Linux          | Flameshot Bash script.        |
-| Screenshots and recordings on KDE       | Spectacle Bash script.        |
-| Upload an existing file from a terminal | General Bash script.          |
+| Your workflow                           | Flare download                              |
+| --------------------------------------- | ------------------------------------------- |
+| Capture and upload on Windows           | ShareX `.sxcu` configuration.               |
+| Screenshots and recordings on macOS     | iTake `.itup` configuration.                |
+| Annotated screenshots on Linux          | Flameshot Bash script.                      |
+| Screenshots and recordings on KDE       | Spectacle Bash script.                      |
+| Upload an existing file from a terminal | General Bash script.                        |
+| Share, paste, and sync from Android     | [Ember](#ember-on-android), a separate app. |
 
 Each download is named after your account name, for example `alex-morgan-sharex.sxcu`, `alex-morgan-flameshot.sh`, or `alex-morgan-spectacle-recording.sh`.
 
@@ -82,6 +83,18 @@ Screenshot choices are full desktop, current monitor, active window, or a select
 The generated script checks for `spectacle`, `curl`, `jq`, and its clipboard tool: `xsel`, or `wl-copy` with Wayland clipboard support. Read the script's setup notes, then run it with Bash. The available capture and recording behavior also depends on your installed Spectacle version and desktop session.
 
 <Screenshot src="/screenshots/preferences/profile-spectacle-options.png" alt="Spectacle script configuration with screenshot and recording modes" caption="Choose the capture mode and desktop environment before downloading the Spectacle script." />
+
+## Ember on Android
+
+[Ember](https://github.com/FlintSH/Ember) is the Android app for Flare. It adds **Upload to Flare** to Android's share menu, turns selected text into a paste, shortens links, and keeps folders such as Camera and Screenshots synced: new files upload on their own, and a screenshot can copy its link as soon as it uploads.
+
+Ember does not use the downloads on this page. It needs Android 8.0 or newer and Flare 3.0 or later.
+
+1. Install Ember from its [latest release](https://github.com/FlintSH/Ember/releases/latest).
+2. In Flare, open **Profile → Integrations** and create a named token with the `files:upload` scope.
+3. In Ember, choose **Connect to Flare** and enter your instance address and that token.
+
+Ember's [getting started guide](https://github.com/FlintSH/Ember/blob/main/docs/getting-started.md) covers the other scopes, servers on a home network, and private certificates.
 
 ## Bash: upload any file
 

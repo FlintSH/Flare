@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 2 76 96" width="76" height="96">
+  <!-- The Ember mark: an outlined flame holding a glowing ember, in Flare's gradient. From Ember's launcher icon. -->
+  <defs>
+    <linearGradient id="ember-flame" gradientUnits="userSpaceOnUse" x1="21" y1="90" x2="79" y2="10">
+      <stop offset="0" stop-color="#ffc301" />
+      <stop offset="1" stop-color="#ff2b01" />
+    </linearGradient>
+    <radialGradient id="ember-core" gradientUnits="userSpaceOnUse" cx="50" cy="62" r="13">
+      <stop offset="0" stop-color="#ffd84d" />
+      <stop offset="0.55" stop-color="#ff8a00" />
+      <stop offset="1" stop-color="#ff3d00" />
+    </radialGradient>
+  </defs>
+  <path d="M58 10C60 27 79 39 79 60C79 78 66 90 50 90C34 90 21 78 21 60C21 42 39 31 51 20C54 17 56.5 13.5 58 10Z" fill="none" stroke="url(#ember-flame)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" />
+  <path d="M38.5 65a11.5 11.5 0 1 0 23 0a11.5 11.5 0 1 0 -23 0Z" fill="url(#ember-core)" />
+</svg>

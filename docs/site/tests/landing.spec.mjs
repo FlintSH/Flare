@@ -94,6 +94,38 @@ test('phones and each theme get their own recording', async ({ page }) => {
     .toMatch(/landing\/mobile-light\.(mp4|webm)$/)
 })
 
+test('the recording is headed by the tools that upload to Flare, each linked', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto('./')
+  // The panel sits on top of the recording, inside the same card.
+  const sources = page.locator('.product-demo-card .product-sources')
+  await expect(sources).toContainText('Uploads straight from')
+  for (const [name, target] of [
+    [/^ShareX\s*Windows$/, /guide\/screenshot-tools\.html#sharex-on-windows$/],
+    [/^iTake\s*macOS$/, /guide\/screenshot-tools\.html#itake-on-macos$/],
+    [
+      /^Flameshot\s*Linux$/,
+      /guide\/screenshot-tools\.html#flameshot-on-linux$/,
+    ],
+    [/^Spectacle\s*KDE$/, /guide\/screenshot-tools\.html#spectacle-on-kde$/],
+    [/^Ember for Android/, /^https:\/\/github\.com\/FlintSH\/Ember$/],
+  ]) {
+    const link = sources.getByRole('link', { name })
+    await expect(link).toHaveAttribute('href', target)
+    // The mark is decorative next to the name, and it has to have loaded.
+    const mark = link.locator('img')
+    await expect(mark).toHaveAttribute('alt', '')
+    await expect
+      .poll(() => mark.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
+  // Each tool link lands on a section that exists.
+  await sources.getByRole('link', { name: /^Spectacle/ }).click()
+  await expect(page.locator('h2#spectacle-on-kde')).toBeVisible()
+})
+
 for (const theme of ['dark', 'light'])
   test(`${theme} homepage fits phones, tablets and desktop`, async ({
     page,
@@ -115,7 +147,7 @@ for (const theme of ['dark', 'light'])
       ).toBe(true)
       // The frame keeps the recording's shape, so nothing moves when it loads.
       const frame = await page.locator('.product-demo-frame').boundingBox()
-      const ratio = width <= 900 ? 780 / 1240 : 2240 / 1400
+      const ratio = width <= 600 ? 780 / 1240 : 2240 / 1400
       expect(Math.abs(frame.width / frame.height - ratio)).toBeLessThan(0.01)
     }
   })
@@ -131,7 +163,9 @@ test('phone controls are easy to tap and the page has no stray menu', async ({
   const page = await context.newPage()
   await page.goto(test.info().project.use.baseURL)
   for (const control of await page
-    .locator('.product-actions a, .product-demo-toggle, .product-run a')
+    .locator(
+      '.product-actions a, .product-sources a, .product-demo-toggle, .product-section header > a, .product-install'
+    )
     .all()) {
     const box = await control.boundingBox()
     expect(box.height).toBeGreaterThanOrEqual(44)
@@ -141,7 +175,7 @@ test('phone controls are easy to tap and the page has no stray menu', async ({
   await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(400)
   await expect(page.getByText('Return to top')).toBeHidden()
   await expect(page.locator('.VPLocalNav')).toBeHidden()
-  await page.getByRole('link', { name: 'Docker Compose' }).click()
+  await page.getByRole('link', { name: /^Docker Compose/ }).click()
   await expect(page).toHaveURL(/hosting\/docker\.html$/)
   await context.close()
 })
