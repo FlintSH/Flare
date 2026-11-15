@@ -9,7 +9,7 @@ import { withBase } from 'vitepress'
 
 # Demos
 
-## Explore the workspace
+## Screen tour {#explore-the-workspace}
 
 <DemoTour />
 
@@ -382,7 +382,7 @@ Removing a permission from one role does not deny a grant from another, and a na
 
 ## Upload options lab
 
-Which setting wins between account defaults, saved profiles, and per-upload choices. [Upload profiles](./guide/upload-profiles) has the full rules.
+See which setting wins: account defaults, saved profiles or per-upload choices. [Upload profiles](./guide/upload-profiles) has the full rules.
 
 <UploadLab />
 

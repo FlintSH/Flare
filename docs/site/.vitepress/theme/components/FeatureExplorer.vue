@@ -231,8 +231,8 @@ const groups = computed(() =>
 
 // A link to an area that the current search or filter hides shows everything
 // again and goes there.
-async function showLinkedArea() {
-  const id = decodeURIComponent(location.hash.slice(1))
+async function showArea(hash) {
+  const id = decodeURIComponent(hash.slice(1))
   const group = groups.value.find((item) => item.id === id)
   if (!group || (category.value === 'Everything' && group.items.length)) return
   category.value = 'Everything'
@@ -242,8 +242,22 @@ async function showLinkedArea() {
   // the hidden area's position, so go to the area after it.
   requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView())
 }
-onMounted(() => window.addEventListener('hashchange', showLinkedArea))
-onUnmounted(() => window.removeEventListener('hashchange', showLinkedArea))
+const onHashChange = () => showArea(location.hash)
+// Following a link to the area already in the address does not change the
+// hash, so clicks on such links are handled as well.
+function onLinkClick(event) {
+  const link = event.target.closest?.('a[href]')
+  if (link?.origin === location.origin && link.pathname === location.pathname)
+    showArea(link.hash)
+}
+onMounted(() => {
+  window.addEventListener('hashchange', onHashChange)
+  document.addEventListener('click', onLinkClick)
+})
+onUnmounted(() => {
+  window.removeEventListener('hashchange', onHashChange)
+  document.removeEventListener('click', onLinkClick)
+})
 </script>
 
 <template>

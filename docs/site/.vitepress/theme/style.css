@@ -1218,6 +1218,16 @@ summary:focus-visible {
 .tour-description h3 {
   margin: 0 0 10px;
 }
+/* A tall screenshot shows its top here and opens in full, so the text and
+   buttons under it stay near the same place from step to step. */
+.demo-tour .screenshot-button {
+  container-type: inline-size;
+}
+.demo-tour .screenshot-button img {
+  max-height: 70cqw;
+  object-fit: cover;
+  object-position: top;
+}
 .tour-description p {
   margin: 8px 0;
   font-size: 14px;

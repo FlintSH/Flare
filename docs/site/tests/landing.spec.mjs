@@ -51,6 +51,22 @@ test('the recording plays on its own, stops off screen and resumes', async ({
   await expect(demo(page)).toHaveAttribute('data-playing', 'false')
 })
 
+test('asking for reduced motion while it plays stops the recording', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto('./')
+  await expect(demo(page)).toHaveAttribute('data-playing', 'true')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(demo(page)).toHaveAttribute('data-playing', 'false')
+  // It stays stopped when it comes back on screen, and Play still works.
+  await page.locator('.project-credit').scrollIntoViewIfNeeded()
+  await demo(page).scrollIntoViewIfNeeded()
+  await expect(demo(page)).toHaveAttribute('data-playing', 'false')
+  await page.getByRole('button', { name: 'Play the recording' }).click()
+  await expect(demo(page)).toHaveAttribute('data-playing', 'true')
+})
+
 test('phones and each theme get their own recording', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' })
   await page.addInitScript(() =>

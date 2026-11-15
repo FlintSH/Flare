@@ -310,10 +310,6 @@ html:not(.dark) .product-demo-still.is-dark {
   .product-feature {
     padding: 18px 20px 20px;
   }
-  .product-feature h2 .doc-icon {
-    opacity: 1;
-    transform: none;
-  }
   .product-run {
     padding: 48px 0 40px;
   }
@@ -322,6 +318,14 @@ html:not(.dark) .product-demo-still.is-dark {
   }
   .home-build-stamp.product-build-stamp {
     padding: 0 16px 24px;
+  }
+}
+
+/* Without hover there is nothing to reveal the arrows, so they stay visible. */
+@media (hover: none) {
+  .product-feature h2 .doc-icon {
+    opacity: 1;
+    transform: none;
   }
 }
 

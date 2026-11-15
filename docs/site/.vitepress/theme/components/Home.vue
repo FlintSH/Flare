@@ -16,7 +16,7 @@ const features = [
   },
   {
     title: 'Folders, tags and search',
-    text: 'Search reads the text inside your screenshots, so you can find one by what it says.',
+    text: 'Group files in folders, label them with tags, and search the text inside your screenshots.',
     link: '/guide/library.html',
   },
   {

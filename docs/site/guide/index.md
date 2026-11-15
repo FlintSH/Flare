@@ -9,12 +9,13 @@ Sign in, upload a file, and share its link. This guide is for people using an ex
 
 ## Join your instance
 
-Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form.
+Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form. The name, colors, logo, and background can differ between instances; the tasks and controls described here stay the same.
+
+If registration is closed, ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 
 ::: details Registration, two-factor codes, passkeys, and single sign-on
 
 - **Registration available:** create an account, then follow any email-verification instructions.
-- **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 - **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
 - **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
@@ -23,8 +24,6 @@ Open the address your administrator gave you and sign in. Depending on the insta
 <Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="The sign-in page, here with a passkey option." />
 
 :::
-
-The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.
 
 ## Upload and share your first file
 
@@ -67,9 +66,9 @@ The **Admin** menu lists only the pages your roles allow. If they allow just one
 
 The instance name and logo at the start of the bar open **Files**, or **Profile** if your roles don't include `files.read`. A bookmark or link to a page your roles don't allow opens **Profile** instead.
 
-:::
+<Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
 
-<Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Your avatar opens the account menu. Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
+:::
 
 ::: details On a phone or in a narrow window
 When the window is too narrow for the bar, choose the menu button next to your avatar. It lists your places, then the administration pages under an **Admin** heading, then **Profile** and **Sign out** under **Account**. Your avatar still opens the account menu too. With four places or fewer, the full bar shows from 768 pixels wide; with more, including the **Admin** menu, it shows from 900 pixels.
@@ -88,10 +87,12 @@ Earlier versions put every page in the bar, including **Profile**, **Users**, **
 
 If a dashboard page cannot load, **Try again** appears inside the workspace so navigation remains available.
 
+When a proxy or sign-in gateway answered in Flare's place, earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Current versions show the screen's usual message instead.
+
 Profile and Settings remember the selected section in the page address, so browser Back and Forward work when moving between sections.
 :::
 
-## Build a workflow that fits
+## Upload workflows {#build-a-workflow-that-fits}
 
 ::: details I share screenshots throughout the day
 Create a **Public screenshots** [upload profile](./upload-profiles), review its defaults, and download a [capture-tool configuration](./screenshot-tools) from that profile. A capture can upload and copy its share link without opening the dashboard. Add a filename tag rule to collect related captures automatically.
@@ -123,7 +124,7 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 
 **Deletion is permanent in Flare.** Download or export anything you need before deleting a file or account. There is no user-facing trash or undo flow.
 
-**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.**; earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Ask the operator if such messages keep appearing.
+**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.** Ask the operator if such messages keep appearing.
 
 ## Where to go next
 

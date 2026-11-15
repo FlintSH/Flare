@@ -36,6 +36,7 @@ const sources = computed(() =>
 let wanted = false
 let visible = false
 let phoneQuery
+let motionQuery
 let observer
 
 function sync() {
@@ -56,6 +57,14 @@ function updatePhone() {
   phone.value = phoneQuery.matches
 }
 
+// Asking for reduced motion while the page is open stops the recording. Play
+// still works afterwards.
+function updateMotion() {
+  if (!motionQuery.matches) return
+  wanted = false
+  sync()
+}
+
 // Changing theme or screen size swaps in another recording, which starts from
 // its first frame like the still behind it.
 watch(sources, async () => {
@@ -69,7 +78,9 @@ onMounted(() => {
   phoneQuery = window.matchMedia('(max-width: 900px)')
   phone.value = phoneQuery.matches
   phoneQuery.addEventListener('change', updatePhone)
-  wanted = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  motionQuery.addEventListener('change', updateMotion)
+  wanted = !motionQuery.matches
   observer = new IntersectionObserver(
     ([entry]) => {
       visible = entry.isIntersecting
@@ -83,6 +94,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   phoneQuery?.removeEventListener('change', updatePhone)
+  motionQuery?.removeEventListener('change', updateMotion)
   observer?.disconnect()
 })
 </script>
