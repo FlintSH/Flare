@@ -11,7 +11,7 @@ import {
   symlink,
   writeFile,
 } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { availableParallelism, tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getBuildInfo } from './build-info.mjs'
@@ -37,6 +37,13 @@ const output = resolve(site, '.vitepress/releases')
 const base = process.env.DOCS_BASE || '/'
 if (!base.startsWith('/') || !base.endsWith('/') || /[?#\\]/.test(base))
   throw new Error('DOCS_BASE must be a URL path beginning and ending with /')
+// How many releases build at once: one per core unless DOCS_BUILD_CONCURRENCY
+// says otherwise. Each build is mostly a single thread of work.
+const concurrency = Number(
+  process.env.DOCS_BUILD_CONCURRENCY || availableParallelism()
+)
+if (!Number.isInteger(concurrency) || concurrency < 1)
+  throw new Error('DOCS_BUILD_CONCURRENCY must be a whole number of 1 or more')
 const args = process.argv.slice(2)
 if (args.length && (args.length !== 2 || args[0] !== '--manifest'))
   throw new Error(
@@ -57,13 +64,18 @@ function token() {
   }
 }
 
-function run(command, arguments_, cwd, env = {}) {
+// Releases build side by side, so each one's output is kept in `log` and
+// printed together when that release finishes.
+function run(command, arguments_, cwd, env = {}, log) {
   return new Promise((accept, reject) => {
     const child = spawn(command, arguments_, {
       cwd,
       env: { ...process.env, ...env },
-      stdio: 'inherit',
+      stdio: log ? ['ignore', 'pipe', 'pipe'] : 'inherit',
     })
+    if (log)
+      for (const stream of [child.stdout, child.stderr])
+        stream.on('data', (chunk) => log.push(chunk))
     child.on('error', reject)
     child.on('exit', (code, signal) => {
       if (code === 0) accept()
@@ -234,10 +246,12 @@ try {
       Number(a.metadata.tag === manifest.latest)
   )
   ordered.push({ metadata: rolling, channel: 'rolling' })
-  for (const { metadata: release, channel = 'stable' } of ordered) {
+  // Builds one release in its own directory and returns where each of its
+  // sites was left, so several can run at once without sharing any state.
+  async function buildRelease({ metadata: release, channel = 'stable' }, log) {
     const label = channel === 'rolling' ? 'rolling' : release.tag
-    console.log(
-      `Building ${label} (${release.kind}, ${release.publishedAt || release.updatedAt})`
+    log.push(
+      `Building ${label} (${release.kind}, ${release.publishedAt || release.updatedAt})\n`
     )
     const archive = resolve(temporary, label)
     const target = resolve(archive, 'docs/site')
@@ -245,8 +259,8 @@ try {
     await mkdir(target, { recursive: true })
     if (!legacy) {
       const tar = resolve(temporary, `${label}.tar`)
-      await run('git', ['archive', '-o', tar, release.commit], repo)
-      await run('tar', ['-xf', tar, '-C', archive], repo)
+      await run('git', ['archive', '-o', tar, release.commit], repo, {}, log)
+      await run('tar', ['-xf', tar, '-C', archive], repo, {}, log)
       await rm(tar)
       await rename(
         resolve(target, '.vitepress/config.mjs'),
@@ -267,7 +281,9 @@ try {
       await run(
         process.execPath,
         [resolve(target, 'scripts/prepare-assets.mjs')],
-        target
+        target,
+        {},
+        log
       )
     }
     await prepareAppearance(target, repo)
@@ -282,7 +298,8 @@ try {
             { path: release.path, base: `${base}${release.path}` },
           ]
         : [{ path: release.path, base: `${base}${release.path}` }]
-    for (const destination of destinations) {
+    const sites = []
+    for (const [index, destination] of destinations.entries()) {
       const productHome = destination.path === '' && !legacy
       if (legacy)
         await prepareLegacy({
@@ -309,24 +326,50 @@ try {
             target,
           ],
           target,
-          { DOCS_BASE: destination.base }
+          { DOCS_BASE: destination.base },
+          log
         )
       if (productHome) await withProductHome({ site, target, repo }, build)
       else await build()
-      await cp(
-        resolve(target, '.vitepress/dist'),
-        resolve(assembled, destination.path),
-        {
-          recursive: true,
-        }
-      )
-      await rm(resolve(target, '.vitepress/dist'), {
-        recursive: true,
-        force: true,
-      })
+      const built = resolve(temporary, 'built', `${label}-${index}`)
+      await mkdir(dirname(built), { recursive: true })
+      await rename(resolve(target, '.vitepress/dist'), built)
+      sites.push({ path: destination.path, built })
     }
     await rm(archive, { recursive: true, force: true })
+    return sites
   }
+
+  // A release with its own handbook takes several times longer than a legacy
+  // one, so those start first and the short builds fill in around them.
+  const queue = [...ordered.keys()].sort(
+    (a, b) =>
+      Number(ordered[a].metadata.kind === 'legacy') -
+        Number(ordered[b].metadata.kind === 'legacy') || a - b
+  )
+  const built = []
+  const failures = []
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+      while (queue.length && !failures.length) {
+        const index = queue.shift()
+        const log = []
+        try {
+          built[index] = await buildRelease(ordered[index], log)
+        } catch (error) {
+          failures.push(error)
+        }
+        process.stdout.write(
+          Buffer.concat(log.map((part) => Buffer.from(part)))
+        )
+      }
+    })
+  )
+  if (failures.length) throw failures[0]
+  // Assemble in the original order: the stable root, then each version.
+  for (const sites of built)
+    for (const { path, built: source } of sites)
+      await cp(source, resolve(assembled, path), { recursive: true })
   await mkdir(resolve(assembled, 'history'))
   for (const { metadata, snapshot } of sources)
     await writeFile(

@@ -372,10 +372,17 @@ export async function createArchive(
     )
   const builder = new ManifestBuilder()
   for (const item of entries) builder.add(item.path, 'file', item.size)
+  // The archiver looks at each source before adding it, four at a time
+  // unless told otherwise, and adds them as those looks finish. One at a
+  // time keeps members in the order they were given.
   const archive =
     format === 'zip'
-      ? archiver('zip', { zlib: { level: 6 } })
-      : archiver('tar', { gzip: true, gzipOptions: { level: 6 } })
+      ? archiver('zip', { zlib: { level: 6 }, statConcurrency: 1 })
+      : archiver('tar', {
+          gzip: true,
+          gzipOptions: { level: 6 },
+          statConcurrency: 1,
+        })
   const sink = createWriteStream(outputPath, { flags: 'wx', mode: 0o600 })
   const writing = pipeline(
     archive,

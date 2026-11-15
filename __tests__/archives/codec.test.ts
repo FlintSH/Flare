@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { createWriteStream } from 'node:fs'
+import fs, { createWriteStream } from 'node:fs'
 import {
   mkdir,
   mkdtemp,
@@ -15,7 +15,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { crc32, createGzip, gzipSync } from 'node:zlib'
 import * as tar from 'tar-stream'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createArchive,
@@ -343,6 +343,42 @@ describe('archive creation', () => {
         'Archive round trip'
       )
       expect(await readFile(source.path, 'utf8')).toBe('Archive round trip')
+    }
+  )
+  it.each(['zip', 'tar.gz'] as const)(
+    'stores the members of a %s in the order given, however slowly a source is read',
+    async (format) => {
+      const entries: { path: string; localPath: string; size: number }[] = []
+      for (const name of ['first.txt', 'second.txt', 'third.txt']) {
+        const bytes = Buffer.from(name)
+        const source = await file(bytes)
+        entries.push({ path: name, localPath: source.path, size: bytes.length })
+      }
+      // The archiver looks at each source before adding it. Hold its look at
+      // the first one back until it has had time to see the others.
+      const lstat = fs.lstat as (...args: unknown[]) => void
+      const slow = vi.spyOn(fs, 'lstat').mockImplementation(((
+        path: unknown,
+        ...rest: unknown[]
+      ) => {
+        if (path === entries[0].localPath)
+          setTimeout(() => lstat(path, ...rest), 100)
+        else lstat(path, ...rest)
+      }) as typeof fs.lstat)
+      try {
+        const output = join(directory, `ordered.${format}`)
+        await createArchive(output, format, entries)
+        const manifest = await readArchive(output, `ordered.${format}`, {
+          directory,
+        })
+        expect(manifest.entries.map((entry) => entry.path)).toEqual([
+          'first.txt',
+          'second.txt',
+          'third.txt',
+        ])
+      } finally {
+        slow.mockRestore()
+      }
     }
   )
   it('fails if any source is missing or changes size; never silently omits it', async () => {

@@ -3,10 +3,11 @@
 node_modules
 npm-debug.log
 README.md
-docs/site
-docs/images/timeline
-docs/images/thumbnails
-.github/assets/timeline
+# The app builds without the handbook, its screenshots, CI files or tests.
+# Leaving them out keeps about 300 MB from being sent to every build.
+docs
+.github
+__tests__
 scripts/timeline
 .env
 .env.*

@@ -1,0 +1,12 @@
+{
+  "linux/amd64": {
+    "before": 1458,
+    "after": 471,
+    "note": "Compressed, as Docker reports it on that runner"
+  },
+  "linux/arm64": {
+    "before": 3638,
+    "after": 1402,
+    "note": "Unpacked, as Docker reports it on that runner"
+  }
+}

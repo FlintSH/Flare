@@ -59,6 +59,17 @@ jobs:
           # Do not restore or save dependency caches across publishing contexts.
       - name: Install documentation dependencies
         run: npm ci --prefix docs/site
+      # The browser and the fonts it renders with install while the site
+      # builds; "Wait for the browser" collects the result. A pull request
+      # runs its browser tests in the `browser` jobs below instead.
+      - name: Start installing the browser
+        if: github.event_name != 'pull_request'
+        working-directory: docs/site
+        run: |
+          (status=0
+            npx playwright install --with-deps --only-shell chromium > "$RUNNER_TEMP/browser-install.log" 2>&1 || status=1
+            echo "$status" > "$RUNNER_TEMP/browser-install.status.part"
+            mv "$RUNNER_TEMP/browser-install.status.part" "$RUNNER_TEMP/browser-install.status") &
       - name: Require documentation with code changes
         if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000')
         env:
@@ -70,13 +81,22 @@ jobs:
         run: npm run format:check --prefix docs/site
       - name: Build and verify links and assets
         run: npm run build --prefix docs/site
-      - name: Install browser
+      - name: Test the documentation scripts
+        if: github.event_name == 'pull_request'
         working-directory: docs/site
-        run: npx playwright install --with-deps chromium
+        run: node --test scripts/*.test.mjs
+      - name: Wait for the browser
+        if: github.event_name != 'pull_request'
+        timeout-minutes: 10
+        run: |
+          until [ -f "$RUNNER_TEMP/browser-install.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/browser-install.log"
+          exit "$(cat "$RUNNER_TEMP/browser-install.status")"
       - name: Test documentation interactions and responsive layouts
+        if: github.event_name != 'pull_request'
         run: npm test --prefix docs/site
       - name: Save browser failure evidence
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docs-browser-failures
@@ -84,14 +104,19 @@ jobs:
           if-no-files-found: ignore
       # Build the deployable site from the same checkout that passed source
       # checks, without accepting a checkout ref or artifact from another job.
+      # A pull request publishes nothing and always checks out one fixed
+      # commit, so there the Documentation Releases workflow runs these steps
+      # beside this job rather than after it.
       - name: Build stable docs, dated archives and the rolling preview
+        if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run build:releases --prefix docs/site
       - name: Test stable content, archives, comparisons and explicit rolling access
+        if: github.event_name != 'pull_request'
         run: npm run test:releases --prefix docs/site
       - name: Save archive browser failure evidence
-        if: failure()
+        if: failure() && github.event_name != 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: docs-release-browser-failures
@@ -102,6 +127,64 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: docs/site/.vitepress/releases
+
+  # A pull request's browser tests, split in two so they finish in about half
+  # the time. The two groups are one filter and its opposite, so a new test
+  # always lands in one of them.
+  browser:
+    if: github.event_name == 'pull_request'
+    name: browser (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: accessibility
+            filter: --grep "WCAG accessibility"
+          - group: layout and features
+            filter: --grep-invert "WCAG accessibility"
+    env:
+      DOCS_BASE: ${{ vars.DOCS_BASE || format('/{0}/', github.event.repository.name) }}
+    steps:
+      - name: Check out the pull request
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Pages show when they last changed, which comes from the history.
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          # Do not restore or save dependency caches across publishing contexts.
+      - name: Install documentation dependencies
+        run: npm ci --prefix docs/site
+      # Installs while the site builds; "Wait for the browser" collects it.
+      - name: Start installing the browser
+        working-directory: docs/site
+        run: |
+          (status=0
+            npx playwright install --with-deps --only-shell chromium > "$RUNNER_TEMP/browser-install.log" 2>&1 || status=1
+            echo "$status" > "$RUNNER_TEMP/browser-install.status.part"
+            mv "$RUNNER_TEMP/browser-install.status.part" "$RUNNER_TEMP/browser-install.status") &
+      - name: Build the site
+        run: npm run build --prefix docs/site
+      - name: Wait for the browser
+        timeout-minutes: 10
+        run: |
+          until [ -f "$RUNNER_TEMP/browser-install.status" ]; do sleep 1; done
+          cat "$RUNNER_TEMP/browser-install.log"
+          exit "$(cat "$RUNNER_TEMP/browser-install.status")"
+      - name: Test documentation interactions and responsive layouts
+        working-directory: docs/site
+        run: npx playwright test ${{ matrix.filter }}
+      - name: Save browser failure evidence
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: docs-browser-failures-${{ strategy.job-index }}
+          path: docs/site/test-results
+          if-no-files-found: ignore
 
   deploy:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.event_name == 'release') && vars.DOCS_PAGES_ENABLED == 'true'

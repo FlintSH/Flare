@@ -105,7 +105,7 @@ Test sign-in, upload, download, and any integrations you depend on after the upd
 
 Builds after 3.1.0 show a frame from each video on library cards, shared folder tiles, **View content**, the share page player, and [link previews](/guide/embeds), instead of a video icon and a generic picture. There is no setting to change. The official image applies one migration, `20261114000000_video_frames`, which adds an empty `VideoFrame` table and changes no rows.
 
-- **Official image.** It now includes ffmpeg, which makes the image larger. Nothing else is needed.
+- **Official image.** It now includes ffmpeg. Nothing else is needed, and the image is still [smaller than 3.1.0's](#smaller-official-image).
 - **Source installs.** Install ffmpeg on the server, or set [`FLARE_FFMPEG_PATH`](./configuration#core-environment-variables). Without it Flare works as before, logs `Video thumbnails are off` once, and video cards keep their icon.
 - **Frames are saved in the database.** A new upload's frame is made right after it is published. A video uploaded before the update gets its frame the first time it is shown, once; after that it comes from the database, also after restarts. A frame is a WebP picture of usually 20 to 150 KB, kept with its file and deleted with it, so the database and its backups grow by that much per video.
 - **CPU.** The first time each existing video is shown after the update takes some CPU: Flare runs at most two ffmpeg processes at a time, each on one thread, and a frame takes about a quarter to half a second of one core for 1080p video. Share pages never wait for it.
@@ -114,6 +114,17 @@ Builds after 3.1.0 show a frame from each video on library cards, shared folder 
 - **Link previews already posted** keep the generic picture until the link is pasted again.
 
 Rollback: an older image leaves the `VideoFrame` table alone, and the database still deletes a file's frame with the file. Return to the older image as usual; drop the table afterwards if you want the space back.
+
+### Smaller official image
+
+Builds after 3.1.0 ship a smaller image that is quicker to pull and to build. The `linux/amd64` image is about 470 MiB to download, where 3.1.0 was 941 MiB, even though it now carries ffmpeg; unpacked, the `linux/arm64` image takes about 1.4 GiB of disk instead of 3.6 GiB for the same contents in the earlier layout. Flare itself runs the same way: the same startup script, migrations, port, health check, user (UID/GID `1001`), and `/app/uploads` volume. There is no database migration and no setting to change.
+
+- **What it contains.** The image is built on `node:24-bookworm-slim` instead of the full `node:24`, and holds Flare's production dependencies and compiled app. `curl`, `openssl`, `ffmpeg`, and the pinned `pnpm` are still there, so `pnpm prisma` commands still work inside the container.
+- **What it no longer contains.** Compilers, `make`, Python, Git, `wget`, and other build tools from the full Node.js image, and Flare's development dependencies such as the test runner, linter, and formatter. Earlier images also carried a second copy of every dependency; that is gone.
+- **You run extra tools inside the container, or build your own image `FROM flintsh/flare`.** Install what you need with `apt-get install` in your own image layer. A package that compiles native code during `npm install` or `pnpm add` needs `python3 make g++` first.
+- **You build from the Dockerfile.** The command is unchanged. The first build after updating downloads the new base image. A build no longer needs the `docs` or `.github` directories. See [build or run from source](./docker#build-or-run-from-source).
+
+Rollback needs nothing beyond returning to the older image.
 
 ### Upgrading from 3.0.1 to 3.1
 

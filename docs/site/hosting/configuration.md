@@ -106,6 +106,8 @@ These belong to the app runtime or build tooling, rather than saved instance con
 
 The Dockerfile also sets Corepack/pnpm installation variables (`COREPACK_ENABLE_DOWNLOAD_PROMPT`, `COREPACK_HOME`, `pnpm_config_verify_deps_before_run`, and `HUSKY`) to make its packaged runtime work: the startup script's pnpm commands use the pnpm release and dependencies built into the image and never start an install. They are not Flare feature controls. Earlier images set `npm_config_verify_deps_before_run`, which pnpm 11 ignores, so each of those commands first compared the installed dependencies with the lockfile and would have tried to install them had they differed. Build identity arguments `FLARE_RELEASE_CHANNEL` and `FLARE_COMMIT_SHA` are baked into the official image by release workflows.
 
+`FLARE_SKIP_BUILD_TYPECHECK` is a build-time switch, not a runtime setting. With the exact value `1`, `pnpm build` skips its TypeScript check; the Dockerfile takes a build argument of the same name and passes it on. Flare's own CI sets it for builds whose types a separate job already checks. Leave it unset for your own builds, so a build still stops on a type error.
+
 Browser and backend session recording are no longer bundled with Flare. Existing installations need no database migration for this removal. Remove obsolete recording environment variables and recording-related Docker build arguments from deployment configuration; they no longer enable recording or production browser source maps.
 
 ## Email environment variables
