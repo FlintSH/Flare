@@ -33,7 +33,7 @@ const features = [
   [
     'Share',
     'Embeds & link previews',
-    'Show an image or video on its own where a link is pasted, or a card you write with placeholders, an author line, and an accent color.',
+    'Show an image or video on its own where a link is pasted, with a frame from the video in its real shape, or a card you write with placeholders, an author line, and an accent color.',
     '/guide/embeds',
   ],
   [
@@ -81,7 +81,7 @@ const features = [
   [
     'Organize',
     'Image gallery',
-    'Browse images by month, open the lightbox, and navigate with keyboard arrows or touch.',
+    'Browse images by month, see a frame from every video, open the lightbox, and navigate with keyboard arrows or touch.',
     '/guide/library',
   ],
   [

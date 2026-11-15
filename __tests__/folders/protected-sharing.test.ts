@@ -227,7 +227,7 @@ describe('protected shared-folder links', () => {
     expect(data!.files[0]).toMatchObject({
       name: file.name,
       href: '/recipient-slug/Quarterly%20Budget%20FY26.pdf',
-      // Only an image has a picture to show on its tile.
+      // Only an image or a video has a picture to show on its tile.
       thumbnail: null,
       hasPassword: false,
     })
@@ -235,17 +235,27 @@ describe('protected shared-folder links', () => {
 
   // The tile's picture is the file's thumbnail, which can be resized and
   // adds no view; the raw link it used to load is the whole original.
-  it('shows an image by its thumbnail', async () => {
+  it('shows an image or a video by its thumbnail', async () => {
     const image = { ...file, password: null, mimeType: 'image/jpeg' }
+    const video = { ...image, mimeType: 'video/mp4' }
     mocks.folder.mockResolvedValueOnce({
       name: 'Marketing assets',
-      files: [image, { ...image, mimeType: 'image/gif' }, file],
-      _count: { files: 3 },
+      files: [
+        image,
+        { ...image, mimeType: 'image/gif' },
+        video,
+        // A protected video's frame would show what it holds.
+        { ...video, password: file.password },
+        file,
+      ],
+      _count: { files: 5 },
     })
     const data = await getSharedFolder(token)
     expect(data!.files.map((entry) => entry.thumbnail)).toEqual([
-      { url: `/api/files/${fileId}/thumbnail` },
-      { url: `/api/files/${fileId}/thumbnail` },
+      { url: `/api/files/${fileId}/thumbnail`, video: false },
+      { url: `/api/files/${fileId}/thumbnail`, video: false },
+      { url: `/api/files/${fileId}/thumbnail`, video: true },
+      null,
       null,
     ])
   })

@@ -284,6 +284,16 @@ const TSV_TYPE = 'text/tab-separated-values'
 // streams, which no browser's video player opens.
 const MPEG_TS_TYPES = new Set(['video/mp2t', 'video/vnd.dlna.mpeg-tts'])
 
+/**
+ * Whether Flare's thumbnail route has a picture of the file: an image's own,
+ * or a frame from a video. A video's frame can still be missing, as when the
+ * server has no ffmpeg, so a preview built on this needs a fallback.
+ */
+export function hasThumbnail(file: FileTypeInput) {
+  const { kind } = fileKind(file)
+  return kind === 'image' || kind === 'video'
+}
+
 export function fileKind({ name = '', mimeType }: FileTypeInput): FileKindInfo {
   // A media type wins over the name: uploads check those bytes against it.
   if (mimeType.startsWith('image/')) return { kind: 'image' }

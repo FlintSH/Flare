@@ -296,7 +296,7 @@ On local storage this prints `302` and the file's `/raw` address. A private file
 
 ### Thumbnails
 
-`GET /api/files/{id}/thumbnail` sends a file's image for a preview and adds no view. Access is the file's own: a public image answers anyone, a private one needs its owner's browser session, and a password-protected one needs the `password` query value. A named token does not authorize it.
+`GET /api/files/{id}/thumbnail` sends a file's image, or a frame from a video, for a preview and adds no view. Access is the file's own: a public file answers anyone, a private one needs its owner's browser session, and a password-protected one needs the `password` query value. A named token does not authorize it.
 
 With `w`, Flare answers a WebP copy scaled down to that width. The library, shared folders and an administrator's **View content** ask for their previews this way:
 
@@ -313,7 +313,11 @@ curl --fail-with-body --silent --show-error --output preview.webp \
 - Flare resizes still JPEG, PNG, WebP and AVIF images, whatever type the file was uploaded as. The original comes back unchanged under its stored `Content-Type` for an SVG, a GIF or another animation, an image over 32 MiB or 100 megapixels, bytes it can't decode, and an image that storage takes more than 20 seconds to hand over. Read the response's `Content-Type` rather than assuming WebP.
 - Without `w` the response is the original image, as in earlier versions, which ignored `w`.
 
+For a video, Flare answers a WebP frame from about one second in, or from the start of a shorter video, shown the way the video plays: turned as a phone recorded it and with square pixels. The frame is at most 1280 pixels wide and 1280 tall; with `w` it is scaled down like an image, and without `w` the whole frame comes back. A video with no frame to show answers `404` with `Cache-Control: private, max-age=600`: the server can't run ffmpeg, the video has no picture, has frames over 40 megapixels (a little more than 8K), or can't be decoded, or the frame took more than 20 seconds in all. While too many frames are already waiting to be made, a video answers `503` with `Retry-After: 5` and `Cache-Control: no-store`. Other files answer `400`, after access is checked. Earlier builds answered `400` for videos too.
+
 Both forms follow the [content caching](#content-caching) table and are sent with `Content-Security-Policy: sandbox`. Each process keeps the copies it made in memory, up to 64 MiB, and makes a copy again when it is asked for one it no longer holds. It resizes at most three images at a time; with more than 256 waiting it answers the rest with originals, and it skips a copy whose requests were all cancelled, as a browser cancels previews that scroll out of view.
+
+ffmpeg reads only the part of a video it needs: the file on local storage, or ranges of a short-lived signed URL on S3. Flare makes a video's frame right after it is uploaded, or, for a video uploaded before frames existed, the first time it is asked for, and saves it in the database with the file, so ffmpeg runs once per video. A saved frame is deleted with its file. Flare runs at most two ffmpeg processes at a time, each decoding on one thread, lets 64 more wait, and keeps up to 32 MiB of frames per process in memory in front of the saved ones. A waiting frame whose requests were all cancelled is not made. A video ffmpeg ran on but got no frame from is not tried again for a day; one whose frame failed for another reason, such as a missing ffmpeg, for ten minutes.
 
 ### oEmbed
 

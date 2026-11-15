@@ -13,13 +13,18 @@ import {
 
 const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 
-/** `lookupUrl` answers with where the video plays from. */
+/**
+ * `lookupUrl` answers with where the video plays from. `poster` is a frame
+ * from the video, shown until it plays; nothing shows if it doesn't load.
+ */
 export function VideoViewer({
   file,
   lookupUrl,
+  poster,
 }: {
   file: { name: string }
   lookupUrl: string
+  poster?: string
 }) {
   const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
   const [failedUrl, setFailedUrl] = useState<string>()
@@ -68,6 +73,7 @@ export function VideoViewer({
     <VideoPlayer
       src={direct.url}
       name={file.name}
+      poster={poster}
       onError={() => setFailedUrl(direct.url)}
       className={stageMaxHeightClassName}
     />

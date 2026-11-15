@@ -114,6 +114,7 @@ Video and audio play in Flare's own player instead of the browser's built-in one
 
 **Video.** The controls sit over the picture and step aside about two and a half seconds after the pointer rests on a playing video. Move the pointer, press a key, or tap to bring them back. They also stay up while one of them has keyboard focus, so the control you tabbed to is never hidden; clicking a control doesn't hold them.
 
+- Before it plays, the video shows a frame from itself, the same one its [library card](./library#read-a-file-card) and [link preview](./embeds) use. Without one, as on a server without ffmpeg, the browser shows what it loads of the video.
 - A large play button in the middle starts the video; clicking the picture plays and pauses it. On a touch screen a tap shows or hides the controls and the button in the middle plays and pauses.
 - The timeline shows how much has played and how much has loaded. Click or drag it to seek; hovering shows the time under the pointer.
 - **Mute** and a volume slider. Phones show only **Mute**, because they set the volume with their own buttons.

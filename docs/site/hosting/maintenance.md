@@ -101,6 +101,20 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### Video thumbnails
+
+Builds after 3.1.0 show a frame from each video on library cards, shared folder tiles, **View content**, the share page player, and [link previews](/guide/embeds), instead of a video icon and a generic picture. There is no setting to change. The official image applies one migration, `20261114000000_video_frames`, which adds an empty `VideoFrame` table and changes no rows.
+
+- **Official image.** It now includes ffmpeg, which makes the image larger. Nothing else is needed.
+- **Source installs.** Install ffmpeg on the server, or set [`FLARE_FFMPEG_PATH`](./configuration#core-environment-variables). Without it Flare works as before, logs `Video thumbnails are off` once, and video cards keep their icon.
+- **Frames are saved in the database.** A new upload's frame is made right after it is published. A video uploaded before the update gets its frame the first time it is shown, once; after that it comes from the database, also after restarts. A frame is a WebP picture of usually 20 to 150 KB, kept with its file and deleted with it, so the database and its backups grow by that much per video.
+- **CPU.** The first time each existing video is shown after the update takes some CPU: Flare runs at most two ffmpeg processes at a time, each on one thread, and a frame takes about a quarter to half a second of one core for 1080p video. Share pages never wait for it.
+- **S3 storage.** ffmpeg reads videos through short-lived signed URLs, so the app server must be able to reach the bucket's endpoint.
+- **A CDN or caching proxy sits in front of Flare.** Public video frames are cached for a year at `/api/files/{id}/thumbnail?w=…`, like image thumbnails. A video without a frame answers `404` that browsers may keep for ten minutes.
+- **Link previews already posted** keep the generic picture until the link is pasted again.
+
+Rollback: an older image leaves the `VideoFrame` table alone, and the database still deletes a file's frame with the file. Return to the older image as usual; drop the table afterwards if you want the space back.
+
 ### Upgrading from 3.0.1 to 3.1
 
 Flare 3.1 makes the app sturdier and faster, adds embed controls, and reworks much of the interface. Use the normal backup and upgrade steps above. The official image applies one database migration, which only adds indexes. Nobody is signed out, and no environment variable is required. The optional `FLARE_CORS_ORIGINS` lets web apps on other sites call the token API; see [cross-origin browser access](./configuration#cross-origin-browser-access).

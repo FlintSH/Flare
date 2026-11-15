@@ -60,8 +60,11 @@ RUN corepack enable pnpm
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 --gid nodejs nextjs
 
-# Install curl for healthcheck and OpenSSL for Prisma
-RUN apt-get update && apt-get install -y curl openssl && rm -rf /var/lib/apt/lists/*
+# Install curl for healthcheck, OpenSSL for Prisma, and ffmpeg for the frames
+# that video thumbnails and link previews show.
+RUN apt-get update && apt-get install -y curl openssl && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /app/uploads && \
     chown nextjs:nodejs /app/uploads && \

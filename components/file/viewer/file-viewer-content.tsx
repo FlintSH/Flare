@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic'
 
-import { fileUrls } from '@/lib/files/urls'
+import { VIDEO_POSTER_SIZE, fileUrls, thumbnailLoader } from '@/lib/files/urls'
 
 import { UnsupportedState } from './components/unsupported-state'
 import type { FileViewerFile } from './types'
@@ -71,7 +71,16 @@ export function FileViewerContent({
     case 'pdf':
       return <PdfViewer name={file.name} src={src} />
     case 'video':
-      return <VideoViewer file={file} lookupUrl={urls.direct} />
+      return (
+        <VideoViewer
+          file={file}
+          lookupUrl={urls.direct}
+          poster={thumbnailLoader({
+            src: urls.thumbnail,
+            width: VIDEO_POSTER_SIZE,
+          })}
+        />
+      )
     case 'audio':
       return <AudioViewer file={file} src={src} />
     case 'csv':

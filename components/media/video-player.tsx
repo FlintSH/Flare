@@ -40,6 +40,8 @@ interface VideoPlayerProps {
   src: string
   /** Names the player to screen readers. */
   name: string
+  /** A picture shown until the video plays. */
+  poster?: string
   /** Called when the browser can't play the file. */
   onError?: () => void
   /** Sizes the player, such as the tallest it may grow. */
@@ -54,6 +56,7 @@ interface VideoPlayerProps {
 export function VideoPlayer({
   src,
   name,
+  poster,
   onError,
   className,
 }: VideoPlayerProps) {
@@ -183,6 +186,7 @@ export function VideoPlayer({
       <video
         ref={video}
         src={src}
+        poster={poster}
         playsInline
         preload="metadata"
         className="h-full w-full object-contain"

@@ -257,12 +257,28 @@ model File {
   tags             VaultFileTag[]
   folderId         String?        @map("vaultFolderId")
   folder           VaultFolder?   @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  videoFrame       VideoFrame?
 
   @@index([ocrTagsPendingAt])
   @@index([userId, folderId])
   @@index([userId, uploadedAt(sort: Desc), id])
   @@index([userId, mimeType])
   @@index([path])
+}
+
+// A still frame of a video file, made once by ffmpeg for its thumbnail and
+// link previews. It goes with its file. A row without an image records a
+// video ffmpeg could not take a frame of, so it isn't tried again.
+model VideoFrame {
+  fileId    String   @id
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  /// The stored path the frame was taken from; a different path is a new file.
+  path      String
+  /// WebP, no wider or taller than 1280 pixels.
+  image     Bytes?
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
 }
 
 // Independent of retired Folder tables: folders organize existing files without

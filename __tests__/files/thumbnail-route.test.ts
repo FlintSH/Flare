@@ -34,11 +34,15 @@ const state = vi.hoisted(() => ({
   } | null,
   findFile: vi.fn(),
   getFileStream: vi.fn(),
+  videoPoster: vi.fn(),
 }))
 
 vi.mock('@/lib/auth', () => ({ getAccessSession: async () => state.session }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { file: { findUnique: state.findFile } },
+}))
+vi.mock('@/lib/files/video-poster', () => ({
+  videoPoster: state.videoPoster,
 }))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({ getFileStream: state.getFileStream }),
@@ -105,6 +109,109 @@ beforeEach(() => {
   )
 })
 afterEach(auditSettled)
+
+describe('a frame from a video', () => {
+  const clip: FixtureFile = {
+    ...photo,
+    id: 'photo',
+    name: 'clip.mp4',
+    mimeType: 'video/mp4',
+    path: 'uploads/owner/clip/clip.mp4',
+    // Far past the largest image Flare resizes: ffmpeg reads only a frame.
+    size: 900,
+  }
+  let frame: Buffer
+  beforeAll(async () => {
+    frame = await sharp({
+      create: { width: 1280, height: 720, channels: 3, background: '#cc6633' },
+    })
+      .webp()
+      .toBuffer()
+  })
+
+  it('answers with the frame resized to the width asked for', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue({
+      image: frame,
+      width: 1280,
+      height: 720,
+    })
+    const response = await thumbnail('?w=384')
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/webp')
+    expect(response.headers.get('cache-control')).toBe(PUBLIC_CACHE)
+    expect(response.headers.get('content-security-policy')).toBe('sandbox')
+    expect(await sharp(await body(response)).metadata()).toMatchObject({
+      width: 384,
+      height: 216,
+    })
+    // The video's own bytes are ffmpeg's to read, never the resizer's.
+    expect(state.getFileStream).not.toHaveBeenCalled()
+  })
+
+  it('sends the frame as it is when it is no wider than asked', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue({
+      image: frame,
+      width: 1280,
+      height: 720,
+    })
+    const response = await thumbnail('?w=1280')
+    expect(response.headers.get('content-type')).toBe('image/webp')
+    expect(await body(response)).toEqual(frame)
+  })
+
+  it('answers with the whole frame without a width', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue({
+      image: frame,
+      width: 1280,
+      height: 720,
+    })
+    const response = await thumbnail()
+    expect(response.headers.get('content-type')).toBe('image/webp')
+    expect(await body(response)).toEqual(frame)
+  })
+
+  it('answers 404 when there is no frame, so the card keeps its icon', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue(null)
+    const response = await thumbnail('?w=384')
+    expect(response.status).toBe(404)
+    expect(response.headers.get('cache-control')).toBe('private, max-age=600')
+  })
+
+  it('asks the browser to come back while too many frames are waiting', async () => {
+    state.file = { ...clip }
+    state.videoPoster.mockResolvedValue('busy')
+    const response = await thumbnail('?w=384')
+    expect(response.status).toBe(503)
+    expect(response.headers.get('retry-after')).toBe('5')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('keeps a private video hidden and never reads its frame', async () => {
+    state.file = { ...clip, visibility: 'PRIVATE' }
+    const response = await thumbnail('?w=384')
+    expect(response.status).toBe(404)
+    expect(state.videoPoster).not.toHaveBeenCalled()
+  })
+
+  it('keeps the frame of a password-protected video out of every cache', async () => {
+    state.file = { ...clip, password: hashSync(password, 4) }
+    state.videoPoster.mockResolvedValue({
+      image: frame,
+      width: 1280,
+      height: 720,
+    })
+    expect((await thumbnail('?w=384')).status).toBe(401)
+    expect(state.videoPoster).not.toHaveBeenCalled()
+    const query = new URLSearchParams({ w: '384', password })
+    const response = await thumbnail(`?${query}`)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('private, no-store')
+  })
+})
 
 describe('a thumbnail of the width the browser asks for', () => {
   it('answers a public image with a WebP copy any cache may keep, sandboxed', async () => {

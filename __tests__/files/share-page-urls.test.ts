@@ -47,6 +47,9 @@ vi.mock('@/lib/database/prisma', () => ({
     },
   },
 }))
+vi.mock('@/lib/files/video-poster', () => ({
+  readyVideoPoster: async () => null,
+}))
 vi.mock('@/lib/storage', () => ({
   getStorageProvider: async () => ({ kind: mocks.storage }),
 }))

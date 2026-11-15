@@ -12,8 +12,10 @@ import {
   queueFileExpiration,
   storedExpiry,
 } from '@/lib/files/expiry'
+import { fileKind } from '@/lib/files/file-kind'
 import { urlSafeFilename } from '@/lib/files/filename'
 import { hashFilePassword } from '@/lib/files/password-hash'
+import { videoPoster } from '@/lib/files/video-poster'
 import { validateOwnedFolderId } from '@/lib/folders/service'
 import { tokenUsable } from '@/lib/integrations/tokens'
 import { enqueueFileReady } from '@/lib/integrations/webhooks'
@@ -240,7 +242,11 @@ export function enqueueUploadProcessing(file: {
   id: string
   path: string
   mimeType: string
+  name?: string
 }) {
+  // A video's frame is made now, while nobody waits for it, so the library
+  // and link previews find it ready. It handles its own failures.
+  if (fileKind(file).kind === 'video') void videoPoster(file)
   if (file.mimeType.startsWith('image/')) {
     void ocrQueue
       .add({ filePath: file.path, fileId: file.id })

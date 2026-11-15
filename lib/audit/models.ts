@@ -193,7 +193,8 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
   // Not audited. Credentials and sign-in challenges stay out of the log, and
   // rate limits are counters. Sign-ins, sessions, storage cleanup and file
   // expiry jobs record their own events. Nothing writes event handlers any
-  // more, and the log doesn't record writes to itself.
+  // more, and the log doesn't record writes to itself. Video frames are made
+  // from a file when its preview is asked for, which that request records.
   RecoveryCode: null,
   PasskeyRecoveryCode: null,
   EmailToken: null,
@@ -206,4 +207,5 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
   Event: null,
   EventHandler: null,
   AuditEvent: null,
+  VideoFrame: null,
 }

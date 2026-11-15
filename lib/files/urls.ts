@@ -108,6 +108,12 @@ export function fileUrls(
 }
 
 /**
+ * The widest and tallest frame Flare keeps of a video, which its thumbnail
+ * is resized from and its share page and link previews show.
+ */
+export const VIDEO_POSTER_SIZE = 1280
+
+/**
  * A `next/image` loader for thumbnail URLs: the same address with the width
  * the browser picked, which Flare answers with a resized copy. Flare resizes
  * its own thumbnails because Next's optimizer fetches without the viewer's

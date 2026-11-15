@@ -23,6 +23,7 @@ const image: EmbedFileRow = {
   id: 'file',
   name: 'photo.png',
   urlPath: '/owner/photo.png',
+  path: 'uploads/owner/photo.png',
   mimeType: 'image/png',
   size: 1.8,
   visibility: 'PUBLIC',
@@ -38,6 +39,9 @@ const video = {
   urlPath: '/owner/clip.mp4',
   mimeType: 'video/mp4',
 }
+// A portrait phone video's frame, as `videoPoster` measures it.
+const frame = { width: 1280, height: 720 }
+const portrait = { width: 405, height: 720 }
 const archive = {
   ...image,
   name: 'backup.zip',
@@ -105,7 +109,7 @@ describe('direct media, the default', () => {
   })
 
   it('shows a video as its player and title alone', () => {
-    const document = page({ file: video })
+    const document = page({ file: video, videoFrame: frame })
     expect(document.card).toEqual({
       siteName: '',
       author: '',
@@ -117,13 +121,17 @@ describe('direct media, the default', () => {
       kind: 'video',
       url: 'https://flare.example/owner/clip.mp4/raw',
       type: 'video/mp4',
-      poster: 'https://flare.example/video-poster.png',
+      poster: 'https://flare.example/api/files/file/thumbnail?w=1280',
+      width: 1280,
+      height: 720,
     })
     const html = embedHtml(document)
     expect(html).toContain('<meta property="og:type" content="video.other">')
     expect(html).toContain(
-      '<meta property="og:image" content="https://flare.example/video-poster.png">'
+      '<meta property="og:image" content="https://flare.example/api/files/file/thumbnail?w=1280">'
     )
+    expect(html).toContain('<meta property="og:video:width" content="1280">')
+    expect(html).toContain('<meta property="og:video:height" content="720">')
     expect(html).toContain(
       '<meta property="og:video:secure_url" content="https://flare.example/owner/clip.mp4/raw">'
     )
@@ -132,6 +140,33 @@ describe('direct media, the default', () => {
     )
     expect(html).not.toContain('twitter:card')
     expect(html).not.toContain('og:site_name')
+  })
+
+  it('falls back to the generic poster when the video has no frame', () => {
+    const document = page({ file: video, videoFrame: null })
+    expect(document.media).toMatchObject({
+      poster: 'https://flare.example/video-poster.png',
+      width: 1920,
+      height: 1080,
+    })
+  })
+
+  it('declares a portrait video in its own shape', () => {
+    const html = embedHtml(page({ file: video, videoFrame: portrait }))
+    expect(html).toContain('<meta property="og:image:width" content="405">')
+    expect(html).toContain('<meta property="og:video:height" content="720">')
+  })
+
+  it('keeps the file password on the frame of a protected video', () => {
+    const document = page({
+      file: { ...video, password: 'hash' },
+      password: 'open sesame',
+      videoFrame: frame,
+    })
+    expect(document.media).toMatchObject({
+      poster:
+        'https://flare.example/api/files/file/thumbnail?password=open+sesame&w=1280',
+    })
   })
 
   it('gives a file with nothing to show the card instead of its bytes', () => {

@@ -36,6 +36,7 @@ import {
   isTextKind,
 } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
+import { readyVideoPoster } from '@/lib/files/video-poster'
 import { sharedFolderBackLink } from '@/lib/folders/shared'
 import { getStorageProvider } from '@/lib/storage'
 import { formatFileSize } from '@/lib/utils'
@@ -85,6 +86,13 @@ export async function generateMetadata({
 
   const { access } = await checkPageAccess(file, password)
   const appearance = config.settings.customization.published
+  // The page never waits for ffmpeg: it names a frame made before, and
+  // otherwise starts one for its player. Fetchers Flare knows wait for the
+  // frame on their own route.
+  const videoFrame =
+    access.allowed && fileKind(file).kind === 'video'
+      ? await readyVideoPoster(file)
+      : null
   const embed = fileEmbed({
     file,
     ownerId: userUrlId,
@@ -96,6 +104,7 @@ export async function generateMetadata({
     origin: requestOrigin(requestHeaders),
     appearance,
     signedStorage: storage.kind === 's3',
+    videoFrame,
     crawler: null,
   })
   return embed.kind === 'document' ? embedMetadata(embed.document) : {}

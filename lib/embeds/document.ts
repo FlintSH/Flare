@@ -4,8 +4,18 @@ import type { EmbedCard } from './card'
 
 export type EmbedMedia =
   | { kind: 'image'; url: string; type: string; alt: string }
-  /** Apps show the poster until the video plays; some need one to play it. */
-  | { kind: 'video'; url: string; type: string; poster: string }
+  /**
+   * Apps show the poster until the video plays; some need one to play it.
+   * The size is the video's shape, which apps draw the player in.
+   */
+  | {
+      kind: 'video'
+      url: string
+      type: string
+      poster: string
+      width: number
+      height: number
+    }
   | { kind: 'audio'; url: string; type: string }
 
 /**
@@ -22,10 +32,6 @@ export interface EmbedDocument {
   /** A locked file: nothing about it may be indexed. */
   locked?: boolean
 }
-
-// Apps that can't measure a video drop it unless a size is declared. Flare
-// doesn't read a video's real size, so this is the frame they get.
-const VIDEO_SIZE = { width: 1920, height: 1080 }
 
 type Tag =
   | { tag: 'title'; text: string }
@@ -64,14 +70,17 @@ function tags({ url, card, media, oembed, locked }: EmbedDocument): Tag[] {
   if (media?.kind === 'video')
     list.push(
       property('og:image', media.poster),
+      property('og:image:width', media.width),
+      property('og:image:height', media.height),
       property('og:video', media.url),
       property('og:video:url', media.url),
       ...(media.url.startsWith('https:')
         ? [property('og:video:secure_url', media.url)]
         : []),
       property('og:video:type', media.type),
-      property('og:video:width', VIDEO_SIZE.width),
-      property('og:video:height', VIDEO_SIZE.height)
+      // Apps that can't measure a video drop it unless a size is declared.
+      property('og:video:width', media.width),
+      property('og:video:height', media.height)
     )
   if (media?.kind === 'audio')
     list.push(
@@ -192,7 +201,9 @@ export function embedMetadata({
         : {}),
       ...(media?.kind === 'video'
         ? {
-            images: [{ url: media.poster }],
+            images: [
+              { url: media.poster, width: media.width, height: media.height },
+            ],
             videos: [
               {
                 url: media.url,
@@ -200,7 +211,8 @@ export function embedMetadata({
                   ? { secureUrl: media.url }
                   : {}),
                 type: media.type,
-                ...VIDEO_SIZE,
+                width: media.width,
+                height: media.height,
               },
             ],
           }

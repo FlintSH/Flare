@@ -37,6 +37,7 @@ import {
   MoveFilesDialog,
 } from '@/components/dashboard/library-dialogs'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
+import { VideoBadge } from '@/components/file/video-badge'
 import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -61,7 +62,7 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
-import { fileTypeLabel } from '@/lib/files/file-kind'
+import { fileKind, fileTypeLabel, hasThumbnail } from '@/lib/files/file-kind'
 import { filePasswordHint } from '@/lib/files/password-policy'
 import { fileUrls, thumbnailLoader } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
@@ -299,6 +300,7 @@ export function FileCard({
   }
 
   const isImage = file.mimeType.startsWith('image/')
+  const isVideo = fileKind(file).kind === 'video'
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const tags = file.tags ?? []
@@ -386,17 +388,24 @@ export function FileCard({
           }}
           className="relative block aspect-[4/3] overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
         >
-          {isImage && !previewFailed ? (
-            <Image
-              loader={thumbnailLoader}
-              src={urls.thumbnail}
-              alt={file.name}
-              fill
-              className="object-cover"
-              sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
-              loading="lazy"
-              onError={() => setPreviewFailed(true)}
-            />
+          {hasThumbnail(file) && !previewFailed ? (
+            <>
+              <Image
+                loader={thumbnailLoader}
+                src={urls.thumbnail}
+                alt={file.name}
+                fill
+                className="object-cover"
+                sizes="(min-width: 1280px) 25vw, (min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw"
+                loading="lazy"
+                onError={() => setPreviewFailed(true)}
+              />
+              {/* Steps aside for the hover and focus controls, as the
+                  icon of a file without a picture does. */}
+              {isVideo && (
+                <VideoBadge className="transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0" />
+              )}
+            </>
           ) : (
             // The icon steps aside for the hover and focus controls, so it
             // doesn't show through between them.
