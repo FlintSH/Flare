@@ -27,7 +27,6 @@ const buttonUnavailable = ref(false)
         </span>
       </a>
       <div class="project-credit-details">
-        <p>Open source. Yours to make your own.</p>
         <p>
           <a href="https://github.com/FlintSH/Flare/blob/main/LICENSE"
             >MIT License</a

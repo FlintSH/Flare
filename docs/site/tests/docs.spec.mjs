@@ -55,10 +55,41 @@ test('feature filters and search direct readers to a relevant guide', async ({
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('3 of 33')
-  await page.getByLabel('Find a capability').fill('webhook')
+  await page.getByLabel('Search features').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/api\/webhooks/)
+})
+
+test('feature areas are in the outline and older section links still work', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await page.goto('./features.html')
+  const outline = page.locator('.VPDocAsideOutline')
+  for (const area of ['Share', 'Organize', 'Host & administer'])
+    await expect(
+      outline.getByRole('link', { name: area, exact: true })
+    ).toBeVisible()
+  // A link to an area the filter hides brings everything back and goes there.
+  await page.getByRole('button', { name: 'Automate', exact: true }).click()
+  await expect(page.locator('#organize')).toBeHidden()
+  await outline.getByRole('link', { name: 'Organize', exact: true }).click()
+  await expect(page.locator('#organize')).toBeInViewport()
+  const everything = page.getByRole('button', {
+    name: 'Everything',
+    exact: true,
+  })
+  await expect(everything).toHaveAttribute('aria-pressed', 'true')
+  // The same link again, with its area already in the address and hidden.
+  await page.getByRole('button', { name: 'Automate', exact: true }).click()
+  await expect(page.locator('#organize')).toBeHidden()
+  await outline.getByRole('link', { name: 'Organize', exact: true }).click()
+  await expect(page.locator('#organize')).toBeInViewport()
+  await expect(everything).toHaveAttribute('aria-pressed', 'true')
+  // These ids were the section headings' before they were renamed.
+  for (const id of ['choose-your-starting-point', 'know-what-you-are-choosing'])
+    await expect(page.locator(`h2#${id}`)).toBeVisible()
 })
 
 test('walkthrough, screenshot dialog, and upload precedence are interactive', async ({
@@ -67,10 +98,10 @@ test('walkthrough, screenshot dialog, and upload precedence are interactive', as
   await page.goto('./demos.html')
   await page.getByRole('button', { name: '2. Upload', exact: true }).click()
   await expect(page.locator('.tour-description')).toContainText(
-    'Upload with intention'
+    'Upload options'
   )
   await page
-    .getByRole('button', { name: 'Enlarge screenshot: Upload with intention' })
+    .getByRole('button', { name: 'Enlarge screenshot: Upload options' })
     .click()
   await expect(page.getByRole('dialog')).toBeVisible()
   await page.keyboard.press('Escape')
@@ -88,7 +119,7 @@ test('continuous library guide and its real recording are discoverable', async (
   page,
 }) => {
   await page.goto('./features.html')
-  await page.getByLabel('Find a capability').fill('timeline')
+  await page.getByLabel('Search features').fill('timeline')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/guide\/library\.html$/)
@@ -313,9 +344,9 @@ test('role walkthrough links to the guide and recording loads without autoplay',
   page,
 }) => {
   await page.goto('./demos.html')
-  await page.getByRole('button', { name: '6. Delegate', exact: true }).click()
+  await page.getByRole('button', { name: '6. Roles', exact: true }).click()
   await expect(page.locator('.tour-description')).toContainText(
-    'Give every role a clear purpose'
+    'Roles and permissions'
   )
   await expect(page.locator('.tour-description a')).toHaveAttribute(
     'href',
@@ -350,13 +381,13 @@ test('security guide is discoverable and all three recordings load without autop
   page,
 }) => {
   await page.goto('./features.html')
-  await page.getByLabel('Find a capability').fill('passkeys')
+  await page.getByLabel('Search features').fill('passkeys')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/guide\/security\.html$/)
   await expect(page.locator('h2#add-a-passkey')).toBeVisible()
   await page.goto('./demos.html')
-  await page.getByRole('button', { name: '7. Secure', exact: true }).click()
+  await page.getByRole('button', { name: '7. Sign-in', exact: true }).click()
   await expect(page.locator('.tour-description a')).toHaveAttribute(
     'href',
     /guide\/security\.html$/
@@ -414,7 +445,7 @@ test('archive guide, API contracts, tour, and recordings are discoverable', asyn
   page,
 }) => {
   await page.goto('./features.html')
-  await page.getByLabel('Find a capability').fill('archives')
+  await page.getByLabel('Search features').fill('archives')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/guide\/archives\.html$/)
@@ -520,7 +551,7 @@ test('sessions and audit guides, walkthroughs, and recordings are discoverable',
     ['audit log', /admin\/audit\.html$/],
   ]) {
     await page.goto('./features.html')
-    await page.getByLabel('Find a capability').fill(query)
+    await page.getByLabel('Search features').fill(query)
     await expect(page.locator('.feature-card')).toHaveCount(1)
     await page.locator('.feature-card').click()
     await expect(page).toHaveURL(target)
@@ -528,7 +559,7 @@ test('sessions and audit guides, walkthroughs, and recordings are discoverable',
   await page.goto('./demos.html')
   for (const [label, target] of [
     ['8. Sessions', /guide\/account\.html$/],
-    ['9. Audit', /admin\/audit\.html$/],
+    ['9. Audit log', /admin\/audit\.html$/],
   ]) {
     await page.getByRole('button', { name: label, exact: true }).click()
     await expect(page.locator('.tour-description a')).toHaveAttribute(
@@ -574,7 +605,7 @@ test('invite guides, walkthrough, and recordings are discoverable', async ({
   page,
 }) => {
   await page.goto('./features.html')
-  await page.getByLabel('Find a capability').fill('invite links')
+  await page.getByLabel('Search features').fill('invite links')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
   await expect(page).toHaveURL(/guide\/invites\.html$/)
@@ -614,10 +645,8 @@ test('invite guides, walkthrough, and recordings are discoverable', async ({
       .toBeGreaterThan(0)
   }
   await page.goto('./demos.html')
-  await page.getByRole('button', { name: '12. Invite', exact: true }).click()
-  await expect(page.locator('.tour-description')).toContainText(
-    'Bring people in by invitation'
-  )
+  await page.getByRole('button', { name: '12. Invites', exact: true }).click()
+  await expect(page.locator('.tour-description')).toContainText('Invite links')
   await expect(page.locator('.tour-description a')).toHaveAttribute(
     'href',
     /guide\/invites\.html$/

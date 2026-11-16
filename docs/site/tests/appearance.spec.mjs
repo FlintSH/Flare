@@ -109,7 +109,7 @@ test('mobile readers can open the sidebar and navigate', async ({ page }) => {
   await expect(
     page
       .locator('.VPNavScreen')
-      .getByRole('link', { name: 'Explore', exact: true })
+      .getByRole('link', { name: 'Features', exact: true })
   ).toBeVisible()
   await expect
     .poll(() =>

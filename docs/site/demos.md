@@ -1,5 +1,5 @@
 ---
-title: Interactive demos
+title: Demos
 description: Walk through real Flare screens, watch recorded workflows, and experiment with upload settings.
 ---
 
@@ -7,45 +7,88 @@ description: Walk through real Flare screens, watch recorded workflows, and expe
 import { withBase } from 'vitepress'
 </script>
 
-# A closer look at Flare
+# Demos
 
-Explore real screens before you install, or discover a feature you have not tried yet. The walkthrough uses captured app screens; the settings lab runs locally in your browser. Neither connects to a live account.
-
-## Homepage feature showcase
-
-The [project homepage](./) has a silent interactive preview with sample files. Choose **Capture**, **Organize**, **OCR**, **Storage**, **API**, or **Roles** to inspect a scene. **Pause** stops the animation; **Play** restarts the tour. Automatic playback pauses when the preview leaves the screen or the browser tab is hidden. With reduced motion enabled, scenes start still and can be selected manually.
-
-This is an illustrated local demo, not a recording or a connection to a Flare instance. The recorded workflows below show real application interactions.
-
-1. **Capture:** connected capture tools send a sample screenshot into the library and produce a sharing link.
-2. **Organize:** sample files move into a folder and receive tags.
-3. **OCR:** a search for text inside an example invoice finds its image even though that text is absent from the filename.
-4. **Storage:** an upload is shown going to either local disk or S3-compatible storage. Changing the real provider does not migrate existing files; follow the [storage guide](./hosting/storage).
-5. **API:** an example upload request uses an environment variable for its token. The preview never executes it.
-6. **Roles:** an example custom role grants selected permissions. Real roles combine grants with Everyone; follow the [role guide](./admin/roles).
-
-<details>
-<summary>Preview scenes and phone layout</summary>
-
-<Screenshot src="/screenshots/handbook/homepage-showcase-desktop.webp" alt="Flare's dark homepage with its short introduction, Capture scene, six feature cards, and source metadata" caption="The homepage pairs a short introduction with a silent illustrated feature preview." />
-
-<Screenshot src="/screenshots/handbook/feature-showcase-mobile.webp" alt="Six illustrated demo scenes at phone width: captures arriving, tags and folders, OCR search, local or S3 storage, an API request, and role grants" caption="All six scenes use sample data. Tabs select still scenes; Play runs the silent tour." />
-
-</details>
-
-## Explore the workspace
-
-Choose a step, then enlarge the screenshot to inspect the details. The screenshots use demonstration accounts and files.
+## Screen tour {#explore-the-workspace}
 
 <DemoTour />
 
-## Watch real workflows
+## Recordings {#watch-real-workflows}
 
-These short, silent recordings capture actual browser interactions with Flare and an isolated test database. Playback is manual and downloads only when requested. The written steps below each video are also its descriptive transcript.
+Silent recordings of the real app with demonstration data.
 
-### Browse a large library
+### Everyday use
+
+#### Upload a file, open it, copy the link
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Upload a file, open it, copy the link: 11-second silent Flare recording" :poster="withBase('/landing/desktop-dark-poster.webp')"><source type="video/mp4" :src="withBase('/landing/desktop-dark.mp4')" /><source type="video/webm" :src="withBase('/landing/desktop-dark.webm')" />Your browser does not support this video. Follow the steps below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. The file library is open with demonstration files. A picture is dragged in from outside the window, and the page shows **Drop files to upload**.
+2. The file is dropped. A progress card shows its name, the bytes sent, and the upload speed, then **Upload complete** appears with **Open** and **Copy link**. The new file is first in the library.
+3. **Open** shows the file on its share page, with its name, type, and size above the picture.
+4. **Copy link** on the share page changes to **Link copied**.
+
+Recorded in a real Flare instance with a disposable account and demonstration files. The pointer and the picture being dragged are drawn by the recorder. A second version made at phone width opens **Upload** from the menu, chooses a file, sends it, opens it, and copies its link.
+
+</details>
+
+#### Organize and upload
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 18-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. In **Files**, choose **New folder** and create a folder named Project launch. The new folder opens.
+2. Go back to **Folders**, open **Unfiled**, select two files, and move them into Project launch.
+3. Open Project launch and create a Week 39 subfolder, which opens in turn.
+4. Use **Upload here** to upload a project checklist into the subfolder. **Save to** already shows Project launch / Week 39.
+5. Choose **Open folder** in **Upload complete** to see the checklist in its folder.
+
+Moving a file preserves its individual share link. [Read the folders guide](./guide/folders).
+
+</details>
+
+#### Share a collection, then revoke access
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 12-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. Open a folder, choose **Share**, and choose **Create share link**.
+2. Open the shared folder link. It shows what any recipient sees: the public files, and a password-protected file as a generic locked tile.
+3. Return to the folder, choose **Share**, and choose **Disable link**.
+4. Revisit the link to confirm the shared page is unavailable.
+
+Disabling a folder link does not revoke a file’s separate public URL. [Understand sharing boundaries](./guide/sharing).
+
+</details>
+
+#### Open a protected file
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Protected-file handoff: 10-second silent Flare recording" :src="withBase('/demos/protected-file-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. Open a locked tile from a shared folder. The password page links back to the folder.
+2. Enter an incorrect password; the file stays locked and its name stays hidden.
+3. Enter the correct password to reveal the file and its normal viewer.
+
+This flow is for a **public file protected by a password**. Private files are not included in a public folder share.
+
+</details>
+
+#### Browse a large library
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse a large library: silent Flare recording with demonstration files" :poster="withBase('/screenshots/timeline/library-desktop.webp')" :src="withBase('/demos/timeline-scroll.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Open **Files** in the isolated demonstration account. The library shows **12,000 files** and its newest uploads from October 2026. The folder directory starts collapsed, leaving the file cards close to search.
 2. Scroll down through the file cards. More files appear in the same continuous list, and the slim rail at the right shows the current upload period.
@@ -55,11 +98,16 @@ These short, silent recordings capture actual browser interactions with Flare an
 
 This recording uses real application requests and a disposable account seeded with 12,000 demonstration files across several years. The upload dates and file contents are fixtures; the scrolling, date jumps, selection, and filtering are actual browser interactions. It does not measure the performance of your server or storage provider. [Follow the library guide](./guide/library#scroll-through-your-library) for keyboard controls, selection limits, and retry behavior.
 
-### Browse the same library on a phone
+</details>
+
+#### Browse the same library on a phone
 
 <div style="max-width: 390px; margin-inline: auto">
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse the same library on a phone: silent Flare recording at mobile width" :poster="withBase('/screenshots/timeline/library-mobile.webp')" :src="withBase('/demos/timeline-mobile.mp4')">Your browser does not support this video. Follow the transcript below.</video>
 </div>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Open the same demonstration library at a 390px viewport. Sorting and the labeled **Filters** control sit above the single-column cards; the folder directory starts collapsed. The date label fits beside the narrow rail.
 2. Scroll down through the newest uploads.
@@ -67,35 +115,16 @@ This recording uses real application requests and a disposable account seeded wi
 
 This is Chromium rendering the real application at mobile width, using the same local database as the desktop recording. It demonstrates the narrow layout and full-library date navigation; it is not a physical-phone or touch-gesture recording.
 
-### Review and revoke browser sessions
+</details>
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Review and revoke browser sessions: silent Flare recording" :src="withBase('/demos/session-management.webm')">Your browser does not support this video. Follow the transcript below.</video>
+### Archives
 
-1. Open **Profile → Account** on the isolated demonstration instance and scroll to **Active sessions**.
-2. Review **This browser** and the other signed-in browser sessions, including their sign-in methods and activity times.
-3. Inspect **Login history**, where a rejected demonstration password appears as **Failed** beside successful sign-ins.
-4. Choose **Revoke session** on another browser and confirm **Revoke session**. The list reloads without that session; the browser check separately verifies its next authenticated request is rejected.
-5. Choose **Revoke all sessions** and confirm **Revoke all and sign out**. The current browser returns to sign-in too.
-
-The recording uses real browser sign-ins and server revocations against a disposable database. Revocation applies to subsequent protected requests; API credentials and previously issued storage URLs have separate lifetimes. [Follow the account guide](./guide/account#login-history-and-active-sessions). The recording stays at desktop width. Separate screenshots and browser checks in that guide cover the mobile controls.
-
-### Investigate instance activity
-
-<video class="demo-video" controls playsinline preload="none" aria-label="Investigate instance activity: silent Flare audit-log recording" :src="withBase('/demos/audit-investigation.webm')">Your browser does not support this video. Follow the transcript below.</video>
-
-1. Open **Admin → Audit log** on the isolated demonstration instance with an administrator session.
-2. Review recorded activity produced by a real demonstration upload, visibility changes, download, denied access, actual OCR of a generated receipt image, a rejected OCR request on a text file, deletion, role assignment, and settings change.
-3. Enter **quarterly-report.txt** in **Search activity**, choose **Apply filters**, and expand a **File delete** event. The deleted filename and acting account remain recorded.
-4. Review **Recorded details** and request context. Choose **Clear filters**, set **Outcome** to **Denied**, and apply to inspect refused requests.
-5. Add **missing-demo-filename** to search and apply. Flare shows **No activity matches these filters**. Clear the filters and return to recent instance activity.
-
-These screens display real events produced by demonstration operations. The setup uses API requests before opening the recorded audit page; the recording shows investigation of those events. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
-
-The audit guide also includes a [separate real-server archive investigation capture](./admin/audit), produced by creating, browsing, downloading from, and extracting an archive on the disposable instance. [Reproduce the combined archive/audit check](./contributing#sessions-and-audit-browser-checks-and-demos) to verify those events; they are separate from the recorded investigation above.
-
-### Browse and extract an archive
+#### Browse and extract an archive
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse and extract an archive: silent Flare recording" :src="withBase('/demos/archive-browse-extract.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. In Alex Morgan's demonstration library, open the menu for **Field kit.zip** and choose **Browse archive**. Flare displays four files and four folders. The arrow keys, **End**, and **Home** move focus through the folder list.
 2. Search for **README** and select **guide/README.md**. Its text appears beside the matching path, with a **Download entry** action.
@@ -106,9 +135,14 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 The app reads a real stored ZIP and publishes its new folder tree to the disposable database. The browser checks also verify the extracted bytes, the preserved empty directory, and the unchanged source archive. [Follow the archive guide](./guide/archives#browse-and-preview-entries) and [reproduce the checks](./contributing#archive-browser-checks-and-demos).
 
-### Preview files in a large archive
+</details>
+
+#### Preview files in a large archive
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Preview files in a large archive: silent Flare recording" :src="withBase('/demos/archive-large-preview.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Open the menu for **Studio handoff.zip**, a 906 MB ZIP, and choose **Browse archive**. The listing appears at once: 20,025 files in 114 folders, 908 MB unpacked. **Extract all** is unavailable, and the line below it explains that the archive is larger than the 256 MB extraction limit.
 2. Open **media** and select **share-walkthrough.webm**. The video plays inside the archive and jumps near its end without the rest of the archive being read.
@@ -120,9 +154,14 @@ The app reads a real stored ZIP and publishes its new folder tree to the disposa
 
 The archive is a disposable fixture generated for the check: 20 real Flare screenshots as photos, a real Flare recording as the video, a generated tone, a generated server log, 20,000 small project files, and a 900 MiB block of random data. It was uploaded through the normal chunked upload API to the local storage provider. The browser checks also confirm that seeking the video used partial (`206`) responses. [Read how Flare handles large archives](./guide/archives#large-archives).
 
-### Read a large TAR.GZ
+</details>
+
+#### Read a large TAR.GZ
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Read a large TAR.GZ: silent Flare recording" :src="withBase('/demos/archive-large-tgz.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Open the menu for **Render outputs.tar.gz**, a 337 MB compressed archive, and choose **Browse archive**. A progress bar shows how much of the compressed data has been read, and the **frames** folder is listed while reading continues.
 2. When reading finishes, the summary shows 81 files and 480 MB unpacked, and explains why **Extract all** is unavailable.
@@ -130,9 +169,14 @@ The archive is a disposable fixture generated for the check: 20 real Flare scree
 
 This TAR.GZ is a disposable generated fixture of 80 alternating log and random-data files plus a short summary at the end. TAR.GZ and GZIP files have no index, so the first read always takes time proportional to their size; later previews of the same archive start near the file while its index stays in memory.
 
-### Create an archive with a saved profile
+</details>
+
+#### Create an archive with a saved profile
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Create an archive with a saved profile: silent Flare recording" :src="withBase('/demos/archive-create.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. In **Files**, choose **Select** and select **Field notes.txt** and **Launch checklist.csv**.
 2. Choose **Create archive**, enter **Launch handoff.zip**, leave **Format** on **ZIP**, and select **Campaigns** as the destination. The initial profile choice is **Private (no profile)**.
@@ -142,9 +186,14 @@ This TAR.GZ is a disposable generated fixture of 80 alternating log and random-d
 
 This is a real stored ZIP generated from two private fixture files. The explicit profile makes the result public, applies the **Approved** tag, and sets expiration to make it private after one week. The server checks the displayed profile and effective settings before publication, including inherited defaults. The same browser suite separately exercises private TAR.GZ creation and profile-based extraction. [Review profile and privacy choices](./guide/archives#choose-an-upload-profile-deliberately) before packaging your own files.
 
-### Browse and download a shared archive
+</details>
+
+#### Browse and download a shared archive
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Browse and download a shared archive: silent Flare recording" :src="withBase('/demos/archive-share-browse.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Open the public **Field kit.zip** share page while signed out. The whole-file **Download** action sits beside the archive's name, and the page lists four files and four folders inline below it.
 2. Open **guide** and select **README.md**. The text appears beside the folder contents.
@@ -153,9 +202,16 @@ This is a real stored ZIP generated from two private fixture files. The explicit
 
 This recording uses an anonymous visitor and a real unprotected public archive. The browser checks verify the downloaded bytes and that no **Extract all** action appears. Separate, unrecorded checks exercise protected-file access, reject missing or incorrect passwords, and deny unrelated visitors after the source becomes private. The guide includes the [password gate, unlocked page, and mobile captures](./guide/archives#browse-an-archive-shared-with-you). Existing file visibility and password rules apply to every shared entry request.
 
-### Invite someone with a role
+</details>
+
+### People and roles
+
+#### Invite someone with a role
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Invite someone with a role: silent Flare recording with the invite token blurred" :poster="withBase('/screenshots/invites/create-invite.webp')" :src="withBase('/demos/admin-invite.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. As the demonstration administrator **Alex Morgan**, open **Settings → Access → Invites**. Turn on **Let everyone create invites**, then choose **Save settings**. **Settings updated** confirms the change.
 2. Open **Admin → Users** and choose the **Invites** tab. It shows **No invites yet**.
@@ -166,9 +222,14 @@ This recording uses an anonymous visitor and a real unprotected public archive. 
 
 This recording performs real settings and invite operations on an isolated instance whose registration is closed. Turning on the switch grants Create invites to the Everyone role. [Read the administrator guide](./admin/users#invite-links).
 
-### Join with an invite link
+</details>
+
+#### Join with an invite link
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Join with an invite link: silent Flare recording of a new account registration" :poster="withBase('/screenshots/invites/register-invite.webp')" :src="withBase('/demos/join-with-invite.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. In a separate signed-out browser, open the invite link from the previous recording.
 2. **You’re invited** explains that **Alex Morgan invited you to join Flare** and lists the **Moderator** role.
@@ -177,9 +238,14 @@ This recording performs real settings and invite operations on an isolated insta
 
 Afterward the single-use link is spent: opening it again shows **Invite unavailable** with **This invite link has already been used.** In **Users**, Sam’s account shows **Invited by Alex Morgan**. [Read what invited people see](./guide/invites#what-the-invited-person-sees).
 
-### Let members invite people
+</details>
+
+#### Let members invite people
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Let members invite people: silent Flare recording of Profile Invites with the invite token blurred" :poster="withBase('/screenshots/invites/profile-invites.webp')" :src="withBase('/demos/member-invites.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. As the ordinary member **Jamie Rivera**, open **Profile → Invites**. The note explains the member limits: up to five active invites, each link works once and expires within 30 days.
 2. Choose **Create invite** and enter the note **For Priya**. **Uses** offers only **1 person**.
@@ -189,9 +255,35 @@ Afterward the single-use link is spent: opening it again shows **Invite unavaila
 
 The member has no role picker because they cannot assign roles. [Read about member limits](./guide/invites#limits-for-members).
 
-### Enable, use, and recover two-factor authentication
+</details>
+
+#### Create and assign a role
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 19-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. Open **Admin → Roles** and choose **Create role**.
+2. Name the role **Content reviewer**, choose an amber color, and describe its purpose: “Review uploads and help keep the workspace tidy.” Set **Position** to `30`.
+3. Search for **View users** and turn it on.
+4. Search for **moderation**. Turn on **View all content** and **Edit all content**; leave **Delete all content** off.
+5. Choose **Save role**. The role exists without any members yet.
+6. Open **Admin → Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save changes**.
+7. Return to **Roles**, select **Content reviewer**, and confirm it shows **1 member** and the selected moderation permissions.
+
+This recording makes real role and account changes in an isolated instance. Everyone remains the shared baseline; the new role adds review/edit capabilities without granting deletion of other users' content or settings administration. [Read the role guide](./admin/roles) for hierarchy and permission details. The separate [roles lab](#roles-and-permissions-lab) below is a local simulation.
+
+</details>
+
+### Sign-in security and activity
+
+#### Enable, use, and recover two-factor authentication
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Enable, use, and recover two-factor authentication: silent Flare recording" :src="withBase('/demos/two-factor-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Sign in to the isolated **Alex Morgan** account and open **Profile → Account → Sign-in security**.
 2. Choose **Set up authenticator**, confirm the current password, and choose **Continue**. The real setup dialog displays the QR code and manual key; both are concealed before the recording captures a frame.
@@ -205,9 +297,14 @@ The member has no role picker because they cannot assign roles. [Read about memb
 
 These are real enrollment, login, recovery, and removal operations against a disposable database. The authenticator code is generated by the test's TOTP client; no personal authenticator account is involved. QR/setup secrets, passwords, and recovery values are concealed throughout the capture. The recording stays at desktop width; the guide also shows real mobile captures, and the browser verification separately exercises recovery at 390px wide. [Follow the account security guide](./guide/security) for your own account, and [reproduce the checks](./contributing#security-browser-checks-and-demos) locally.
 
-### Create, use, and remove a passkey
+</details>
+
+#### Create, use, and remove a passkey
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Create, use, and remove a passkey: silent Flare recording with a virtual authenticator" :src="withBase('/demos/passkey-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Sign in to the isolated **Jamie Rivera** account and open **Sign-in security**.
 2. Choose **Add a passkey**, name it **Personal laptop**, confirm the password, and choose **Create passkey**.
@@ -219,9 +316,14 @@ These are real enrollment, login, recovery, and removal operations against a dis
 
 The app and server operations are real; **Chromium's virtual authenticator simulates the device**. It performs actual WebAuthn cryptographic ceremonies but does not display a physical device's fingerprint, face, PIN, or security-key prompt. Your browser/provider supplies those prompts on your own device. This recording demonstrates server registration, passwordless sign-in, renaming, and revocation; it is not a hardware compatibility test. [Add a passkey](./guide/security#add-a-passkey).
 
-### Require a passkey and recover access
+</details>
+
+#### Require a passkey and recover access
 
 <video class="demo-video" controls playsinline preload="none" aria-label="Require a passkey and recover access: silent Flare recording with a virtual authenticator" :src="withBase('/demos/passkey-required-demo.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
 1. Sign in to the isolated **Jamie Rivera** account, add **Required sign-in key**, and sign in again with that passkey.
 2. Open **Sign-in security → Require passkey to sign in**. Review the password/authenticator/SSO restriction, then choose **Require passkey**. The recent passkey sign-in confirms the change.
@@ -234,67 +336,58 @@ The app and server operations are real; **Chromium's virtual authenticator simul
 
 This is a real local account workflow; Chromium's virtual authenticator replaces the physical device. Password rejection and dedicated recovery use the actual server, with no mocked authentication responses. The same browser checks also verify rejection of stale sessions and last-key removal while required. The recording stays at desktop width; the guide includes separate mobile captures. It does not demonstrate a live external SSO provider or native biometric prompt. [Prepare required-passkey recovery](./guide/security#require-a-passkey-for-sign-in) before enabling it on your account.
 
-### Create and assign a role
+</details>
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Create and assign a role: 19-second silent Flare recording" :src="withBase('/demos/roles-demo.mp4')">Your browser does not support this video. Follow the transcript below.</video>
+#### Review and revoke browser sessions
 
-1. Open **Admin → Roles** and choose **Create role**.
-2. Name the role **Content reviewer**, choose an amber color, and describe its purpose: “Review uploads and help keep the workspace tidy.” Set **Position** to `30`.
-3. Search for **View users** and turn it on.
-4. Search for **moderation**. Turn on **View all content** and **Edit all content**; leave **Delete all content** off.
-5. Choose **Save role**. The role exists without any members yet.
-6. Open **Admin → Users**, edit the demonstration account **Taylor Reed**, select **Content reviewer**, and choose **Save changes**.
-7. Return to **Roles**, select **Content reviewer**, and confirm it shows **1 member** and the selected moderation permissions.
+<video class="demo-video" controls playsinline preload="none" aria-label="Review and revoke browser sessions: silent Flare recording" :src="withBase('/demos/session-management.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-This recording makes real role and account changes in an isolated instance. Everyone remains the shared baseline; the new role adds review/edit capabilities without granting deletion of other users' content or settings administration. [Read the role guide](./admin/roles) for hierarchy and permission details. The separate [roles lab](#roles-and-permissions-lab) below is a local simulation.
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
-### Organize and upload
+1. Open **Profile → Account** on the isolated demonstration instance and scroll to **Active sessions**.
+2. Review **This browser** and the other signed-in browser sessions, including their sign-in methods and activity times.
+3. Inspect **Login history**, where a rejected demonstration password appears as **Failed** beside successful sign-ins.
+4. Choose **Revoke session** on another browser and confirm **Revoke session**. The list reloads without that session; the browser check separately verifies its next authenticated request is rejected.
+5. Choose **Revoke all sessions** and confirm **Revoke all and sign out**. The current browser returns to sign-in too.
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 18-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+The recording uses real browser sign-ins and server revocations against a disposable database. Revocation applies to subsequent protected requests; API credentials and previously issued storage URLs have separate lifetimes. [Follow the account guide](./guide/account#login-history-and-active-sessions). The recording stays at desktop width. Separate screenshots and browser checks in that guide cover the mobile controls.
 
-1. In **Files**, choose **New folder** and create a folder named Project launch. The new folder opens.
-2. Go back to **Folders**, open **Unfiled**, select two files, and move them into Project launch.
-3. Open Project launch and create a Week 39 subfolder, which opens in turn.
-4. Use **Upload here** to upload a project checklist into the subfolder. **Save to** already shows Project launch / Week 39.
-5. Choose **Open folder** in **Upload complete** to see the checklist in its folder.
+</details>
 
-Moving a file preserves its individual share link. [Read the folders guide](./guide/folders).
+#### Investigate instance activity
 
-### Share a collection, then revoke access
+<video class="demo-video" controls playsinline preload="none" aria-label="Investigate instance activity: silent Flare audit-log recording" :src="withBase('/demos/audit-investigation.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Share and revoke: 12-second silent Flare recording" :src="withBase('/demos/sharing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<details class="demo-transcript">
+<summary>Transcript</summary>
 
-1. Open a folder, choose **Share**, and choose **Create share link**.
-2. Open the shared folder link. It shows what any recipient sees: the public files, and a password-protected file as a generic locked tile.
-3. Return to the folder, choose **Share**, and choose **Disable link**.
-4. Revisit the link to confirm the shared page is unavailable.
+1. Open **Admin → Audit log** on the isolated demonstration instance with an administrator session.
+2. Review recorded activity produced by a real demonstration upload, visibility changes, download, denied access, actual OCR of a generated receipt image, a rejected OCR request on a text file, deletion, role assignment, and settings change.
+3. Enter **quarterly-report.txt** in **Search activity**, choose **Apply filters**, and expand a **File delete** event. The deleted filename and acting account remain recorded.
+4. Review **Recorded details** and request context. Choose **Clear filters**, set **Outcome** to **Denied**, and apply to inspect refused requests.
+5. Add **missing-demo-filename** to search and apply. Flare shows **No activity matches these filters**. Clear the filters and return to recent instance activity.
 
-Disabling a folder link does not revoke a file’s separate public URL. [Understand sharing boundaries](./guide/sharing).
+These screens display real events produced by demonstration operations. The setup uses API requests before opening the recorded audit page; the recording shows investigation of those events. The receipt image is generated test input, and the server performs real OCR; it is not a fabricated application screenshot. The audit log begins when the feature is installed, retains selected metadata, and does not capture every request outside Flare. It is not a tamper-evident ledger. [Read the audit guide](./admin/audit) for access, filtering, privacy, and retention; the guide also includes desktop and mobile screenshots. The recording stays at desktop width; mobile layout is covered by those separate captures and browser checks.
 
-### Open a protected file
+The audit guide also includes a [separate real-server archive investigation capture](./admin/audit), produced by creating, browsing, downloading from, and extracting an archive on the disposable instance. [Reproduce the combined archive/audit check](./contributing#sessions-and-audit-browser-checks-and-demos) to verify those events; they are separate from the recorded investigation above.
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Protected-file handoff: 10-second silent Flare recording" :src="withBase('/demos/protected-file-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
-
-1. Open a locked tile from a shared folder. The password page links back to the folder.
-2. Enter an incorrect password; the file stays locked and its name stays hidden.
-3. Enter the correct password to reveal the file and its normal viewer.
-
-This flow is for a **public file protected by a password**. Private files are not included in a public folder share.
+</details>
 
 ## Roles and permissions lab
 
-Try Everyone, an additional contributor role, and Administrator. Removing a permission from one role does not deny a grant from another. The simulation also shows why a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
+Removing a permission from one role does not deny a grant from another, and a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
 
 <RoleLab />
 
 ## Upload options lab
 
-Try the precedence rules behind account defaults, saved profiles, and per-upload choices. This is an educational model of the [upload profile rules](./guide/upload-profiles), with explicit inputs; it does not read your account.
+See which setting wins: account defaults, saved profiles or per-upload choices. [Upload profiles](./guide/upload-profiles) has the full rules.
 
 <UploadLab />
 
 ## Build an API request
 
-Generate curl, JavaScript, or Python examples with your instance address. The builder never asks for a token and never sends a request.
+Generate curl, JavaScript, or Python examples with your instance address. The builder never asks for a token.
 
 <ApiPlayground />

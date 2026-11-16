@@ -81,10 +81,10 @@ export default defineConfig({
     },
     sidebar: [
       group('Discover', [
-        ['Flare home', '/'],
-        ['Feature explorer', '/features'],
-        ['Interactive demos', '/demos'],
-        ['Frequently asked questions', '/faq'],
+        ['Home', '/'],
+        ['Features', '/features'],
+        ['Demos', '/demos'],
+        ['FAQ', '/faq'],
       ]),
       group('Use Flare', [
         ['Your first steps', '/guide/'],

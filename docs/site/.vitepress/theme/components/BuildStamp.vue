@@ -1,6 +1,16 @@
 <script setup>
 import { computed, ref, useId } from 'vue'
 import { useData, withBase } from 'vitepress'
+// A handbook page shows the notice above its title and the stamp after its
+// content. Other pages show the stamp where the layout puts it, with the
+// rolling notice before it; there the stamp itself says a release is archived.
+const props = defineProps({
+  part: {
+    type: String,
+    default: 'all',
+    validator: (value) => ['all', 'notice', 'stamp'].includes(value),
+  },
+})
 const { theme, page } = useData()
 const selected = ref('')
 const selectorId = useId()
@@ -8,6 +18,7 @@ const releases = computed(() => theme.value.docsVersions?.releases || [])
 const root = computed(() => theme.value.docsRoot || withBase('/'))
 const current = computed(() => theme.value.buildInfo.release)
 const rolling = computed(() => theme.value.buildInfo.channel === 'rolling')
+const archived = computed(() => current.value && !current.value.latest)
 const stableDocs = computed(() => {
   const latest = releases.value.find(
     (release) => release.tag === theme.value.docsVersions?.latest
@@ -27,6 +38,27 @@ const destination = computed(() => {
 
 <template>
   <div
+    v-if="rolling && part !== 'stamp'"
+    class="release-notice"
+    role="note"
+    aria-label="Rolling documentation"
+  >
+    <strong>Rolling preview · Unreleased</strong>
+    <p>These docs describe a rolling build, not a stable release.</p>
+    <a :href="stableDocs" target="_self">Read stable docs</a>
+  </div>
+  <div
+    v-else-if="archived && part === 'notice'"
+    class="release-notice"
+    role="note"
+    aria-label="Archived documentation"
+  >
+    <strong>Archived release · {{ current.tag }}</strong>
+    <p>These docs describe an older release of Flare.</p>
+    <a :href="stableDocs" target="_self">Read stable docs</a>
+  </div>
+  <div
+    v-if="part !== 'notice'"
     class="build-stamp"
     aria-label="Documentation version and source revision"
   >
@@ -82,16 +114,6 @@ const destination = computed(() => {
       >Build details ↗</a
     >
     <a :href="`${root}versions.html`" target="_self">Versions &amp; changes</a>
-    <div
-      v-if="rolling"
-      class="rolling-notice"
-      role="note"
-      aria-label="Rolling documentation"
-    >
-      <strong>Rolling preview · Unreleased</strong>
-      <p>These docs describe a rolling build, not a stable release.</p>
-      <a :href="stableDocs" target="_self">Read stable docs</a>
-    </div>
     <div v-if="releases.length" class="release-picker">
       <label :for="selectorId">Documentation release</label>
       <select :id="selectorId" v-model="selected">
@@ -114,19 +136,23 @@ const destination = computed(() => {
 .release-channel {
   color: var(--vp-c-text-2);
 }
-.rolling-notice {
-  width: 100%;
-  margin-top: 8px;
+.release-notice {
+  margin-bottom: 24px;
   padding: 12px 16px;
-  border: 1px solid var(--vp-c-brand-1);
+  border: 1px solid var(--control);
   border-radius: 8px;
   background: var(--vp-c-brand-soft);
   color: var(--vp-c-text-1);
   font-size: 14px;
   line-height: 1.6;
 }
-.rolling-notice p {
+.release-notice p {
   margin: 4px 0;
+}
+.release-notice a {
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .release-picker {
   display: flex;

@@ -5,26 +5,25 @@ description: Get comfortable with Flare, upload your first file, and choose how 
 
 # Your first five minutes
 
-Flare gives you a home for screenshots, recordings, files, text, and links on a server you control. Upload something, get a link, and decide who can open it. Your library keeps everything together, with folders, tags, search, and previews when you need them.
-
-This guide is for people using an existing Flare instance. Everyone supplies the starting permissions; additional [roles](/admin/roles) can add capabilities, and administrators can restrict the baseline. A missing navigation item or unavailable action may reflect your current permissions. If you're installing your own, start with the [administrator guide](../admin/index).
-
-<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare file library with image previews, search, folders, and file controls" caption="Scroll through every file and use the date rail to jump through your upload history." />
+Sign in, upload a file, and share its link. This guide is for people using an existing Flare instance; if you're installing your own, start with the [administrator guide](../admin/index).
 
 ## Join your instance
 
-Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form.
+Open the address your administrator gave you and sign in. Depending on the instance, you may see a registration option, a sign-in button for an identity provider, or only a local email and password form. The name, colors, logo, and background can differ between instances; the tasks and controls described here stay the same.
+
+If registration is closed, ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
+
+::: details Registration, two-factor codes, passkeys, and single sign-on
 
 - **Registration available:** create an account, then follow any email-verification instructions.
-- **Registration closed:** ask the administrator for access, or open an [invite link](./invites#what-the-invited-person-sees) if someone sent you one. A public file link does not require an account unless the file's access settings require one.
 - **Two-factor authentication:** after your password, enter your authenticator code or a saved recovery code if you enabled this protection. [Set it up](./security).
 - **Passkeys:** choose **Sign in with a passkey** to use a passkey already registered to your account. [Add a passkey](./security#add-a-passkey).
 - **Passkey required:** password and SSO sign-in are blocked after you explicitly enable this setting. Use your passkey, or **Use a passkey recovery code** with your email and one dedicated emergency code. [Understand the requirement](./security#require-a-passkey-for-sign-in).
 - **Single sign-on:** use the provider offered by your instance. Existing local accounts are not automatically linked to SSO accounts with the same email address.
 
-The name, colors, logo, and background can differ between instances. The tasks and controls described here stay the same.
+<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="The sign-in page, here with a passkey option." />
 
-<Screenshot src="/screenshots/security/passkey-login.webp" alt="Flare login with email and password fields and a separate Sign in with a passkey button" caption="Use an allowed account method. Requiring passkeys disables password and SSO sign-in; dedicated passkey recovery codes remain an emergency option." />
+:::
 
 ## Upload and share your first file
 
@@ -40,8 +39,6 @@ The copied link opens a Flare share page. A password or private setting still ap
 Continue with [uploading files](./uploading) and [sharing and privacy](./sharing).
 
 ## Find your way around
-
-Keyboard users can press **Tab** to reveal **Skip to content**, then **Enter** to move past the navigation to the page.
 
 The bar at the top of the dashboard holds your own places: **Files**, **Upload**, **Paste**, and **Links**. Select your avatar at the right of the bar for the account menu, which has **Profile** and **Sign out**. If your roles let you help run the instance, the bar ends with an **Admin** menu after a thin divider.
 
@@ -62,27 +59,40 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 | **Admin → Audit log**      | Investigate activity across the instance. Needs `audit.read`.                                                        |
 | **Admin → Settings**       | Configure the instance. Needs `settings.read`.                                                                       |
 
+What you see depends on your [roles](/admin/roles): Everyone supplies the starting permissions, other roles add to them, and administrators can restrict the baseline. A missing place or unavailable action usually means your roles don't include it.
+
+::: details How the Admin menu, your avatar, and the logo behave
 The **Admin** menu lists only the pages your roles allow. If they allow just one, that page sits in the bar by itself instead of in a menu, for example **Audit log** for an account whose only administration permission is `audit.read`. Without any of these permissions there is no **Admin** menu. While you are on one of its pages, the **Admin** button is highlighted and the menu marks the current page. On **Profile**, a ring around your avatar shows where you are.
 
 The instance name and logo at the start of the bar open **Files**, or **Profile** if your roles don't include `files.read`. A bookmark or link to a page your roles don't allow opens **Profile** instead.
 
-<Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Your avatar opens the account menu. Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
+<Screenshot src="/screenshots/navigation/account-menu.webp" alt="Account menu open below the avatar, showing the account's name and email address, then Profile and Sign out" caption="Sign out here, from the navigation sheet on a phone, or from the top of Profile." />
 
+:::
+
+::: details On a phone or in a narrow window
 When the window is too narrow for the bar, choose the menu button next to your avatar. It lists your places, then the administration pages under an **Admin** heading, then **Profile** and **Sign out** under **Account**. Your avatar still opens the account menu too. With four places or fewer, the full bar shows from 768 pixels wide; with more, including the **Admin** menu, it shows from 900 pixels.
 
 <div style="max-width: 390px; margin-inline: auto">
 <Screenshot src="/screenshots/navigation/mobile-sheet.webp" alt="Navigation sheet on a phone listing Files, Upload, Paste, and Links, then Users, Roles, Audit log, and Settings under an Admin heading, then Profile and Sign out under an Account heading" caption="On a phone, the sheet groups administration and your account under their own headings." />
 </div>
 
-Earlier versions put every page in the bar, including **Profile**, **Users**, **Roles**, **Audit log**, and **Settings**, and showed the menu button to everyone below 1280 pixels. Page addresses haven't changed, so bookmarks such as `/dashboard/settings` and `/dashboard/profile` still work.
+On touch devices, shared buttons, inputs, selects, and menu rows have larger targets; switches and radio controls keep compact visuals with larger hit areas, and calendar days use a compact seven-column grid while the desktop keeps compact controls.
+:::
 
-On touch devices, shared buttons, inputs, selects, and menu rows have larger targets; switches and radio controls keep compact visuals with larger hit areas, and calendar days use a compact seven-column grid while the desktop keeps compact controls. Keyboard focus stays visible, and reduced-motion preferences suppress UI animation.
+::: details Keyboard, errors, and what changed from earlier versions
+Keyboard users can press **Tab** to reveal **Skip to content**, then **Enter** to move past the navigation to the page. Keyboard focus stays visible, and reduced-motion preferences suppress UI animation.
+
+Earlier versions put every page in the bar, including **Profile**, **Users**, **Roles**, **Audit log**, and **Settings**, and showed the menu button to everyone below 1280 pixels. Page addresses haven't changed, so bookmarks such as `/dashboard/settings` and `/dashboard/profile` still work.
 
 If a dashboard page cannot load, **Try again** appears inside the workspace so navigation remains available.
 
-Profile and Settings remember the selected section in the page address, so browser Back and Forward work when moving between sections.
+When a proxy or sign-in gateway answered in Flare's place, earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Current versions show the screen's usual message instead.
 
-## Build a workflow that fits
+Profile and Settings remember the selected section in the page address, so browser Back and Forward work when moving between sections.
+:::
+
+## Upload workflows {#build-a-workflow-that-fits}
 
 ::: details I share screenshots throughout the day
 Create a **Public screenshots** [upload profile](./upload-profiles), review its defaults, and download a [capture-tool configuration](./screenshot-tools) from that profile. A capture can upload and copy its share link without opening the dashboard. Add a filename tag rule to collect related captures automatically.
@@ -114,7 +124,7 @@ Start with a generated [Bash script](./screenshot-tools#bash-upload-any-file). F
 
 **Deletion is permanent in Flare.** Download or export anything you need before deleting a file or account. There is no user-facing trash or undo flow.
 
-**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.**; earlier versions showed a script error such as `Unexpected token '<'` in folder and tag dialogs, **Profile → Integrations**, and your appearance preference. Ask the operator if such messages keep appearing.
+**Error messages give Flare's reason.** When Flare refuses a change, such as a save, upload, or delete, the message says why, such as **Permission denied** or **File not found**. If a proxy or sign-in gateway in front of Flare answers with its own page instead, you see the screen's usual message, such as **Couldn’t update folders. Please try again.** Ask the operator if such messages keep appearing.
 
 ## Where to go next
 

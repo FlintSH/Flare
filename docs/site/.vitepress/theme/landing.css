@@ -2,54 +2,436 @@
   display: none;
 }
 
+/* The homepage has no page menu, so the bar that would offer one stays away. */
+.Layout:has(.product-home) .VPLocalNav {
+  display: none;
+}
+
+/* Behind the headline: the fine grid Flare offers as an app background, under
+   one plain light from above. No color; the page's color is the product's. */
+.Layout:has(.product-home) {
+  --home-grid: color-mix(in srgb, var(--border) 62%, transparent);
+  --home-light: rgb(255 255 255 / 0.06);
+  position: relative;
+  isolation: isolate;
+}
+html:not(.dark) .Layout:has(.product-home) {
+  --home-grid: color-mix(in srgb, var(--border) 50%, transparent);
+  --home-light: rgb(255 255 255 / 0.9);
+}
+.Layout:has(.product-home)::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: 720px;
+  background-image:
+    radial-gradient(ellipse 50% 48% at 50% 0%, var(--home-light), transparent),
+    linear-gradient(to right, var(--home-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--home-grid) 1px, transparent 1px);
+  background-position:
+    center top,
+    center top,
+    center top;
+  background-size:
+    100% 100%,
+    48px 48px,
+    48px 48px;
+  mask-image: radial-gradient(
+    ellipse 62% 72% at 50% 34%,
+    #000 30%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
 .product-home {
-  max-width: 1280px;
+  max-width: 1152px;
   margin: 0 auto;
   padding: 0 24px;
   color: var(--foreground);
 }
 
+/* Hero: what Flare is and how to get it. */
 .product-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  align-items: center;
-  gap: 48px;
-  padding: 64px 0 48px;
+  padding: 72px 0 56px;
+  text-align: center;
 }
 
 .product-hero h1 {
-  margin: 0 0 20px;
+  margin: 0;
   color: var(--foreground);
-  font-size: clamp(40px, 4.5vw, 60px);
+  font-size: clamp(40px, 6.6vw, 80px);
   font-weight: 650;
-  letter-spacing: -2px;
-  line-height: 1.12;
+  letter-spacing: -0.032em;
+  line-height: 1.04;
+  text-wrap: balance;
 }
 
 .product-intro {
-  max-width: 400px;
-  margin: 0;
+  max-width: 620px;
+  margin: 22px auto 0;
   color: var(--muted-foreground);
-  font-size: 16px;
-  line-height: 1.8;
+  font-size: 19px;
+  line-height: 1.55;
+  text-wrap: balance;
 }
 
 .product-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 26px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 22px;
+  margin-top: 32px;
 }
 
+.product-actions .button-primary {
+  min-height: 44px;
+  padding-inline: 20px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.product-docs {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--muted-foreground);
+  font-size: 15px;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 5px;
+  transition: color 150ms;
+}
+
+.product-docs:hover {
+  color: var(--foreground);
+}
+
+/* The product: where uploads come from, on top of the recording they land in.
+   One panel, in the style the app uses. */
+.product-demo {
+  margin: 0;
+}
+
+.product-demo-card {
+  overflow: hidden;
+  border: 1px solid var(--flare-line);
+  border-radius: 16px;
+  background: var(--panel);
+  box-shadow:
+    var(--flare-shadow),
+    0 40px 80px -48px rgb(0 0 0 / 0.5);
+}
+
+html:not(.dark) .product-demo-card {
+  box-shadow:
+    var(--flare-shadow),
+    0 32px 64px -48px rgb(15 23 42 / 0.22);
+}
+
+.product-sources {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--flare-line);
+  /* A step lighter than the app's own bar below it, so the two don't read as
+     one toolbar. */
+  background: color-mix(in oklab, var(--panel) 95%, var(--foreground));
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.product-sources-tools {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px 28px;
+  min-width: 0;
+  /* The same inset as the app inside the recording, so their edges line up. */
+  padding: 14px 16px;
+}
+
+.product-sources-tools p {
+  flex: none;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.product-sources-tools ul {
+  display: flex;
+  flex: 1;
+  /* Four on a line or two by two, never three and a stray. */
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  gap: 4px 20px;
+  max-width: 600px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-sources a {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 44px;
+  color: var(--foreground);
+}
+
+.product-sources img {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.product-sources span {
+  display: grid;
+  min-width: 0;
+}
+
+.product-sources b {
+  font-weight: 600;
+}
+
+.product-sources small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  text-wrap: pretty;
+}
+
+.product-sources .doc-icon {
+  width: 12px;
+  height: 12px;
+  margin-left: 5px;
+  color: var(--muted-foreground);
+  vertical-align: -1px;
+}
+
+.product-sources a:focus-visible {
+  /* Inside the panel's edge, so the ring is not cut off. */
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.product-sources a:hover b {
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 4px;
+}
+
+.product-sources-ember {
+  flex: none;
+  padding: 14px 20px 14px 16px;
+  border-left: 1px solid var(--flare-line);
+}
+
+.product-demo-frame {
+  position: relative;
+  aspect-ratio: 2240 / 1400;
+  background: var(--background);
+}
+
+.product-demo-still,
+.product-demo-still img,
+.product-demo-frame video {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.dark .product-demo-still.is-light,
+html:not(.dark) .product-demo-still.is-dark {
+  display: none;
+}
+
+.product-demo-frame video {
+  position: absolute;
+  inset: 0;
+  object-fit: cover;
+  cursor: pointer;
+}
+
+.product-demo-caption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 32px;
+  margin-top: 14px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.product-demo-caption p {
+  margin: 0;
+}
+
+.product-demo-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 11px;
+  border: 1px solid var(--flare-line);
+  border-radius: 8px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 150ms,
+    color 150ms;
+}
+
+.product-demo-toggle:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+/* Each section: a heading that names it, then what it holds. */
+.product-section {
+  margin-top: 80px;
+}
+
+.product-section:last-child {
+  padding-bottom: 72px;
+}
+
+.product-section header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin-bottom: 22px;
+}
+
+.product-section h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.product-section header p {
+  margin: 10px 0 0;
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.product-section header a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 150ms;
+}
+
+.product-section header p a {
+  display: inline;
+  min-height: 0;
+  color: var(--foreground);
+  font-size: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--control);
+  text-underline-offset: 4px;
+}
+
+.product-section header a:hover {
+  color: var(--foreground);
+}
+
+.product-section header .doc-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.product-section header p .doc-icon {
+  width: 13px;
+  height: 13px;
+  margin-left: 5px;
+  color: var(--muted-foreground);
+  vertical-align: -1px;
+}
+
+/* Features: one panel of four plain items, like a settings list in the app. */
 .product-features {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--flare-line);
+  border-radius: 16px;
+  background: var(--flare-line);
+  box-shadow: var(--flare-shadow);
 }
 
 .product-feature {
   display: block;
-  padding: 24px;
+  padding: 22px 24px 24px;
+  background: var(--panel);
+  transition: background-color 150ms;
+}
+
+.product-feature:hover {
+  background: color-mix(in srgb, var(--accent) 35%, var(--panel));
+}
+
+.product-feature:focus-visible {
+  border-radius: 0;
+  outline-offset: -2px;
+}
+
+.product-feature h3 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: var(--foreground);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+.product-feature h3 .doc-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--muted-foreground);
+}
+
+.product-feature p {
+  margin: 8px 0 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+/* Install: the two ways to run it, as the two things to choose between. */
+.product-installs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.product-install {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 24px;
   border: 1px solid var(--flare-line);
   border-radius: 16px;
   background: var(--panel);
@@ -59,76 +441,55 @@
     border-color 150ms;
 }
 
-.product-feature:hover {
+.product-install:hover {
   border-color: var(--control);
-  background: color-mix(in srgb, var(--accent) 20%, var(--panel));
+  background: color-mix(in srgb, var(--accent) 30%, var(--panel));
 }
 
-.product-feature-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.product-install span {
+  display: grid;
+  gap: 3px;
 }
 
-.product-feature-title h2 {
-  margin: 0;
+.product-install b {
   color: var(--foreground);
   font-size: 16px;
   font-weight: 600;
-  line-height: 1.5;
-  letter-spacing: -0.25px;
+  letter-spacing: -0.01em;
 }
 
-.product-feature-title > .doc-icon {
+.product-install small {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.product-install .doc-icon {
   width: 18px;
   height: 18px;
   color: var(--muted-foreground);
 }
 
-.product-feature-title > .doc-icon:last-child {
-  width: 15px;
-  height: 15px;
-  margin-left: auto;
-}
-
-.product-feature p {
-  margin: 12px 0 0;
-  color: var(--muted-foreground);
-  font-size: 14px;
-  line-height: 1.8;
-}
-
-.product-project-links {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  align-items: center;
-  gap: 10px;
-  padding: 28px 0;
+/* The marks' terms ask for credit wherever they are shown. */
+.product-credits {
+  margin: 36px 0 0;
   color: var(--muted-foreground);
   font-size: 12px;
-  line-height: 1.8;
+  line-height: 1.6;
 }
 
-.product-project-links a {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.product-project-links a:hover {
-  color: var(--foreground);
+.product-credits a {
   text-decoration: underline;
+  text-decoration-color: var(--control);
   text-underline-offset: 3px;
 }
 
-.product-project-links .doc-icon {
-  width: 13px;
-  height: 13px;
+.product-credits a:hover {
+  color: var(--foreground);
 }
 
 .home-build-stamp.product-build-stamp {
-  max-width: 1280px;
+  max-width: 1152px;
   margin: 0 auto;
   padding: 0 24px 24px;
 }
@@ -140,70 +501,116 @@
   border-bottom: 0;
 }
 
-@media (max-width: 1000px) {
-  .product-hero {
-    gap: 28px;
+/* Narrower: Ember moves under the tools before they run out of room, and the
+   features pair up. */
+@media (max-width: 1079px) {
+  .product-sources {
+    flex-direction: column;
   }
-  .product-feature {
-    padding: 20px;
+  .product-sources-ember {
+    border-top: 1px solid var(--flare-line);
+    border-left: 0;
   }
 }
 
-@media (max-width: 800px) {
-  .product-hero {
-    grid-template-columns: 1fr;
-    gap: 28px;
-    padding-top: 40px;
-  }
-  .product-hero-copy {
-    max-width: 540px;
-  }
-  .product-hero h1 {
-    font-size: 48px;
-  }
-  .product-intro {
-    max-width: 480px;
-  }
+/* Four features need the full page width, or one title wraps and the row
+   looks uneven. */
+@media (max-width: 1199px) {
   .product-features {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
+/* Too narrow for four tools on a line: two by two. */
+@media (max-width: 720px) {
+  .product-sources-tools {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 14px 16px 10px;
+  }
+  .product-sources-tools ul {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+    max-width: none;
+  }
+  .product-sources-ember {
+    padding: 10px 16px;
+  }
+}
+
+/* Phones get the recording made at phone width, no wider than it was made. */
 @media (max-width: 600px) {
+  .product-demo {
+    max-width: 440px;
+    margin-inline: auto;
+  }
+  .product-demo-frame {
+    aspect-ratio: 780 / 1240;
+  }
+}
+
+@media (max-width: 640px) {
+  .Layout:has(.product-home) {
+    --home-grid: color-mix(in srgb, var(--border) 44%, transparent);
+  }
+  html:not(.dark) .Layout:has(.product-home) {
+    --home-grid: color-mix(in srgb, var(--border) 36%, transparent);
+  }
+  .Layout:has(.product-home)::before {
+    height: 520px;
+    background-size:
+      100% 100%,
+      40px 40px,
+      40px 40px;
+    mask-image: radial-gradient(
+      ellipse 110% 70% at 50% 30%,
+      #000 30%,
+      transparent 100%
+    );
+  }
   .product-home {
     padding: 0 16px;
   }
   .product-hero {
-    gap: 24px;
-    padding: 32px 0;
-  }
-  .product-hero h1 {
-    margin-bottom: 16px;
-    font-size: 40px;
-    letter-spacing: -1.4px;
+    padding: 36px 0 36px;
   }
   .product-intro {
-    font-size: 15px;
+    margin-top: 16px;
+    font-size: 17px;
   }
   .product-actions {
-    margin-top: 22px;
+    margin-top: 24px;
   }
-  .product-actions > a {
-    min-height: 40px;
+  .product-demo-toggle {
+    min-height: 44px;
+    padding: 0 14px;
   }
-  .product-features {
+  .product-section {
+    margin-top: 56px;
+  }
+  .product-section:last-child {
+    padding-bottom: 48px;
+  }
+  .product-section h2 {
+    font-size: 26px;
+  }
+  .product-section header a {
+    min-height: 44px;
+  }
+  .product-features,
+  .product-installs {
     grid-template-columns: 1fr;
+  }
+  .product-installs {
     gap: 12px;
   }
   .product-feature {
-    padding: 20px;
+    padding: 18px 20px 20px;
   }
-  .product-feature p {
-    margin-top: 8px;
-  }
-  .product-project-links {
-    gap: 8px;
-    font-size: 11px;
+  .product-install {
+    padding: 18px 20px;
   }
   .home-build-stamp.product-build-stamp {
     padding: 0 16px 24px;
@@ -211,7 +618,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .product-feature {
+  .product-docs,
+  .product-feature,
+  .product-install,
+  .product-demo-toggle,
+  .product-section header a {
     transition: none;
   }
 }

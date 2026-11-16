@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { withBase } from 'vitepress'
 const category = ref('Everything')
 const query = ref('')
@@ -206,7 +206,7 @@ const features = [
   ],
   [
     'Host & administer',
-    'Operate with confidence',
+    'Backups and upgrades',
     'Back up the database and files, preserve secrets, upgrade carefully, and diagnose failures.',
     '/hosting/maintenance',
   ],
@@ -218,16 +218,56 @@ const filtered = computed(() =>
       item.join(' ').toLowerCase().includes(query.value.toLowerCase())
   )
 )
+// Cards sit under their area, so the area is said once instead of on each card.
+// Every area stays in the page, hidden while it has nothing to show, so the
+// outline's links to them always have somewhere to go.
+const groups = computed(() =>
+  categories.slice(1).map((name) => ({
+    name,
+    id: name.toLowerCase().replace(/[^a-z]+/g, '-'),
+    items: filtered.value.filter((item) => item[0] === name),
+  }))
+)
+
+// A link to an area that the current search or filter hides shows everything
+// again and goes there.
+async function showArea(hash) {
+  const id = decodeURIComponent(hash.slice(1))
+  const group = groups.value.find((item) => item.id === id)
+  if (!group || (category.value === 'Everything' && group.items.length)) return
+  category.value = 'Everything'
+  query.value = ''
+  await nextTick()
+  // The site's own scroll for this link runs on the next frame and still has
+  // the hidden area's position, so go to the area after it.
+  requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView())
+}
+const onHashChange = () => showArea(location.hash)
+// Following a link to the area already in the address does not change the
+// hash, so clicks on such links are handled as well.
+function onLinkClick(event) {
+  const link = event.target.closest?.('a[href]')
+  if (link?.origin === location.origin && link.pathname === location.pathname)
+    showArea(link.hash)
+}
+onMounted(() => {
+  window.addEventListener('hashchange', onHashChange)
+  document.addEventListener('click', onLinkClick)
+})
+onUnmounted(() => {
+  window.removeEventListener('hashchange', onHashChange)
+  document.removeEventListener('click', onLinkClick)
+})
 </script>
 
 <template>
   <section class="feature-explorer" aria-label="Filter Flare features">
-    <label class="input-label" for="feature-query">Find a capability</label>
+    <label class="visually-hidden" for="feature-query">Search features</label>
     <input
       id="feature-query"
       v-model="query"
       type="search"
-      placeholder="Try passwords, S3, screenshots…"
+      placeholder="Search features"
       class="demo-input"
     />
     <div class="filter-pills" aria-label="Feature categories">
@@ -240,19 +280,35 @@ const filtered = computed(() =>
         {{ item }}
       </button>
     </div>
+    <!-- A count only says something once a search or filter has changed it. -->
     <p class="result-count" role="status">
-      {{ filtered.length }} of {{ features.length }} capabilities
+      {{
+        filtered.length === features.length
+          ? ''
+          : `${filtered.length} of ${features.length} features`
+      }}
     </p>
-    <div class="feature-grid">
-      <a
-        v-for="item in filtered"
-        :key="item[1]"
-        :href="withBase(item[3] + '.html')"
-        class="feature-card"
-        ><span class="eyebrow">{{ item[0] }}</span>
-        <h3>{{ item[1] }} <span aria-hidden="true">↗</span></h3>
-        <p>{{ item[2] }}</p></a
-      >
+    <div
+      v-for="group in groups"
+      v-show="group.items.length"
+      :key="group.name"
+      class="feature-group"
+    >
+      <!-- A chosen area is already named by its filter. -->
+      <h2 v-show="category === 'Everything'" :id="group.id">
+        {{ group.name }}
+      </h2>
+      <div class="feature-grid">
+        <a
+          v-for="item in group.items"
+          :key="item[1]"
+          :href="withBase(item[3] + '.html')"
+          class="feature-card"
+        >
+          <h3>{{ item[1] }}</h3>
+          <p>{{ item[2] }}</p>
+        </a>
+      </div>
     </div>
     <p v-if="!filtered.length">
       No matches. Try another word or choose Everything.

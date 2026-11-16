@@ -1,21 +1,15 @@
 ---
-title: Feature explorer
+title: Features
 description: Explore everything Flare can do, with practical guides for each capability.
 ---
 
-# A home for your files. Built around you.
+# Features
 
-Flare brings uploads, previews, organization, and automation to your own server and domain. Start with the essentials; add the tools and settings that fit your workflow.
-
-Filter the capabilities below, or [take a guided tour](./demos). Each card leads to a complete guide with instructions and important limits.
-
-You can also open the handbook from **Documentation** in the **Settings** header, or choose **Setup guide** during first-run setup. Both open a new tab so your current form stays in place, selecting your stable release's archive or the published rolling handbook. Setup links for versions before 2.1.0 open the archive homepage with the original setup guidance. Other prerelease or unknown versions open the version selector.
-
-Reading for a particular installation? [Browse dated documentation releases and compare changes](./versions). The public handbook defaults to the current stable release. The versions page also offers explicit access to the published rolling build's unreleased docs.
+Everything Flare does. Pick one to see how it works.
 
 <FeatureExplorer />
 
-## Choose your starting point
+## Not sure where to start? {#choose-your-starting-point}
 
 | You want to…                                                   | Start here                                                                                                                                                |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -35,10 +29,8 @@ Reading for a particular installation? [Browse dated documentation releases and 
 | Connect your own software                                      | [API](./api/) → [signed webhooks](./api/webhooks)                                                                                                         |
 | Build a web app or PWA on top of your files                    | [Call Flare from a web app](./api/authentication#call-flare-from-a-web-app) → [`FLARE_CORS_ORIGINS`](./hosting/configuration#cross-origin-browser-access) |
 
-## Know what you are choosing
+## Before you choose Flare {#know-what-you-are-choosing}
 
-Flare needs a running application server and PostgreSQL. Local storage also needs a persistent writable filesystem; S3 is an alternative file store. The **documentation** can run on a static host, but **Flare itself** cannot. Read the [deployment guide](./hosting/) before choosing infrastructure.
-
-Private files are restricted to their owner and accounts with permission to read other users’ content. This is a self-hosted sharing application, not an end-to-end encrypted vault. See [sharing and privacy](./guide/sharing) for the exact rules, including passwords, folder links, and storage URLs.
-
-These docs describe the source revision shown on the page. If a control is missing on an older installation, check the version in **Settings → General**, [open its documentation archive](./versions), review the release notes, and follow the [upgrade guide](./hosting/maintenance).
+- **Flare needs a server.** It runs as an application with PostgreSQL. Local storage also needs a persistent writable disk; an S3-compatible bucket can hold the files instead. Read the [deployment guide](./hosting/) before choosing infrastructure.
+- **Private means access-controlled, not end-to-end encrypted.** Private files are limited to their owner and to accounts allowed to read other people's content. [Sharing and privacy](./guide/sharing) has the exact rules, including passwords, folder links, and storage URLs.
+- **These docs follow releases.** If a control is missing on an older installation, check the version in **Settings → General**, open [the docs for that release](./versions), and follow the [upgrade guide](./hosting/maintenance).

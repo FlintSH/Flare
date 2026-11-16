@@ -1,9 +1,9 @@
 import { mkdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import { landingImages, prepareLandingAssets } from './landing-assets.mjs'
+import { landingAssets, prepareLandingAssets } from './landing-assets.mjs'
 
 export const productNavigation = [
-  { text: 'Explore', link: '/features' },
+  { text: 'Features', link: '/features' },
   { text: 'Docs', link: '/guide/' },
   { text: 'Self-host', link: '/hosting/' },
   { text: 'API', link: '/api/' },
@@ -15,9 +15,7 @@ export const productPresentation = [
   '.vitepress/theme/components/Home.vue',
   '.vitepress/theme/components/DocIcon.vue',
   '.vitepress/theme/landing.css',
-  '.vitepress/theme/components/FeatureShowcase.vue',
-  '.vitepress/theme/components/showcase-model.mjs',
-  '.vitepress/theme/showcase.css',
+  '.vitepress/theme/components/ProductDemo.vue',
 ]
 
 // The public root is the project's home. Archives still render their original
@@ -25,7 +23,7 @@ export const productPresentation = [
 export async function withProductHome({ site, target, repo }, build) {
   const paths = [
     ...productPresentation,
-    ...landingImages.map(([, name]) => `public/landing/${name}`),
+    ...landingAssets.map((name) => `public/landing/${name}`),
   ]
   const originals = await Promise.all(
     paths.map(async (path) => {

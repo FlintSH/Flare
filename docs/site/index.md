@@ -1,6 +1,7 @@
 ---
 layout: page
 sidebar: false
+outline: false
 productHome: true
 title: Flare · Your own file host
 titleTemplate: false

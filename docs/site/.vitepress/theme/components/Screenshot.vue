@@ -16,7 +16,6 @@ const source = computed(() =>
       @click="dialog.showModal()"
     >
       <img :src="source" :alt="alt" loading="lazy" decoding="async" />
-      <span class="enlarge-hint" aria-hidden="true">↗ Enlarge</span>
     </button>
     <figcaption v-if="caption">{{ caption }}</figcaption>
     <dialog

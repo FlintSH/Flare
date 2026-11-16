@@ -3,12 +3,11 @@ import { test } from 'node:test'
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import sharp from 'sharp'
 import { productPresentation, withProductHome } from './product-home.mjs'
-import { landingImages } from './landing-assets.mjs'
+import { landingAssets } from './landing-assets.mjs'
 
 for (const fail of [false, true]) {
-  test(`product root overlay restores archived content and images after ${fail ? 'failure' : 'success'}`, async () => {
+  test(`product root overlay restores archived content and recordings after ${fail ? 'failure' : 'success'}`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'flare-product-home-'))
     const site = join(root, 'site')
     const target = join(root, 'archive')
@@ -25,17 +24,14 @@ for (const fail of [false, true]) {
         'Original archived component'
       )
       await write(
-        join(target, 'public/landing/library-desktop.webp'),
-        'Original archived screenshot bytes'
+        join(target, 'public/landing/desktop-dark.mp4'),
+        'Original archived recording bytes'
       )
-      for (const [source] of landingImages) {
-        await mkdir(dirname(join(root, source)), { recursive: true })
-        await sharp({
-          create: { width: 2, height: 2, channels: 3, background: '#010610' },
-        })
-          .png()
-          .toFile(join(root, source))
-      }
+      for (const name of landingAssets)
+        await write(
+          join(root, '.github/assets/landing', name),
+          `current ${name}`
+        )
       const operation = withProductHome(
         { site, target, repo: root },
         async () => {
@@ -43,14 +39,11 @@ for (const fail of [false, true]) {
             await readFile(join(target, 'index.md'), 'utf8'),
             'current index.md'
           )
-          assert.equal(
-            (
-              await sharp(
-                join(target, 'public/landing/library-desktop.webp')
-              ).metadata()
-            ).width,
-            2
-          )
+          for (const name of landingAssets)
+            assert.equal(
+              await readFile(join(target, 'public/landing', name), 'utf8'),
+              `current ${name}`
+            )
           if (fail) throw new Error('Build failed')
           return 'built'
         }
@@ -69,18 +62,15 @@ for (const fail of [false, true]) {
         'Original archived component'
       )
       assert.equal(
-        await readFile(
-          join(target, 'public/landing/library-desktop.webp'),
-          'utf8'
-        ),
-        'Original archived screenshot bytes'
+        await readFile(join(target, 'public/landing/desktop-dark.mp4'), 'utf8'),
+        'Original archived recording bytes'
       )
       for (const file of [
         ...productPresentation.filter(
           (file) =>
             !['index.md', '.vitepress/theme/components/Home.vue'].includes(file)
         ),
-        'public/landing/library-mobile.webp',
+        'public/landing/mobile-light.mp4',
       ])
         await assert.rejects(readFile(join(target, file)), { code: 'ENOENT' })
     } finally {

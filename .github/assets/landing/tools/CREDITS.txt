@@ -1,0 +1,55 @@
+Tool marks on the Flare homepage
+================================
+
+The homepage names the capture tools Flare has a ready-made setup for and shows
+each one's own mark beside its name. The marks are copies from each project.
+They are not covered by Flare's MIT license: each stays under the terms below.
+The names and marks belong to their projects, and showing them does not mean
+those projects endorse Flare.
+
+The license texts are in the "licenses" folder next to this file.
+
+
+sharex.png
+  The ShareX logo, by the ShareX Team.
+  Original: ShareX.HelpersLib/Resources/ShareX_Logo.png
+    https://github.com/ShareX/ShareX/blob/d1efe0c7ac/ShareX.HelpersLib/Resources/ShareX_Logo.png
+  License: GNU General Public License, version 3 (licenses/GPL-3.0.txt)
+    https://github.com/ShareX/ShareX/blob/d1efe0c7ac/LICENSE.txt
+  Changes: scaled from 256 px to 72 px.
+
+itake.png
+  iTake's app icon. The artwork is the "Neocat & Neofox snuggle" emote by
+  Volpeon (https://volpeon.ink/emojis/), which iTake uses as its icon.
+  Original: preview/AppIcon.png
+    https://github.com/SerStars/iTake/blob/af7baeb52b/preview/AppIcon.png
+  License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0
+    https://creativecommons.org/licenses/by-nc-sa/4.0/
+  Changes: scaled from 1024 px to 72 px. This copy is under the same license.
+
+flameshot.svg
+  The Flameshot logo, by the Flameshot authors.
+  Original: data/img/app/flameshot.svg
+    https://github.com/flameshot-org/flameshot/blob/dcb1291a5c/data/img/app/flameshot.svg
+  License: Free Art License 1.3 (licenses/Free-Art-License-1.3.txt)
+    https://github.com/flameshot-org/flameshot/blob/dcb1291a5c/data/img/app/flameshotLogoLicense.txt
+  Changes: none.
+
+spectacle.svg
+  Spectacle's icon from the Breeze icon theme.
+  Copyright (C) 2014 Uri Herrera and others.
+  Original: icons/apps/48/ksnapshot.svg
+    https://github.com/KDE/breeze-icons/blob/7c81d01ed6/icons/apps/48/ksnapshot.svg
+  License: GNU Lesser General Public License, version 3 or later
+    (licenses/LGPL-3.0.txt and licenses/GPL-3.0.txt; the theme's own notice is
+    licenses/Breeze-icons-notice.txt)
+    https://github.com/KDE/breeze-icons/blob/7c81d01ed6/COPYING-ICONS
+  Changes: none.
+
+ember.svg
+  The Ember mark, by FlintSH, who also makes Flare.
+  Original: Ember's launcher icon, app/src/main/res/drawable/ic_launcher_foreground.xml
+    https://github.com/FlintSH/Ember/blob/747cffe/app/src/main/res/drawable/ic_launcher_foreground.xml
+  License: MIT.
+  Changes: redrawn as SVG from the Android drawable, with the same paths and
+  colors.

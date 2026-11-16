@@ -20,7 +20,10 @@ const { frontmatter } = useData()
       >
         <BuildStamp /></div
     ></template>
-    <template #doc-before><BuildStamp /></template>
+    <template #doc-before><BuildStamp part="notice" /></template>
+    <template #doc-after
+      ><div class="doc-build-stamp"><BuildStamp part="stamp" /></div
+    ></template>
     <template #layout-bottom><ProjectCredit /></template>
   </Layout>
 </template>
