@@ -23,6 +23,12 @@ const suite = databaseUrl ? describe : describe.skip
 vi.setConfig({ testTimeout: 30_000 })
 
 const ORIGIN = 'https://files.example.com'
+const TRANSFER_PREFIX = `${ORIGIN}/api/mcp/transfer/`
+
+/** A transfer URL of this instance: the fixed address, then a 43-character secret. */
+const isTransferUrl = (url: string) =>
+  url.startsWith(TRANSFER_PREFIX) &&
+  /^[A-Za-z0-9_-]{43}$/.test(url.slice(TRANSFER_PREFIX.length))
 const TOKEN = 'flr_database-suite-agent-token-0123456789abcdefghij'
 const OTHER_TOKEN = 'flr_database-suite-other-token-0123456789abcdefghij'
 const SCRIPT_TOKEN = 'flr_database-suite-script-token-0123456789abcdefghi'
@@ -244,9 +250,7 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
     it('store a digest of the secret, never the secret', async () => {
       const principal = await principalOf()
       const made = await transfer.createDownloadUrl(principal, ORIGIN, 'file-1')
-      expect(made.url).toMatch(
-        new RegExp(`^${ORIGIN}/api/mcp/transfer/[A-Za-z0-9_-]{43}$`)
-      )
+      expect(isTransferUrl(made.url)).toBe(true)
       const secret = secretOf(made.url)
       const rows = await prisma.agentTransfer.findMany()
       expect(rows).toHaveLength(1)
@@ -1051,9 +1055,7 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
         shown: 'nothing',
         note: 'Files of type application/pdf are not shown here. Use the download link.',
       })
-      expect(data.download_url).toMatch(
-        new RegExp(`^${ORIGIN}/api/mcp/transfer/[A-Za-z0-9_-]{43}$`)
-      )
+      expect(isTransferUrl(data.download_url)).toBe(true)
       // The link is a row made for this token, and only its digest is stored.
       const row = await rowOf(data.download_url)
       expect(row).toMatchObject({
@@ -1126,8 +1128,10 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
       })
       const later = await callTool('read_file', { file: 'alex-report' })
       expect(
-        JSON.parse(later.body.result.content[0].text).download_url
-      ).toMatch(new RegExp(`^${ORIGIN}/api/mcp/transfer/`))
+        JSON.parse(later.body.result.content[0].text).download_url.startsWith(
+          TRANSFER_PREFIX
+        )
+      ).toBe(true)
       expect(await prisma.agentTransfer.count()).toBe(1)
     })
 
