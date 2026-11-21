@@ -51,6 +51,15 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'no-store' },
         ],
       },
+      // A transfer URL is a short-lived bearer link: it must never travel in
+      // a Referer header.
+      {
+        source: '/api/mcp/transfer/:path*',
+        headers: [
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
       {
         source: '/api/auth/email/:path*',
         headers: [{ key: 'Cache-Control', value: 'no-store' }],

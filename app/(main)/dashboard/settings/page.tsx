@@ -10,6 +10,7 @@ import {
   readPreferenceSection,
 } from '@/lib/preferences/navigation'
 import { getBuildInfo } from '@/lib/releases'
+import { publicOrigin } from '@/lib/security/public-origin'
 
 import { requireDashboardPage } from '../page-access'
 
@@ -37,6 +38,7 @@ export default async function SettingsPage({
       buildInfo={getBuildInfo()}
       recovery={recovery}
       initialEveryoneCanInvite={inviteAccess}
+      publicAddress={publicOrigin()?.href.replace(/\/+$/, '') ?? null}
     />
   )
 }

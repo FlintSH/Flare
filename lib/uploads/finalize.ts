@@ -69,7 +69,28 @@ type UploadInput = {
   signal?: AbortSignal
   /** Publish in the caller's transaction; the caller enqueues processing after it commits. */
   transaction?: Prisma.TransactionClient
+  /**
+   * A caller's own last check, run in the publishing transaction after the
+   * account, role and token have been read again. Throw to refuse the upload.
+   */
+  authorize?: (tx: Prisma.TransactionClient) => Promise<void>
+  /**
+   * Store the type the bytes are when the sender named none. Tools such as
+   * curl send `application/octet-stream` for most formats, which would
+   * otherwise be refused as a mismatch. The bytes decide; a claimed type is
+   * still checked against them.
+   */
+  adoptDetectedType?: boolean
 }
+
+/** What a sender that names no type sends. */
+const UNNAMED_TYPE = 'application/octet-stream'
+
+/**
+ * How much of a file's start decides what type its bytes are. A caller that
+ * names the type itself reads the same bytes, so the two always agree.
+ */
+export const TYPE_CHECK_BYTES = 4100
 
 const validatedUpload = Symbol('validated upload')
 type PreparedUpload = UploadInput & {
@@ -89,13 +110,18 @@ export async function prepareUpload(
   if (size > 0) {
     const head = await storage.getFileStream(
       filePath,
-      { start: 0, end: 4099 },
+      { start: 0, end: TYPE_CHECK_BYTES - 1 },
       input.signal
     )
     for await (const chunk of head) chunks.push(Buffer.from(chunk))
   }
   const type = await validateFileType(Buffer.concat(chunks), mimeType)
-  if (!type.valid)
+  const adopted =
+    !type.valid &&
+    input.adoptDetectedType &&
+    mimeType === UNNAMED_TYPE &&
+    type.detectedType
+  if (!type.valid && !adopted)
     throw new UploadError(
       `File type mismatch: detected ${type.detectedType}, claimed ${mimeType}`
     )
@@ -103,7 +129,12 @@ export async function prepareUpload(
     input.passwordHash !== undefined
       ? input.passwordHash
       : await hashFilePassword(options.password)
-  return { ...input, passwordHash, [validatedUpload]: true }
+  return {
+    ...input,
+    ...(adopted && { mimeType: adopted }),
+    passwordHash,
+    [validatedUpload]: true,
+  }
 }
 
 /** How long publishing an upload may wait for a database connection. */
@@ -171,6 +202,7 @@ export async function publishPreparedUpload(input: PreparedUpload) {
           () => new UploadError('The token upload profile was removed.', 403)
         )
     }
+    await input.authorize?.(tx)
     assertFits(uploadCapacity(config, access, fresh.storageUsed), size)
     const sizeMB = bytesToMB(size)
     if (expiry && expiry.expiresAt <= new Date())

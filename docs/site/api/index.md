@@ -36,19 +36,20 @@ Use the builder to see how your choices change a request. It generates a command
 
 ## Choose the right connection
 
-| What you want to do                                                | Start here                                                              |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------- |
-| Give a script only the permissions it needs                        | [Authentication and scopes](./authentication)                           |
-| Upload, list, search, or filter files                              | [Files API](./files)                                                    |
-| Upload a large file in parts                                       | [Chunked uploads](./files#chunked-uploads)                              |
-| Browse shared archives or manage archives in your library          | [Archive API contracts](./archives)                                     |
-| Create, list, or remove short links                                | [Short links API](./short-links)                                        |
-| Run your own automation after an upload                            | [Webhooks](./webhooks)                                                  |
-| Call Flare from a web app or PWA in the browser                    | [Call Flare from a web app](./authentication#call-flare-from-a-web-app) |
-| Start with working code                                            | [Recipes](./recipes)                                                    |
-| Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)                                |
-| Build browser session history or audit views                       | [Sessions and audit contracts](./activity)                              |
-| Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)                              |
+| What you want to do                                                | Start here                                                                |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| Give a script only the permissions it needs                        | [Authentication and scopes](./authentication)                             |
+| Upload, list, search, or filter files                              | [Files API](./files)                                                      |
+| Upload a large file in parts                                       | [Chunked uploads](./files#chunked-uploads)                                |
+| Browse shared archives or manage archives in your library          | [Archive API contracts](./archives)                                       |
+| Create, list, or remove short links                                | [Short links API](./short-links)                                          |
+| Run your own automation after an upload                            | [Webhooks](./webhooks)                                                    |
+| Call Flare from a web app or PWA in the browser                    | [Call Flare from a web app](./authentication#call-flare-from-a-web-app)   |
+| Let an AI agent find, read, upload, and organize files             | [Connect an agent](/guide/agents), then the [MCP server reference](./mcp) |
+| Start with working code                                            | [Recipes](./recipes)                                                      |
+| Integrate with browser sign-in, passkey requirements, and recovery | [Session security contracts](./security)                                  |
+| Build browser session history or audit views                       | [Sessions and audit contracts](./activity)                                |
+| Understand the rest of the application's routes                    | [Endpoint inventory](./endpoint-inventory)                                |
 
 For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the uploader configuration for you in **Profile → Uploads → Screenshot tools and scripts**. Those downloads already contain your account upload credential. Named tokens are useful when building a custom connection, restricting permissions, or revoking one tool independently.
 
@@ -59,6 +60,8 @@ For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the upload
 - [Read the runnable Node.js example](https://github.com/FlintSH/Flare/blob/main/examples/integrations.mjs). It supports both uploading and receiving signed webhooks without extra packages.
 
 The OpenAPI security scheme is HTTP Bearer authentication. Flare's permission names are application scopes; this is not an OAuth authorization flow.
+
+The [MCP server](./mcp) is not in the OpenAPI document. It describes itself: `tools/list` returns the JSON Schema of every tool's arguments and answer for the token that asks.
 
 ## Response conventions
 
@@ -83,4 +86,6 @@ The API paths currently have no version prefix. These references describe the im
 
 The [sessions and audit routes](./activity) require an interactive browser session. The request builder deliberately offers no token-authenticated session-revocation or audit operation. Audit events do not add a webhook type; `file.ready` and its schema/signing/retry behavior are unchanged.
 
-Named tokens currently cover file listing/uploads and short links. Account administration, token/webhook management, file deletion, changing an existing file's settings, and organization management are dashboard operations. The [endpoint inventory](./endpoint-inventory) identifies their authentication boundaries without implying that they are additional bearer-token APIs.
+Over the REST API, named tokens currently cover file listing/uploads and short links. Account administration, token/webhook management, file deletion, changing an existing file's settings, and organization management are dashboard operations. The [endpoint inventory](./endpoint-inventory) identifies their authentication boundaries without implying that they are additional bearer-token APIs.
+
+The [MCP server](./mcp) is a second way in, built for AI agents and off until an administrator enables it. A token with **Agent access** can read file contents, organize, change sharing, and delete through MCP tools when it holds the matching [scopes](./authentication#scope-reference). Those scopes do nothing over REST, and MCP has no tools for account administration, tokens, or webhooks.

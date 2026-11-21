@@ -6,6 +6,7 @@ import {
   CORS_ENV,
   applyCors,
   corsWarnings,
+  originAllowed,
   preflight,
   readCorsPolicy,
 } from '@/lib/http/cors'
@@ -181,6 +182,118 @@ describe('preflight', () => {
   })
 })
 
+describe('the MCP endpoint', () => {
+  const mcpPreflight = preflight('mcp')
+
+  it('lets an allowed origin POST with its credential and the protocol headers', async () => {
+    vi.stubEnv(CORS_ENV, SITE)
+    const response = await mcpPreflight(preflightRequest('/api/mcp', 'POST'))
+    expect(response.status).toBe(204)
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SITE)
+    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('POST')
+    expect(response.headers.get('Access-Control-Allow-Headers')).toBe(
+      'Authorization, Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id'
+    )
+    expect(response.headers.get('Access-Control-Max-Age')).toBe('600')
+    expect(response.headers.has('Access-Control-Allow-Credentials')).toBe(false)
+  })
+
+  it('allows no other method and no origin that is not listed', async () => {
+    vi.stubEnv(CORS_ENV, SITE)
+    for (const method of ['GET', 'DELETE', 'PUT', 'PATCH']) {
+      const response = await mcpPreflight(preflightRequest('/api/mcp', method))
+      expect(response.headers.has('Access-Control-Allow-Origin'), method).toBe(
+        false
+      )
+    }
+    const foreign = await mcpPreflight(
+      preflightRequest('/api/mcp', 'POST', 'https://evil.example')
+    )
+    expect(foreign.headers.has('Access-Control-Allow-Origin')).toBe(false)
+    expect(foreign.headers.has('Access-Control-Allow-Headers')).toBe(false)
+  })
+
+  it('sends no CORS headers while FLARE_CORS_ORIGINS is unset', async () => {
+    vi.stubEnv(CORS_ENV, '')
+    const response = await mcpPreflight(preflightRequest('/api/mcp', 'POST'))
+    expect(response.headers.has('Access-Control-Allow-Origin')).toBe(false)
+  })
+
+  it('lets an allowed origin read answers to a POST, and the sign-in challenge', () => {
+    vi.stubEnv(CORS_ENV, SITE)
+    const response = applyCors(
+      request('/api/mcp', { method: 'POST' }),
+      new Response('{}', { status: 401 }),
+      'mcp'
+    )
+    expect(response.headers.get('Access-Control-Allow-Origin')).toBe(SITE)
+    expect(response.headers.get('Access-Control-Expose-Headers')).toBe(
+      'WWW-Authenticate, Retry-After'
+    )
+    for (const method of ['GET', 'DELETE']) {
+      const other = applyCors(
+        request('/api/mcp', { method }),
+        new Response('{}', { status: 405 }),
+        'mcp'
+      )
+      expect(other.headers.has('Access-Control-Allow-Origin'), method).toBe(
+        false
+      )
+    }
+  })
+
+  describe('origin check', () => {
+    const from = (origin: string | null, url = `${APP}/api/mcp`) => {
+      const headers = new Headers()
+      if (origin) headers.set('Origin', origin)
+      return new Request(url, { method: 'POST', headers })
+    }
+
+    it('passes a request without an Origin, as non-browser clients send', () => {
+      vi.stubEnv(CORS_ENV, '')
+      expect(originAllowed(from(null), APP)).toBe(true)
+      expect(originAllowed(from(null), null)).toBe(true)
+    })
+
+    it("passes Flare's own origin: its public address, or the request's own", () => {
+      vi.stubEnv(CORS_ENV, '')
+      expect(originAllowed(from(APP), APP)).toBe(true)
+      // Behind a reverse proxy the request URL is the internal one.
+      expect(
+        originAllowed(
+          from('https://files.example.com', 'http://127.0.0.1:3000/api/mcp'),
+          'https://files.example.com'
+        )
+      ).toBe(true)
+      // Without a public address, the request's own origin is all there is.
+      expect(originAllowed(from(APP), null)).toBe(true)
+    })
+
+    it('passes an origin FLARE_CORS_ORIGINS allows', () => {
+      vi.stubEnv(CORS_ENV, `${SITE} http://localhost:5173`)
+      expect(originAllowed(from(SITE), APP)).toBe(true)
+      expect(originAllowed(from('http://localhost:5173'), APP)).toBe(true)
+      vi.stubEnv(CORS_ENV, '*')
+      expect(originAllowed(from('https://anything.example'), APP)).toBe(true)
+    })
+
+    it('refuses every other origin', () => {
+      vi.stubEnv(CORS_ENV, SITE)
+      for (const origin of [
+        'https://evil.example',
+        'http://flare.test',
+        'https://flare.test:8443',
+        'https://app.flare.test',
+        'https://app.example.com.evil.example',
+        'null',
+      ])
+        expect(originAllowed(from(origin), APP), origin).toBe(false)
+      vi.stubEnv(CORS_ENV, '')
+      expect(originAllowed(from(SITE), APP)).toBe(false)
+    })
+  })
+})
+
 describe('answers to cross-origin requests', () => {
   const ok = () => Response.json({ data: [] })
 
@@ -302,6 +415,22 @@ describe('route files', () => {
         `${relative(process.cwd(), file)} OPTIONS`
       ).toBe(tokenRoute)
     }
+  })
+})
+
+describe('the MCP route', () => {
+  it('answers preflights with the MCP headers and checks the origin itself', () => {
+    const source = readFileSync(
+      join(process.cwd(), 'app/api/mcp/route.ts'),
+      'utf8'
+    )
+    // Its OPTIONS handler answers 404 while MCP is off, so it wraps the
+    // preflight instead of exporting it as the other routes do.
+    expect(source).toContain("preflight('mcp')")
+    expect(source).toMatch(/export async function OPTIONS\b/)
+    expect(source).not.toContain("preflight('token')")
+    expect(source).toContain("applyCors(request, response, 'mcp')")
+    expect(source).toContain('originAllowed(request')
   })
 })
 

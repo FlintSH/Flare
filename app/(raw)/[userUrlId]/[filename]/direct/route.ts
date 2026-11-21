@@ -30,7 +30,10 @@ export const GET = api(
 
     const storageProvider = await getStorageProvider()
 
-    const directUrl = await storageProvider.getPublicUrl(file.path)
+    const directUrl = await storageProvider.getPublicUrl(
+      file.path,
+      file.mimeType
+    )
     if (directUrl) {
       return NextResponse.json({ url: directUrl })
     }

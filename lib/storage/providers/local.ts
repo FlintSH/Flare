@@ -201,13 +201,17 @@ export class LocalStorageProvider implements StorageProvider {
     }
   }
 
-  async getPublicUrl(_path: string): Promise<string | null> {
+  async getPublicUrl(
+    _path: string,
+    _contentType?: string
+  ): Promise<string | null> {
     return null
   }
 
   async getDownloadUrl(
     _path: string,
-    _filename?: string
+    _filename?: string,
+    _contentType?: string
   ): Promise<string | null> {
     return null
   }

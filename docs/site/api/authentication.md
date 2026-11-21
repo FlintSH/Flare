@@ -5,17 +5,19 @@ description: Create, restrict, rotate, and troubleshoot Flare API tokens.
 
 # Authentication & scopes
 
-With `tokens.manage`, create one named API token for each script or service in **Profile → Integrations**. Give it only the permissions it uses. You can revoke a connection without interrupting your other tools.
+With `tokens.manage`, create one named API token for each script, service, or AI agent in **Profile → Integrations**. Give it only the permissions it uses. You can revoke a connection without interrupting your other tools.
+
+A token works with the REST API, with the [MCP server](./mcp) that agents connect to, or with both, depending on its scopes. The [scope reference](#scope-reference) says which.
 
 ## Create a token
 
 1. In **Profile → Integrations**, choose **New token** to open the creation dialog. Choose a name of 1–80 characters. Use the name to identify the machine, service, or purpose.
-2. Select one or more scopes from the table below. The form offers a scope only while your role allows at least one of its operations, as listed in [Scopes and account roles](#scopes-and-account-roles). For example, `urls:write` appears with either `links.create` or `links.delete`.
+2. Select one or more scopes from the table below. The form offers a scope only while your role allows at least one of its operations, as listed in [Scopes and account roles](#scopes-and-account-roles). For example, `urls:write` appears with either `links.create` or `links.delete`. While the instance's [MCP server](/admin/agents) is on, the form also has an **Agent access** box; checking it adds the scopes only agents use and groups the list under **Files** and **Short links**. See [tokens for agents](#tokens-for-agents).
 3. Review **Expires after**, which starts at **90 days**. Choose 30 days, 90 days, 1 year, or Never; Never keeps the token active until revoked.
 4. If it uploads files, optionally bind it to one of your saved upload profiles.
 5. Create the token and save the displayed `flr_…` secret in your tool's secret store.
 
-The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. Token and webhook changes for one account run one at a time, so concurrent requests cannot exceed it. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes.
+The full value is shown once. Flare stores a hash rather than the recoverable token. If you lose it, revoke the token and create a replacement. Each account can have **50 active named tokens**. Expired and revoked tokens do not count toward that limit. Token and webhook changes for one account run one at a time, so concurrent requests cannot exceed it. The integrations screen retrieves the latest 100 token records and shows creation, expiration, revocation, and last-use information. Each token also lists the scopes it can still use with your current role, and the upload profile it's bound to, if any. The bound profile is the outlined chip with a sliders icon; the filled chips are scopes. A token an agent can use also has an outlined **Agent access** chip.
 
 ## Send a token
 
@@ -89,12 +91,19 @@ Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/c
 
 ## Scope reference
 
-| Scope          | Allowed methods and paths                                                                                                                                            |
-| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `files:read`   | `GET /api/files`; `GET /api/files/types`; `GET /api/files/timeline`                                                                                                  |
-| `files:upload` | `POST /api/files`; `POST`, `GET`, `PUT /api/files/chunks`; `GET`, `PUT /api/files/chunks/{uploadId}/part/{partNumber}`; `POST /api/files/chunks/{uploadId}/complete` |
-| `urls:read`    | `GET /api/urls`                                                                                                                                                      |
-| `urls:write`   | `POST /api/urls`; `DELETE /api/urls/{id}`                                                                                                                            |
+| Scope            | Name in the token form | Works with       | What it allows                                                                                                                                                                                                   |
+| ---------------- | ---------------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `files:upload`   | Upload files           | REST API and MCP | REST: `POST /api/files`; `POST`, `GET`, `PUT /api/files/chunks`; `GET`, `PUT /api/files/chunks/{uploadId}/part/{partNumber}`; `POST /api/files/chunks/{uploadId}/complete`. MCP: upload files and create pastes. |
+| `files:read`     | Read files             | REST API and MCP | REST: `GET /api/files`; `GET /api/files/types`; `GET /api/files/timeline`. MCP: search and list files, folders, and tags.                                                                                        |
+| `files:content`  | Read file contents     | MCP              | Read text, see images and the text in them, and get download links, private files included.                                                                                                                      |
+| `files:organize` | Organize files         | MCP              | Create, rename, and remove folders and tags, move and tag files, and schedule or cancel an expiry.                                                                                                               |
+| `files:share`    | Change sharing         | MCP              | Change files' visibility and passwords, create or revoke folder links, and schedule an expiry that makes files private.                                                                                          |
+| `files:delete`   | Delete files           | MCP              | Delete files permanently, and schedule an expiry that deletes them.                                                                                                                                              |
+| `urls:read`      | Read short links       | REST API and MCP | REST: `GET /api/urls`. MCP: list short links.                                                                                                                                                                    |
+| `urls:write`     | Manage short links     | REST API and MCP | REST: `POST /api/urls`; `DELETE /api/urls/{id}`. MCP: create and delete short links.                                                                                                                             |
+| `mcp`            | Agent access           | MCP              | Marks the token as one an agent may use: the MCP endpoint accepts no token without it. By itself it allows only `get_account`.                                                                                   |
+
+**Works with** says where Flare honors a scope. The REST API does not honor a scope marked **MCP**: a token holding `files:delete` still cannot delete a file through `DELETE /api/files/{id}`, and one holding `files:content` still cannot download a private file through `/api/files/{id}/download`. Those scopes take effect only through the [MCP tools](./mcp#authorization-matrix). In the other direction, a token works on the MCP endpoint only while it carries `mcp`, so the tokens your scripts already use cannot drive an agent.
 
 Scopes are independent. `files:upload` does not include listing, and `urls:write` does not include listing. Select both relevant scopes when a service needs both capabilities.
 
@@ -102,7 +111,7 @@ The `{uploadId}` and `{id}` path segments in these routes accept letters, digits
 
 `files:read` returns your file metadata, including private files. It does **not** authorize private file downloads, thumbnails, or OCR routes. Those use the file's sharing rules and browser session. `files:upload` does not provide a chunk cancellation or uploaded-parts listing endpoint.
 
-Named tokens do not authorize the following operations:
+Over the REST API, named tokens do not authorize the following operations, whatever their scopes:
 
 - Creating or revoking tokens, managing webhooks, or retrieving the account upload token.
 - Enrolling or disabling two-factor authentication, replacing recovery codes, or registering/managing passkeys.
@@ -113,9 +122,27 @@ Named tokens do not authorize the following operations:
 
 This remains true when the token's owner is an administrator. See [all route boundaries](./endpoint-inventory) if you are investigating a request used by the dashboard.
 
+An agent connected through the MCP server can organize, share, and delete its owner's files with the MCP scopes above. It still cannot do the first three items in this list, and it has no tools yet for upload profiles or archives; the [MCP coverage table](./mcp#what-mcp-covers-of-the-http-api) has the whole boundary.
+
+### Tokens for agents
+
+**Connect an agent** in **Profile → Integrations** creates a token with **Agent access** and the actions you pick, and shows the setup for your client; [Connect an agent](/guide/agents) walks through it. You can also check **Agent access** in **New token**, which then shows the scopes that only agents use. Both appear only while an administrator has the [MCP server turned on](/admin/agents), and both make ordinary named tokens: they count toward the limit of 50, expire and are revoked the same way, and are listed with an outlined **Agent access** chip.
+
+<div style="max-width: 512px; margin-inline: auto">
+<Screenshot src="/screenshots/agents/new-token-agent-access.webp" alt="New API token dialog with Agent access checked, which adds Read file contents, Organize files, Change sharing and Delete files to the Files group beside Upload files and Read files, above a Short links group, an Upload profile menu and Expires after" caption="Checking Agent access adds the scopes only agents use and groups the list." />
+</div>
+
+Flare applies three rules when a token for agents is created, each with a `400` and a message that names the scopes:
+
+- **The MCP server must be on.** Otherwise: `The MCP server is turned off on this instance, so tokens cannot have Agent access.`
+- **A scope that works only with MCP needs Agent access on the same token**, since it would do nothing without it.
+- **Every scope must be one your role can use now.** A token cannot be given `files:delete` while your role lacks `files.delete`, for example.
+
+A token made only of REST scopes is created exactly as before. Turning the MCP server off later keeps tokens and their scopes; the MCP endpoint stops answering, and the token's REST scopes keep working.
+
 ## Scopes and account roles
 
-A scope restricts the token; it does not grant a permission missing from the owner's current [roles](/admin/roles). Every request must satisfy both checks:
+A scope restricts the token; it does not grant a permission missing from the owner's current [roles](/admin/roles). Every request must satisfy both checks. For the REST API:
 
 | Token operation                     | Named-token scope | Current account permission |
 | ----------------------------------- | ----------------- | -------------------------- |
@@ -125,7 +152,9 @@ A scope restricts the token; it does not grant a permission missing from the own
 | Create a short link                 | `urls:write`      | `links.create`             |
 | Delete an owned short link          | `urls:write`      | `links.delete`             |
 
-`tokens.manage` controls issuing, rotating, and revoking credentials. Removing it alone does not disable already-issued named tokens or the legacy upload credential while the owner still holds the required operation permissions. Revoke/rotate the credential or remove its operation grants to stop its use.
+MCP tools follow the same rule with their own table, the [authorization matrix](./mcp#authorization-matrix).
+
+`tokens.manage` controls issuing, rotating, and revoking credentials, including tokens for agents. Removing it alone does not disable already-issued named tokens or the legacy upload credential while the owner still holds the required operation permissions. Revoke/rotate the credential or remove its operation grants to stop its use.
 
 Everyone initially grants these personal capabilities. A role change can revoke them on the next request without waiting for token expiration. Granting the permission again restores the authority of an otherwise valid token; revoke it too if it should never be used again. Administrator satisfies account permission checks but does not expand a named token's selected scopes or supported routes.
 
@@ -163,7 +192,7 @@ Security management requires a browser session and fresh identity proof. Neither
 
 ## Rotate or revoke a token
 
-For planned rotation, create a replacement, update the tool's stored credential, and run a small test. Then revoke the old token in **Profile → Integrations**. Revocation takes effect on subsequent authentication. Upload finalization also checks whether a named token expired or was revoked while bytes were being transferred.
+For planned rotation, create a replacement, update the tool's stored credential, and run a small test. Then revoke the old token in **Profile → Integrations**. Revocation takes effect on subsequent authentication. Upload finalization also checks whether a named token expired or was revoked while bytes were being transferred. Revoking a token that has Agent access disconnects its agent on the next call and ends the [upload and download URLs](./mcp#transfer-urls) it was given.
 
 The last-used timestamp is best-effort activity metadata, not a full audit log. Never put bearer tokens into a public repository, a screenshot, a URL, or a support report. A token is a credential even when it can only upload.
 
@@ -178,6 +207,7 @@ The last-used timestamp is best-effort activity metadata, not a full audit log. 
 | `403` says you lack permission                      | Ask the administrator to review the owner’s current role grants. Token scope alone does not grant account authority.                                                                                                                                                                                                     |
 | `403` mentions an upload profile                    | Remove conflicting overrides, select the bound profile, and confirm it still exists.                                                                                                                                                                                                                                     |
 | A web app on another site gets `Failed to fetch`    | The instance hasn't allowed the app's origin. Ask the operator to add it to [`FLARE_CORS_ORIGINS`](#call-flare-from-a-web-app), written exactly as the browser sends it, such as `http://localhost:5173`. Session-only routes never work from another site, and a page can't read answers the session cookie authorized. |
+| An agent gets `401` from `/api/mcp`                 | The token has no **Agent access**, or it was revoked or expired. A `404` there means the MCP server is off. See the [agent troubleshooting table](/guide/agents#troubleshooting).                                                                                                                                        |
 | `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                                                                    |
 
 Missing credentials, unknown tokens, expired tokens, revoked tokens, missing scopes, and required email verification intentionally share a generic `401` response. The server does not reveal which authentication check failed to an unauthenticated caller. An authenticated request lacking a current role permission returns `403`; restoring that role grant can restore access without issuing another token.

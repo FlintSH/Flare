@@ -5,6 +5,7 @@ import { startFileExpiryWorker } from '@/lib/files/expiry-worker'
 import { CORS_ENV, corsWarnings } from '@/lib/http/cors'
 import { startWebhookWorker } from '@/lib/integrations/worker'
 import { loggers } from '@/lib/logger'
+import { startTransferCleanupWorker } from '@/lib/mcp/worker'
 import { startStorageDeletionWorker } from '@/lib/storage/deletion-worker'
 import { startOcrTagWorker } from '@/lib/tags/worker'
 
@@ -41,6 +42,7 @@ export async function runStartupTasks() {
     ['email delivery', startMailWorker],
     ['webhook delivery', startWebhookWorker],
     ['OCR tag retries', startOcrTagWorker],
+    ['transfer URL cleanup', startTransferCleanupWorker],
   ]
   if (process.env.NODE_ENV === 'production')
     tasks.push(['memory monitor', startMemoryMonitor])

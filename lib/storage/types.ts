@@ -64,15 +64,21 @@ export interface StorageProvider {
    * Returns a URL a client can be redirected to in order to fetch the object
    * directly from the backend (e.g. an S3 presigned/public URL), or `null` when
    * the backend has no such URL and the caller must stream the bytes itself
-   * (e.g. local filesystem).
+   * (e.g. local filesystem). `contentType` is the type to send the bytes
+   * under, where the backend can be told: the type Flare recorded for the
+   * file, which can differ from the one the object was stored with.
    */
-  getPublicUrl(path: string): Promise<string | null>
+  getPublicUrl(path: string, contentType?: string): Promise<string | null>
   /**
    * Like {@link getPublicUrl} but for forced downloads (attachment). Returns a
    * URL to redirect to, or `null` when the caller must stream the bytes with
    * attachment headers itself.
    */
-  getDownloadUrl(path: string, filename?: string): Promise<string | null>
+  getDownloadUrl(
+    path: string,
+    filename?: string,
+    contentType?: string
+  ): Promise<string | null>
 }
 
 export interface S3Config {

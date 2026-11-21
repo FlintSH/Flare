@@ -55,6 +55,7 @@ model User {
   defaultUploadProfileId      String?
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
+  agentTransfers              AgentTransfer[]
   webhooks                    Webhook[]
 
   @@index([inviteId])
@@ -116,17 +117,17 @@ model AuthRateLimit {
 }
 
 model BrowserSession {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   userId         String
   sessionVersion Int
   authMethod     String
   ipAddress      String?
   userAgent      String?
-  createdAt      DateTime @default(now())
-  lastSeenAt     DateTime @default(now())
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
   expiresAt      DateTime
   revokedAt      DateTime?
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt, expiresAt])
   @@index([expiresAt])
@@ -355,6 +356,30 @@ model ApiToken {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+// A short-lived URL an MCP tool hands an agent to move one file's bytes
+// outside the model. Only a digest of the URL's secret is stored. The row
+// records who it was made for and what it allows, all rechecked at use.
+model AgentTransfer {
+  id         String    @id @default(cuid())
+  secretHash String    @unique
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The credential it was made for, such as `token:<id>`.
+  credential String
+  // `download` or `upload`.
+  kind       String
+  fileId     String?
+  // An upload's fixed options, with its password already hashed.
+  options    Json?
+  expiresAt  DateTime
+  // An upload is single use: claimed when it starts.
+  claimedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, credential])
+  @@index([expiresAt])
 }
 
 model Webhook {

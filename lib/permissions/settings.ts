@@ -14,6 +14,28 @@ const generalPermissions: Record<string, Permission> = {
   credits: 'settings.general',
   ocr: 'settings.general',
 }
+/**
+ * The MCP server's fields each have their own permission: turning it on opens
+ * an endpoint agents authenticate to, the same class of change as
+ * registration and OIDC.
+ */
+const mcpPermissions: Record<string, Permission> = {
+  enabled: 'settings.security',
+}
+function mcpPatchAllowed(
+  subject: { permissions?: readonly string[] },
+  value: unknown
+): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const fields = Object.keys(value)
+  return (
+    fields.length > 0 &&
+    fields.every(
+      (field) =>
+        mcpPermissions[field] && hasPermission(subject, mcpPermissions[field])
+    )
+  )
+}
 export function settingsPatchAllowed(
   subject: { permissions?: readonly string[] },
   settings: Record<string, unknown>
@@ -26,10 +48,11 @@ export function settingsPatchAllowed(
       if (key === 'general')
         return (
           Object.keys(value).length > 0 &&
-          Object.keys(value).every(
-            (field) =>
-              generalPermissions[field] &&
-              hasPermission(subject, generalPermissions[field])
+          Object.entries(value).every(([field, fieldValue]) =>
+            field === 'mcp'
+              ? mcpPatchAllowed(subject, fieldValue)
+              : generalPermissions[field] &&
+                hasPermission(subject, generalPermissions[field])
           )
         )
       return Boolean(

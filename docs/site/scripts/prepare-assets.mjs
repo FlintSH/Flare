@@ -165,6 +165,7 @@ for (const [directory, name] of [
   ['invites', 'admin-invite'],
   ['invites', 'join-with-invite'],
   ['invites', 'member-invites'],
+  ['agents', 'connect-agent'],
 ]) {
   await copyFile(
     resolve(root, '../../.github/assets', directory, `${name}.webm`),

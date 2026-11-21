@@ -163,6 +163,12 @@ const features = [
     '/api/webhooks',
   ],
   [
+    'Automate',
+    'AI agents (MCP)',
+    'Connect Claude Code, Codex, Cursor, and other MCP clients to your account. They find, read, upload, and organize files within the actions you allow.',
+    '/guide/agents',
+  ],
+  [
     'Host & administer',
     'Guided setup',
     'Create an administrator, choose storage and registration policy, then optionally personalize and configure email.',

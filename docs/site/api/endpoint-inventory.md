@@ -9,6 +9,8 @@ Flare's dashboard also talks to HTTP routes. Their existence does not make all o
 
 Use the [OpenAPI document](/openapi.json) for custom clients using `flr_…` tokens. It describes the **13 supported method/path combinations** across eight paths. The rest of this page is a map for operators and contributors, not a promise of a general administrator REST API.
 
+AI agents do not call these routes. They connect to the [MCP server](#mcp-server-routes), whose tools do the same work through the same code under their own scopes. The [MCP coverage table](./mcp#what-mcp-covers-of-the-http-api) lists, for every route on this page, the tool that covers it or the reason none does.
+
 Paths use `{id}` for a dynamic segment. `{path}` and `{nextauth}` are catch-all path segments. Methods listed here are the implemented handlers; do not assume another method is supported because the path exists.
 
 ## Answers and errors
@@ -242,6 +244,17 @@ A `/api/settings` save that includes storage settings with S3 selected answers `
 
 `PATCH` and the legacy `POST` on `/api/settings` both save submitted custom CSS trimmed, with at most one blank line in a row. Earlier builds tidied it only in the `POST`, so CSS saved from Settings kept its extra blank lines.
 
+## MCP server routes
+
+These two routes are the [MCP server](./mcp). Both answer `404` with `{ "error": "Not found" }`, to every method, until an administrator [turns the server on](/admin/agents). Neither reads a session cookie or the legacy upload token, and neither is in the named-token OpenAPI document: MCP has its own protocol and its own [scopes](./authentication#scope-reference).
+
+| Path                         | Methods                    | Authentication and purpose                                                                                                                                                                                                                                                               |
+| ---------------------------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/mcp`                   | POST, GET, DELETE, OPTIONS | `POST`: one MCP JSON-RPC message, authenticated by a named token that has **Agent access** (`mcp`); each tool then needs its own scope and role permission. `GET` and `DELETE` answer `405`. `OPTIONS` answers the CORS preflight for [allowed origins](./mcp#browser-clients-and-cors). |
+| `/api/mcp/transfer/{ticket}` | GET, POST                  | No credential: `{ticket}` is a short-lived secret made by an MCP tool. `GET` downloads the one file the URL was made for, for 10 minutes. `POST` takes one multipart upload with the options the URL fixed, once, within 15 minutes. Rechecked against the token and role at use.        |
+
+A request to `/api/mcp` without a usable token answers `401` with `WWW-Authenticate: Bearer realm="Flare MCP"`. A request from a browser origin that is neither Flare's own nor listed in `FLARE_CORS_ORIGINS` answers `403`. A JSON-RPC batch answers `400`, and a body over 1 MiB `413`. A transfer URL that is unknown, expired, already used, of the other kind, or no longer allowed answers `404`; an upload URL in use by another request answers `409`. Transfer answers carry `Cache-Control: no-store` and `Referrer-Policy: no-referrer` and never CORS headers. See [transfer URLs](./mcp#transfer-urls) for what is rechecked and why these are bearer links.
+
 ## Public and bootstrap routes
 
 | Path                            | Methods   | Authentication and purpose                                                                                                                                                                      |
@@ -266,6 +279,6 @@ Every route that sets an account's name, address, or password applies one set of
 
 ## Maintaining an integration
 
-Build new automation against the named-token routes and their [OpenAPI schemas](/openapi.json). For dashboard behavior, treat route bodies and session flows as application internals that can evolve with Flare. There is currently no named-token administrator API, no general token-authorized file deletion/download API, and no chunk-cancel endpoint.
+Build new automation against the named-token routes and their [OpenAPI schemas](/openapi.json). For dashboard behavior, treat route bodies and session flows as application internals that can evolve with Flare. There is currently no named-token administrator API, no general token-authorized file deletion/download REST API, and no chunk-cancel endpoint. An agent that needs to read, organize, share, or delete its owner's files uses the [MCP server](./mcp) with a token that has Agent access.
 
 The route inventory is checked against the source tree when the documentation is validated, so a newly added route prompts a documentation update instead of silently expanding a token's authority.

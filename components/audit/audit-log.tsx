@@ -87,6 +87,7 @@ const ACRONYMS = new Set([
   'csv',
   'http',
   'id',
+  'mcp',
   'oidc',
   'ocr',
   'sso',

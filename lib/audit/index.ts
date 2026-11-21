@@ -274,6 +274,11 @@ export async function auditRequest(
     action?: string
     category?: string
     skipSuccess?: boolean
+    /**
+     * Whether the request only reads, when its method doesn't say: a POST
+     * that carries a read, such as an MCP tool call.
+     */
+    read?: boolean
   },
   handle: () => Promise<Response>
 ): Promise<Response> {
@@ -307,7 +312,7 @@ export async function auditRequest(
           // failures are recorded first.
           if (
             outcome === 'success' &&
-            (method === 'GET' || method === 'HEAD') &&
+            (options.read ?? (method === 'GET' || method === 'HEAD')) &&
             deferred.events.length < AUDIT_QUEUE_LIMIT
           )
             recordAuditLater(event)

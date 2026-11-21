@@ -87,6 +87,13 @@ export const configSchema = z.object({
       ocr: z.object({
         enabled: z.boolean().default(true),
       }),
+      // The MCP server agents connect to. Off until an administrator turns it
+      // on; while off, its routes answer as if they did not exist.
+      mcp: z
+        .object({
+          enabled: z.boolean().default(false),
+        })
+        .prefault({}),
       oidc: z
         .object({
           enabled: z.boolean().default(false),

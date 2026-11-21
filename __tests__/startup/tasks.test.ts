@@ -20,6 +20,7 @@ for (const [path, name] of [
   ['@/lib/auth/security/worker', 'startSecurityCleanupWorker'],
   ['@/lib/email/worker', 'startMailWorker'],
   ['@/lib/integrations/worker', 'startWebhookWorker'],
+  ['@/lib/mcp/worker', 'startTransferCleanupWorker'],
   ['@/lib/storage/deletion-worker', 'startStorageDeletionWorker'],
   ['@/lib/tags/worker', 'startOcrTagWorker'],
   ['@/lib/startup/memory-monitor', 'startMemoryMonitor'],
@@ -37,6 +38,7 @@ const workers = [
   'startOcrTagWorker',
   'startSecurityCleanupWorker',
   'startStorageDeletionWorker',
+  'startTransferCleanupWorker',
   'startWebhookWorker',
 ]
 /** The workers startup started, sorted: the order they start in doesn't matter. */

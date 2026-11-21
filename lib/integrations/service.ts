@@ -1,18 +1,28 @@
 import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
+import { readConfig } from '@/lib/config'
 import { lockIntegrationChanges, lockWebhookQueue } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
+import { scopeAvailable } from '@/lib/mcp/catalog'
+import { mcpEnabled } from '@/lib/mcp/settings'
 import {
   type Permission,
   type PermissionSubject,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import { publicOrigin } from '@/lib/security/public-origin'
 import { encryptSecret } from '@/lib/security/secret-box'
 import { findOwnedProfile } from '@/lib/uploads/profiles'
 
-import { API_SCOPES } from './bearer-routes'
+import {
+  API_SCOPES,
+  API_SCOPE_CATALOG,
+  type ApiScope,
+  MCP_SCOPE,
+  scopeWorksOverApi,
+} from './bearer-routes'
 import { CONNECTION_NAME_MAX_LENGTH, WEBHOOK_URL_MAX_LENGTH } from './limits'
 import { resolveWebhookTarget } from './security'
 import { createRandomApiToken, createWebhookSecret } from './tokens'
@@ -107,10 +117,26 @@ const webhookSelect = {
 type Account = { id: string } & PermissionSubject
 type Transaction = Prisma.TransactionClient
 
+/**
+ * Whether agents can connect, and the address they connect to: the public
+ * address, or null for the browser's own when none is configured. While the
+ * MCP server is off the screen shows nothing about agents, so no address.
+ */
+async function agentAccess() {
+  const enabled = await mcpEnabled()
+  const origin = enabled ? publicOrigin() : null
+  return {
+    enabled,
+    url: origin ? `${origin.href.replace(/\/+$/, '')}/api/mcp` : null,
+  }
+}
+
 /** The integrations screen. An account sees each list only while it may manage it. */
 export async function listIntegrations(account: Account) {
   const userId = account.id
-  const [tokens, webhooks, deliveries, profiles] = await Promise.all([
+  const managesTokens = hasPermission(account, 'tokens.manage')
+  const managesWebhooks = hasPermission(account, 'webhooks.manage')
+  const [tokens, webhooks, deliveries, profiles, mcp] = await Promise.all([
     prisma.apiToken.findMany({
       where: { userId },
       select: tokenSelect,
@@ -143,14 +169,15 @@ export async function listIntegrations(account: Account) {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
+    // Agents connect with tokens, so only an account that manages them is told.
+    managesTokens ? agentAccess() : undefined,
   ])
-  const managesTokens = hasPermission(account, 'tokens.manage')
-  const managesWebhooks = hasPermission(account, 'webhooks.manage')
   return {
     tokens: managesTokens ? tokens : [],
     webhooks: managesWebhooks ? webhooks : [],
     deliveries: managesWebhooks ? deliveries : [],
     profiles: managesTokens ? profiles : [],
+    ...(mcp && { mcp }),
   }
 }
 
@@ -177,7 +204,7 @@ export async function runIntegrationCommand(account: Account, body: unknown) {
     await lockIntegrationChanges(tx, userId)
     switch (command.action) {
       case 'create-token':
-        return createToken(tx, userId, command)
+        return createToken(tx, account, command)
       case 'revoke-token':
         return revokeToken(tx, userId, command.id)
       case 'create-webhook':
@@ -194,11 +221,59 @@ export async function runIntegrationCommand(account: Account, body: unknown) {
   })
 }
 
+const scopeLabels = (scopes: readonly ApiScope[]) =>
+  scopes
+    .map(
+      (scope) =>
+        `"${API_SCOPE_CATALOG.find((entry) => entry.scope === scope)?.label ?? scope}"`
+    )
+    .join(', ')
+
+/**
+ * The rules for a token agents can use: one that carries Agent access or a
+ * scope only the MCP server honors. Such a token exists only while the server
+ * is on, always carries Agent access, and holds nothing the account's role
+ * cannot use right now, as the form offers them. A token made only of REST
+ * scopes never comes here, so those are created exactly as before.
+ */
+async function assertAgentScopes(
+  tx: Transaction,
+  account: Account,
+  scopes: readonly ApiScope[]
+) {
+  const agentOnly = scopes.filter(
+    (scope) => scope !== MCP_SCOPE && !scopeWorksOverApi(scope)
+  )
+  if (!scopes.includes(MCP_SCOPE) && !agentOnly.length) return
+  if (!(await readConfig(tx)).settings.general.mcp.enabled)
+    throw new IntegrationError(
+      'The MCP server is turned off on this instance, so tokens cannot have Agent access.'
+    )
+  if (!scopes.includes(MCP_SCOPE))
+    throw new IntegrationError(
+      `Agent access is needed for ${scopeLabels(agentOnly)}. Enable Agent access on the token, or remove ${agentOnly.length === 1 ? 'it' : 'them'}.`
+    )
+  const unavailable = scopes.filter(
+    (scope) =>
+      !scopeAvailable(
+        scope,
+        (permission) => hasPermission(account, permission),
+        true
+      )
+  )
+  if (unavailable.length)
+    throw new IntegrationError(
+      `Your role does not allow ${scopeLabels(unavailable)}. Remove ${unavailable.length === 1 ? 'it' : 'them'} and try again.`
+    )
+}
+
 async function createToken(
   tx: Transaction,
-  userId: string,
+  account: Account,
   input: z.infer<typeof createTokenCommand>
 ) {
+  const userId = account.id
+  await assertAgentScopes(tx, account, input.scopes)
   const active = await tx.apiToken.count({
     where: {
       userId,

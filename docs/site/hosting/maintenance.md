@@ -101,6 +101,19 @@ The official image runs database and configuration migrations on startup. It doe
 
 Test sign-in, upload, download, and any integrations you depend on after the update. Avoid unattended movement to `rolling` on an instance whose downtime or data loss would be costly.
 
+### MCP server
+
+Builds after 3.1.0 include an [MCP server](/admin/agents) that lets AI agents work with an account's files. **It is off after the upgrade**, and nothing changes until someone with `settings.security` turns it on in **Settings → Access**: its routes answer `404`, Profile shows nothing about agents, and existing API tokens, upload tokens, and sessions work exactly as before. Turning it on later gives none of them access to it either; an agent needs a token created for it afterwards.
+
+- **Database.** The official image applies one migration, `20261121000000_agent_transfers`, which adds an empty `AgentTransfer` table with three indexes and changes no rows. Source deployments run `npx prisma migrate deploy` before starting the updated app.
+- **Saved settings.** `general.mcp.enabled` starts as `false` on existing instances without a configuration migration.
+- **Environment.** No new variable. If you plan to turn the server on, check that [`NEXTAUTH_URL`](./configuration#mcp-server) is the address agents will use, and review what that section says about proxy body limits and access logs.
+- **Background work.** Each process gains a [cleanup worker](#background-workers) that deletes expired transfer URLs every 15 minutes. It does nothing while the server is unused.
+- **API tokens.** The token form gains scopes that only the MCP server honors. They appear only while the server is on, and the REST API ignores them, so existing integrations and the [OpenAPI document](/api/authentication#scope-reference) are unchanged.
+- **Audit log.** Once agents are in use, each of their tool calls is an event in category `mcp`.
+
+Rollback: an older image ignores the `AgentTransfer` table and the saved `general.mcp` setting, and its token form does not offer the new scopes. Tokens created with them keep working on the REST API for the scopes that existed before. Drop the table afterwards if you want it gone.
+
 ### Video thumbnails
 
 Builds after 3.1.0 show a frame from each video on library cards, shared folder tiles, **View content**, the share page player, and [link previews](/guide/embeds), instead of a video icon and a generic picture. There is no setting to change. The official image applies one migration, `20261114000000_video_frames`, which adds an empty `VideoFrame` table and changes no rows.
@@ -495,6 +508,7 @@ Background work runs inside the application. Each process starts these workers w
 | [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
 | [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
 | [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
+| [Transfer URL cleanup](../api/mcp#transfer-urls) for the MCP server                                            | Every 15 minutes                  | `mcp-transfers`    |
 | Memory check, production only                                                                                  | Every 60 seconds                  | `startup`          |
 
 Apart from audit retention, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.
