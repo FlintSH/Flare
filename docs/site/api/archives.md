@@ -5,7 +5,7 @@ description: Archive listings that read only the file list, ranged entry reads f
 
 # Archive API contracts
 
-The [archive workspace](/guide/archives) has separate owner-library and share-page routes. Owner-library operations require the owner's **browser session**. Shared reads follow ordinary file visibility/password rules and can be anonymous for an unprotected public file. Named tokens and legacy upload credentials do not grant access to either set of routes.
+The [archive workspace](/guide/archives) has separate owner-library and share-page routes. Owner-library operations require the owner's **browser session**. Shared reads follow ordinary file visibility/password rules and can be anonymous for an unprotected public file. Named tokens and legacy upload credentials do not grant access to either set of routes. An AI agent does the owner-library work through the [MCP server](./mcp#archives-and-the-account-export) instead, with its own tools and scopes: `read_file` lists an archive and reads its entries, and `extract_archive` and `create_archive` call the same services as the routes below.
 
 These routes are documented separately from the [named-token OpenAPI document](/openapi.json) and request builder. Ordinary file listing/upload scopes remain unchanged. Shared archives support browsing and entry downloads only; extraction and creation remain owner-only library operations.
 

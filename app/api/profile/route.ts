@@ -13,7 +13,7 @@ import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { hashAccountPassword } from '@/lib/users/credentials'
 import { deleteAccount } from '@/lib/users/delete-account'
-import { updateAccount } from '@/lib/users/update-account'
+import { accountToEdit, saveProfile } from '@/lib/users/profile'
 
 const api = routes('/api/profile', {
   envelope: 'api',
@@ -25,8 +25,7 @@ export const PUT = api(async (request) => {
   const user = await requireAccount(request)
 
   const body = await readJson(request, UpdateProfileSchema)
-  const account = await prisma.user.findUnique({ where: { id: user.id } })
-  if (!account) throw new HttpError(404, 'User not found')
+  const account = await accountToEdit(user.id)
   const emailConfig = await getEmailConfig()
   const emailChanged = Boolean(body.email && body.email !== account.email)
   const security =
@@ -78,48 +77,20 @@ export const PUT = api(async (request) => {
           'Use the verified email change form to change your email address.'
         )
     }
-    return updateAccount(
-      tx,
-      account,
-      {
-        name: body.name,
-        email: emailChanged ? body.email : undefined,
-        password: passwordHash,
-        vanityId: body.vanityId,
-        settings: {
-          ...(typeof body.randomizeFileUrls === 'boolean' && {
-            randomizeFileUrls: body.randomizeFileUrls,
-          }),
-          ...(body.defaultFileExpiration && {
-            defaultFileExpiration: body.defaultFileExpiration,
-          }),
-          ...(body.defaultFileExpirationAction && {
-            defaultFileExpirationAction: body.defaultFileExpirationAction,
-          }),
-        },
-      },
-      {
-        kind: 'self',
-        emailEnabled,
-        prove: security
-          ? (fresh) =>
-              assertFreshIdentity(
-                fresh,
-                { password: body.currentPassword, code: body.securityCode },
-                security.session,
-                { secondFactor: true, tx }
-              )
-          : undefined,
-      },
-      {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        randomizeFileUrls: true,
-        vanityId: true,
-      }
-    )
+    return saveProfile(tx, account, body, {
+      email: emailChanged ? body.email : undefined,
+      password: passwordHash,
+      emailEnabled,
+      prove: security
+        ? (fresh) =>
+            assertFreshIdentity(
+              fresh,
+              { password: body.currentPassword, code: body.securityCode },
+              security.session,
+              { secondFactor: true, tx }
+            )
+        : undefined,
+    })
   })
 
   return apiResponse<ProfileResponse>(updatedUser)

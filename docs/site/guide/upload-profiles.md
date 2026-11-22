@@ -94,6 +94,8 @@ Downloads from the general **Screenshot tools and scripts** section use your acc
 
 For custom integrations, a [named API token](../api/authentication) can be bound to a profile. A bound token cannot select another profile or override its upload settings. Deleting that profile makes uploads with the bound token fail until the integration is reconfigured.
 
+An [AI agent you connected](./agents#before-you-allow-change-account-settings) with **Change account settings** can create, change, and delete your profiles, choose the default, and change the [account upload defaults](#account-upload-defaults). A token bound to a profile cannot, even with that action.
+
 ## Edit or delete a profile
 
 Edits apply to future uploads. They do not change the visibility, expiration, naming, tags, or stored style of existing files. An in-progress chunked upload uses the settings captured when it started, even if you edit the profile during transfer.

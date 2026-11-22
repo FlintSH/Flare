@@ -104,6 +104,7 @@ function context(user: AuthenticatedUser): ToolContext {
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: ORIGIN,
     allows: () => true,
+    recheck: async () => {},
     requireEffect: () => {},
   }
 }

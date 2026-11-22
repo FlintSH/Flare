@@ -74,6 +74,8 @@ export async function archiveListing(
   options: {
     progress: boolean
     after: number
+    /** At most this many entries, for a caller that reads a page at a time. */
+    limit?: number
     signal: AbortSignal
     /** Account or IP address, for the per-requester indexing limit. */
     requester: string
@@ -93,7 +95,8 @@ export async function archiveListing(
   if (!view.complete || !view.index) {
     await options.confirm()
     const progress: ArchiveListingProgress = view.index?.progress(
-      options.after
+      options.after,
+      options.limit
     ) ?? {
       status: 'indexing',
       format: ref.format,
@@ -108,9 +111,9 @@ export async function archiveListing(
     )
   }
   if (!view.cached) await options.recheck()
-  if (options.after)
+  if (options.after || options.limit !== undefined)
     return NextResponse.json({
-      data: view.index.listing(options.after),
+      data: view.index.listing(options.after, options.limit),
       success: true,
     })
   // Blob parts share the encoded listing instead of copying it.

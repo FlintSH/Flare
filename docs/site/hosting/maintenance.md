@@ -103,7 +103,7 @@ Test sign-in, upload, download, and any integrations you depend on after the upd
 
 ### MCP server
 
-Builds after 3.1.0 include an [MCP server](/admin/agents) that lets AI agents work with an account's files. **It is off after the upgrade**, and nothing changes until someone with `settings.security` turns it on in **Settings → Access**: its routes answer `404`, Profile shows nothing about agents, and existing API tokens, upload tokens, and sessions work exactly as before. Turning it on later gives none of them access to it either; an agent connects only after a person signs it in through the browser or creates a token for it.
+Builds after 3.1.0 include an [MCP server](/admin/agents) that lets AI agents work with an account's files, archives, upload profiles, and settings. **It is off after the upgrade**, and nothing changes until someone with `settings.security` turns it on in **Settings → Access**: its routes answer `404`, Profile shows nothing about agents, and existing API tokens, upload tokens, and sessions work exactly as before. Turning it on later gives none of them access to it either; an agent connects only after a person signs it in through the browser or creates a token for it.
 
 - **Database.** The official image applies two migrations that add empty tables and change no rows: `20261121000000_agent_transfers` adds `AgentTransfer` with three indexes, and `20261122000000_agent_sign_in` adds `OAuthClient`, `OAuthCode`, `AgentConnection`, and `AgentToken` for [agent sign-in](#agent-sign-in). Source deployments run `npx prisma migrate deploy` before starting the updated app.
 - **Saved settings.** `general.mcp.enabled` starts as `false` on existing instances without a configuration migration.

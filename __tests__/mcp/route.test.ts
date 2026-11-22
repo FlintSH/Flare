@@ -1687,6 +1687,7 @@ describe('an agent that signed in through the browser', () => {
       'list_folders',
       'list_tags',
       'list_short_links',
+      'export_account',
     ])
     expect(mocks.pair).toHaveBeenCalledWith(
       expect.objectContaining({

@@ -78,6 +78,7 @@ describe('scoped API tokens', () => {
       'files:organize',
       'files:share',
       'files:delete',
+      'account:write',
       'mcp',
     ])
     for (const scope of mcpOnly) {
@@ -100,6 +101,7 @@ describe('scoped API tokens', () => {
       'files:organize',
       'files:share',
       'files:delete',
+      'account:write',
       'mcp',
     ]
     for (const [method, path] of [
@@ -108,6 +110,13 @@ describe('scoped API tokens', () => {
       ['DELETE', '/api/files/abc'],
       ['PATCH', '/api/files/abc'],
       ['GET', '/api/urls'],
+      // Changing account settings is a scope for agents: it opens no
+      // account route to a named token.
+      ['PUT', '/api/profile'],
+      ['DELETE', '/api/profile'],
+      ['GET', '/api/profile/export'],
+      ['POST', '/api/profile/avatar'],
+      ['POST', '/api/upload-profiles'],
       ['POST', '/api/mcp'],
     ])
       expect(

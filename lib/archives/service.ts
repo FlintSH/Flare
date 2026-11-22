@@ -161,7 +161,12 @@ async function inspectSource(
   })
 }
 
-type ListingOptions = { progress: boolean; after: number; signal: AbortSignal }
+type ListingOptions = {
+  progress: boolean
+  after: number
+  limit?: number
+  signal: AbortSignal
+}
 
 function memberReadAudit(source: SourceFile) {
   return (entry: IndexedEntry, length: number) =>
@@ -261,6 +266,9 @@ async function lockPublication(
   })
   if (!user || user.sessionVersion !== actor.sessionVersion)
     throw new ArchiveError('Sign in again before creating files.', 401)
+  // Whatever row this takes comes after the role lock and the account's row,
+  // the order uploads take a credential's row in.
+  await actor.authorize?.(tx)
   if (options.profileId) {
     const changed = () =>
       new ArchiveError(

@@ -105,6 +105,8 @@ export interface ArchiveListing extends ArchiveManifest {
   archiveBytes: number
   /** Entries the archive declares; can exceed `entries.length` when truncated. */
   entryCount: number
+  /** Entries the whole listing holds, when `entries` is one page of it. */
+  listed?: number
   truncated: ArchiveTruncation | null
   extraction: ArchiveExtraction
 }

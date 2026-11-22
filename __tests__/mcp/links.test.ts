@@ -63,6 +63,7 @@ function contextFor(
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: ORIGIN,
     allows: (effectName) => needsMet(effect(effectName), principal),
+    recheck: async () => {},
     requireEffect(effectName) {
       if (!needsMet(effect(effectName), principal))
         throw new ToolError(`Not allowed: ${effectName}`, 'denied')

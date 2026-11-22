@@ -487,6 +487,7 @@ describe('an upload URL made earlier', () => {
       request: new Request('https://flare.test/api/mcp', { method: 'POST' }),
       origin: 'https://flare.test',
       allows: () => true,
+      recheck: async () => {},
       requireEffect: () => {},
     }
     const tool = uploadsTools.find(({ name }) => name === 'create_upload_url')!

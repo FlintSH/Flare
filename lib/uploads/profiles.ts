@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 
 import { getConfig } from '@/lib/config'
-import { lockUploadProfiles } from '@/lib/database/locks'
+import { lockRoleChanges, lockUploadProfiles } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import {
@@ -125,11 +125,23 @@ export async function listProfiles(user: PermissionSubject & { id: string }) {
   }
 }
 
+/**
+ * Runs before a profile write, with the role lock and the account's profiles
+ * held, and throws to refuse it: a caller with rules of its own judges the
+ * state the write will change, and the roles, which no other write can
+ * change before it commits.
+ */
+export type ProfileCheck = (tx: Prisma.TransactionClient) => Promise<void>
+
+/** `checked` says the change runs a `ProfileCheck`, which needs the role lock. */
 function changeProfiles<T>(
   userId: string,
-  change: (tx: Prisma.TransactionClient) => Promise<T>
+  change: (tx: Prisma.TransactionClient) => Promise<T>,
+  checked = false
 ) {
   return prisma.$transaction(async (tx) => {
+    // The role lock goes before row locks.
+    if (checked) await lockRoleChanges(tx)
     await lockUploadProfiles(tx, userId)
     return change(tx)
   })
@@ -149,16 +161,59 @@ async function withOwnedTags(
     : options
 }
 
-export async function createProfile(
+type Tx = Prisma.TransactionClient
+
+/** The caller holds `lockUploadProfiles`. */
+async function createIn(
+  tx: Tx,
   userId: string,
   { name, options }: UploadProfileInput
 ) {
-  const profile = await changeProfiles(userId, async (tx) =>
-    tx.uploadProfile.create({
-      data: { userId, name, options: await withOwnedTags(tx, userId, options) },
-    })
+  return tx.uploadProfile.create({
+    data: { userId, name, options: await withOwnedTags(tx, userId, options) },
+  })
+}
+
+/** The caller holds `lockUploadProfiles`; null when the profile left `revision`. */
+async function updateIn(
+  tx: Tx,
+  userId: string,
+  id: string,
+  revision: string,
+  { name, options }: UploadProfileInput
+) {
+  const result = await tx.uploadProfile.updateMany({
+    where: { id, userId, updatedAt: new Date(revision) },
+    data: { name, options: await withOwnedTags(tx, userId, options) },
+  })
+  if (!result.count) return null
+  return tx.uploadProfile.findUniqueOrThrow({ where: { id } })
+}
+
+/** The caller holds `lockUploadProfiles`. */
+async function setDefaultIn(tx: Tx, userId: string, profileId: string | null) {
+  if (profileId) await findOwnedProfile(tx, userId, profileId)
+  await tx.user.update({
+    where: { id: userId },
+    data: { defaultUploadProfileId: profileId },
+  })
+}
+
+/** The caller holds `lockUploadProfiles`. Leaves another default alone. */
+async function clearDefaultIn(tx: Tx, userId: string, id: string) {
+  await tx.user.updateMany({
+    where: { id: userId, defaultUploadProfileId: id },
+    data: { defaultUploadProfileId: null },
+  })
+}
+
+const staleProfile = () =>
+  new HttpError(409, 'Profile changed or was removed. Reload it before saving.')
+
+export async function createProfile(userId: string, input: UploadProfileInput) {
+  return profileView(
+    await changeProfiles(userId, (tx) => createIn(tx, userId, input))
   )
-  return profileView(profile)
 }
 
 /** Saves only while the profile is at `revision`, the `updatedAt` its editor loaded. */
@@ -166,32 +221,87 @@ export async function updateProfile(
   userId: string,
   id: string,
   revision: string,
-  { name, options }: UploadProfileInput
+  input: UploadProfileInput
 ) {
-  const profile = await changeProfiles(userId, async (tx) => {
-    const result = await tx.uploadProfile.updateMany({
-      where: { id, userId, updatedAt: new Date(revision) },
-      data: { name, options: await withOwnedTags(tx, userId, options) },
-    })
-    if (!result.count) return null
-    return tx.uploadProfile.findUniqueOrThrow({ where: { id } })
-  })
-  if (!profile)
-    throw new HttpError(
-      409,
-      'Profile changed or was removed. Reload it before saving.'
-    )
+  const profile = await changeProfiles(userId, (tx) =>
+    updateIn(tx, userId, id, revision, input)
+  )
+  if (!profile) throw staleProfile()
   return profileView(profile)
 }
 
-export async function deleteProfile(userId: string, id: string) {
-  await changeProfiles(userId, async (tx) => {
-    await tx.user.updateMany({
-      where: { id: userId, defaultUploadProfileId: id },
-      data: { defaultUploadProfileId: null },
-    })
-    await tx.uploadProfile.deleteMany({ where: { id, userId } })
-  })
+/**
+ * Creates a profile (`id` null) or saves one, and makes it the default or
+ * stops it being the default, in one transaction, so a refusal of either
+ * leaves both as they were. A profile with an `id` is refused as stale
+ * unless it is still at `revision`, when one is given, even when nothing
+ * about it changes; `input` left out leaves its fields as they are, and
+ * changing them needs a `revision`. `makeDefault` left out leaves the
+ * default alone. `check` runs once the profile is known to be current and
+ * before anything is written. Answers the profile and the default after.
+ */
+export async function saveProfileAndDefault(
+  userId: string,
+  save: {
+    id: string | null
+    revision?: string
+    input?: UploadProfileInput
+    makeDefault?: boolean
+  },
+  check?: ProfileCheck
+) {
+  return changeProfiles(
+    userId,
+    async (tx) => {
+      if (save.id && save.revision !== undefined) {
+        const current = await tx.uploadProfile.findFirst({
+          where: { id: save.id, userId },
+          select: { updatedAt: true },
+        })
+        if (current?.updatedAt.getTime() !== new Date(save.revision).getTime())
+          throw staleProfile()
+      }
+      await check?.(tx)
+      const profile = !save.id
+        ? await createIn(tx, userId, save.input!)
+        : save.input
+          ? await updateIn(tx, userId, save.id, save.revision!, save.input)
+          : await findOwnedProfile(tx, userId, save.id)
+      if (!profile) throw staleProfile()
+      if (save.makeDefault) await setDefaultIn(tx, userId, profile.id)
+      else if (save.makeDefault === false)
+        await clearDefaultIn(tx, userId, profile.id)
+      const { defaultUploadProfileId } = await tx.user.findUniqueOrThrow({
+        where: { id: userId },
+        select: { defaultUploadProfileId: true },
+      })
+      return {
+        profile: profileView(profile),
+        defaultId: defaultUploadProfileId,
+      }
+    },
+    Boolean(check)
+  )
+}
+
+/** Answers whether a profile was deleted; false for one that was not there. */
+export async function deleteProfile(
+  userId: string,
+  id: string,
+  check?: ProfileCheck
+): Promise<boolean> {
+  return changeProfiles(
+    userId,
+    async (tx) => {
+      await check?.(tx)
+      await clearDefaultIn(tx, userId, id)
+      const { count } = await tx.uploadProfile.deleteMany({
+        where: { id, userId },
+      })
+      return count > 0
+    },
+    Boolean(check)
+  )
 }
 
 /** The profile uploads use when they select none; null for account settings only. */
@@ -199,13 +309,7 @@ export async function setDefaultProfile(
   userId: string,
   profileId: string | null
 ) {
-  await changeProfiles(userId, async (tx) => {
-    if (profileId) await findOwnedProfile(tx, userId, profileId)
-    await tx.user.update({
-      where: { id: userId },
-      data: { defaultUploadProfileId: profileId },
-    })
-  })
+  await changeProfiles(userId, (tx) => setDefaultIn(tx, userId, profileId))
 }
 
 export async function profileRecipe(userId: string, id: string) {

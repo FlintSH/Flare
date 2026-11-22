@@ -22,8 +22,6 @@ export type UnexposedReason = keyof typeof UNEXPOSED_REASONS
 
 /** The later changes that add tools, by what they cover. */
 export const LATER_AREAS = {
-  archives: 'Archives',
-  account: 'Account settings',
   invites: 'Invites',
   administration: 'Administration',
 } as const
@@ -55,8 +53,6 @@ const signIn = not('sign-in')
 const credentials = not('credentials')
 const browser = not('browser')
 const preflight = not('preflight')
-const archives = later('archives')
-const account = later('account')
 const invites = later('invites')
 const administration = later('administration')
 const chunked = noted(
@@ -158,32 +154,60 @@ export const API_COVERAGE: Record<
   },
 
   // Archives
-  '/api/files/archive': { POST: archives },
-  '/api/files/{id}/archive': { GET: archives },
-  '/api/files/{id}/archive/entry': { GET: archives },
-  '/api/files/{id}/archive/extract': { POST: archives },
+  '/api/files/archive': { POST: tools('create_archive') },
+  '/api/files/{id}/archive': { GET: tools('read_file') },
+  '/api/files/{id}/archive/entry': { GET: tools('read_file') },
+  '/api/files/{id}/archive/extract': { POST: tools('extract_archive') },
   // Visitors unlock a shared archive with a password cookie.
   '/api/files/{id}/archive/share': { POST: browser },
   '/api/files/{id}/archive/share/entry': { GET: browser, POST: browser },
 
   // The account
   '/api/profile': {
-    PUT: account,
+    PUT: noted(
+      'update_profile changes the name, the vanity ID and the upload defaults; the email address and the password change only in the browser.',
+      'update_profile'
+    ),
     // Deleting the account an agent acts as is how its owner would lose it.
     DELETE: signIn,
   },
-  '/api/profile/avatar': { POST: account },
-  '/api/profile/embed': { GET: account, PATCH: account },
-  '/api/profile/export': { GET: account },
+  '/api/profile/avatar': {
+    POST: noted(
+      'update_profile makes an image that is already in the library the avatar; it takes no upload of its own.',
+      'update_profile'
+    ),
+  },
+  '/api/profile/embed': {
+    GET: tools('get_account'),
+    PATCH: tools('update_profile'),
+  },
+  '/api/profile/export': { GET: tools('export_account') },
+  // The export page follows its own download through this stream.
   '/api/profile/export/progress': { GET: browser },
-  '/api/customization/preferences': { GET: account, PATCH: account },
+  '/api/customization/preferences': {
+    GET: tools('get_account'),
+    PATCH: tools('update_profile'),
+  },
   '/api/upload-profiles': {
     GET: tools('get_account'),
-    POST: account,
+    POST: noted(
+      'save_upload_profile takes the settings as arguments; it does not import a recipe file.',
+      'save_upload_profile'
+    ),
   },
-  '/api/upload-profiles/default': { PUT: account },
-  '/api/upload-profiles/{id}': { PUT: account, DELETE: account },
-  '/api/upload-profiles/{id}/export': { GET: account },
+  '/api/upload-profiles/default': { PUT: tools('save_upload_profile') },
+  '/api/upload-profiles/{id}': {
+    PUT: tools('save_upload_profile'),
+    DELETE: tools('delete_upload_profile'),
+  },
+  // A recipe is a file the profile page exports and imports. What it holds,
+  // a profile's name and settings, is what get_account lists.
+  '/api/upload-profiles/{id}/export': {
+    GET: noted(
+      "get_account lists each profile's settings; no tool makes the recipe file.",
+      'get_account'
+    ),
+  },
   '/api/profile/sessions': { GET: signIn, DELETE: signIn },
   '/api/profile/sessions/{id}': { DELETE: signIn },
   '/api/profile/login-history': { GET: signIn },
@@ -283,7 +307,7 @@ export const API_COVERAGE: Record<
     DELETE: not('mcp'),
     OPTIONS: preflight,
   },
-  // The transfer URLs read_file and create_upload_url hand out.
+  // The transfer URLs read_file, create_upload_url and export_account hand out.
   '/api/mcp/transfer/{ticket}': { GET: not('mcp'), POST: not('mcp') },
   // How an agent signs in to the server through the browser (OAuth). A
   // client calls these to connect; none of them is something a tool does.

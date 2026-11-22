@@ -27,7 +27,7 @@ Everything Flare does. Pick one to see how it works.
 | Investigate activity or a failed operation                     | [Instance audit log](./admin/audit)                                                                                                                       |
 | Match your own brand                                           | [Appearance studio](./admin/appearance)                                                                                                                   |
 | Connect your own software                                      | [API](./api/) → [signed webhooks](./api/webhooks)                                                                                                         |
-| Let an AI agent find, read, upload, and organize your files    | [Connect an agent](./guide/agents) → [MCP server reference](./api/mcp)                                                                                    |
+| Let an AI agent work with your files, archives, and settings   | [Connect an agent](./guide/agents) → [MCP server reference](./api/mcp)                                                                                    |
 | Build a web app or PWA on top of your files                    | [Call Flare from a web app](./api/authentication#call-flare-from-a-web-app) → [`FLARE_CORS_ORIGINS`](./hosting/configuration#cross-origin-browser-access) |
 
 ## Before you choose Flare {#know-what-you-are-choosing}

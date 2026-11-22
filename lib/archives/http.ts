@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 import { setAuditActor, setAuditOutcome } from '@/lib/audit'
@@ -18,7 +19,17 @@ import { ArchiveError } from './errors'
 import type { ArchiveEntrySelector } from './index-cache'
 import { ARCHIVE_LIMITS } from './shared'
 
-export type ArchiveActor = { user: AuthenticatedUser; sessionVersion: number }
+export type ArchiveActor = {
+  user: AuthenticatedUser
+  sessionVersion: number
+  /**
+   * A caller's own last check, for one that is not a browser session. It runs
+   * wherever access is read again under the account's locks: in the
+   * transaction that publishes results, and when a slow read is rechecked.
+   * Throw to refuse.
+   */
+  authorize?: (tx: Prisma.TransactionClient) => Promise<void>
+}
 
 export const createArchiveSchema = z
   .object({

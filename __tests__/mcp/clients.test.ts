@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
 
 import { API_SCOPE_CATALOG } from '@/lib/integrations/bearer-routes'
-import { MCP_SCOPES } from '@/lib/mcp/catalog'
+import { MCP_SCOPES, TOOL_NAMES, toolAllowed } from '@/lib/mcp/catalog'
 import {
   AGENT_CLIENTS,
   AGENT_PRESETS,
@@ -772,7 +772,7 @@ describe('whether cloud clients can reach an address', () => {
 
 describe('permission presets', () => {
   const groupScopes = API_SCOPE_CATALOG.filter(
-    ({ group }) => group === 'files' || group === 'links'
+    ({ group }) => group === 'files' || group === 'links' || group === 'account'
   ).map(({ scope }) => scope)
 
   it('offers read only, read and upload, and everything', () => {
@@ -785,8 +785,86 @@ describe('permission presets', () => {
     const [read, upload, all] = AGENT_PRESETS.map(({ scopes }) => [...scopes])
     expect(read).toEqual(['files:read', 'files:content', 'urls:read'])
     expect(upload).toEqual([...read, 'files:upload'])
-    // Every Files and Short links scope, in the catalog's order.
+    // Every Files, Short links and Account scope, in the catalog's order.
     expect(all).toEqual(groupScopes)
+    expect(all.at(-1)).toBe('account:write')
+    // Changing account settings comes with everything, and with nothing less.
+    expect(read).not.toContain('account:write')
+    expect(upload).not.toContain('account:write')
+  })
+
+  it('opens 8, 13 and 28 tools to a role that allows everything', () => {
+    const tools = (id: string, can: () => boolean = () => true) => {
+      const { scopes } = AGENT_PRESETS.find((preset) => preset.id === id)!
+      return TOOL_NAMES.filter((name) => toolAllowed(name, { scopes, can }))
+    }
+    const readTools = [
+      'get_account',
+      'search_files',
+      'get_file',
+      'read_file',
+      'list_folders',
+      'list_tags',
+      'list_short_links',
+      // The export only reads, and needs every scope that reads.
+      'export_account',
+    ]
+    expect(tools('read')).toEqual(readTools)
+    expect(tools('read')).toHaveLength(8)
+    expect([...tools('upload')].sort()).toEqual(
+      [
+        ...readTools,
+        'upload_file',
+        'create_paste',
+        'create_upload_url',
+        'extract_archive',
+        'create_archive',
+      ].sort()
+    )
+    expect(tools('upload')).toHaveLength(13)
+    expect(tools('all')).toEqual(TOOL_NAMES)
+    expect(tools('all')).toHaveLength(28)
+    // The account tools are what Everything adds over the file scopes.
+    const withoutAccount = TOOL_NAMES.filter((name) =>
+      toolAllowed(name, {
+        scopes: groupScopes.filter((scope) => scope !== 'account:write'),
+        can: () => true,
+      })
+    )
+    expect(TOOL_NAMES.filter((name) => !withoutAccount.includes(name))).toEqual(
+      ['update_profile', 'save_upload_profile', 'delete_upload_profile']
+    )
+    // A role that allows nothing is left with the tool that needs nothing.
+    for (const { id } of AGENT_PRESETS)
+      expect(tools(id, () => false)).toEqual(['get_account'])
+  })
+
+  it('describes each preset by what it holds, in one short sentence', () => {
+    expect(
+      AGENT_PRESETS.map(({ id, description }) => [id, description])
+    ).toEqual([
+      ['read', 'Find and read files, and list short links.'],
+      ['upload', 'Read only, plus uploading files and pastes.'],
+      [
+        'all',
+        'All file, short link and account setting actions, deleting included.',
+      ],
+    ])
+    // Everything names each kind of scope it holds, account settings too.
+    const { scopes, description } = AGENT_PRESETS[2]
+    const kinds = new Set(
+      API_SCOPE_CATALOG.filter(({ scope }) =>
+        (scopes as readonly string[]).includes(scope)
+      ).map(({ group }) => group)
+    )
+    expect([...kinds]).toEqual(['files', 'links', 'account'])
+    for (const word of ['file', 'short link', 'account setting'])
+      expect(description).toContain(word)
+    for (const { description: sentence } of AGENT_PRESETS) {
+      expect(sentence).toMatch(/^[A-Z][^.!?]*\.$/)
+      expect(sentence.length).toBeLessThanOrEqual(70)
+      expect(sentence).not.toMatch(/[\u2013\u2014]/)
+    }
   })
 
   it('holds only scopes MCP honors, and never the marker', () => {

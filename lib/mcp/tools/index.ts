@@ -1,10 +1,13 @@
 import type { ToolDefinition } from '../tool'
 import { accountTools } from './account'
+import { archivesTools } from './archives'
 import { fileTools } from './files'
 import { foldersTools } from './folders'
 import { linksTools } from './links'
 import { organizeTools } from './organize'
+import { profileTools } from './profile'
 import { tagsTools } from './tags'
+import { uploadProfileTools } from './upload-profiles'
 import { uploadsTools } from './uploads'
 
 /**
@@ -19,4 +22,7 @@ export const TOOLS: ToolDefinition[] = [
   ...linksTools,
   ...uploadsTools,
   ...organizeTools,
+  ...archivesTools,
+  ...profileTools,
+  ...uploadProfileTools,
 ] as ToolDefinition[]

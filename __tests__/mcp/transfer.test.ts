@@ -6,16 +6,24 @@ import type { AgentPrincipal } from '@/lib/mcp/auth'
 import { ToolError } from '@/lib/mcp/tool'
 import {
   DOWNLOAD_MINUTES,
+  EXPORT_HOLD_HOURS,
+  EXPORT_MINUTES,
   MAX_OUTSTANDING_TRANSFERS,
   TRANSFER_PATH,
   TransferLimitError,
   UPLOAD_MINUTES,
+  claimExport,
   claimUpload,
   consumeUpload,
   createDownloadUrl,
+  createEntryUrl,
+  createExportUrl,
   createUploadUrl,
   deleteExpiredTransfers,
+  endExport,
+  entryOf,
   findTransfer,
+  releaseExport,
   releaseUpload,
   uploadOf,
 } from '@/lib/mcp/transfer'
@@ -38,7 +46,8 @@ type Where = {
   secretHash?: string
   userId?: string
   credential?: string
-  kind?: string
+  /** One kind, or any of several that are counted together. */
+  kind?: string | { in: string[] }
   claimedAt?: null
   expiresAt?: { lte?: Date; gt?: Date }
 }
@@ -57,7 +66,10 @@ const agentTransfer = vi.hoisted(() => {
     (where.secretHash === undefined || row.secretHash === where.secretHash) &&
     (where.userId === undefined || row.userId === where.userId) &&
     (where.credential === undefined || row.credential === where.credential) &&
-    (where.kind === undefined || row.kind === where.kind) &&
+    (where.kind === undefined ||
+      (typeof where.kind === 'string'
+        ? row.kind === where.kind
+        : where.kind.in.includes(row.kind))) &&
     (!('claimedAt' in where) || row.claimedAt === null) &&
     (where.expiresAt?.lte === undefined ||
       row.expiresAt <= where.expiresAt.lte) &&
@@ -529,6 +541,260 @@ describe('using an upload URL once', () => {
     const row = seed({ kind: 'upload', fileId: null })
     table.failing = true
     await expect(releaseUpload(row.id)).resolves.toBeUndefined()
+  })
+})
+
+describe('a link to one entry of an archive', () => {
+  it('keeps the archive and the entry it was made for, for the ten minutes of a download', async () => {
+    const { url, expires_at } = await createEntryUrl(
+      principal(),
+      ORIGIN,
+      'file-9',
+      { path: 'docs/readme.md' }
+    )
+    const [row] = table.rows
+    expect(row).toMatchObject({
+      userId: 'owner',
+      credential: 'token:token-1',
+      kind: 'archive-entry',
+      fileId: 'file-9',
+      options: { entry: { path: 'docs/readme.md' } },
+      claimedAt: null,
+      secretHash: hashApiToken(secretOf(url)),
+    })
+    expect(row.expiresAt).toEqual(minutes(DOWNLOAD_MINUTES))
+    expect(expires_at).toBe(minutes(DOWNLOAD_MINUTES).toISOString())
+    expect(entryOf(row as never)).toEqual({ path: 'docs/readme.md' })
+  })
+
+  it('keeps an entry named by its position in the listing', async () => {
+    await createEntryUrl(principal(), ORIGIN, 'file-9', { position: 12 })
+    expect(table.rows[0].options).toEqual({ entry: { position: 12 } })
+    expect(entryOf(table.rows[0] as never)).toEqual({ position: 12 })
+  })
+
+  it.each([
+    [{ path: '' }],
+    [{ path: 'x'.repeat(4097) }],
+    [{ position: -1 }],
+    [{ position: 1.5 }],
+    [{ position: 1_000_000_000 }],
+    [{ path: 'a.txt', position: 1 }],
+    [{ path: 'a.txt', inline: true }],
+    [{}],
+  ])('makes no link for the entry %j', async (entry) => {
+    await expect(
+      createEntryUrl(principal(), ORIGIN, 'file-9', entry as never)
+    ).rejects.toThrow()
+    expect(table.rows).toEqual([])
+  })
+
+  it.each([
+    [null],
+    [{}],
+    [{ entry: null }],
+    [{ entry: 'docs/readme.md' }],
+    [{ entry: { path: '' } }],
+    [{ entry: { position: '3' } }],
+    [{ entry: { path: 'a.txt', position: 3 } }],
+    // What an upload URL keeps is not an entry.
+    [{ options: {}, filename: 'a.txt' }],
+  ])('reads no entry back from a row that holds %j', (options) => {
+    expect(entryOf({ options } as never)).toBeNull()
+  })
+
+  it('is found as an entry link, and as nothing else', async () => {
+    const { url } = await createEntryUrl(principal(), ORIGIN, 'file-9', {
+      path: 'a.txt',
+    })
+    const secret = secretOf(url)
+    expect(await findTransfer(secret, 'archive-entry')).toBe(table.rows[0])
+    for (const kind of ['download', 'upload', 'export'] as const)
+      expect(await findTransfer(secret, kind)).toBeNull()
+    // A request that serves several kinds finds it among them.
+    expect(
+      await findTransfer(secret, ['download', 'archive-entry', 'export'])
+    ).toBe(table.rows[0])
+    expect(await findTransfer(secret, ['download', 'export'])).toBeNull()
+    expect(await findTransfer(secret, [])).toBeNull()
+  })
+
+  it('can be used again and again until it expires', async () => {
+    const { url } = await createEntryUrl(principal(), ORIGIN, 'file-9', {
+      path: 'a.txt',
+    })
+    for (let attempt = 0; attempt < 3; attempt++)
+      expect(await findTransfer(secretOf(url), 'archive-entry')).not.toBeNull()
+    expect(table.rows[0].claimedAt).toBeNull()
+    vi.setSystemTime(minutes(DOWNLOAD_MINUTES))
+    expect(await findTransfer(secretOf(url), 'archive-entry')).toBeNull()
+  })
+
+  it('counts with the download links of files: twenty of the two wait at once', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS / 2; index++) {
+      await createDownloadUrl(principal(), ORIGIN, `file-${index}`)
+      await createEntryUrl(principal(), ORIGIN, 'file-9', { position: index })
+    }
+    expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
+    // Both are download links to whoever holds them, and are refused alike.
+    for (const refused of [
+      createEntryUrl(principal(), ORIGIN, 'file-9', { path: 'a.txt' }),
+      createDownloadUrl(principal(), ORIGIN, 'file-9'),
+    ])
+      await expect(refused).rejects.toThrow(
+        `This connection already has ${MAX_OUTSTANDING_TRANSFERS} download links waiting. Wait a few minutes for them to expire.`
+      )
+    expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
+  })
+
+  it('is refused by twenty file links alone, and refuses a file link by twenty of its own', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++) seed()
+    await expect(
+      createEntryUrl(principal(), ORIGIN, 'file-9', { path: 'a.txt' })
+    ).rejects.toThrow(TransferLimitError)
+    table.rows = []
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++)
+      seed({ kind: 'archive-entry' })
+    await expect(
+      createDownloadUrl(principal(), ORIGIN, 'file-9')
+    ).rejects.toThrow(TransferLimitError)
+  })
+
+  it('leaves upload URLs and export URLs their own counts', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++)
+      seed({ kind: 'archive-entry' })
+    await createUploadUrl(principal(), ORIGIN, { options: {} })
+    await createExportUrl(principal(), ORIGIN)
+    // And neither of those takes a place among the download links.
+    table.rows = []
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++) {
+      seed({ kind: 'upload', fileId: null })
+      seed({ kind: 'export', fileId: null })
+    }
+    await createEntryUrl(principal(), ORIGIN, 'file-9', { path: 'a.txt' })
+    await createDownloadUrl(principal(), ORIGIN, 'file-9')
+  })
+
+  it('counts under the lock of its account, beside file links that arrive with it', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS - 1; index++) seed()
+    const results = await Promise.allSettled([
+      createEntryUrl(principal(), ORIGIN, 'file-9', { path: 'a.txt' }),
+      createDownloadUrl(principal(), ORIGIN, 'file-9'),
+      createEntryUrl(principal(), ORIGIN, 'file-9', { position: 2 }),
+    ])
+    expect(results.map(({ status }) => status)).toEqual([
+      'fulfilled',
+      'rejected',
+      'rejected',
+    ])
+    expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
+  })
+})
+
+describe('an export URL', () => {
+  it('fixes nothing but whose export it is, and waits 15 minutes for its download', async () => {
+    const { url, expires_at } = await createExportUrl(principal(), ORIGIN)
+    const [row] = table.rows
+    expect(row).toMatchObject({
+      userId: 'owner',
+      credential: 'token:token-1',
+      kind: 'export',
+      fileId: null,
+      options: null,
+      claimedAt: null,
+      secretHash: hashApiToken(secretOf(url)),
+    })
+    expect(url).toBe(`${ORIGIN}${TRANSFER_PATH}/${secretOf(url)}`)
+    expect(expires_at).toBe(minutes(EXPORT_MINUTES).toISOString())
+    expect(EXPORT_MINUTES).toBe(15)
+    expect(await findTransfer(secretOf(url), 'export')).toBe(row)
+    for (const kind of ['download', 'archive-entry', 'upload'] as const)
+      expect(await findTransfer(secretOf(url), kind)).toBeNull()
+  })
+
+  it('stops at twenty waiting, on a count of its own', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++)
+      await createExportUrl(principal(), ORIGIN)
+    const refusal = await createExportUrl(principal(), ORIGIN).then(
+      () => null,
+      (error: unknown) => error
+    )
+    expect(refusal).toBeInstanceOf(TransferLimitError)
+    expect(refusal).toMatchObject({
+      outcome: 'failure',
+      message: `This connection already has ${MAX_OUTSTANDING_TRANSFERS} export URLs waiting. Use one, or wait: one that was never used expires 15 minutes after it was made.`,
+    })
+    expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
+    // Download links and upload URLs are still to be had.
+    await createDownloadUrl(principal(), ORIGIN, 'file-9')
+    await createUploadUrl(principal(), ORIGIN, { options: {} })
+  })
+
+  it('goes to the first request only, and is kept a day for the download that took it', async () => {
+    const row = seed({ kind: 'export', fileId: null })
+    const claims = await Promise.all([claimExport(row.id), claimExport(row.id)])
+    expect(claims.filter(Boolean)).toHaveLength(1)
+    expect(await claimExport(row.id)).toBe(false)
+    expect(row.claimedAt).toEqual(NOW)
+    // A large account takes far longer to send than the URL had to start.
+    expect(row.expiresAt).toEqual(minutes(EXPORT_HOLD_HOURS * 60))
+    expect(EXPORT_HOLD_HOURS).toBe(24)
+    // One conditional write each, so the database decides.
+    expect(table.calls).toEqual(['updateMany', 'updateMany', 'updateMany'])
+  })
+
+  it('still counts while its download runs', async () => {
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS; index++) {
+      const row = seed({ kind: 'export', fileId: null })
+      await claimExport(row.id)
+    }
+    vi.setSystemTime(minutes(60))
+    await expect(createExportUrl(principal(), ORIGIN)).rejects.toThrow(
+      TransferLimitError
+    )
+  })
+
+  it('does not go to a request that comes after its time, or for a URL that is not there', async () => {
+    const row = seed({ kind: 'export', fileId: null, expiresAt: NOW })
+    expect(await claimExport(row.id)).toBe(false)
+    expect(row.claimedAt).toBeNull()
+    expect(await claimExport('missing')).toBe(false)
+  })
+
+  it('is given back with the time it had when the export fails before a byte is sent', async () => {
+    const row = seed({
+      kind: 'export',
+      fileId: null,
+      createdAt: minutes(-5),
+      expiresAt: minutes(EXPORT_MINUTES - 5),
+    })
+    await claimExport(row.id)
+    await releaseExport(row.id)
+    expect(row.claimedAt).toBeNull()
+    // Fifteen minutes from when it was made, not from when it was taken.
+    expect(row.expiresAt).toEqual(minutes(EXPORT_MINUTES - 5))
+    expect(await claimExport(row.id)).toBe(true)
+    expect(await claimExport(row.id)).toBe(false)
+  })
+
+  it('is gone once its download has ended', async () => {
+    const row = seed({ kind: 'export', fileId: null })
+    const other = seed({ kind: 'export', fileId: null })
+    await claimExport(row.id)
+    await endExport(row.id)
+    expect(table.rows).toEqual([other])
+    expect(await claimExport(row.id)).toBe(false)
+    // Ending it twice, or releasing it afterwards, brings nothing back.
+    await endExport(row.id)
+    await releaseExport(row.id)
+    expect(table.rows).toEqual([other])
+  })
+
+  it('never fails the request when it cannot be given back or removed', async () => {
+    const row = seed({ kind: 'export', fileId: null })
+    table.failing = true
+    await expect(releaseExport(row.id)).resolves.toBeUndefined()
+    await expect(endExport(row.id)).resolves.toBeUndefined()
   })
 })
 

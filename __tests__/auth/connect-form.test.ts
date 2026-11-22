@@ -73,7 +73,7 @@ describe('the consent form as the server sends it', () => {
     const none = form({ available: [] })
     expect(none).not.toContain('>Allow<')
     expect(none).toContain(
-      'Your role allows no file or short link actions, so there is nothing to allow.'
+      'Your role allows no file, short link or account setting actions, so there is nothing to allow.'
     )
     expect(
       form({ available: ['files:read'], ceiling: ['files:delete'] })

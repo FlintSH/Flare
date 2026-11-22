@@ -108,6 +108,7 @@ function context(
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: overrides.origin ?? ORIGIN,
     allows: () => true,
+    recheck: async () => {},
     requireEffect: () => {},
   }
 }
@@ -589,7 +590,7 @@ describe('upload options', () => {
     }
     expect(mocks.profiles).toHaveBeenCalledWith({
       where: { userId: 'owner' },
-      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
     })
   })
 

@@ -3,10 +3,13 @@ import type { Prisma } from '@prisma/client'
 import { Readable } from 'node:stream'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ArchiveError } from '@/lib/archives/errors'
 import { auditSettled, configureAuditWriter } from '@/lib/audit'
 import { HttpError } from '@/lib/http/errors'
 import { hashApiToken } from '@/lib/integrations/tokens'
+import { ToolError } from '@/lib/mcp/tool'
 import { DEFAULT_PERMISSIONS } from '@/lib/permissions/catalog'
+import { PermissionError } from '@/lib/permissions/server'
 import { newLinkToken } from '@/lib/security/link-token'
 import type { FixedUpload } from '@/lib/uploads/direct'
 
@@ -37,6 +40,9 @@ const state = vi.hoisted(() => ({
   files: [] as FileRow[],
   tokens: [] as Array<Record<string, unknown> & { id: string }>,
   connections: [] as Array<Record<string, unknown> & { id: string }>,
+  users: [] as Array<{ id: string; sessionVersion: number }>,
+  /** The transfer table cannot be read. */
+  unreadable: false,
   everyone: [] as string[],
   enabled: true,
   storage: undefined as unknown,
@@ -51,6 +57,8 @@ const mocks = vi.hoisted(() => ({
   consume: vi.fn(),
   verifyEmail: vi.fn(),
   queries: vi.fn(),
+  readEntry: vi.fn(),
+  exportData: vi.fn(),
 }))
 
 // Either would answer a signed-in administrator, if anything asked.
@@ -77,6 +85,7 @@ vi.mock('@/lib/database/prisma', () => {
       agentTransfer: {
         findUnique: async ({ where }: { where: Where }) => {
           mocks.queries('agentTransfer.findUnique')
+          if (state.unreadable) throw new Error('Database unavailable')
           return state.transfers.find((row) => matches(row, where)) ?? null
         },
         updateMany: async ({
@@ -130,9 +139,24 @@ vi.mock('@/lib/database/prisma', () => {
         },
         update: mocks.countFile,
       },
+      // The account's row, for the session version it is on.
+      user: {
+        findUnique: async ({ where }: { where: { id: string } }) => {
+          mocks.queries('user.findUnique')
+          return state.users.find((user) => user.id === where.id) ?? null
+        },
+      },
     },
   }
 })
+// The library's archive reader and the account export, which the route only
+// calls: what they are handed is what these tests are about.
+vi.mock('@/lib/archives/service', () => ({
+  readArchiveEntry: mocks.readEntry,
+}))
+vi.mock('@/lib/users/export', () => ({
+  exportAccountData: mocks.exportData,
+}))
 vi.mock('@/lib/email/config', () => ({
   getEmailConfig: vi.fn(async () => ({})),
 }))
@@ -167,7 +191,10 @@ vi.mock('@/lib/logger', () => {
     info: vi.fn(),
     debug: vi.fn(),
   }
-  return { loggers: new Proxy({}, { get: () => logger }) }
+  return {
+    loggers: new Proxy({}, { get: () => logger }),
+    createLogger: () => logger,
+  }
 })
 
 const ORIGIN = 'https://flare.test'
@@ -198,7 +225,7 @@ const token = {
   userId: 'owner',
   name: 'Agent',
   hash: hashApiToken('flr_AgentToken'),
-  scopes: ['files:read', 'files:content', 'files:upload', 'mcp'],
+  scopes: ['files:read', 'files:content', 'files:upload', 'urls:read', 'mcp'],
   profileId: null as string | null,
   revokedAt: null as Date | null,
   expiresAt: null as Date | null,
@@ -215,7 +242,7 @@ const connection = {
   clientId: 'flc_client',
   clientName: 'Claude Code (flare)',
   redirectUri: 'http://localhost:53124/callback',
-  scopes: ['files:read', 'files:content', 'files:upload'],
+  scopes: ['files:read', 'files:content', 'files:upload', 'urls:read'],
   lastUsedAt: null,
   revokedAt: null as Date | null,
   revokedReason: null as string | null,
@@ -241,11 +268,13 @@ const fixedUpload = {
   passwordHash: '$2b$10$storedhashstoredhashstoredhashstoredhashstoredhashstor',
 }
 
+const KINDS = ['download', 'archive-entry', 'export', 'upload'] as const
+type Kind = (typeof KINDS)[number]
+/** The entry an archive-entry URL is made for, unless a test says otherwise. */
+const ENTRY = { path: 'docs/readme.md' }
+
 /** A transfer row and the secret its URL carries. */
-function transfer(
-  kind: 'download' | 'upload',
-  overrides: Partial<TransferRow> = {}
-) {
+function transfer(kind: Kind, overrides: Partial<TransferRow> = {}) {
   const secret = newLinkToken()
   const row: TransferRow = {
     id: `transfer-${state.transfers.length + 1}`,
@@ -253,8 +282,13 @@ function transfer(
     userId: 'owner',
     credential: 'token:token-1',
     kind,
-    fileId: kind === 'download' ? 'file-1' : null,
-    options: kind === 'upload' ? fixedUpload : null,
+    fileId: kind === 'download' || kind === 'archive-entry' ? 'file-1' : null,
+    options:
+      kind === 'upload'
+        ? fixedUpload
+        : kind === 'archive-entry'
+          ? { entry: ENTRY }
+          : null,
     expiresAt: new Date(Date.now() + 5 * 60_000),
     claimedAt: null,
     createdAt: new Date(),
@@ -352,12 +386,44 @@ const links = {
   type: 'application/pdf',
 }
 
+/** What the archive reader answers for the whole of a small entry. */
+const entryAnswer = () =>
+  new Response(new Uint8Array(bytes), {
+    headers: {
+      'Accept-Ranges': 'bytes',
+      'Cache-Control': 'private, no-store',
+      'Content-Disposition': 'attachment; filename="readme.md"',
+      'Content-Length': String(bytes.length),
+      'Content-Type': 'application/octet-stream',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  })
+
+/** An export as the account export hands it over: a name and a body to read. */
+function exportOf(chunks: string[]) {
+  let sent = 0
+  const cancelled = vi.fn()
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent < chunks.length)
+        controller.enqueue(new TextEncoder().encode(chunks[sent++]))
+      else controller.close()
+    },
+    cancel: cancelled,
+  })
+  return { filename: 'flare-data-export-1.zip', body, cancelled }
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   state.transfers = []
   state.files = [{ ...file }]
   state.tokens = [{ ...token }]
   state.connections = [{ ...connection }]
+  state.users = [{ id: 'owner', sessionVersion: 1 }]
+  state.unreadable = false
+  mocks.readEntry.mockImplementation(async () => entryAnswer())
+  mocks.exportData.mockImplementation(async () => exportOf(['PK', 'zip']))
   state.everyone = [...DEFAULT_PERMISSIONS]
   state.enabled = true
   state.storage = memoryStorage()
@@ -376,16 +442,24 @@ afterEach(async () => {
   vi.unstubAllEnvs()
 })
 
-/** What makes a URL unusable, for either kind unless it names one. */
+/** The kinds whose URLs name a file of the account. */
+const OF_A_FILE: Kind[] = ['download', 'archive-entry']
+/** The kinds whose URLs send something, which need what reading needs. */
+const SENT: Kind[] = ['download', 'archive-entry', 'export']
+
+/** What makes a URL unusable, for every kind unless it names some. */
 const refusals: Array<{
   name: string
-  kind?: 'download' | 'upload'
+  kinds?: Kind[]
   outcome: 'failure' | 'denied'
+  /** The row is not even found, so a GET cannot tell what it was for. */
+  unfound?: true
   arrange: (row: TransferRow) => void
 }> = [
   {
     name: 'it has expired',
     outcome: 'failure',
+    unfound: true,
     arrange: (row) => (row.expiresAt = new Date(Date.now() - 1)),
   },
   {
@@ -411,20 +485,52 @@ const refusals: Array<{
   },
   {
     name: 'its token lost the scope for reading contents',
-    kind: 'download',
+    kinds: SENT,
     outcome: 'denied',
-    arrange: () => withToken({ scopes: ['files:read', 'files:upload', 'mcp'] }),
+    arrange: () =>
+      withToken({ scopes: ['files:read', 'files:upload', 'urls:read', 'mcp'] }),
   },
   {
-    name: 'its token lost the upload scope',
-    kind: 'upload',
+    name: 'its token lost the scope for reading short links, which an export holds',
+    kinds: ['export'],
     outcome: 'denied',
     arrange: () =>
       withToken({ scopes: ['files:read', 'files:content', 'mcp'] }),
   },
   {
+    name: 'its token lost the scope for listing files, which an export holds',
+    kinds: ['export'],
+    outcome: 'denied',
+    arrange: () => withToken({ scopes: ['files:content', 'urls:read', 'mcp'] }),
+  },
+  {
+    name: 'its token lost the upload scope',
+    kinds: ['upload'],
+    outcome: 'denied',
+    arrange: () =>
+      withToken({ scopes: ['files:read', 'files:content', 'mcp'] }),
+  },
+  {
+    name: 'the role no longer lets the account export its data',
+    kinds: ['export'],
+    outcome: 'denied',
+    arrange: () =>
+      (state.everyone = DEFAULT_PERMISSIONS.filter(
+        (permission) => permission !== 'profile.export'
+      )),
+  },
+  {
+    name: 'the role no longer lets the account see its short links, which an export holds',
+    kinds: ['export'],
+    outcome: 'denied',
+    arrange: () =>
+      (state.everyone = DEFAULT_PERMISSIONS.filter(
+        (permission) => permission !== 'links.read'
+      )),
+  },
+  {
     name: 'the role no longer lets the account read files',
-    kind: 'download',
+    kinds: SENT,
     outcome: 'denied',
     arrange: () =>
       (state.everyone = DEFAULT_PERMISSIONS.filter(
@@ -433,7 +539,7 @@ const refusals: Array<{
   },
   {
     name: 'the role no longer lets the account upload',
-    kind: 'upload',
+    kinds: ['upload'],
     outcome: 'denied',
     arrange: () =>
       (state.everyone = DEFAULT_PERMISSIONS.filter(
@@ -458,19 +564,95 @@ const refusals: Array<{
   },
   {
     name: 'the file was deleted',
-    kind: 'download',
+    kinds: OF_A_FILE,
     outcome: 'failure',
     arrange: () => (state.files = []),
   },
   {
     name: 'the file belongs to another account now',
-    kind: 'download',
+    kinds: OF_A_FILE,
     outcome: 'denied',
     arrange: () => (state.files = [{ ...file, userId: 'other' }]),
   },
   {
+    name: 'its row names no file',
+    kinds: OF_A_FILE,
+    outcome: 'failure',
+    arrange: (row) => (row.fileId = null),
+  },
+  {
+    name: 'its row names no entry',
+    kinds: ['archive-entry'],
+    outcome: 'failure',
+    arrange: (row) => (row.options = null),
+  },
+  {
+    name: 'its row names an entry that is neither a path nor a position',
+    kinds: ['archive-entry'],
+    outcome: 'failure',
+    arrange: (row) => (row.options = { entry: { path: '', position: 2 } }),
+  },
+  {
+    name: 'the archive went while its entry was being found',
+    kinds: ['archive-entry'],
+    outcome: 'failure',
+    arrange: () =>
+      mocks.readEntry.mockRejectedValue(
+        new ArchiveError('One or more source files are unavailable.', 404)
+      ),
+  },
+  {
+    name: 'the archive no longer holds the entry',
+    kinds: ['archive-entry'],
+    outcome: 'failure',
+    arrange: () =>
+      mocks.readEntry.mockRejectedValue(
+        new ArchiveError('Archive entry not found.', 404)
+      ),
+  },
+  {
+    name: 'the role changed while its entry was being found',
+    kinds: ['archive-entry'],
+    outcome: 'denied',
+    arrange: () =>
+      mocks.readEntry.mockRejectedValue(
+        new PermissionError('You no longer have permission for this action')
+      ),
+  },
+  {
+    name: 'the account was signed out everywhere while its entry was being found',
+    kinds: ['archive-entry'],
+    outcome: 'denied',
+    arrange: () =>
+      mocks.readEntry.mockRejectedValue(
+        new ArchiveError('Sign in again before creating files.', 401)
+      ),
+  },
+  {
+    name: 'its credential ended while its entry was being found',
+    kinds: ['archive-entry'],
+    outcome: 'denied',
+    arrange: () =>
+      mocks.readEntry.mockRejectedValue(
+        new ToolError('This connection was disconnected.', 'denied')
+      ),
+  },
+  {
+    name: 'the account went the moment its entry was asked for',
+    kinds: ['archive-entry'],
+    outcome: 'denied',
+    arrange: () => (state.users = []),
+  },
+  {
+    name: 'the account went the moment its export was asked for',
+    kinds: ['export'],
+    outcome: 'failure',
+    arrange: () =>
+      mocks.exportData.mockRejectedValue(new HttpError(404, 'User not found')),
+  },
+  {
     name: 'the stored object is gone',
-    kind: 'download',
+    kinds: ['download'],
     outcome: 'failure',
     arrange: () =>
       (state.storage = {
@@ -482,9 +664,9 @@ const refusals: Array<{
   },
 ]
 
-describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
+describe.each(KINDS)('a %s URL', (kind) => {
   const send = (secret: string) =>
-    kind === 'download' ? download(secret) : upload(secret)
+    kind === 'upload' ? upload(secret) : download(secret)
   const action = `mcp.transfer.${kind}`
 
   it('answers 404 for a ticket nobody was given', async () => {
@@ -492,7 +674,9 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
     await expectNotFound(await send(newLinkToken()))
     expect(await audited()).toEqual([
       expect.objectContaining({
-        action,
+        // A GET that names nothing is recorded as the plain download it
+        // asked for: only a row says what else it might have been.
+        action: kind === 'upload' ? action : 'mcp.transfer.download',
         category: 'mcp',
         outcome: 'failure',
         status: 404,
@@ -514,14 +698,17 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
     }
   )
 
-  it('answers 404 for a URL of the other kind', async () => {
-    const { secret, row } = transfer(
-      kind === 'download' ? 'upload' : 'download'
-    )
+  it.each(
+    // A URL that sends is no upload URL, and an upload URL sends nothing.
+    kind === 'upload' ? SENT : (['upload'] as Kind[])
+  )('answers 404 for a %s URL sent the other way', async (other) => {
+    const { secret, row } = transfer(other)
     await expectNotFound(await send(secret))
     // Nothing was claimed, served or uploaded.
     expect(row.claimedAt).toBeNull()
     expect(mocks.directUpload).not.toHaveBeenCalled()
+    expect(mocks.readEntry).not.toHaveBeenCalled()
+    expect(mocks.exportData).not.toHaveBeenCalled()
     expect(mocks.queries.mock.calls.flat()).toEqual([
       'agentTransfer.findUnique',
     ])
@@ -541,9 +728,9 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
     expect((await send(secret)).status).toBe(200)
   })
 
-  it.each(refusals.filter((refusal) => (refusal.kind ?? kind) === kind))(
+  it.each(refusals.filter(({ kinds = KINDS }) => kinds.includes(kind)))(
     'answers the same 404 when $name',
-    async ({ arrange, outcome }) => {
+    async ({ arrange, outcome, unfound }) => {
       const { secret, row } = transfer(kind)
       arrange(row)
       const response = await send(secret)
@@ -551,10 +738,15 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
       expect(row.claimedAt).toBeNull()
       expect(mocks.directUpload).not.toHaveBeenCalled()
       expect(mocks.consume).not.toHaveBeenCalled()
+      // Nothing of the account was sent, whatever the URL was for.
+      const storage = state.storage as ReturnType<typeof memoryStorage>
+      expect(storage.getFileStream).not.toHaveBeenCalled()
       const events = await audited()
       expect(events).toEqual([
         expect.objectContaining({
-          action,
+          // Like a ticket nobody was given: a plain download that failed.
+          action:
+            unfound && kind !== 'upload' ? 'mcp.transfer.download' : action,
           category: 'mcp',
           outcome,
           status: 404,
@@ -580,9 +772,9 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
       Cookie: 'next-auth.session-token=signed-in-administrator',
     }
     const response =
-      kind === 'download'
-        ? await download(secret, { headers })
-        : await upload(secret, { headers })
+      kind === 'upload'
+        ? await upload(secret, { headers })
+        : await download(secret, { headers })
     await expectNotFound(response)
     expect(mocks.session).not.toHaveBeenCalled()
     expect(mocks.serverSession).not.toHaveBeenCalled()
@@ -593,9 +785,9 @@ describe.each(['download', 'upload'] as const)('a %s URL', (kind) => {
     const { secret } = transfer(kind)
     const headers = { Origin: 'https://app.example.com' }
     const response =
-      kind === 'download'
-        ? await download(secret, { headers })
-        : await upload(secret, { headers })
+      kind === 'upload'
+        ? await upload(secret, { headers })
+        : await download(secret, { headers })
     expect(response.status).toBe(200)
     expect(response.headers.get('access-control-allow-origin')).toBeNull()
     expect(response.headers.get('vary')).toBeNull()
@@ -746,6 +938,599 @@ describe('downloading through a transfer URL', () => {
       },
       body: JSON.stringify({ error: 'The transfer could not be completed.' }),
     })
+  })
+})
+
+describe('a download whose row cannot be read', () => {
+  it.each(SENT)(
+    'answers the transfer error for a %s URL, and records it as any failed request',
+    async (kind) => {
+      const { secret } = transfer(kind)
+      state.unreadable = true
+      expect(await shape(await download(secret))).toEqual({
+        status: 500,
+        headers: {
+          'cache-control': 'no-store',
+          'content-type': 'application/json',
+          'referrer-policy': 'no-referrer',
+        },
+        body: JSON.stringify({ error: 'The transfer could not be completed.' }),
+      })
+      const events = await audited()
+      expect(events).toEqual([
+        expect.objectContaining({
+          // The row would have said what it was; without it, a download.
+          action: 'mcp.transfer.download',
+          category: 'mcp',
+          outcome: 'failure',
+          status: 500,
+          route: TEMPLATE,
+        }),
+      ])
+      expect(JSON.stringify(events)).not.toContain(secret)
+      expect(mocks.readEntry).not.toHaveBeenCalled()
+      expect(mocks.exportData).not.toHaveBeenCalled()
+    }
+  )
+})
+
+describe('downloading one entry of an archive through a transfer URL', () => {
+  /** What the archive reader was handed on its only call. */
+  const handed = () => {
+    expect(mocks.readEntry).toHaveBeenCalledOnce()
+    const [actor, id, selector, request, inline] = mocks.readEntry.mock
+      .calls[0] as [
+      {
+        user: Record<string, unknown>
+        sessionVersion: number
+        authorize: unknown
+      },
+      string,
+      unknown,
+      Request,
+      boolean,
+    ]
+    return { actor, id, selector, request, inline }
+  }
+
+  it('sends what the archive reader answers, as a download that nothing may cache', async () => {
+    const { secret } = transfer('archive-entry')
+    const response = await download(secret)
+    expect(response.status).toBe(200)
+    expect(Object.fromEntries(response.headers)).toEqual({
+      'accept-ranges': 'bytes',
+      // The reader's own `private, no-store` gives way to the transfer's.
+      'cache-control': 'no-store',
+      'content-disposition': 'attachment; filename="readme.md"',
+      'content-length': '10',
+      'content-type': 'application/octet-stream',
+      'referrer-policy': 'no-referrer',
+      'x-content-type-options': 'nosniff',
+    })
+    expect(await response.text()).toBe('0123456789')
+  })
+
+  it('asks the reader for the file and the entry its row names, as the account, and never inline', async () => {
+    const { secret } = transfer('archive-entry')
+    await download(secret)
+    const { actor, id, selector, inline } = handed()
+    expect(id).toBe('file-1')
+    expect(selector).toEqual({ path: 'docs/readme.md' })
+    expect(inline).toBe(false)
+    expect(actor.user).toMatchObject({
+      id: 'owner',
+      credential: 'token',
+      apiToken: { id: 'token-1' },
+    })
+    // The session version the account is on as the request arrives, and the
+    // check the reader runs if finding the entry takes long.
+    expect(actor.sessionVersion).toBe(1)
+    expect(actor.authorize).toEqual(expect.any(Function))
+  })
+
+  it('reads an entry its row names by position', async () => {
+    const { secret } = transfer('archive-entry', {
+      options: { entry: { position: 12 } },
+    })
+    await download(secret)
+    expect(handed().selector).toEqual({ position: 12 })
+  })
+
+  it('serves the entry its row names, whatever the request names', async () => {
+    state.files.push({ ...file, id: 'file-2', name: 'other.zip' })
+    const { secret } = transfer('archive-entry')
+    await GET(
+      new Request(
+        url(
+          secret,
+          '?path=secrets.txt&entry=3&file=file-2&id=file-2&disposition=inline'
+        )
+      ),
+      at(secret)
+    )
+    const { id, selector, inline } = handed()
+    expect(id).toBe('file-1')
+    expect(selector).toEqual({ path: 'docs/readme.md' })
+    expect(inline).toBe(false)
+  })
+
+  it('hands the reader the request itself, so a Range is honoured as the reader honours it', async () => {
+    mocks.readEntry.mockImplementation(
+      async (
+        _actor: unknown,
+        _id: string,
+        _entry: unknown,
+        request: Request
+      ) =>
+        request.headers.get('range') === 'bytes=2-5'
+          ? new Response('2345', {
+              status: 206,
+              headers: { 'Content-Range': 'bytes 2-5/10' },
+            })
+          : new Response(null, {
+              status: 416,
+              headers: { 'Content-Range': 'bytes */10' },
+            })
+    )
+    const { secret } = transfer('archive-entry')
+    const part = await download(secret, { headers: { Range: 'bytes=2-5' } })
+    expect(part.status).toBe(206)
+    expect(part.headers.get('content-range')).toBe('bytes 2-5/10')
+    expect(part.headers.get('cache-control')).toBe('no-store')
+    expect(part.headers.get('referrer-policy')).toBe('no-referrer')
+    expect(await part.text()).toBe('2345')
+    const past = await download(secret, { headers: { Range: 'bytes=50-60' } })
+    expect(past.status).toBe(416)
+    expect(past.headers.get('content-range')).toBe('bytes */10')
+    expect(past.headers.get('cache-control')).toBe('no-store')
+    expect(await past.text()).toBe('')
+  })
+
+  it('works again and again until it expires, so a download can resume', async () => {
+    const { secret, row } = transfer('archive-entry')
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const response = await download(secret)
+      expect(response.status).toBe(200)
+      expect(await response.text()).toBe('0123456789')
+    }
+    expect(row.claimedAt).toBeNull()
+    expect(state.transfers).toEqual([row])
+    row.expiresAt = new Date(Date.now() - 1)
+    await expectNotFound(await download(secret))
+    expect(mocks.readEntry).toHaveBeenCalledTimes(3)
+  })
+
+  it('records the download under its own action, the account and the archive', async () => {
+    const { secret } = transfer('archive-entry')
+    await (await download(secret)).text()
+    const events = await audited()
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: 'mcp.transfer.archive-entry',
+        category: 'mcp',
+        outcome: 'success',
+        status: 200,
+        method: 'GET',
+        route: TEMPLATE,
+        actorId: 'owner',
+        actorName: 'Alex',
+        targetType: 'file',
+        targetId: 'file-1',
+        targetName: 'notes.txt',
+      }),
+    ])
+    expect(events[0].details).toMatchObject({ tokenId: 'token-1' })
+    // Neither the secret nor the name of the entry is recorded here.
+    expect(JSON.stringify(events)).not.toContain(secret)
+    expect(JSON.stringify(events)).not.toContain('readme.md')
+  })
+
+  it('counts neither a view nor a download, and reads nothing but through the reader', async () => {
+    const { secret } = transfer('archive-entry')
+    await (await download(secret)).text()
+    await (await download(secret, { headers: { Range: 'bytes=0-1' } })).text()
+    expect(mocks.countFile).not.toHaveBeenCalled()
+    const storage = state.storage as ReturnType<typeof memoryStorage>
+    expect(storage.getFileStream).not.toHaveBeenCalled()
+    expect(storage.getDownloadUrl).not.toHaveBeenCalled()
+    expect(mocks.session).not.toHaveBeenCalled()
+    expect(mocks.serverSession).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['a private archive', { visibility: 'PRIVATE' as const }],
+    ['an archive with a password', { password: '$2b$10$filepasswordhash' }],
+  ])(
+    'opens %s for the account that owns it, without asking for more',
+    async (_what, change) => {
+      state.files = [{ ...file, ...change }]
+      const { secret } = transfer('archive-entry')
+      expect((await download(secret)).status).toBe(200)
+    }
+  )
+
+  it('answers a busy reader as the archive routes do, and says when to come back', async () => {
+    mocks.readEntry.mockRejectedValue(
+      new ArchiveError(
+        'Too many archive files are open at once. Close a preview or wait for a download to finish, then try again.',
+        429
+      )
+    )
+    const { secret } = transfer('archive-entry')
+    const response = await download(secret)
+    expect(await shape(response)).toEqual({
+      status: 429,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'application/json',
+        'referrer-policy': 'no-referrer',
+        'retry-after': '5',
+      },
+      body: JSON.stringify({
+        error:
+          'Too many archive files are open at once. Close a preview or wait for a download to finish, then try again.',
+      }),
+    })
+  })
+
+  it.each([
+    [
+      415,
+      'This file is encrypted inside the archive. Download the whole archive and open it with its password.',
+    ],
+    [409, 'A source file changed or was removed. Refresh and try again.'],
+  ])(
+    'answers what the reader says about an entry it cannot send (%i)',
+    async (status, message) => {
+      mocks.readEntry.mockRejectedValue(new ArchiveError(message, status))
+      const { secret } = transfer('archive-entry')
+      const response = await download(secret)
+      expect(response.status).toBe(status)
+      expect(await response.json()).toEqual({ error: message })
+      expect(response.headers.get('cache-control')).toBe('no-store')
+    }
+  )
+
+  it('reports a failure of its own as the transfer error, with nothing cacheable', async () => {
+    mocks.readEntry.mockRejectedValue(new Error('disk on fire'))
+    const { secret } = transfer('archive-entry')
+    expect(await shape(await download(secret))).toEqual({
+      status: 500,
+      headers: {
+        'cache-control': 'no-store',
+        'content-type': 'application/json',
+        'referrer-policy': 'no-referrer',
+      },
+      body: JSON.stringify({ error: 'The transfer could not be completed.' }),
+    })
+  })
+})
+
+describe('downloading the account export through a transfer URL', () => {
+  /** A download that stays open until the test lets its export go on. */
+  function slowExport() {
+    let more!: (chunk: string | null) => void
+    const cancelled = vi.fn()
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        const chunk = await new Promise<string | null>(
+          (resolve) => (more = resolve)
+        )
+        if (chunk === null) controller.close()
+        else controller.enqueue(new TextEncoder().encode(chunk))
+      },
+      cancel: cancelled,
+    })
+    mocks.exportData.mockResolvedValueOnce({
+      filename: 'flare-data-export-1.zip',
+      body,
+    })
+    return {
+      cancelled,
+      /** Hands the export its next bytes once it asks for them. */
+      async send(chunk: string | null) {
+        await vi.waitFor(() => expect(more).toBeTypeOf('function'))
+        const give = more
+        more = undefined as never
+        give(chunk)
+      },
+    }
+  }
+
+  it('sends the export as a ZIP download that nothing may cache', async () => {
+    const { secret } = transfer('export')
+    const response = await download(secret)
+    expect(response.status).toBe(200)
+    expect(Object.fromEntries(response.headers)).toEqual({
+      'cache-control': 'no-store',
+      'content-disposition': 'attachment; filename="flare-data-export-1.zip"',
+      'content-type': 'application/zip',
+      'referrer-policy': 'no-referrer',
+    })
+    expect(await response.text()).toBe('PKzip')
+  })
+
+  it('exports the account its row names, under an id of its own, until the request ends', async () => {
+    const { secret } = transfer('export')
+    const controller = new AbortController()
+    await (await download(secret, { signal: controller.signal })).text()
+    expect(mocks.exportData).toHaveBeenCalledOnce()
+    const [userId, options] = mocks.exportData.mock.calls[0] as [
+      string,
+      { exportId: string; signal: AbortSignal },
+    ]
+    expect(userId).toBe('owner')
+    expect(Object.keys(options).sort()).toEqual(['exportId', 'signal'])
+    expect(options.exportId).toMatch(/^[0-9a-f]{32}$/)
+    expect(options.signal.aborted).toBe(false)
+    controller.abort()
+    expect(options.signal.aborted).toBe(true)
+  })
+
+  it('exports nothing the request names: not another account, not an id of its choosing', async () => {
+    const first = transfer('export')
+    const second = transfer('export')
+    const chosen = 'a'.repeat(32)
+    for (const { secret } of [first, second])
+      await (
+        await GET(
+          new Request(
+            url(secret, `?id=${chosen}&user=other&userId=other&account=other`),
+            { headers: { 'X-User-Id': 'other' } }
+          ),
+          at(secret)
+        )
+      ).text()
+    const calls = mocks.exportData.mock.calls as [
+      string,
+      { exportId: string },
+    ][]
+    expect(calls.map(([userId]) => userId)).toEqual(['owner', 'owner'])
+    // A new id each time, and never the one the request asked for.
+    const ids = calls.map(([, { exportId }]) => exportId)
+    expect(new Set(ids).size).toBe(2)
+    expect(ids).not.toContain(chosen)
+  })
+
+  it('records the export under its own action, with the account as its target', async () => {
+    const { secret } = transfer('export')
+    await (await download(secret)).text()
+    const events = await audited()
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: 'mcp.transfer.export',
+        category: 'mcp',
+        outcome: 'success',
+        status: 200,
+        method: 'GET',
+        route: TEMPLATE,
+        actorId: 'owner',
+        actorName: 'Alex',
+        targetType: 'user',
+        targetId: 'owner',
+        targetName: 'Alex',
+      }),
+    ])
+    expect(events[0].details).toMatchObject({ tokenId: 'token-1' })
+    expect(JSON.stringify(events)).not.toContain(secret)
+  })
+
+  it('counts neither a view nor a download, and asks for no session', async () => {
+    const { secret } = transfer('export')
+    await (
+      await download(secret, {
+        headers: { Cookie: 'next-auth.session-token=signed-in-administrator' },
+      })
+    ).text()
+    expect(mocks.countFile).not.toHaveBeenCalled()
+    expect(mocks.session).not.toHaveBeenCalled()
+    expect(mocks.serverSession).not.toHaveBeenCalled()
+  })
+
+  describe('once', () => {
+    it('is gone once its download has ended, and the same command finds nothing', async () => {
+      const { secret, row } = transfer('export')
+      const response = await download(secret)
+      // Taken as the export starts, and kept while it is sent.
+      expect(row.claimedAt).toBeInstanceOf(Date)
+      expect(state.transfers).toEqual([row])
+      expect(await response.text()).toBe('PKzip')
+      expect(state.transfers).toEqual([])
+      await expectNotFound(await download(secret))
+      expect(mocks.exportData).toHaveBeenCalledOnce()
+    })
+
+    it('refuses a second request with 409 while the first is still being sent', async () => {
+      const { secret, row } = transfer('export')
+      const { send } = slowExport()
+      const sending = download(secret)
+      await send('PK')
+      const first = await sending
+      const second = await download(secret)
+      expect(await shape(second)).toEqual({
+        status: 409,
+        headers: {
+          'cache-control': 'no-store',
+          'content-type': 'application/json',
+          'referrer-policy': 'no-referrer',
+        },
+        body: JSON.stringify({
+          error:
+            'This export URL is in use by another download, or was already used. If that download fails before it starts the URL can be used again; otherwise call export_account for a new one.',
+        }),
+      })
+      // The refused request starts no export and leaves the first one's claim.
+      expect(mocks.exportData).toHaveBeenCalledOnce()
+      expect(row.claimedAt).toBeInstanceOf(Date)
+      expect(state.transfers).toEqual([row])
+      const reading = first.text()
+      await send('zip')
+      await send(null)
+      expect(await reading).toBe('PKzip')
+      expect(state.transfers).toEqual([])
+    })
+
+    it('goes to one of two requests that arrive together', async () => {
+      const { secret } = transfer('export')
+      const [first, second] = await Promise.all([
+        download(secret),
+        download(secret),
+      ])
+      expect([first.status, second.status].sort()).toEqual([200, 409])
+      expect(mocks.exportData).toHaveBeenCalledOnce()
+    })
+
+    it('keeps the URL for the download that took it, long past the time it had to start', async () => {
+      const { secret, row } = transfer('export', {
+        expiresAt: new Date(Date.now() + 60_000),
+      })
+      const { send } = slowExport()
+      const sending = download(secret)
+      await send('PK')
+      await sending
+      const held = row.expiresAt.getTime() - Date.now()
+      expect(held).toBeGreaterThan(23 * 3_600_000)
+      expect(held).toBeLessThanOrEqual(24 * 3_600_000)
+    })
+
+    it('answers before the export is whole: it is read as it is sent', async () => {
+      const { secret } = transfer('export')
+      const { send } = slowExport()
+      const sending = download(secret)
+      // Nothing is answered until the export has begun to arrive.
+      let answered = false
+      void sending.then(() => (answered = true))
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(answered).toBe(false)
+      await send('PK')
+      const response = await sending
+      expect(response.status).toBe(200)
+      const reader = response.body!.getReader()
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('PK')
+      await send('more')
+      expect(new TextDecoder().decode((await reader.read()).value)).toBe('more')
+      await send(null)
+      expect((await reader.read()).done).toBe(true)
+      expect(state.transfers).toEqual([])
+    })
+  })
+
+  describe('when the export fails before a byte is sent', () => {
+    it('gives the URL back with the time it had, so the same command can run again', async () => {
+      const { secret, row } = transfer('export')
+      mocks.exportData.mockRejectedValueOnce(new Error('storage unavailable'))
+      const failed = await download(secret)
+      expect(await shape(failed)).toEqual({
+        status: 500,
+        headers: {
+          'cache-control': 'no-store',
+          'content-type': 'application/json',
+          'referrer-policy': 'no-referrer',
+        },
+        body: JSON.stringify({ error: 'The transfer could not be completed.' }),
+      })
+      expect(row.claimedAt).toBeNull()
+      // Fifteen minutes from when it was made, not the day it was kept for.
+      expect(row.expiresAt.getTime()).toBe(
+        row.createdAt.getTime() + 15 * 60_000
+      )
+      expect(state.transfers).toEqual([row])
+      const retried = await download(secret)
+      expect(retried.status).toBe(200)
+      expect(await retried.text()).toBe('PKzip')
+      expect(mocks.exportData).toHaveBeenCalledTimes(2)
+    })
+
+    it('gives it back when the export breaks off as it is first read', async () => {
+      const { secret, row } = transfer('export')
+      mocks.exportData.mockResolvedValueOnce({
+        filename: 'flare-data-export-1.zip',
+        body: new ReadableStream<Uint8Array>({
+          pull() {
+            throw new Error('archive failed')
+          },
+        }),
+      })
+      expect((await download(secret)).status).toBe(500)
+      expect(row.claimedAt).toBeNull()
+      expect((await download(secret)).status).toBe(200)
+    })
+
+    it('gives it back when the export ends without sending anything', async () => {
+      const { secret, row } = transfer('export')
+      mocks.exportData.mockResolvedValueOnce(exportOf([]))
+      expect((await download(secret)).status).toBe(500)
+      expect(row.claimedAt).toBeNull()
+      expect(state.transfers).toEqual([row])
+    })
+
+    it('records the failure, and that nothing was sent', async () => {
+      const { secret } = transfer('export')
+      mocks.exportData.mockRejectedValueOnce(new Error('storage unavailable'))
+      await download(secret)
+      expect(await audited()).toEqual([
+        expect.objectContaining({
+          action: 'mcp.transfer.export',
+          outcome: 'failure',
+          status: 500,
+        }),
+      ])
+    })
+  })
+
+  describe('when the download breaks off part way', () => {
+    it('is used up when the export fails after its first bytes', async () => {
+      const { secret } = transfer('export')
+      let pulls = 0
+      mocks.exportData.mockResolvedValueOnce({
+        filename: 'flare-data-export-1.zip',
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (pulls++) throw new Error('a file failed part way')
+            controller.enqueue(new TextEncoder().encode('PK'))
+          },
+        }),
+      })
+      const response = await download(secret)
+      expect(response.status).toBe(200)
+      // The client sees a failed download, never a short archive that ends well.
+      await expect(response.text()).rejects.toThrow('a file failed part way')
+      expect(state.transfers).toEqual([])
+      await expectNotFound(await download(secret))
+    })
+
+    it('is used up, and the export stopped, when the client gives up', async () => {
+      const { secret } = transfer('export')
+      const { send, cancelled } = slowExport()
+      const sending = download(secret)
+      await send('PK')
+      const response = await sending
+      await response.body!.cancel('client left')
+      expect(cancelled).toHaveBeenCalledExactlyOnceWith('client left')
+      expect(state.transfers).toEqual([])
+      await expectNotFound(await download(secret))
+    })
+  })
+
+  it('takes nothing for a HEAD, which only asks what is there', async () => {
+    const { secret, row } = transfer('export')
+    const response = await download(secret, { method: 'HEAD' })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('application/zip')
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.body).toBeNull()
+    expect(mocks.exportData).not.toHaveBeenCalled()
+    expect(row.claimedAt).toBeNull()
+    // The URL is still there for the download itself.
+    expect(await (await download(secret)).text()).toBe('PKzip')
+  })
+
+  it('answers a HEAD as it would a GET while a download has the URL', async () => {
+    const { secret, row } = transfer('export')
+    row.claimedAt = new Date()
+    const response = await download(secret, { method: 'HEAD' })
+    expect(response.status).toBe(409)
+    expect(mocks.exportData).not.toHaveBeenCalled()
   })
 })
 
@@ -1128,10 +1913,10 @@ describe('uploading through a transfer URL', () => {
 })
 
 describe('a transfer URL made for an agent that signed in', () => {
-  const made = (kind: 'download' | 'upload') =>
+  const made = (kind: Kind) =>
     transfer(kind, { credential: 'connection:connection-1' })
-  const send = (kind: 'download' | 'upload', secret: string) =>
-    kind === 'download' ? download(secret) : upload(secret)
+  const send = (kind: Kind, secret: string) =>
+    kind === 'upload' ? upload(secret) : download(secret)
 
   it('downloads for as long as the connection lives, and never reads a token', async () => {
     const { secret } = made('download')
@@ -1181,7 +1966,24 @@ describe('a transfer URL made for an agent that signed in', () => {
     expect((await upload(secret)).status).toBe(200)
   })
 
-  describe.each(['download', 'upload'] as const)('for a %s', (kind) => {
+  it('reads an archive entry and sends an export as the account behind the connection', async () => {
+    const entry = made('archive-entry')
+    expect((await download(entry.secret)).status).toBe(200)
+    expect(mocks.readEntry.mock.calls[0][0]).toMatchObject({
+      user: {
+        id: 'owner',
+        credential: 'agent',
+        agentConnection: { id: 'connection-1' },
+      },
+      sessionVersion: 1,
+    })
+    const sent = made('export')
+    expect(await (await download(sent.secret)).text()).toBe('PKzip')
+    expect(mocks.exportData.mock.calls[0][0]).toBe('owner')
+    expect(mocks.queries).not.toHaveBeenCalledWith('apiToken.findUnique')
+  })
+
+  describe.each(KINDS)('for a %s', (kind) => {
     const dies: Array<[string, () => void]> = [
       [
         'the agent is disconnected',
@@ -1237,6 +2039,8 @@ describe('a transfer URL made for an agent that signed in', () => {
       arrange()
       await expectNotFound(await send(kind, secret))
       expect(mocks.directUpload).not.toHaveBeenCalled()
+      expect(mocks.readEntry).not.toHaveBeenCalled()
+      expect(mocks.exportData).not.toHaveBeenCalled()
       const storage = state.storage as ReturnType<typeof memoryStorage>
       expect(storage.getFileStream).not.toHaveBeenCalled()
     })

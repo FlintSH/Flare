@@ -97,19 +97,21 @@ export class ArchiveIndex {
     return 2048 + (this.gzip?.memoryBytes ?? 0) + this.entryBytes
   }
 
-  private publicEntries(after: number): ArchiveEntry[] {
+  private publicEntries(after: number, limit?: number): ArchiveEntry[] {
     return this.entries
-      .slice(after)
+      .slice(after, limit === undefined ? undefined : after + limit)
       .map(({ path, type, size, issue }) =>
         issue ? { path, type, size, issue } : { path, type, size }
       )
   }
 
-  listing(after = 0): ArchiveListing {
+  /** With `limit`, one page of entries and how many the listing holds. */
+  listing(after = 0, limit?: number): ArchiveListing {
     if (this.complete) this.extraction ??= assessExtraction(this)
     return {
       format: this.format,
-      entries: this.publicEntries(after),
+      entries: this.publicEntries(after, limit),
+      ...(limit !== undefined && { listed: this.entries.length }),
       fileCount: this.fileCount,
       totalBytes: this.totalBytes,
       archiveBytes: this.archiveBytes,
@@ -125,13 +127,13 @@ export class ArchiveIndex {
     return this.encoded
   }
 
-  progress(after = 0): ArchiveListingProgress {
+  progress(after = 0, limit?: number): ArchiveListingProgress {
     return {
       status: 'indexing',
       format: this.format,
       archiveBytes: this.archiveBytes,
       bytesRead: Math.min(this.bytesRead, this.archiveBytes),
-      entries: this.publicEntries(after),
+      entries: this.publicEntries(after, limit),
       entriesFound: this.entries.length,
     }
   }

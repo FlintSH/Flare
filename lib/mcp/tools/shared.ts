@@ -229,3 +229,96 @@ export const fileIds = z
   .min(1)
   .max(50)
   .describe('File IDs from search_files, 1 to 50')
+
+/**
+ * The account's upload profile an argument names: its ID, its exact name, or
+ * its name in another letter case when only one profile has it.
+ */
+export async function ownProfile(userId: string, value: string) {
+  const wanted = value.trim()
+  const profiles = await prisma.uploadProfile.findMany({
+    where: { userId },
+    orderBy: { name: 'asc' },
+  })
+  const exact =
+    profiles.find((profile) => profile.id === wanted) ??
+    profiles.find((profile) => profile.name === wanted)
+  if (exact) return exact
+  // Names differ by case at most here; one match is what the caller meant.
+  const named = profiles.filter(
+    (profile) => profile.name.toLowerCase() === wanted.toLowerCase()
+  )
+  if (named.length === 1) return named[0]
+  if (named.length > 1)
+    throw new ToolError(
+      `Several upload profiles match "${value}": ${named
+        .map((profile) => profile.name)
+        .join(', ')}. Use the exact name or the profile ID.`
+    )
+  throw new ToolError(
+    `No upload profile matches "${value}". Call get_account to see the upload profiles.`
+  )
+}
+
+/** The ID of the upload profile an argument names, as `ownProfile` finds it; null for "none". */
+export async function pickProfile(
+  userId: string,
+  value: string
+): Promise<string | null> {
+  if (value.trim().toLowerCase() === NONE) return null
+  return (await ownProfile(userId, value)).id
+}
+
+/** Text ended as a sentence; some services' refusals are not written as one. */
+export const sentence = (text: string) =>
+  /[.!?]$/.test(text) ? text : `${text}.`
+
+/**
+ * A value read by the schema a service or its route reads it with, so a tool
+ * refuses exactly what the route refuses, in the route's words. `names` gives
+ * the tool's argument for each field the schema may complain about.
+ */
+export function serviceInput<Schema extends z.ZodType>(
+  schema: Schema,
+  value: unknown,
+  names: Record<string, string>
+): z.infer<Schema> {
+  const parsed = schema.safeParse(value)
+  if (parsed.success) return parsed.data
+  const [issue] = parsed.error.issues
+  const name = names[String(issue.path[0])]
+  throw new ToolError(name ? `\`${name}\`: ${issue.message}` : issue.message)
+}
+
+/** A new file as the tools that make one answer it. */
+export const newFileSchema = z.object({
+  file: z.object({
+    id: z.string(),
+    name: z.string(),
+    type: z.string().describe('MIME type'),
+    size_bytes: z.number(),
+    url: z
+      .string()
+      .describe('The share page; private files need the owner signed in'),
+    raw_url: z.string().describe('The bytes, shown in the browser'),
+    download_url: z.string().describe('The bytes, as a download'),
+  }),
+})
+
+/**
+ * What an address may hold inside double quotes in a shell command without
+ * the shell reading any of it: URL characters, less `!` and `$`.
+ */
+const SHELL_PLAIN = /^[A-Za-z0-9\-._~:/?#[\]@%&'()*+,;=]+$/
+
+/**
+ * Refuses to write a shell command around an instance address the shell
+ * would read. The rest of a transfer URL is a fixed path and a base64url
+ * secret.
+ */
+export function shellSafeOrigin(origin: string) {
+  if (!SHELL_PLAIN.test(origin))
+    throw new ToolError(
+      'The address of this Flare instance holds characters that are not safe in a shell command. Ask its administrator to check the address it is served under.'
+    )
+}

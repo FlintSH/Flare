@@ -136,7 +136,7 @@ export function ConnectForm({
       {available && !grantable && (
         <p className="text-pretty text-sm text-muted-foreground">
           {picker.roleAllowsNothing
-            ? 'Your role allows no file or short link actions, so there is nothing to allow.'
+            ? 'Your role allows no file, short link or account setting actions, so there is nothing to allow.'
             : 'Your role allows none of the actions this agent asked for, so there is nothing to allow.'}
         </p>
       )}

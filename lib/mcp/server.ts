@@ -20,6 +20,7 @@ import {
   needsMet,
   toolAllowed,
 } from './catalog'
+import { stillAllowed } from './publish-check'
 import {
   type ContentBlock,
   type ToolContext,
@@ -76,7 +77,7 @@ function refusal(needs: ToolNeeds, principal: AgentPrincipal): ToolError {
   return new ToolError(`Not allowed: ${parts.join('; and ')}.`, 'denied')
 }
 
-function toolContext(
+export function toolContext(
   tool: ToolDefinition,
   principal: AgentPrincipal,
   request: Request
@@ -87,6 +88,8 @@ function toolContext(
     if (!needs) throw new Error(`${tool.name} has no effect called ${name}`)
     return needs
   }
+  // What the call has leaned on so far, for the check in the saving transaction.
+  const required = new Set<string>()
   return {
     principal,
     request,
@@ -95,7 +98,10 @@ function toolContext(
     requireEffect(name) {
       const needs = effect(name)
       if (!needsMet(needs, principal)) throw refusal(needs, principal)
+      required.add(name)
     },
+    recheck: (tx) =>
+      stillAllowed(tx, principal, [row, ...[...required].map(effect)]),
   }
 }
 

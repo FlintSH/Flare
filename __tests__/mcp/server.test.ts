@@ -20,6 +20,7 @@ import {
   SERVER_INSTRUCTIONS,
   instanceOrigin,
   mcpHandler,
+  toolContext,
 } from '@/lib/mcp/server'
 import { TOOLS } from '@/lib/mcp/tools'
 import { DEFAULT_PERMISSIONS, hasPermission } from '@/lib/permissions/catalog'
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   stream: vi.fn(),
   thumbnail: vi.fn(),
   downloadUrl: vi.fn(),
+  stillAllowed: vi.fn(),
 }))
 // The real tools run; the services under them are stood in for.
 vi.mock('@/lib/database/prisma', () => ({
@@ -50,6 +52,10 @@ vi.mock('@/lib/storage', async (importOriginal) => ({
 vi.mock('@/lib/files/thumbnail', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/files/thumbnail')>()),
   resizedThumbnail: mocks.thumbnail,
+}))
+vi.mock('@/lib/mcp/publish-check', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/mcp/publish-check')>()),
+  stillAllowed: mocks.stillAllowed,
 }))
 vi.mock('@/lib/mcp/transfer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/mcp/transfer')>()),
@@ -334,7 +340,7 @@ describe.each(ERAS)('tools/list for a %s client', (era) => {
         TOOLS.some((tool) => tool.name === name) && toolAllowed(name, who)
     )
 
-  it('lists the seven read tools to a read-only connection, in catalog order', async () => {
+  it('lists the seven read tools and the export to a read-only connection, in catalog order', async () => {
     const who = principal(READ_ONLY)
     const names = (await list(who)).map((tool) => tool.name)
     expect(names).toEqual([
@@ -345,6 +351,8 @@ describe.each(ERAS)('tools/list for a %s client', (era) => {
       'list_folders',
       'list_tags',
       'list_short_links',
+      // It only reads, and holds what the three read scopes together allow.
+      'export_account',
     ])
     expect(names).toEqual(expected(who))
   })
@@ -901,5 +909,54 @@ describe('instanceOrigin', () => {
   it("falls back to the request's origin when no public address is set", () => {
     vi.stubEnv('NEXTAUTH_URL', '')
     expect(instanceOrigin(request)).toBe('http://10.0.0.5:3000')
+  })
+})
+
+describe('the last check a tool is handed', () => {
+  const tool = TOOLS.find(({ name }) => name === 'update_profile')!
+  const row: ToolRow = TOOL_CATALOG.update_profile
+  const request = new Request('https://flare.test/api/mcp', { method: 'POST' })
+  const tx = {} as never
+
+  it('asks again for the tool and for each effect the call required, and for no other', async () => {
+    const who = principal(
+      ['account:write', 'files:content', 'files:share'],
+      ['profile.update', 'appearance.personal', 'files.read', 'files.share']
+    )
+    const context = toolContext(tool, who, request)
+    context.requireEffect('theme_mode')
+    context.requireEffect('avatar_file')
+    // Asked about, and not leaned on.
+    expect(context.allows('embed')).toBe(true)
+    await context.recheck(tx)
+    expect(mocks.stillAllowed).toHaveBeenCalledExactlyOnceWith(tx, who, [
+      row,
+      row.effects!.theme_mode,
+      row.effects!.avatar_file,
+    ])
+  })
+
+  it('counts an effect once, and never one that was refused', async () => {
+    const who = principal(['account:write'], ['profile.update'])
+    const context = toolContext(tool, who, request)
+    expect(() => context.requireEffect('avatar_file')).toThrow('Not allowed')
+    await context.recheck(tx)
+    expect(mocks.stillAllowed).toHaveBeenLastCalledWith(tx, who, [row])
+  })
+
+  it('covers an effect required after an earlier check, in the next one', async () => {
+    const who = principal(
+      ['account:write', 'files:delete'],
+      ['profile.update', 'files.delete']
+    )
+    const context = toolContext(tool, who, request)
+    await context.recheck(tx)
+    context.requireEffect('default_expiry_delete')
+    context.requireEffect('default_expiry_delete')
+    await context.recheck(tx)
+    expect(mocks.stillAllowed.mock.calls.map((call) => call[2])).toEqual([
+      [row],
+      [row, row.effects!.default_expiry_delete],
+    ])
   })
 })

@@ -195,6 +195,85 @@ describe('the coverage contract', () => {
   })
 })
 
+describe('archives and account settings', () => {
+  const table = new Map<string, Coverage>(entries)
+
+  it.each<[string, string[]]>([
+    ['POST /api/files/archive', ['create_archive']],
+    ['GET /api/files/{id}/archive', ['read_file']],
+    ['GET /api/files/{id}/archive/entry', ['read_file']],
+    ['POST /api/files/{id}/archive/extract', ['extract_archive']],
+    ['PUT /api/profile', ['update_profile']],
+    ['POST /api/profile/avatar', ['update_profile']],
+    ['GET /api/profile/embed', ['get_account']],
+    ['PATCH /api/profile/embed', ['update_profile']],
+    ['GET /api/customization/preferences', ['get_account']],
+    ['PATCH /api/customization/preferences', ['update_profile']],
+    ['GET /api/profile/export', ['export_account']],
+    ['GET /api/upload-profiles', ['get_account']],
+    ['POST /api/upload-profiles', ['save_upload_profile']],
+    ['PUT /api/upload-profiles/default', ['save_upload_profile']],
+    ['PUT /api/upload-profiles/{id}', ['save_upload_profile']],
+    ['DELETE /api/upload-profiles/{id}', ['delete_upload_profile']],
+    ['GET /api/upload-profiles/{id}/export', ['get_account']],
+  ])('%s is covered by %j', (operation, covering) => {
+    expect(toolsOf(table.get(operation)!)).toEqual(covering)
+  })
+
+  it.each([
+    // How the owner would lose the account, or see who else is signed in.
+    ['DELETE /api/profile', 'sign-in'],
+    ['GET /api/profile/sessions', 'sign-in'],
+    ['DELETE /api/profile/sessions', 'sign-in'],
+    ['DELETE /api/profile/sessions/{id}', 'sign-in'],
+    ['GET /api/profile/login-history', 'sign-in'],
+    // Visitors of a shared archive, and the export page's own progress.
+    ['POST /api/files/{id}/archive/share', 'browser'],
+    ['GET /api/files/{id}/archive/share/entry', 'browser'],
+    ['POST /api/files/{id}/archive/share/entry', 'browser'],
+    ['GET /api/profile/export/progress', 'browser'],
+  ])('%s stays without a tool: %s', (operation, reason) => {
+    expect(table.get(operation)).toEqual({ reason })
+  })
+
+  it('leaves nothing of them for a later change', () => {
+    expect(Object.keys(LATER_AREAS)).toEqual(['invites', 'administration'])
+    const later = entries
+      .filter(
+        ([, coverage]) => 'reason' in coverage && coverage.reason === 'later'
+      )
+      .map(([operation]) => operation.split(' ')[1])
+    expect(later.length).toBeGreaterThan(0)
+    for (const path of later)
+      expect(path).not.toMatch(
+        /^\/api\/(profile|upload-profiles|customization\/preferences|files)(\/|$)/
+      )
+  })
+
+  it('says where a tool does less than its route', () => {
+    const note = (operation: string) => table.get(operation)?.note ?? ''
+    // No tool changes how the account signs in.
+    expect(note('PUT /api/profile')).toMatch(
+      /the email address and the password change only in the browser/
+    )
+    expect(note('POST /api/profile/avatar')).toMatch(
+      /already in the library.*no upload of its own/
+    )
+    // The settings themselves are read in full, by get_account.
+    for (const read of [
+      'GET /api/profile/embed',
+      'GET /api/customization/preferences',
+    ])
+      expect(table.get(read)).toEqual({ tools: ['get_account'] })
+    expect(note('POST /api/upload-profiles')).toMatch(
+      /does not import a recipe file/
+    )
+    expect(note('GET /api/upload-profiles/{id}/export')).toMatch(
+      /no tool makes the recipe file/
+    )
+  })
+})
+
 describe('compatibility with the REST API', () => {
   /** A path a named token could call, for a table path. */
   const example = (path: string) => path.replace(/\{[^}]+\}/g, '1')
