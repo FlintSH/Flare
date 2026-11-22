@@ -8,6 +8,7 @@ import type { EmailCapabilities } from '@/lib/email/eligibility'
 const mocks = vi.hoisted(() => ({
   capabilities: vi.fn(),
   findFirst: vi.fn(),
+  cookies: new Map<string, string>(),
 }))
 
 vi.mock('@/lib/config', async (importOriginal) => {
@@ -22,6 +23,15 @@ vi.mock('@/lib/email/config', () => ({
 vi.mock('@/lib/invites/service', () => ({ inspectInvite: vi.fn() }))
 vi.mock('@/lib/database/prisma', () => ({
   prisma: { user: { findFirst: mocks.findFirst } },
+}))
+// The login page reads one cookie; these tests render it outside a request.
+vi.mock('next/headers', () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      mocks.cookies.has(name)
+        ? { name, value: mocks.cookies.get(name) }
+        : undefined,
+  }),
 }))
 vi.mock('next/navigation', () => ({
   notFound: () => {
@@ -48,6 +58,7 @@ const email: EmailCapabilities = {
   changesEnabled: false,
 }
 const recoveryLink = 'Forgot your password?'
+const agentNotice = 'Sign in to connect an agent to this account.'
 const verificationNotice = 'confirm your email before using your account'
 const fetch = vi.fn()
 
@@ -60,6 +71,7 @@ const register = async () =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.cookies.clear()
   vi.stubGlobal('fetch', fetch)
   mocks.capabilities.mockResolvedValue(email)
   mocks.findFirst.mockResolvedValue({ id: 'admin' })
@@ -105,5 +117,18 @@ describe('sign-in pages', () => {
     mocks.findFirst.mockRejectedValue(new Error("Can't reach database"))
     expect(await login()).toContain('Welcome back')
     expect(await register()).toContain('Create an account')
+  })
+
+  it("say that an agent's sign-in is waiting, only while one is", async () => {
+    expect(await login()).not.toContain(agentNotice)
+    mocks.cookies.set('flare_oauth_pending', '1')
+    const page = await login()
+    expect(page).toContain(agentNotice)
+    // Above the form, which is otherwise as it was.
+    expect(page.indexOf(agentNotice)).toBeLessThan(page.indexOf('<form'))
+    expect(page).toContain(recoveryLink)
+    // Only the value the authorize endpoint sets counts.
+    mocks.cookies.set('flare_oauth_pending', '')
+    expect(await login()).not.toContain(agentNotice)
   })
 })

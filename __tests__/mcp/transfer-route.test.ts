@@ -36,6 +36,7 @@ const state = vi.hoisted(() => ({
   transfers: [] as TransferRow[],
   files: [] as FileRow[],
   tokens: [] as Array<Record<string, unknown> & { id: string }>,
+  connections: [] as Array<Record<string, unknown> & { id: string }>,
   everyone: [] as string[],
   enabled: true,
   storage: undefined as unknown,
@@ -103,6 +104,12 @@ vi.mock('@/lib/database/prisma', () => {
           mocks.queries('apiToken.findUnique')
           // Like the database: found by its key, never by anything else.
           return state.tokens.find((token) => token.id === where.id) ?? null
+        },
+      },
+      agentConnection: {
+        findUnique: async ({ where }: { where: { id?: string } }) => {
+          mocks.queries('agentConnection.findUnique')
+          return state.connections.find((row) => row.id === where.id) ?? null
         },
       },
       role: {
@@ -200,6 +207,22 @@ const token = {
 }
 const withToken = (override: Partial<typeof token>) => {
   state.tokens = [{ ...token, ...override }]
+}
+/** An agent that signed in through the browser, and holds no token row. */
+const connection = {
+  id: 'connection-1',
+  userId: 'owner',
+  clientId: 'flc_client',
+  clientName: 'Claude Code (flare)',
+  redirectUri: 'http://localhost:53124/callback',
+  scopes: ['files:read', 'files:content', 'files:upload'],
+  lastUsedAt: null,
+  revokedAt: null as Date | null,
+  revokedReason: null as string | null,
+  user: account,
+}
+const withConnection = (override: Partial<typeof connection>) => {
+  state.connections = [{ ...connection, ...override }]
 }
 
 const file: FileRow = {
@@ -334,6 +357,7 @@ beforeEach(() => {
   state.transfers = []
   state.files = [{ ...file }]
   state.tokens = [{ ...token }]
+  state.connections = [{ ...connection }]
   state.everyone = [...DEFAULT_PERMISSIONS]
   state.enabled = true
   state.storage = memoryStorage()
@@ -862,6 +886,33 @@ describe('uploading through a transfer URL', () => {
     expect(mocks.directUpload).toHaveBeenCalledOnce()
   })
 
+  it('keeps the URL for the upload that took it, long past the time it had to start', async () => {
+    const { secret, row } = transfer('upload', {
+      expiresAt: new Date(Date.now() + 60_000),
+    })
+    let finish!: (value: typeof links) => void
+    mocks.directUpload.mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve))
+    )
+    const sending = upload(secret)
+    await vi.waitFor(() => expect(mocks.directUpload).toHaveBeenCalledOnce())
+    // A day, so the sweep of expired URLs leaves it to a file still arriving.
+    const held = row.expiresAt.getTime() - Date.now()
+    expect(held).toBeGreaterThan(23 * 3_600_000)
+    expect(held).toBeLessThanOrEqual(24 * 3_600_000)
+    finish(links)
+    expect((await sending).status).toBe(200)
+  })
+
+  it('gives a failed upload its URL back with the time it had, not the day it was kept for', async () => {
+    const { secret, row } = transfer('upload')
+    mocks.directUpload.mockRejectedValueOnce(new HttpError(413, 'Too large.'))
+    expect((await upload(secret)).status).toBe(413)
+    expect(row.claimedAt).toBeNull()
+    // Fifteen minutes from when it was made.
+    expect(row.expiresAt.getTime()).toBe(row.createdAt.getTime() + 15 * 60_000)
+  })
+
   it('releases the URL when the upload fails, so the same command can run again', async () => {
     const { secret, row } = transfer('upload')
     mocks.directUpload.mockRejectedValueOnce(
@@ -940,11 +991,14 @@ describe('uploading through a transfer URL', () => {
         },
         agentTransfer: {
           deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
-            removed.push(where.id)
+            // As the database answers: how many rows were there to remove.
+            const before = state.transfers.length
             state.transfers = state.transfers.filter(
               (row) => row.id !== where.id
             )
-            return { count: 1 }
+            const count = before - state.transfers.length
+            if (count) removed.push(where.id)
+            return { count }
           }),
         },
       }
@@ -1025,8 +1079,338 @@ describe('uploading through a transfer URL', () => {
       expect(state.transfers).toContain(row)
     })
 
+    it('publishes nothing with a URL that is already gone, however good the token still is', async () => {
+      const { secret } = transfer('upload')
+      const authorize = await publishCheck(secret)
+      const { tx, raw, removed } = transaction()
+      // Removed since the upload started: with its credential, or by
+      // another publication.
+      state.transfers = []
+      await expect(authorize(tx)).rejects.toMatchObject({
+        status: 403,
+        message:
+          'This upload URL may no longer be used: its connection lost upload access, or the MCP server was turned off.',
+      })
+      expect(raw.agentTransfer.deleteMany).toHaveBeenCalledOnce()
+      expect(removed).toEqual([])
+    })
+
+    it('publishes one file when two publications reach the same URL', async () => {
+      const { secret, row } = transfer('upload')
+      const authorize = await publishCheck(secret)
+      const { tx, removed } = transaction()
+      await expect(authorize(tx)).resolves.toBeUndefined()
+      await expect(authorize(tx)).rejects.toMatchObject({ status: 403 })
+      expect(removed).toEqual([row.id])
+    })
+
     it('answers a refused publication 403 and gives the URL back', async () => {
       const { secret, row } = transfer('upload')
+      const { tx } = transaction({ revokedAt: new Date() })
+      mocks.directUpload.mockImplementationOnce(
+        async (_request: Request, _user: unknown, fixed: FixedUpload) => {
+          await fixed.authorize!(tx)
+          return links
+        }
+      )
+      const response = await upload(secret)
+      expect(response.status).toBe(403)
+      expect(row.claimedAt).toBeNull()
+      expect(await audited()).toEqual([
+        expect.objectContaining({
+          action: 'mcp.transfer.upload',
+          outcome: 'denied',
+          status: 403,
+        }),
+      ])
+    })
+  })
+})
+
+describe('a transfer URL made for an agent that signed in', () => {
+  const made = (kind: 'download' | 'upload') =>
+    transfer(kind, { credential: 'connection:connection-1' })
+  const send = (kind: 'download' | 'upload', secret: string) =>
+    kind === 'download' ? download(secret) : upload(secret)
+
+  it('downloads for as long as the connection lives, and never reads a token', async () => {
+    const { secret } = made('download')
+    const response = await download(secret)
+    expect(response.status).toBe(200)
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
+    expect(mocks.queries).toHaveBeenCalledWith('agentConnection.findUnique')
+    expect(mocks.queries).not.toHaveBeenCalledWith('apiToken.findUnique')
+    expect(mocks.session).not.toHaveBeenCalled()
+    expect(mocks.serverSession).not.toHaveBeenCalled()
+  })
+
+  it('records the transfer under the account and the connection it was made for', async () => {
+    const { secret } = made('download')
+    await (await download(secret)).arrayBuffer()
+    expect(await audited()).toEqual([
+      expect.objectContaining({
+        action: 'mcp.transfer.download',
+        category: 'mcp',
+        outcome: 'success',
+        actorId: 'owner',
+        actorName: 'Alex',
+        details: expect.objectContaining({
+          tokenId: 'connection:connection-1',
+        }),
+      }),
+    ])
+  })
+
+  it('uploads with a check that reads the connection again', async () => {
+    const { secret } = made('upload')
+    const response = await upload(secret)
+    expect(response.status).toBe(200)
+    const [, user, fixed] = mocks.directUpload.mock.calls[0]
+    expect(user).toMatchObject({
+      id: 'owner',
+      credential: 'agent',
+      agentConnection: { id: 'connection-1' },
+    })
+    expect(user).not.toHaveProperty('apiToken')
+    expect(fixed).toEqual({ ...fixedUpload, authorize: expect.any(Function) })
+  })
+
+  it('does not depend on the access token it was made with: it holds the whole grant', async () => {
+    // Whatever pair asked for the URL, the connection itself still uploads.
+    const { secret } = made('upload')
+    expect((await upload(secret)).status).toBe(200)
+  })
+
+  describe.each(['download', 'upload'] as const)('for a %s', (kind) => {
+    const dies: Array<[string, () => void]> = [
+      [
+        'the agent is disconnected',
+        () =>
+          withConnection({
+            revokedAt: new Date(),
+            revokedReason: 'disconnected',
+          }),
+      ],
+      [
+        'the connection ends after a refresh token came back',
+        () =>
+          withConnection({ revokedAt: new Date(), revokedReason: 'replay' }),
+      ],
+      [
+        'the account is signed out everywhere',
+        () =>
+          withConnection({
+            revokedAt: new Date(),
+            revokedReason: 'sessions-revoked',
+          }),
+      ],
+      ['the connection was removed', () => (state.connections = [])],
+      [
+        'its permissions were edited down',
+        () => withConnection({ scopes: ['files:read'] }),
+      ],
+      [
+        'the connection belongs to another account now',
+        () =>
+          withConnection({
+            userId: 'other',
+            user: { ...account, id: 'other' },
+          }),
+      ],
+      [
+        'the account must verify its email first',
+        () => mocks.verifyEmail.mockReturnValue(true),
+      ],
+      [
+        'the role no longer allows it',
+        () =>
+          (state.everyone = DEFAULT_PERMISSIONS.filter(
+            (permission) =>
+              permission !== 'files.read' && permission !== 'files.upload'
+          )),
+      ],
+      ['the MCP server is turned off', () => (state.enabled = false)],
+    ]
+
+    it.each(dies)('dies when %s', async (_what, arrange) => {
+      const { secret } = made(kind)
+      arrange()
+      await expectNotFound(await send(kind, secret))
+      expect(mocks.directUpload).not.toHaveBeenCalled()
+      const storage = state.storage as ReturnType<typeof memoryStorage>
+      expect(storage.getFileStream).not.toHaveBeenCalled()
+    })
+
+    it('answers exactly as an unknown URL does once the agent is disconnected', async () => {
+      const { secret } = made(kind)
+      withConnection({ revokedAt: new Date() })
+      const refused = await shape(await send(kind, secret))
+      const unknown = await shape(await send(kind, newLinkToken()))
+      expect(refused).toEqual(unknown)
+      expect(await audited()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: `mcp.transfer.${kind}`,
+            outcome: 'denied',
+            status: 404,
+          }),
+        ])
+      )
+    })
+  })
+
+  it('is not served by a token that happens to share the id', async () => {
+    const { secret } = transfer('download', {
+      credential: 'connection:token-1',
+    })
+    await expectNotFound(await download(secret))
+  })
+
+  describe('in the transaction that publishes the file', () => {
+    function transaction(
+      stored: Partial<typeof connection> | null = {},
+      enabled = true
+    ) {
+      const removed: string[] = []
+      const tx = {
+        // The connection's row lock, taken before it is read.
+        $queryRaw: vi.fn(async () => []),
+        agentConnection: {
+          findUnique: vi.fn(async ({ where }: { where: { id: string } }) =>
+            stored && where.id === connection.id
+              ? { ...connection, ...stored }
+              : null
+          ),
+        },
+        apiToken: { findUnique: vi.fn() },
+        config: {
+          findUnique: vi.fn(async () => ({
+            value: { general: { mcp: { enabled } } },
+          })),
+        },
+        agentTransfer: {
+          deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+            // As the database answers: how many rows were there to remove.
+            const before = state.transfers.length
+            state.transfers = state.transfers.filter(
+              (row) => row.id !== where.id
+            )
+            const count = before - state.transfers.length
+            if (count) removed.push(where.id)
+            return { count }
+          }),
+        },
+      }
+      return { tx: tx as unknown as Prisma.TransactionClient, removed, raw: tx }
+    }
+    async function publishCheck(secret: string) {
+      let authorize!: NonNullable<FixedUpload['authorize']>
+      mocks.directUpload.mockImplementationOnce(
+        async (_request: Request, _user: unknown, fixed: FixedUpload) => {
+          authorize = fixed.authorize!
+          return links
+        }
+      )
+      await upload(secret)
+      return authorize
+    }
+
+    it('reads the connection and the settings through the transaction only, and removes the URL', async () => {
+      const { secret, row } = made('upload')
+      const authorize = await publishCheck(secret)
+      const { tx, raw, removed } = transaction()
+      mocks.queries.mockClear()
+      await expect(authorize(tx)).resolves.toBeUndefined()
+      expect(raw.agentConnection.findUnique).toHaveBeenCalledExactlyOnceWith({
+        where: { id: 'connection-1' },
+        select: { revokedAt: true, scopes: true },
+      })
+      expect(raw.config.findUnique).toHaveBeenCalledOnce()
+      // A connection is not a named token, and nothing outside the
+      // transaction is asked.
+      expect(raw.apiToken.findUnique).not.toHaveBeenCalled()
+      expect(mocks.queries).not.toHaveBeenCalled()
+      expect(removed).toEqual([row.id])
+    })
+
+    it.each([
+      ['the MCP server was turned off', {}, false],
+      [
+        'the agent was disconnected',
+        { revokedAt: new Date(), revokedReason: 'disconnected' },
+        true,
+      ],
+      [
+        'the account was signed out everywhere',
+        { revokedAt: new Date(), revokedReason: 'sessions-revoked' },
+        true,
+      ],
+      ['the connection was removed', null, true],
+      [
+        'its permissions lost uploading',
+        { scopes: ['files:read', 'files:content'] },
+        true,
+      ],
+      ['its permissions were emptied', { scopes: [] }, true],
+    ] as const)(
+      'refuses when %s while the file was arriving',
+      async (_what, stored, enabled) => {
+        const { secret, row } = made('upload')
+        const authorize = await publishCheck(secret)
+        const { tx, removed } = transaction(
+          stored as Partial<typeof connection> | null,
+          enabled
+        )
+        await expect(authorize(tx)).rejects.toMatchObject({
+          status: 403,
+          message:
+            'This upload URL may no longer be used: its connection lost upload access, or the MCP server was turned off.',
+        })
+        expect(removed).toEqual([])
+        expect(state.transfers).toContain(row)
+      }
+    )
+
+    it("holds the connection's row before reading it, to the end of the transaction", async () => {
+      const { secret } = made('upload')
+      const authorize = await publishCheck(secret)
+      const { tx, raw } = transaction()
+      await authorize(tx)
+      const [statement, id] = raw.$queryRaw.mock.calls[0] as unknown as [
+        string[],
+        string,
+      ]
+      expect(statement.join('?')).toBe(
+        'SELECT "id" FROM "AgentConnection" WHERE "id" = ? FOR SHARE'
+      )
+      expect(id).toBe('connection-1')
+      const order = (mock: { mock: { invocationCallOrder: number[] } }) =>
+        mock.mock.invocationCallOrder[0]
+      expect(order(raw.$queryRaw)).toBeLessThan(
+        order(raw.agentConnection.findUnique)
+      )
+      // The connection, then the URL: the order ending a connection uses.
+      expect(order(raw.agentConnection.findUnique)).toBeLessThan(
+        order(raw.agentTransfer.deleteMany)
+      )
+    })
+
+    it('publishes nothing with a URL that went with its connection, even if the connection read as live', async () => {
+      const { secret } = made('upload')
+      const authorize = await publishCheck(secret)
+      const { tx, removed } = transaction()
+      // Disconnecting deletes a connection's URLs.
+      state.transfers = []
+      await expect(authorize(tx)).rejects.toMatchObject({
+        status: 403,
+        message:
+          'This upload URL may no longer be used: its connection lost upload access, or the MCP server was turned off.',
+      })
+      expect(removed).toEqual([])
+    })
+
+    it('answers a publication refused mid-upload 403, and publishes nothing', async () => {
+      const { secret, row } = made('upload')
       const { tx } = transaction({ revokedAt: new Date() })
       mocks.directUpload.mockImplementationOnce(
         async (_request: Request, _user: unknown, fixed: FixedUpload) => {

@@ -61,7 +61,7 @@ For ShareX, iTake, Flameshot, Spectacle, and Bash, Flare can generate the upload
 
 The OpenAPI security scheme is HTTP Bearer authentication. Flare's permission names are application scopes; this is not an OAuth authorization flow.
 
-The [MCP server](./mcp) is not in the OpenAPI document. It describes itself: `tools/list` returns the JSON Schema of every tool's arguments and answer for the token that asks.
+The [MCP server](./mcp) is not in the OpenAPI document. It describes itself: `tools/list` returns the JSON Schema of every tool's arguments and answer for the connection that asks, and its [sign-in endpoints](./mcp#sign-in-with-oauth) are published in the two OAuth metadata documents under `/.well-known/`.
 
 ## Response conventions
 
@@ -88,4 +88,4 @@ The [sessions and audit routes](./activity) require an interactive browser sessi
 
 Over the REST API, named tokens currently cover file listing/uploads and short links. Account administration, token/webhook management, file deletion, changing an existing file's settings, and organization management are dashboard operations. The [endpoint inventory](./endpoint-inventory) identifies their authentication boundaries without implying that they are additional bearer-token APIs.
 
-The [MCP server](./mcp) is a second way in, built for AI agents and off until an administrator enables it. A token with **Agent access** can read file contents, organize, change sharing, and delete through MCP tools when it holds the matching [scopes](./authentication#scope-reference). Those scopes do nothing over REST, and MCP has no tools for account administration, tokens, or webhooks.
+The [MCP server](./mcp) is a second way in, built for AI agents and off until an administrator enables it. An agent signs in through its owner's browser (OAuth 2.1) or sends a token with **Agent access**, and can then read file contents, organize, change sharing, and delete through MCP tools when it holds the matching [scopes](./authentication#scope-reference). The access token of a sign-in works on the MCP endpoint only, never on the routes above. Those scopes do nothing over REST, and MCP has no tools for account administration, tokens, or webhooks.

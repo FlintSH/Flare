@@ -5,7 +5,9 @@ description: Create, restrict, rotate, and troubleshoot Flare API tokens.
 
 # Authentication & scopes
 
-With `tokens.manage`, create one named API token for each script, service, or AI agent in **Profile → Integrations**. Give it only the permissions it uses. You can revoke a connection without interrupting your other tools.
+With `tokens.manage`, create one named API token for each script or service in **Profile → Integrations**. Give it only the permissions it uses. You can revoke a connection without interrupting your other tools.
+
+An AI agent usually needs no token: it [signs in through your browser](/guide/agents), and you choose its permissions on the screen Flare shows. Create a [token for an agent](#tokens-for-agents) only when its client cannot sign in, or when you want its access to end on a date you set.
 
 A token works with the REST API, with the [MCP server](./mcp) that agents connect to, or with both, depending on its scopes. The [scope reference](#scope-reference) says which.
 
@@ -101,9 +103,11 @@ Earlier builds skipped the origin check on `POST /api/files`, `POST /api/files/c
 | `files:delete`   | Delete files           | MCP              | Delete files permanently, and schedule an expiry that deletes them.                                                                                                                                              |
 | `urls:read`      | Read short links       | REST API and MCP | REST: `GET /api/urls`. MCP: list short links.                                                                                                                                                                    |
 | `urls:write`     | Manage short links     | REST API and MCP | REST: `POST /api/urls`; `DELETE /api/urls/{id}`. MCP: create and delete short links.                                                                                                                             |
-| `mcp`            | Agent access           | MCP              | Marks the token as one an agent may use: the MCP endpoint accepts no token without it. By itself it allows only `get_account`.                                                                                   |
+| `mcp`            | Agent access           | MCP              | Marks the token as one an agent may use: the MCP endpoint accepts no named token without it. By itself it allows only `get_account`. An agent that signs in never holds it and does not need it.                 |
 
 **Works with** says where Flare honors a scope. The REST API does not honor a scope marked **MCP**: a token holding `files:delete` still cannot delete a file through `DELETE /api/files/{id}`, and one holding `files:content` still cannot download a private file through `/api/files/{id}/download`. Those scopes take effect only through the [MCP tools](./mcp#authorization-matrix). In the other direction, a token works on the MCP endpoint only while it carries `mcp`, so the tokens your scripts already use cannot drive an agent.
+
+An agent that [signs in through the browser](./mcp#sign-in-with-oauth) is granted scopes from this same table, every one except `mcp`, on the consent screen. Its access token is not a named token: it works on the MCP endpoint only, and the REST API answers it with `401` whatever scopes it holds.
 
 Scopes are independent. `files:upload` does not include listing, and `urls:write` does not include listing. Select both relevant scopes when a service needs both capabilities.
 
@@ -126,7 +130,9 @@ An agent connected through the MCP server can organize, share, and delete its ow
 
 ### Tokens for agents
 
-**Connect an agent** in **Profile → Integrations** creates a token with **Agent access** and the actions you pick, and shows the setup for your client; [Connect an agent](/guide/agents) walks through it. You can also check **Agent access** in **New token**, which then shows the scopes that only agents use. Both appear only while an administrator has the [MCP server turned on](/admin/agents), and both make ordinary named tokens: they count toward the limit of 50, expire and are revoked the same way, and are listed with an outlined **Agent access** chip.
+An agent normally [signs in through the browser](/guide/agents#connect-your-client) and holds no named token. Such a connection is listed under **Connected agents** in the **Agents** card, not under **API tokens**, does not count toward the limit of 50 tokens (an account can have 50 signed-in agents besides), and is ended with **Disconnect**.
+
+For a client that cannot sign in, **Connect an agent → Use a token instead** in **Profile → Integrations** creates a token with **Agent access** and the actions you pick, and shows the setup for your client; [Connect an agent](/guide/agents#use-a-token-instead) walks through it. You can also check **Agent access** in **New token**, which then shows the scopes that only agents use. Both appear only while an administrator has the [MCP server turned on](/admin/agents), and both make ordinary named tokens: they count toward the limit of 50, expire and are revoked the same way, and are listed with an outlined **Agent access** chip.
 
 <div style="max-width: 512px; margin-inline: auto">
 <Screenshot src="/screenshots/agents/new-token-agent-access.webp" alt="New API token dialog with Agent access checked, which adds Read file contents, Organize files, Change sharing and Delete files to the Files group beside Upload files and Read files, above a Short links group, an Upload profile menu and Expires after" caption="Checking Agent access adds the scopes only agents use and groups the list." />
@@ -154,7 +160,7 @@ A scope restricts the token; it does not grant a permission missing from the own
 
 MCP tools follow the same rule with their own table, the [authorization matrix](./mcp#authorization-matrix).
 
-`tokens.manage` controls issuing, rotating, and revoking credentials, including tokens for agents. Removing it alone does not disable already-issued named tokens or the legacy upload credential while the owner still holds the required operation permissions. Revoke/rotate the credential or remove its operation grants to stop its use.
+`tokens.manage` controls issuing, rotating, and revoking credentials, including tokens for agents, and signing agents in: the consent screen refuses an account without it, and so do **Edit permissions** and **Disconnect**. Removing it alone does not disable already-issued named tokens, agents that already signed in, or the legacy upload credential while the owner still holds the required operation permissions. Revoke/rotate the credential or remove its operation grants to stop its use.
 
 Everyone initially grants these personal capabilities. A role change can revoke them on the next request without waiting for token expiration. Granting the permission again restores the authority of an otherwise valid token; revoke it too if it should never be used again. Administrator satisfies account permission checks but does not expand a named token's selected scopes or supported routes.
 
@@ -192,7 +198,7 @@ Security management requires a browser session and fresh identity proof. Neither
 
 ## Rotate or revoke a token
 
-For planned rotation, create a replacement, update the tool's stored credential, and run a small test. Then revoke the old token in **Profile → Integrations**. Revocation takes effect on subsequent authentication. Upload finalization also checks whether a named token expired or was revoked while bytes were being transferred. Revoking a token that has Agent access disconnects its agent on the next call and ends the [upload and download URLs](./mcp#transfer-urls) it was given.
+For planned rotation, create a replacement, update the tool's stored credential, and run a small test. Then revoke the old token in **Profile → Integrations**. Revocation takes effect on subsequent authentication. Upload finalization also checks whether a named token expired or was revoked while bytes were being transferred. Revoking a token that has Agent access disconnects its agent on the next call and ends the [upload and download URLs](./mcp#transfer-urls) it was given. An agent that signed in has no token to rotate: its client renews its own access, and [**Disconnect**](/guide/agents#manage-connected-agents) ends it.
 
 The last-used timestamp is best-effort activity metadata, not a full audit log. Never put bearer tokens into a public repository, a screenshot, a URL, or a support report. A token is a credential even when it can only upload.
 
@@ -207,7 +213,7 @@ The last-used timestamp is best-effort activity metadata, not a full audit log. 
 | `403` says you lack permission                      | Ask the administrator to review the owner’s current role grants. Token scope alone does not grant account authority.                                                                                                                                                                                                     |
 | `403` mentions an upload profile                    | Remove conflicting overrides, select the bound profile, and confirm it still exists.                                                                                                                                                                                                                                     |
 | A web app on another site gets `Failed to fetch`    | The instance hasn't allowed the app's origin. Ask the operator to add it to [`FLARE_CORS_ORIGINS`](#call-flare-from-a-web-app), written exactly as the browser sends it, such as `http://localhost:5173`. Session-only routes never work from another site, and a page can't read answers the session cookie authorized. |
-| An agent gets `401` from `/api/mcp`                 | The token has no **Agent access**, or it was revoked or expired. A `404` there means the MCP server is off. See the [agent troubleshooting table](/guide/agents#troubleshooting).                                                                                                                                        |
+| An agent gets `401` from `/api/mcp`                 | With a token: it has no **Agent access**, or it was revoked or expired. After signing in: the connection was disconnected or ended, so sign in again from the client. A `404` there means the MCP server is off. See the [agent troubleshooting table](/guide/agents#troubleshooting).                                   |
 | `403` says an upload token expired or was revoked   | The credential became invalid before upload finalization. Replace it and begin again.                                                                                                                                                                                                                                    |
 
 Missing credentials, unknown tokens, expired tokens, revoked tokens, missing scopes, and required email verification intentionally share a generic `401` response. The server does not reveal which authentication check failed to an unauthenticated caller. An authenticated request lacking a current role permission returns `403`; restoring that role grant can restore access without issuing another token.

@@ -131,6 +131,36 @@ Configure cross-origin access with [`FLARE_CORS_ORIGINS`](./configuration#cross-
 
 With a list of origins, file content answers vary by the requesting site and carry `Vary: Origin`. A CDN that caches public videos or thumbnails but ignores `Vary` can then serve one site's answer to another, and the browser refuses it. Either set `FLARE_CORS_ORIGINS=*`, whose answers are the same for every site, or include `Origin` in the CDN's cache key.
 
+## Agent sign-in
+
+While the [MCP server](/admin/agents) is on, AI agents sign in to Flare through the browser. The clients find out how at two addresses that are not under `/api`:
+
+| Path                                                                         | What it is                                           |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `/.well-known/oauth-protected-resource`, and the same followed by `/api/mcp` | Says which server issues access to the MCP endpoint  |
+| `/.well-known/oauth-authorization-server`                                    | Lists the sign-in endpoints, all under `/api/oauth/` |
+
+**Pass both to Flare.** With the Caddy and nginx examples above the whole hostname goes to the application and nothing needs changing. A proxy or platform that answers `/.well-known/` itself, for certificate challenges under `/.well-known/acme-challenge/` or for files of its own, must limit that to the paths it needs and send `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server` on. A client that gets the proxy's `404` there reports that the server offers no sign-in.
+
+**`NEXTAUTH_URL` is the issuer and must be the address clients use.** Both documents and every endpoint in them are built from it, and Flare issues access for `NEXTAUTH_URL` followed by `/api/mcp` only. A client that reaches Flare through another hostname, an IP address, or another port is sent to `NEXTAUTH_URL` for sign-in and refused, so give people one address and set it exactly: scheme, hostname, and port. Claude on desktop and the web and ChatGPT connect from their vendors' servers, so for them that address has to be reachable from the internet over HTTPS.
+
+Also:
+
+- **Do not cache these answers.** Both documents and every `/api/oauth/` answer carry `Cache-Control: no-store`. A CDN rule that caches them anyway can hand a client a stale address or another client's answer.
+- **Leave their CORS headers alone.** Flare answers these routes with `Access-Control-Allow-Origin: *` itself, and their `OPTIONS` preflights. The rule in [CORS and proxies](#cors-and-proxies) applies: a header added at the proxy on top produces two values.
+- **Forward the client address.** A client registers itself before its first sign-in, and Flare allows 10 registrations an hour for each [client address](#client-addresses-and-rate-limits) and place a sign-in returns to. Without a forwarded address every client shares one allowance.
+- **Allow the sign-in request line.** The browser opens `/api/oauth/authorize` with a query of up to 4,096 characters, and the consent screen's address is shorter than that. nginx's default of 8 KB for a request line, and Caddy's larger one, allow both; a proxy set lower cuts sign-ins off.
+- **Do not frame the sign-in pages.** The consent screen at `/auth/connect` and the pages `/api/oauth/authorize` answers with send `X-Frame-Options: DENY` and `Content-Security-Policy: frame-ancestors 'none'` in place of the `SAMEORIGIN` in [security headers](#security-headers), with `Referrer-Policy: no-referrer`. Pass them through.
+
+To check from outside, ask for the metadata and for the challenge the MCP endpoint sends a client without credentials:
+
+```sh
+curl -sS https://files.example.com/.well-known/oauth-authorization-server
+curl -sS -o /dev/null -D - -X POST https://files.example.com/api/mcp
+```
+
+The first answers JSON whose `issuer` is your public address. The second answers `401` with a `WWW-Authenticate` header that names `https://files.example.com/.well-known/oauth-protected-resource/api/mcp`. Both answer `404` with `{ "error": "Not found" }` while the MCP server is off. The [MCP server reference](/api/mcp#sign-in-with-oauth) has the whole flow.
+
 ## Passkeys and hostname changes
 
 Passkey registration and sign-in verify the origin and relying-party hostname derived from `NEXTAUTH_URL`. Use the canonical HTTPS hostname in both the environment and the browser. Do not rely on a forwarded `Host` header to select a different passkey origin. Local HTTP localhost is for development; use HTTPS for a deployed instance.
@@ -150,7 +180,7 @@ Flare sends these headers on every response. Pass them through unchanged rather 
 | `Strict-Transport-Security`  | `max-age=63072000; includeSubDomains; preload` |
 | `Cross-Origin-Opener-Policy` | `same-origin`                                  |
 
-Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Flare doesn't send a site-wide `Content-Security-Policy`. Adding one at the proxy can break pages that rely on inline scripts and styles, including the theme and administrator custom head HTML, and a proxy policy that replaces the file routes' header would remove their sandbox.
+Sign-in pages also send `Referrer-Policy: no-referrer` and `Cache-Control: no-store`. The two [agent sign-in](#agent-sign-in) pages, `/auth/connect` and `/api/oauth/authorize`, send `X-Frame-Options: DENY` in place of `SAMEORIGIN`, so not even a Flare page can frame them. File content routes add `Content-Security-Policy: sandbox`, so uploaded HTML, SVG, and other active documents can't run script as Flare; see [file content and access checks](/api/endpoint-inventory#file-content-and-access-checks). Flare doesn't send a site-wide `Content-Security-Policy`. Adding one at the proxy can break pages that rely on inline scripts and styles, including the theme and administrator custom head HTML, and a proxy policy that replaces the file routes' header would remove their sandbox.
 
 `Cross-Origin-Opener-Policy: same-origin` means a Flare page and a page on another site never get a window reference to each other, even when one opens the other. Links between them still work. Builds before this header was added let a page that opened Flare in a new tab keep a reference to it, though Flare's own outgoing links already used `noopener`.
 
@@ -166,3 +196,4 @@ After changing `NEXTAUTH_URL`, recreate the app container and use the final host
 - A private file stays unavailable in a signed-out browser.
 - A public image link pasted into a chat app shows its preview. The addresses inside a preview use `NEXTAUTH_URL` when the request names its host; [check what an app is given](/guide/embeds#check-what-an-app-is-given).
 - If configured, OIDC returns to `/api/auth/callback/oidc` on this hostname, and account email links use the same public origin.
+- If the MCP server is on, `/.well-known/oauth-authorization-server` on this hostname answers JSON whose `issuer` is this address; see [agent sign-in](#agent-sign-in).

@@ -285,4 +285,11 @@ export const API_COVERAGE: Record<
   },
   // The transfer URLs read_file and create_upload_url hand out.
   '/api/mcp/transfer/{ticket}': { GET: not('mcp'), POST: not('mcp') },
+  // How an agent signs in to the server through the browser (OAuth). A
+  // client calls these to connect; none of them is something a tool does.
+  '/api/oauth/register': { POST: not('mcp'), OPTIONS: preflight },
+  '/api/oauth/authorize': { GET: not('mcp'), POST: not('mcp') },
+  '/api/oauth/authorize/resume': { GET: not('mcp') },
+  '/api/oauth/token': { POST: not('mcp'), OPTIONS: preflight },
+  '/api/oauth/revoke': { POST: not('mcp'), OPTIONS: preflight },
 }

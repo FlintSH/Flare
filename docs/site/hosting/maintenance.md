@@ -103,16 +103,34 @@ Test sign-in, upload, download, and any integrations you depend on after the upd
 
 ### MCP server
 
-Builds after 3.1.0 include an [MCP server](/admin/agents) that lets AI agents work with an account's files. **It is off after the upgrade**, and nothing changes until someone with `settings.security` turns it on in **Settings → Access**: its routes answer `404`, Profile shows nothing about agents, and existing API tokens, upload tokens, and sessions work exactly as before. Turning it on later gives none of them access to it either; an agent needs a token created for it afterwards.
+Builds after 3.1.0 include an [MCP server](/admin/agents) that lets AI agents work with an account's files. **It is off after the upgrade**, and nothing changes until someone with `settings.security` turns it on in **Settings → Access**: its routes answer `404`, Profile shows nothing about agents, and existing API tokens, upload tokens, and sessions work exactly as before. Turning it on later gives none of them access to it either; an agent connects only after a person signs it in through the browser or creates a token for it.
 
-- **Database.** The official image applies one migration, `20261121000000_agent_transfers`, which adds an empty `AgentTransfer` table with three indexes and changes no rows. Source deployments run `npx prisma migrate deploy` before starting the updated app.
+- **Database.** The official image applies two migrations that add empty tables and change no rows: `20261121000000_agent_transfers` adds `AgentTransfer` with three indexes, and `20261122000000_agent_sign_in` adds `OAuthClient`, `OAuthCode`, `AgentConnection`, and `AgentToken` for [agent sign-in](#agent-sign-in). Source deployments run `npx prisma migrate deploy` before starting the updated app.
 - **Saved settings.** `general.mcp.enabled` starts as `false` on existing instances without a configuration migration.
-- **Environment.** No new variable. If you plan to turn the server on, check that [`NEXTAUTH_URL`](./configuration#mcp-server) is the address agents will use, and review what that section says about proxy body limits and access logs.
-- **Background work.** Each process gains a [cleanup worker](#background-workers) that deletes expired transfer URLs every 15 minutes. It does nothing while the server is unused.
+- **Environment.** No new variable. If you plan to turn the server on, check that [`NEXTAUTH_URL`](./configuration#mcp-server) is the address agents will use, since they sign in at it, that your proxy [passes `/.well-known/` to Flare](./reverse-proxy#agent-sign-in), and review what that section says about proxy body limits and access logs.
+- **Background work.** Each process gains a [cleanup worker](#background-workers) that deletes expired transfer URLs and what [agent sign-in](#agent-sign-in) leaves behind every 15 minutes. It does nothing while the server is unused.
 - **API tokens.** The token form gains scopes that only the MCP server honors. They appear only while the server is on, and the REST API ignores them, so existing integrations and the [OpenAPI document](/api/authentication#scope-reference) are unchanged.
-- **Audit log.** Once agents are in use, each of their tool calls is an event in category `mcp`.
+- **Audit log.** Once agents are in use, each of their tool calls is an event in category `mcp`, and their sign-ins and connections are events in category `authentication`.
+- **Sessions and security changes.** Signing an account out everywhere, a new password or sign-in address, and changes to two-factor authentication or passkeys now also disconnect the agents that account signed in. Nothing changes for an account that has none, and named tokens are untouched as before.
 
-Rollback: an older image ignores the `AgentTransfer` table and the saved `general.mcp` setting, and its token form does not offer the new scopes. Tokens created with them keep working on the REST API for the scopes that existed before. Drop the table afterwards if you want it gone.
+Rollback: an older image ignores the five new tables and the saved `general.mcp` setting, and its token form does not offer the new scopes. Tokens created with them keep working on the REST API for the scopes that existed before, and agents that signed in simply have nowhere to connect. Drop the tables afterwards if you want them gone: `AgentToken`, `AgentConnection`, and `OAuthCode` before `OAuthClient`, which they refer to.
+
+#### Agent sign-in
+
+Signing in keeps four kinds of rows, all small:
+
+| Table             | Holds                                                                            | Removed                                                                                                    |
+| ----------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `OAuthClient`     | A client's registration: the name it gave and its redirect addresses             | 24 hours after registering if nobody approved it, and the oldest beyond 500 unapproved; kept once approved |
+| `OAuthCode`       | The digest of a code a person approved, for 60 seconds                           | Once expired, and when its account is signed out everywhere                                                |
+| `AgentConnection` | One agent a person signed in: the account, the client's name, the scopes granted | Once it has ended, or has no token left                                                                    |
+| `AgentToken`      | Digests of one access token and its refresh token                                | With its connection, or 90 days after it was issued                                                        |
+
+No token or code is stored in a readable form, so a database backup holds nothing an agent could be impersonated with. Restoring a backup brings back the connections as they were: an agent whose refresh token is newer than the backup has to sign in again, and one you disconnected after the backup is connected again until you disconnect it. Deleting an account deletes its codes, connections, and tokens. Registering needs no account, which is why unapproved registrations are bounded by the hourly limit, the 24 hours, and the cap of 500.
+
+The [transfer URL cleanup worker](#background-workers) does this removal in the same run, every 15 minutes in each process. An upload URL whose upload started but never finished is kept for 24 hours before that cleanup removes it. If it fails, the log has `Agent sign-in cleanup unavailable; retrying on the next run.` under `mcp-transfers`, and nothing is lost: expired codes and tokens are refused when presented whether or not their rows are still there.
+
+Rotating `NEXTAUTH_SECRET` does not disconnect agents, since tokens are checked by digest. It only makes sign-ins that are waiting on the consent screen start again.
 
 ### Video thumbnails
 
@@ -508,7 +526,7 @@ Background work runs inside the application. Each process starts these workers w
 | [Email delivery](../admin/email#limits-and-delivery-history)                                                   | Every 5 seconds                   | `email`            |
 | [Webhook delivery](../api/webhooks#retries-and-delivery-states)                                                | Every 5 seconds                   | `integrations`     |
 | [Automatic-tag retries after OCR](../guide/tags#keep-manual-control)                                           | Every 15 seconds                  | `ocr`              |
-| [Transfer URL cleanup](../api/mcp#transfer-urls) for the MCP server                                            | Every 15 minutes                  | `mcp-transfers`    |
+| [Transfer URL](../api/mcp#transfer-urls) and [agent sign-in](#agent-sign-in) cleanup for the MCP server        | Every 15 minutes                  | `mcp-transfers`    |
 | Memory check, production only                                                                                  | Every 60 seconds                  | `startup`          |
 
 Apart from audit retention, a worker's first run comes one interval after the process starts. A process never overlaps a worker's runs: a run that comes due while the previous one is still working is skipped. A failed run logs one warning, such as `Email worker could not process mail; it will retry on the next poll.`, without the underlying error, which can contain credentials, query parameters or message contents. The next run tries again. While a process's heap is above 1 GiB, the memory check logs `High memory usage detected` with heap and external memory in MB.

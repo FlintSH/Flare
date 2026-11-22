@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   everyone: vi.fn(),
   policy: vi.fn(),
+  pair: vi.fn(),
+  connection: vi.fn(),
+  connectionUpdate: vi.fn(),
 }))
 // Both would answer an administrator if anything asked them.
 vi.mock('@/lib/auth', () => ({
@@ -26,6 +29,11 @@ vi.mock('@/lib/database/prisma', () => ({
     apiToken: { findUnique: mocks.token, update: mocks.update },
     user: { findUnique: mocks.user, findFirst: mocks.user },
     role: { findUnique: mocks.everyone },
+    agentToken: { findUnique: mocks.pair },
+    agentConnection: {
+      findUnique: mocks.connection,
+      update: mocks.connectionUpdate,
+    },
   },
 }))
 vi.mock('@/lib/email/config', () => ({
@@ -82,6 +90,35 @@ const stored = {
 /** Like the database, a lookup finds a row only by its exact key. */
 let tokens: (typeof stored)[]
 
+const ACCESS_TOKEN = 'fla_AccessTokenOfASignIn'
+const signedIn = {
+  id: 'connection-1',
+  userId: 'user-1',
+  clientId: 'flc_client',
+  clientName: 'Claude Code (flare)',
+  redirectUri: 'http://localhost:53124/callback',
+  scopes: ['files:read', 'files:content', 'urls:read'],
+  createdAt: new Date('2026-11-20T00:00:00.000Z'),
+  lastUsedAt: null,
+  revokedAt: null as Date | null,
+  revokedReason: null as string | null,
+  user: account,
+}
+const issued = {
+  id: 'pair-1',
+  connectionId: 'connection-1',
+  accessHash: hashApiToken(ACCESS_TOKEN),
+  accessExpiresAt: new Date(Date.now() + 3_600_000),
+  refreshHash: hashApiToken('flf_RefreshTokenOfASignIn'),
+  refreshExpiresAt: new Date(Date.now() + 90 * 86_400_000),
+  narrowed: false,
+  scopes: [] as string[],
+  rotatedAt: null as Date | null,
+  parentId: null,
+}
+let connections: (typeof signedIn)[]
+let pairs: (typeof issued)[]
+
 beforeEach(() => {
   vi.clearAllMocks()
   tokens = [stored]
@@ -92,6 +129,22 @@ beforeEach(() => {
       ) ?? null
   )
   mocks.update.mockResolvedValue({})
+  connections = [signedIn]
+  pairs = [issued]
+  const connectionOf = (id: string) =>
+    connections.find((connection) => connection.id === id) ?? null
+  mocks.pair.mockImplementation(
+    async ({ where }: { where: { accessHash?: string } }) => {
+      const pair = pairs.find((row) => row.accessHash === where.accessHash)
+      return pair
+        ? { ...pair, connection: connectionOf(pair.connectionId) }
+        : null
+    }
+  )
+  mocks.connection.mockImplementation(
+    async ({ where }: { where: { id: string } }) => connectionOf(where.id)
+  )
+  mocks.connectionUpdate.mockResolvedValue({})
   mocks.user.mockResolvedValue({
     ...account,
     roles: [role('admin', ['administrator'])],
@@ -115,6 +168,12 @@ function request(authorization?: string, cookie?: string) {
 }
 const withToken = (override: Partial<typeof stored>) => {
   tokens = [{ ...stored, ...override }]
+}
+const withConnection = (override: Partial<typeof signedIn>) => {
+  connections = [{ ...signedIn, ...override }]
+}
+const withPair = (override: Partial<typeof issued>) => {
+  pairs = [{ ...issued, ...override }]
 }
 
 function expectNoOtherCredentialTried() {
@@ -223,9 +282,12 @@ describe('authenticateAgent', () => {
 
   it.each([
     'legacy-upload-token',
-    'fla_AccessTokenFromALaterChange',
+    'flf_RefreshTokenOfASignIn',
+    'flc_client',
     'eyJhbGciOiJIUzI1NiJ9.session.jwt',
     'Flr_AgentToken',
+    'Fla_AccessTokenOfASignIn',
+    'FLA_AccessTokenOfASignIn',
   ])(
     'never looks up the bearer value %s, which is not a named token',
     async (value) => {
@@ -236,6 +298,8 @@ describe('authenticateAgent', () => {
       )
       expect(await authenticateAgent(request(`Bearer ${value}`))).toBeNull()
       expect(mocks.token).not.toHaveBeenCalled()
+      // Nor an access token: only the `fla_` prefix is one.
+      expect(mocks.pair).not.toHaveBeenCalled()
       expect(mocks.user).not.toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ uploadToken: expect.anything() }),
@@ -435,6 +499,295 @@ describe('authenticateAgent', () => {
       expect(principal!.can('files.read')).toBe(false)
       expect(principal!.can('files.delete')).toBe(false)
     })
+  })
+})
+
+describe('authenticateAgent with the access token of a sign-in', () => {
+  const authenticate = (value = ACCESS_TOKEN) =>
+    authenticateAgent(request(`Bearer ${value}`))
+
+  it('accepts an unexpired access token of a live connection, as its account', async () => {
+    const principal = await authenticate()
+    expect(principal).not.toBeNull()
+    expect(principal!.user).toMatchObject({
+      id: 'user-1',
+      storageUsed: 12.5,
+      urlId: 'alex',
+      credential: 'agent',
+      agentConnection: {
+        id: 'connection-1',
+        scopes: ['files:read', 'files:content', 'urls:read'],
+      },
+    })
+    expect(principal!.name).toBe('Alex')
+    expect(principal!.scopes).toEqual([
+      'files:read',
+      'files:content',
+      'urls:read',
+    ])
+    expect(principal!.credentialKey).toBe('connection:connection-1')
+    expect(mocks.pair).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { accessHash: hashApiToken(ACCESS_TOKEN) },
+      })
+    )
+    expectNoOtherCredentialTried()
+  })
+
+  it('is not a named token: nothing looks one up, and the user carries none', async () => {
+    const principal = await authenticate()
+    expect(principal!.user.apiToken).toBeUndefined()
+    expect(mocks.token).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('returns no secret of the account, the connection or the pair', async () => {
+    const serialized = JSON.stringify(await authenticate())
+    expect(serialized).not.toContain(ACCESS_TOKEN)
+    expect(serialized).not.toContain(issued.accessHash)
+    expect(serialized).not.toContain(issued.refreshHash)
+    expect(serialized).not.toContain('alex@example.com')
+  })
+
+  it('names the account and the connection as the audit actor', async () => {
+    const context: { actorId?: string; actorName?: string; tokenId?: string } =
+      {}
+    await auditContext.run(context, () => authenticate())
+    expect(context).toEqual({
+      actorId: 'user-1',
+      actorName: 'Alex',
+      tokenId: 'connection:connection-1',
+    })
+  })
+
+  it('records when the connection was used, and still answers if that write fails', async () => {
+    await authenticate()
+    expect(mocks.connectionUpdate).toHaveBeenCalledWith({
+      where: { id: 'connection-1' },
+      data: { lastUsedAt: expect.any(Date) },
+    })
+    mocks.connectionUpdate.mockRejectedValue(new Error('database is read-only'))
+    expect(await authenticate()).not.toBeNull()
+  })
+
+  it('compares the token value exactly', async () => {
+    for (const value of [
+      'fla_accesstokenofasignin',
+      'fla_AccessTokenOfASignIn2',
+      'fla_AccessTokenOfASignI',
+      'fla_',
+    ])
+      expect(await authenticate(value)).toBeNull()
+    expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+    expectNoOtherCredentialTried()
+  })
+
+  it.each<[string, Partial<typeof issued>]>([
+    ['expired a second ago', { accessExpiresAt: new Date(Date.now() - 1000) }],
+    ['expired long ago', { accessExpiresAt: new Date(0) }],
+  ])('refuses an access token that %s', async (_what, override) => {
+    withPair(override)
+    expect(await authenticate()).toBeNull()
+    expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+    expectNoOtherCredentialTried()
+  })
+
+  it('accepts an access token until it expires, even after its refresh token was rotated', async () => {
+    withPair({
+      accessExpiresAt: new Date(Date.now() + 1000),
+      rotatedAt: new Date(Date.now() - 30_000),
+    })
+    expect(await authenticate()).not.toBeNull()
+  })
+
+  it.each<[string, Partial<typeof signedIn>]>([
+    ['disconnected', { revokedAt: new Date(), revokedReason: 'disconnected' }],
+    [
+      'revoked after a replay',
+      { revokedAt: new Date(0), revokedReason: 'replay' },
+    ],
+  ])(
+    'refuses the token of a connection that was %s',
+    async (_what, override) => {
+      withConnection(override)
+      expect(await authenticate()).toBeNull()
+      expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+      expectNoOtherCredentialTried()
+    }
+  )
+
+  it('refuses a token whose connection is gone', async () => {
+    connections = []
+    expect(await authenticate()).toBeNull()
+  })
+
+  it('refuses an account that must verify its email first', async () => {
+    mocks.policy.mockReturnValue(true)
+    expect(await authenticate()).toBeNull()
+    expect(mocks.policy).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user-1' }),
+      expect.anything()
+    )
+    expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+  })
+
+  it('refuses a refresh token presented as an access token', async () => {
+    expect(await authenticate('flf_RefreshTokenOfASignIn')).toBeNull()
+    expect(mocks.pair).not.toHaveBeenCalled()
+  })
+
+  describe('its scopes', () => {
+    it('are the grant of the connection when the pair has no ceiling of its own', async () => {
+      withConnection({ scopes: ['files:upload', 'files:read'] })
+      expect((await authenticate())!.scopes).toEqual([
+        'files:upload',
+        'files:read',
+      ])
+    })
+
+    it('are the grant within the ceiling of a narrowed pair', async () => {
+      withPair({ narrowed: true, scopes: ['files:read', 'files:delete'] })
+      const principal = await authenticate()
+      // files:delete is in the ceiling but was never granted.
+      expect(principal!.scopes).toEqual(['files:read'])
+      expect(principal!.user.agentConnection!.scopes).toEqual(['files:read'])
+    })
+
+    it('ignore the scopes column of a pair that is not narrowed', async () => {
+      withPair({ narrowed: false, scopes: ['files:read'] })
+      expect((await authenticate())!.scopes).toEqual([
+        'files:read',
+        'files:content',
+        'urls:read',
+      ])
+    })
+
+    it('follow an edit of the connection on the very next request', async () => {
+      expect((await authenticate())!.scopes).toContain('files:content')
+      withConnection({ scopes: ['files:read'] })
+      expect((await authenticate())!.scopes).toEqual(['files:read'])
+      withConnection({ scopes: [] })
+      expect((await authenticate())!.scopes).toEqual([])
+    })
+
+    it('are empty when a narrowed pair and the grant no longer overlap', async () => {
+      withPair({ narrowed: true, scopes: ['urls:read'] })
+      withConnection({ scopes: ['files:read'] })
+      expect((await authenticate())!.scopes).toEqual([])
+    })
+
+    it('never hold the marker, or a scope a sign-in cannot grant', async () => {
+      withConnection({ scopes: ['mcp', 'files:read', 'admin:everything'] })
+      withPair({
+        narrowed: true,
+        scopes: ['mcp', 'files:read', 'admin:everything'],
+      })
+      expect((await authenticate())!.scopes).toEqual(['files:read'])
+    })
+
+    it('are not permissions: the role still decides', async () => {
+      mocks.everyone.mockResolvedValue(role('everyone', [], 'everyone'))
+      withConnection({ scopes: ['files:read', 'files:delete'] })
+      const principal = await authenticate()
+      expect(principal!.can('files.read')).toBe(false)
+      expect(principal!.can('files.delete')).toBe(false)
+    })
+  })
+
+  it('acts as the connection, not as a session on the same request', async () => {
+    const principal = await authenticateAgent(
+      request(`Bearer ${ACCESS_TOKEN}`, SESSION_COOKIE)
+    )
+    expect(principal!.user.credential).toBe('agent')
+    expect(principal!.user.id).toBe('user-1')
+    expectNoOtherCredentialTried()
+  })
+
+  it('refuses an unknown access token instead of using the cookie', async () => {
+    expect(
+      await authenticateAgent(
+        request('Bearer fla_NobodyIssuedThis', SESSION_COOKIE)
+      )
+    ).toBeNull()
+    expectNoOtherCredentialTried()
+  })
+})
+
+describe('credentialPrincipal for a connection', () => {
+  it('finds the principal a transfer URL was made for, with the whole grant', async () => {
+    // The pair the URL was made with was narrowed; the URL belongs to the connection.
+    withPair({ narrowed: true, scopes: ['files:read'] })
+    const principal = await credentialPrincipal('connection:connection-1')
+    expect(mocks.connection).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'connection-1' } })
+    )
+    expect(principal).toMatchObject({
+      name: 'Alex',
+      scopes: ['files:read', 'files:content', 'urls:read'],
+      credentialKey: 'connection:connection-1',
+      user: {
+        id: 'user-1',
+        credential: 'agent',
+        agentConnection: { id: 'connection-1' },
+      },
+    })
+    // Following a transfer URL is not a use of the connection itself.
+    expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+    expect(mocks.pair).not.toHaveBeenCalled()
+    expect(mocks.token).not.toHaveBeenCalled()
+    expectNoOtherCredentialTried()
+  })
+
+  it('outlives a refresh: it does not depend on any one pair', async () => {
+    pairs = []
+    expect(await credentialPrincipal('connection:connection-1')).not.toBeNull()
+  })
+
+  it.each<[string, Partial<typeof signedIn>]>([
+    ['disconnected', { revokedAt: new Date(), revokedReason: 'disconnected' }],
+    ['revoked', { revokedAt: new Date(0), revokedReason: 'sessions-revoked' }],
+  ])('answers null once the connection is %s', async (_what, override) => {
+    withConnection(override)
+    expect(await credentialPrincipal('connection:connection-1')).toBeNull()
+  })
+
+  it('answers null for a connection that was deleted', async () => {
+    expect(await credentialPrincipal('connection:gone')).toBeNull()
+  })
+
+  it('answers null once the account must verify its email', async () => {
+    mocks.policy.mockReturnValue(true)
+    expect(await credentialPrincipal('connection:connection-1')).toBeNull()
+  })
+
+  it('reflects the grant and the role as they are now', async () => {
+    withConnection({
+      scopes: ['files:read'],
+      user: { ...account, roles: [role('reader', ['files.read'])] },
+    })
+    mocks.everyone.mockResolvedValue(role('everyone', [], 'everyone'))
+    const principal = await credentialPrincipal('connection:connection-1')
+    expect(principal!.scopes).toEqual(['files:read'])
+    expect(principal!.can('files.read')).toBe(true)
+    expect(principal!.can('files.upload')).toBe(false)
+  })
+
+  it('never reads a token row for a connection key, or a connection for a token key', async () => {
+    await credentialPrincipal('connection:token-1')
+    expect(mocks.token).not.toHaveBeenCalled()
+    await credentialPrincipal('token:connection-1')
+    expect(mocks.connection).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'connection',
+    'connection:',
+    ':connection-1',
+    'connections:connection-1',
+  ])('answers null for the key %j without reading anything', async (key) => {
+    expect(await credentialPrincipal(key)).toBeNull()
+    expect(mocks.connection).not.toHaveBeenCalled()
+    expect(mocks.token).not.toHaveBeenCalled()
   })
 })
 

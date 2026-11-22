@@ -563,13 +563,22 @@ Without `FLARE_INVITES_DATABASE_URL`, database cases are skipped while the polic
 
 ## MCP checks and captures
 
-The [MCP server reference](/api/mcp), the [agents guide](/guide/agents), and the [scope reference](/api/authentication#scope-reference) state what tables in the code decide, and a test in the application suite keeps the two together:
+The [MCP server reference](/api/mcp), the [agents guide](/guide/agents), the [administrator's page](/admin/agents), and the [scope reference](/api/authentication#scope-reference) state what tables in the code decide, and a test in the application suite keeps the two together:
 
 ```sh
 pnpm exec vitest run __tests__/mcp/handbook.test.ts
 ```
 
-It reads the three pages and compares them to `TOOL_CATALOG` in `lib/mcp/catalog.ts` (each tool's title, annotations, scopes, role permissions, and the arguments that need more), `API_COVERAGE` in `lib/mcp/coverage.ts` (every API route and method with its tools or its reason), `API_SCOPE_CATALOG` in `lib/integrations/bearer-routes.ts` (each scope's name and where it works), and `lib/mcp/clients.ts` (every setup snippet and preset of **Connect an agent**, rendered with `https://files.example.com/api/mcp` and `flr_YOUR_TOKEN`). A failure prints each missing or wrong table row as the page should have it; paste the rows, then rewrite the surrounding prose to match the change. The test needs no database. It does not cover limits, tool arguments, or interface labels, so read the tools and components you changed against the pages yourself.
+It reads those pages and compares them to:
+
+- `TOOL_CATALOG` in `lib/mcp/catalog.ts`: each tool's title, annotations, scopes, role permissions, and the arguments that need more.
+- `API_COVERAGE` in `lib/mcp/coverage.ts`: every API route and method with its tools or its reason.
+- `API_SCOPE_CATALOG` in `lib/integrations/bearer-routes.ts`: each scope's name and where it works.
+- `lib/mcp/clients.ts`: every client of **Connect an agent** has its own section in the guide, holding each snippet of its sign-in steps and of its token steps, rendered with `https://files.example.com/api/mcp` and `flr_YOUR_TOKEN`, and the presets.
+- `lib/oauth/urls.ts`: every field of the two sign-in metadata documents with the value Flare answers for `https://files.example.com`, and both forms of the `401` challenge.
+- `lib/oauth/constants.ts`: the lifetimes and limits of sign-in, in the reference's table and in the sentences of the guide that state them, and the prefixes of access tokens, refresh tokens, and client IDs.
+
+A failure prints each missing or wrong table row as the page should have it; paste the rows, then rewrite the surrounding prose to match the change. The test needs no database. It does not cover tool arguments, error messages, redirect URI rules, or interface labels, so read the tools, the modules under `lib/oauth`, and the components you changed against the pages yourself.
 
 The MCP database suite needs its own disposable PostgreSQL database, named exactly `flare_mcp_test` on `localhost` or `127.0.0.1`. It deletes every account, role, saved setting, and event there before each case:
 
@@ -579,14 +588,18 @@ DATABASE_URL="$FLARE_MCP_DATABASE_URL" pnpm exec prisma migrate deploy
 pnpm exec vitest run __tests__/mcp/database.test.ts
 ```
 
-Without `FLARE_MCP_DATABASE_URL` the suite is skipped; CI supplies it. The other suites in `__tests__/mcp` run without a database.
+Without `FLARE_MCP_DATABASE_URL` the suite is skipped; CI supplies it. Besides tokens, transfer URLs, and search, it runs agent sign-in against real PostgreSQL: registration, consent to a working connection, codes, refresh tokens, revocation, everything that ends an account's agents, pairs of operations that race, and cleanup. The other suites in `__tests__/mcp` and those in `__tests__/oauth` run without a database.
 
-The screenshots under `docs/images/agents/` and the recording `.github/assets/agents/connect-agent.webm` come from a production build on a disposable instance, signed in as a demonstration account whose files, folders, tags, and short link were created through the MCP tools. They follow the conventions of the invite captures: dark scheme, a 1440×1000 window, 390×844 for the phone, dialogs photographed as elements, and the recording at 1440×1000 with visible typing. To refresh them:
+The screenshots under `docs/images/agents/` and the recording `.github/assets/agents/connect-agent.webm` come from a production build on a disposable instance, signed in as a demonstration account. They follow the conventions of the invite captures: dark scheme, a 1440×1000 window, 390×844 for the phone, dialogs and the sign-in cards photographed as elements, and the recording at 1440×1000. To refresh them:
 
-- **Hide the token before it is painted.** **Connect an agent** shows the new token once, inside the commands. The captures hide it with capture-only CSS: a script installed before the app's own marks every `flr_` token on the page as a [CSS custom highlight](https://developer.mozilla.org/docs/Web/CSS/::highlight) and draws it transparent with a blur, without changing the app's markup. Check every frame of a recording, not only a still.
-- **Use tokens you then destroy.** The recording revokes its token on screen. Remove the tokens a capture created afterwards, and never photograph a token that still works.
+- **Sign real clients in.** The connected agents in the pictures, the consent screen, and the recording are real sign-ins of Claude Code and the Codex CLI: each client adds the server at `http://localhost:PORT/api/mcp` with its own scratch configuration directory (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`) and prints the address it wants opened, the capture browser opens that address as the demonstration account and chooses **Allow**, and the client's own listener receives the answer. Do not put a connection in a picture by registering a client under another product's name.
+- **Give one instance a public HTTPS address.** **Connect an agent** shows the steps for Claude and ChatGPT only when the instance's address is a public HTTPS one. Start the same build a second time with `NEXTAUTH_URL=https://files.example.com` behind a local TLS proxy, and let only the capture browser resolve that name to this computer (Chromium's `--host-resolver-rules`, with certificate errors ignored for the self-signed certificate). The dialog pictures and `profile-agents-card.webp` come from that instance; `connect-unavailable.webp` and `settings-mcp-server.webp` come from the `localhost` one, because they show what a local address gets. No hosted client connected to either.
+- **Wait for Allow.** The consent screen turns **Allow** on half a second after the page is in front. Photograph it after that.
+- **Hide the token before it is painted.** **Use a token instead** shows the new token once, inside the commands. The captures hide it with capture-only CSS: a script installed before the app's own marks every `flr_` token on the page as a [CSS custom highlight](https://developer.mozilla.org/docs/Web/CSS/::highlight) and draws it transparent with a blur, without changing the app's markup. Signing in puts no token on screen, so the recording needs none of this.
+- **Leave nothing that works.** Delete the token `connect-steps.webp` created, sign the clients out or disconnect them when the pictures are done, and never photograph a token that still works. The recording disconnects its agent on screen.
+- **Mind the limits.** An account may sign in 20 times in 15 minutes, and one address may register 10 clients an hour for each redirect host. Keep the session cookies between browser contexts, and let each client register once.
 - **Make the audit events first.** `audit-mcp.webp` shows the `mcp` category after two demonstration tokens worked on the files: reads, an upload through an upload URL, a move, tagging, a sharing change, and one deletion the read-only token was refused.
-- **Review each image** for stale labels, clipped text, and anything private, then update the transcript in [Demos](/demos#connect-an-agent) if the recorded steps change. `settings-mcp-server.webp` is cropped below the **Server URL** so that the note under it, which only some addresses show, stays out of the picture.
+- **Review each image** for stale labels, clipped text, and anything private, and every frame of the recording, then update the transcript in [Demos](/demos#connect-an-agent) if the recorded steps change. `settings-mcp-server.webp` is the whole card, with the note under the **Server URL** that only an address that is not a public HTTPS one shows.
 
 ## Navigation browser checks
 

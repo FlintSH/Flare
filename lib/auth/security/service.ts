@@ -4,6 +4,7 @@ import type { Session } from 'next-auth'
 import { randomBytes } from 'node:crypto'
 
 import { prisma } from '@/lib/database/prisma'
+import { revokeAccountConnections } from '@/lib/oauth/connections'
 
 import {
   createTotp,
@@ -185,14 +186,32 @@ export async function consumeChallenge(
 
 /**
  * Signing an account out everywhere, for the caller's update of its row:
- * deletes its pending security challenges and returns the change that moves
- * its session version on, which ends every browser session once saved.
+ * deletes its pending security challenges, ends every agent it signed in and
+ * returns the change that moves its session version on, which ends every
+ * browser session once saved.
+ *
+ * An agent's tokens are a way into the account as a session is, so the
+ * actions that end the sessions end the agents too, in the same transaction.
+ * Every one of them comes through here:
+ *
+ * - "I may be compromised": signing out everywhere, an administrator signing
+ *   the account out, and a new password, whether changed in the profile, set
+ *   by an administrator or reset from an emailed link.
+ * - "How I sign in changed": a new sign-in address; turning the authenticator
+ *   on or off, or replacing its recovery codes; adding or removing a passkey;
+ *   requiring passkeys or no longer requiring them; replacing passkey
+ *   recovery codes.
+ *
+ * Signing out one session, renaming a passkey and losing a role permission
+ * end no agent. Named API tokens are not touched either: their owner revokes
+ * those one by one.
  */
 export async function sessionRevocation(
   tx: Prisma.TransactionClient,
   userId: string
 ): Promise<Prisma.UserUpdateInput> {
   await tx.authChallenge.deleteMany({ where: { userId } })
+  await revokeAccountConnections(tx, userId, 'sessions-revoked')
   return { sessionVersion: { increment: 1 } }
 }
 

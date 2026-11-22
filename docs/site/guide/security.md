@@ -135,7 +135,7 @@ Each dedicated recovery code can grant **full account sign-in using only your em
 
 <Screenshot src="/screenshots/security/passkey-recovery-codes.webp" alt="Save your passkey recovery codes dialog with ten concealed dedicated codes, download and copy actions, and a saved-confirmation checkbox" caption="Save this dedicated set once. These codes grant emergency sign-in without a password; their values are concealed in the capture." />
 
-Email verification and role permissions still apply after passkey or emergency recovery sign-in. API tokens and upload-tool credentials keep working under their existing permissions; this setting protects browser sign-in and does not revoke integrations.
+Email verification and role permissions still apply after passkey or emergency recovery sign-in. API tokens and upload-tool credentials keep working under their existing permissions; this setting protects browser sign-in and does not revoke them. Turning it on or off does disconnect [AI agents you signed in](./agents#what-else-disconnects-agents) through the browser, which sign in again afterwards.
 
 <Screenshot src="/screenshots/security/passkey-required-password.webp" alt="Login rejects the account password and directs the user to a registered passkey or dedicated passkey recovery code" caption="A correct password cannot bypass the requirement. Resetting it does not restore password or SSO sign-in." />
 
@@ -188,6 +188,8 @@ Flare does not add a local authenticator prompt after an SSO provider's sign-in.
 If the instance automatically redirects to SSO, open `/auth/login?local=1` for permitted password, passkey, or dedicated passkey recovery sign-in. Existing local accounts are not automatically linked to a matching provider email. See [the SSO guide](/admin/sso).
 
 [Named API tokens](/api/authentication) and the legacy upload credential remain independent credentials. Enabling two-factor authentication or using a passkey does not add an interactive prompt to your upload scripts, revoke their tokens, or expand their permissions. Review **Profile → Integrations** and rotate/revoke credentials you no longer use.
+
+An [AI agent that signed in](./agents#what-else-disconnects-agents) through the browser is treated like a browser session, not like a token. Each change on this page that signs your browsers out also disconnects those agents: turning two-factor authentication on or off, replacing recovery codes, adding or removing a passkey, changing **Require passkey to sign in**, and replacing passkey recovery codes. Sign the agent in again from its client.
 
 ## Troubleshoot sign-in
 

@@ -5,6 +5,7 @@ import { getConfig } from '@/lib/config'
 import { prisma } from '@/lib/database/prisma'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { FILE_PASSWORD_MIN_LENGTH } from '@/lib/files/password-policy'
+import { connectionHolds } from '@/lib/oauth/connections'
 import { uploadLimiter } from '@/lib/security/rate-limit'
 import { uploadCapacity } from '@/lib/uploads/capacity'
 import { directUpload } from '@/lib/uploads/direct'
@@ -18,6 +19,7 @@ import {
 import { isoDateTimeWithOffset } from '@/lib/utils/iso-datetime'
 
 import type { AgentPrincipal } from '../auth'
+import { TOOL_CATALOG, type ToolName } from '../catalog'
 import { compact, readableBytes } from '../results'
 import { type ToolContext, ToolError, defineTool } from '../tool'
 import { UPLOAD_MINUTES, createUploadUrl } from '../transfer'
@@ -243,12 +245,32 @@ const uploadedFile = z.object({
 })
 
 /**
+ * For an agent that signed in: the last check on its upload, in the
+ * transaction that publishes the file. The connection is read again there,
+ * so one disconnected while the call was running publishes nothing. A named
+ * token is read again by the upload itself.
+ */
+function connectionCheck(principal: AgentPrincipal, tool: ToolName) {
+  const connection = principal.user.agentConnection
+  if (!connection) return undefined
+  return async (tx: Parameters<typeof connectionHolds>[0]) => {
+    if (!(await connectionHolds(tx, connection.id, TOOL_CATALOG[tool].scopes)))
+      throw new ToolError(
+        'This connection was disconnected, or lost upload access, while the file was being uploaded. Nothing was published.',
+        'denied'
+      )
+  }
+}
+
+/**
  * Publishes bytes held in memory through the upload path every client uses,
  * as one multipart request that never leaves the process.
  */
 async function publishInline(
   { principal, request }: ToolContext,
   upload: {
+    /** The tool that publishes, whose scopes the connection must still hold. */
+    tool: ToolName
     bytes: Buffer
     name: string
     type: string
@@ -264,6 +286,7 @@ async function publishInline(
       'denied'
     )
   }
+  const authorize = connectionCheck(principal, upload.tool)
   const form = new FormData()
   form.set(
     'file',
@@ -281,7 +304,12 @@ async function publishInline(
     }),
     principal.user,
     // The part's name is escaped in transit; the file gets this one as given.
-    { options: upload.options, filename: upload.name, isPaste: upload.isPaste }
+    {
+      options: upload.options,
+      filename: upload.name,
+      isPaste: upload.isPaste,
+      ...(authorize && { authorize }),
+    }
   )
   return {
     structured: {
@@ -330,6 +358,7 @@ const uploadFile = defineTool({
     const name = cleanName(args.filename)
     const bytes = text ? utf8('text', text) : decodeBase64(base64!)
     return publishInline(context, {
+      tool: 'upload_file',
       bytes,
       name,
       type:
@@ -354,6 +383,7 @@ const createPaste = defineTool({
       throw new ToolError('`content` is empty. Give the text or code to share.')
     const bytes = utf8('content', args.content)
     return publishInline(context, {
+      tool: 'create_paste',
       bytes,
       // What the paste page calls a paste nobody named.
       name: args.filename ? cleanName(args.filename) : 'paste.txt',

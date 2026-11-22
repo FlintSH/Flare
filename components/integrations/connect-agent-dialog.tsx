@@ -10,7 +10,6 @@ import {
   formDialogClassName,
   formDialogFooterClassName,
 } from '@/components/shared/form-styles'
-import { SetupOption } from '@/components/shared/setup-option'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,20 +28,20 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { NativeSelect } from '@/components/ui/native-select'
-import { RadioGroup } from '@/components/ui/radio-group'
 
 import { apiRequest } from '@/lib/client/request'
 import { MCP_SCOPE } from '@/lib/integrations/bearer-routes'
 import { CONNECTION_NAME_MAX_LENGTH } from '@/lib/integrations/limits'
 import {
   AGENT_CLIENTS,
-  AGENT_PRESETS,
+  type AgentClient,
   type AgentClientId,
   type AgentLink,
+  type AgentSetup,
   type AgentSnippet,
-  DEFAULT_AGENT_PRESET,
   type TokenClient,
   agentClient,
+  outOfReach,
 } from '@/lib/mcp/clients'
 import { cn } from '@/lib/utils'
 import { scrollFadeRef } from '@/lib/utils/scroll-fade'
@@ -50,7 +49,7 @@ import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { usePermissions } from '@/hooks/use-permissions'
 
 import { CopyButton } from './copy-button'
-import { ScopePicker, offeredScopes } from './scope-picker'
+import { AgentScopes, offeredScopes, useAgentScopes } from './scope-picker'
 import { DEFAULT_TOKEN_LIFETIME, TOKEN_LIFETIMES, tokenExpiry } from './shared'
 
 const CREATE_FAILED = 'Could not create the token.'
@@ -59,37 +58,15 @@ const CREATE_FAILED = 'Could not create the token.'
 const tokenName = (client: { id: string; label: string }) =>
   client.id === 'other' ? 'Agent' : client.label
 
-/** Brings the checkboxes Custom adds into view; on a phone they open below the fold. */
-const reveal = (element: HTMLElement | null) =>
-  element?.scrollIntoView({ block: 'nearest' })
+const TOKEN_CLIENTS: readonly AgentClient[] = AGENT_CLIENTS.filter(
+  (client) => client.method === 'token'
+)
 
 /**
- * The presets this account can tell apart: each keeps only the scopes the
- * role can use, in the catalog's order, and one that adds nothing to the one
- * before it is left out.
- */
-function offeredPresets(offered: readonly string[]) {
-  const presets: {
-    id: string
-    label: string
-    description: string
-    scopes: string[]
-  }[] = []
-  for (const preset of AGENT_PRESETS) {
-    const held: readonly string[] = preset.scopes
-    const scopes = offered.filter((scope) => held.includes(scope))
-    const last = presets.at(-1)
-    if (scopes.length && scopes.length !== last?.scopes.length)
-      presets.push({ ...preset, scopes })
-  }
-  return presets
-}
-
-/**
- * Connect an agent: pick the client, pick what it may do, then get that
- * client's steps with a new token filled in. The method area under the
- * client picker holds the token form today; browser sign-in takes that
- * place later, with this form behind "Use a token instead".
+ * Connect an agent: pick the client and follow its steps. The agent signs in
+ * through the browser, so nothing is created here. "Use a token instead"
+ * swaps the steps for a form that creates a named token and then shows that
+ * client's steps with the token filled in.
  *
  * `children` holds the `DialogTrigger` that opens it, so focus returns to
  * that button when the dialog closes.
@@ -158,16 +135,11 @@ function ConnectAgent({
   const { can } = usePermissions()
   const [clientId, setClientId] = useState<AgentClientId>(AGENT_CLIENTS[0].id)
   const client = agentClient(clientId)
-  const offered = offeredScopes(can, true).map(({ scope }) => scope)
-  const presets = offeredPresets(offered)
-  const [choice, setChoice] = useState<string>(DEFAULT_AGENT_PRESET)
-  const [custom, setCustom] = useState<string[]>([])
-  // The default preset may be one this role cannot tell from a smaller one.
-  const preset =
-    choice === 'custom'
-      ? undefined
-      : (presets.find((candidate) => candidate.id === choice) ?? presets[0])
-  const scopes = preset ? preset.scopes : custom
+  // Only a client that takes a token is ever asked for one.
+  const [withToken, setWithToken] = useState(false)
+  const picker = useAgentScopes(
+    offeredScopes(can, true).map(({ scope }) => scope)
+  )
   // Null follows the client's name until the person types their own.
   const [typedName, setTypedName] = useState<string | null>(null)
   const name = typedName ?? tokenName(client)
@@ -180,7 +152,7 @@ function ConnectAgent({
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (client.method !== 'token') return
+    if (!withToken || client.method !== 'token') return
     onBusyChange(true)
     setError('')
     try {
@@ -190,7 +162,7 @@ function ConnectAgent({
           body: {
             action: 'create-token',
             name,
-            scopes: [MCP_SCOPE, ...scopes],
+            scopes: [MCP_SCOPE, ...picker.scopes],
             expiresAt: tokenExpiry(Number(lifetime)),
           },
           fallback: CREATE_FAILED,
@@ -209,21 +181,41 @@ function ConnectAgent({
 
   if (created)
     return (
-      <AgentSteps
-        client={created.client}
-        url={url}
-        token={created.token}
-        onClose={onClose}
-      />
+      <>
+        <DialogHeader className="shrink-0">
+          <DialogTitle>
+            {created.client.id === 'other'
+              ? 'Connect your client'
+              : `Connect ${created.client.label}`}
+          </DialogTitle>
+          <DialogDescription>
+            The token is shown only this once. Copy what you need before you
+            close this.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div ref={scrollFadeRef} className={formDialogBodyClassName}>
+            <SetupSteps
+              setup={created.client.setup(url, created.token)}
+              token={created.token}
+            />
+          </div>
+          <DialogFooter className={formDialogFooterClassName}>
+            <Button onClick={onClose}>Done</Button>
+          </DialogFooter>
+        </div>
+      </>
     )
 
+  const blocked = withToken ? null : outOfReach(client, url)
   return (
     <>
       <DialogHeader className="shrink-0">
         <DialogTitle>Connect an agent</DialogTitle>
         <DialogDescription>
-          Flare creates a token for the agent and shows the steps for your
-          client.
+          {withToken
+            ? 'Flare creates a token for the agent and shows the steps for your client.'
+            : 'Add Flare to your client, then sign in through your browser.'}
         </DialogDescription>
       </DialogHeader>
       <form onSubmit={create} className="flex min-h-0 flex-1 flex-col">
@@ -250,7 +242,7 @@ function ConnectAgent({
               disabled={busy}
               className="flex flex-wrap gap-1.5"
             >
-              {AGENT_CLIENTS.map((candidate) => (
+              {(withToken ? TOKEN_CLIENTS : AGENT_CLIENTS).map((candidate) => (
                 <RadioGroupPrimitive.Item
                   key={candidate.id}
                   value={candidate.id}
@@ -262,69 +254,9 @@ function ConnectAgent({
               ))}
             </RadioGroupPrimitive.Root>
           </div>
-          {client.method === 'sign-in' ? (
-            <Alert variant="info" role="status">
-              <Info aria-hidden="true" />
-              <AlertDescription>{client.unavailable}</AlertDescription>
-            </Alert>
-          ) : (
+          {withToken ? (
             <>
-              {offered.length > 0 ? (
-                <fieldset disabled={busy}>
-                  <legend
-                    id={`${id}-actions`}
-                    className="mb-2 text-sm font-medium"
-                  >
-                    Allowed actions
-                  </legend>
-                  <RadioGroup
-                    value={preset?.id ?? 'custom'}
-                    onValueChange={(value) => {
-                      // Custom starts from what was chosen, not from nothing.
-                      if (value === 'custom') setCustom(scopes)
-                      setChoice(value)
-                    }}
-                    aria-labelledby={`${id}-actions`}
-                    className="sm:grid-cols-2"
-                  >
-                    {presets.map((candidate) => (
-                      <SetupOption
-                        key={candidate.id}
-                        id={`${id}-preset-${candidate.id}`}
-                        value={candidate.id}
-                        selected={preset?.id === candidate.id}
-                        title={candidate.label}
-                        description={candidate.description}
-                        className="p-3"
-                      />
-                    ))}
-                    <SetupOption
-                      id={`${id}-preset-custom`}
-                      value="custom"
-                      selected={!preset}
-                      title="Custom"
-                      description="Pick each action yourself."
-                      className="p-3"
-                    />
-                  </RadioGroup>
-                  {!preset && (
-                    <div ref={reveal} className="mt-3">
-                      <ScopePicker
-                        selected={custom}
-                        onChange={setCustom}
-                        can={can}
-                        mcp
-                        agent="always"
-                      />
-                    </div>
-                  )}
-                </fieldset>
-              ) : (
-                <p className="text-pretty text-sm text-muted-foreground">
-                  Your role allows no file or short link actions, so the agent
-                  will only see your account details.
-                </p>
-              )}
+              <AgentScopes picker={picker} disabled={busy} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor={`${id}-name`}>Connection name</Label>
@@ -354,28 +286,59 @@ function ConnectAgent({
                 </div>
               </div>
             </>
+          ) : blocked ? (
+            <Alert variant="info" role="status">
+              <Info aria-hidden="true" />
+              <AlertDescription>{blocked}</AlertDescription>
+            </Alert>
+          ) : (
+            // Keyed, so one client's opened "other ways" do not carry over.
+            <SetupSteps key={client.id} setup={client.signIn(url)} />
           )}
         </div>
-        <DialogFooter className={formDialogFooterClassName}>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={busy}
-            onClick={onClose}
+        {withToken ? (
+          <DialogFooter
+            className={cn(formDialogFooterClassName, 'sm:justify-between')}
           >
-            {client.method === 'token' ? 'Cancel' : 'Close'}
-          </Button>
-          {client.method === 'token' && (
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => {
+                setWithToken(false)
+                setError('')
+              }}
+            >
+              Back
+            </Button>
             <Button
               type="submit"
-              disabled={
-                busy || !name.trim() || (!scopes.length && offered.length > 0)
-              }
+              disabled={busy || !name.trim() || picker.incomplete}
             >
               {busy ? 'Creating…' : 'Create token'}
             </Button>
-          )}
-        </DialogFooter>
+          </DialogFooter>
+        ) : (
+          <DialogFooter
+            className={cn(
+              formDialogFooterClassName,
+              client.method === 'token' && 'sm:justify-between'
+            )}
+          >
+            {client.method === 'token' && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setWithToken(true)}
+              >
+                Use a token instead
+              </Button>
+            )}
+            <Button type="button" onClick={onClose}>
+              {blocked ? 'Close' : 'Done'}
+            </Button>
+          </DialogFooter>
+        )}
       </form>
     </>
   )
@@ -466,34 +429,38 @@ function Snippet({
   )
 }
 
-/** A one-click install. The address holds the token, so it is never shown. */
+/**
+ * A one-click install. A link that holds a token is never shown and has a
+ * note saying where the token goes; one that holds nothing secret can also
+ * be copied, to open on the computer the client runs on.
+ */
 function InstallLink({ link }: { link: AgentLink }) {
   return (
     <div className="space-y-1.5">
-      <Button asChild>
-        <a href={link.href} rel="noreferrer">
-          <ExternalLink aria-hidden="true" />
-          {link.label}
-        </a>
-      </Button>
-      <p className="text-pretty text-xs text-muted-foreground">{link.note}</p>
+      <div className="flex flex-wrap gap-2">
+        <Button asChild>
+          <a href={link.href} rel="noreferrer">
+            <ExternalLink aria-hidden="true" />
+            {link.label}
+          </a>
+        </Button>
+        {!link.note && (
+          <CopyButton value={link.href} name="install link" label="Copy link" />
+        )}
+      </div>
+      {link.note && (
+        <p className="text-pretty text-xs text-muted-foreground">{link.note}</p>
+      )}
     </div>
   )
 }
 
-/** The client's steps with the new token filled in. Shown once. */
-function AgentSteps({
-  client,
-  url,
-  token,
-  onClose,
-}: {
-  client: TokenClient
-  url: string
-  token: string
-  onClose: () => void
-}) {
-  const { steps, snippets, links } = client.setup(url, token)
+/**
+ * A client's steps, then the other ways to do the same. With `token`, the
+ * token on its own is one of those ways.
+ */
+function SetupSteps({ setup, token }: { setup: AgentSetup; token?: string }) {
+  const { steps, snippets, links } = setup
   // What no step uses is another way to do the same.
   const others = snippets.filter(
     (candidate) => !steps.some((step) => step.snippet === candidate.id)
@@ -501,72 +468,61 @@ function AgentSteps({
   const numbered = steps.length > 1
   return (
     <>
-      <DialogHeader className="shrink-0">
-        <DialogTitle>
-          {client.id === 'other'
-            ? 'Connect your client'
-            : `Connect ${client.label}`}
-        </DialogTitle>
-        <DialogDescription>
-          The token is shown only this once. Copy what you need before you close
-          this.
-        </DialogDescription>
-      </DialogHeader>
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div ref={scrollFadeRef} className={formDialogBodyClassName}>
-          <ol className="space-y-4">
-            {steps.map((step, index) => {
-              const snippet = snippets.find(({ id }) => id === step.snippet)
-              const link = links.find(({ id }) => id === step.link)
-              return (
-                <li key={step.text} className="flex gap-3">
-                  {numbered && (
-                    <span
-                      aria-hidden="true"
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted/30 text-xs font-medium text-muted-foreground"
-                    >
-                      {index + 1}
-                    </span>
-                  )}
-                  <div className="min-w-0 flex-1 space-y-2">
-                    <p className="text-pretty text-sm leading-6">
-                      <Prose text={step.text} />
-                    </p>
-                    {snippet && (
-                      <Snippet
-                        snippet={snippet}
-                        name={
-                          snippet.language !== 'shell'
-                            ? snippet.title
-                            : numbered
-                              ? `the command for step ${index + 1}`
-                              : 'the command'
-                        }
-                      />
-                    )}
-                    {link && <InstallLink link={link} />}
-                  </div>
-                </li>
-              )
-            })}
-          </ol>
-          <Collapsible className="rounded-xl border bg-muted/30">
-            <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-              Other ways to set it up
-              <ChevronDown
-                className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180"
-                aria-hidden="true"
+      <ol className="space-y-4">
+        {steps.map((step, index) => {
+          const snippet = snippets.find(({ id }) => id === step.snippet)
+          const link = links.find(({ id }) => id === step.link)
+          return (
+            <li key={step.text} className="flex gap-3">
+              {numbered && (
+                <span
+                  aria-hidden="true"
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border bg-muted/30 text-xs font-medium text-muted-foreground"
+                >
+                  {index + 1}
+                </span>
+              )}
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-pretty text-sm leading-6">
+                  <Prose text={step.text} />
+                </p>
+                {snippet && (
+                  <Snippet
+                    snippet={snippet}
+                    name={
+                      snippet.language !== 'shell'
+                        ? snippet.title
+                        : numbered
+                          ? `the command for step ${index + 1}`
+                          : 'the command'
+                    }
+                  />
+                )}
+                {link && <InstallLink link={link} />}
+              </div>
+            </li>
+          )
+        })}
+      </ol>
+      {(others.length > 0 || token) && (
+        <Collapsible className="rounded-xl border bg-muted/30">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-3 rounded-xl p-4 text-left text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+            Other ways to set it up
+            <ChevronDown
+              className="h-4 w-4 shrink-0 transition-transform group-data-[state=open]:rotate-180"
+              aria-hidden="true"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 px-4 pb-4">
+            {others.map((other) => (
+              <Snippet
+                key={other.id}
+                snippet={other}
+                name={other.title}
+                titled
               />
-            </CollapsibleTrigger>
-            <CollapsibleContent className="space-y-4 px-4 pb-4">
-              {others.map((other) => (
-                <Snippet
-                  key={other.id}
-                  snippet={other}
-                  name={other.title}
-                  titled
-                />
-              ))}
+            ))}
+            {token && (
               <Snippet
                 snippet={{
                   id: 'token',
@@ -577,13 +533,10 @@ function AgentSteps({
                 name="the token"
                 titled
               />
-            </CollapsibleContent>
-          </Collapsible>
-        </div>
-        <DialogFooter className={formDialogFooterClassName}>
-          <Button onClick={onClose}>Done</Button>
-        </DialogFooter>
-      </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </>
   )
 }

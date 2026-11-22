@@ -1221,9 +1221,9 @@ export function InstanceSettings({
                   <div className="min-w-0 flex-1 space-y-0.5">
                     <Label>Enable the MCP server</Label>
                     <p className="text-pretty text-sm text-muted-foreground">
-                      Agents can connect and act for an account, using a token
-                      that account creates in its profile. They can do only what
-                      the token and the account&apos;s role allow.
+                      Agents can connect and act for an account, once its owner
+                      signs them in or gives them a token. They can do only what
+                      that connection and the account&apos;s role allow.
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -1265,9 +1265,11 @@ export function InstanceSettings({
                     </div>
                     {!reachableFromCloud(mcpUrl) && (
                       <p className="text-pretty text-sm text-muted-foreground">
-                        Local clients such as Claude Code, Cursor and VS Code
-                        work with this address. Links and upload URLs that Flare
-                        gives agents use it, so agents must be able to reach it.
+                        Claude and ChatGPT on the web connect from their own
+                        servers and need a public HTTPS address. Local clients
+                        such as Claude Code, Cursor and VS Code work with this
+                        address. Links and upload URLs that Flare gives agents
+                        use it, so agents must be able to reach it.
                       </p>
                     )}
                   </div>

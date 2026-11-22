@@ -6,11 +6,18 @@ import { MCP_SCOPES } from '@/lib/mcp/catalog'
 import {
   AGENT_CLIENTS,
   AGENT_PRESETS,
+  type AgentClient,
   type AgentSetup,
   DEFAULT_AGENT_PRESET,
   type TokenClient,
   agentClient,
+  agentScopeChoices,
+  destinationLabel,
+  offeredPresets,
+  outOfReach,
   reachableFromCloud,
+  returnDestination,
+  shownClientName,
 } from '@/lib/mcp/clients'
 
 const URL_ = 'https://files.example.com/api/mcp'
@@ -31,6 +38,21 @@ const snippet = (id: string, name: string, url = URL_, token = TOKEN) => {
   return found.code
 }
 const link = (id: string, token = TOKEN) => setup(id, URL_, token).links[0]
+
+// Read as the general type, so a step's optional parts can be asked for.
+const clients: readonly AgentClient[] = AGENT_CLIENTS
+const signIn = (id: string, url = URL_): AgentSetup =>
+  agentClient(id).signIn(url)
+const signInSnippet = (id: string, name: string, url = URL_) => {
+  const found = signIn(id, url).snippets.find(
+    (candidate) => candidate.id === name
+  )
+  if (!found) throw new Error(`${id} has no ${name} sign-in snippet`)
+  return found.code
+}
+const signInSteps = (id: string) => signIn(id).steps.map(({ text }) => text)
+/** How every sign-in ends. */
+const CONSENT = 'Flare opens in your browser, where you choose what it may do.'
 
 const tokenClients = AGENT_CLIENTS.filter(
   (client): client is Extract<typeof client, { method: 'token' }> =>
@@ -251,7 +273,7 @@ describe('MCP client setup', () => {
       return [
         ...steps.map(({ text }) => text),
         ...snippets.flatMap(({ note }) => (note ? [note] : [])),
-        ...links.map(({ note }) => note),
+        ...links.flatMap(({ note }) => (note ? [note] : [])),
       ]
     })
     // Backticks come in pairs, and no sentence carries the token or a dash.
@@ -285,17 +307,13 @@ describe('MCP client setup', () => {
     }
   })
 
-  it('has no steps and no token for the clients that sign in', () => {
-    const claude = agentClient('claude')
-    const chatgpt = agentClient('chatgpt')
-    expect(claude).not.toHaveProperty('setup')
-    expect(chatgpt).not.toHaveProperty('setup')
-    expect(claude.method === 'sign-in' && claude.unavailable).toBe(
-      "Claude on desktop and the web cannot connect yet. It connects from Anthropic's servers and signs in through your browser instead of using a token. Browser sign-in arrives in a later release and needs a public HTTPS address. Claude Code works today."
-    )
-    expect(chatgpt.method === 'sign-in' && chatgpt.unavailable).toBe(
-      "ChatGPT cannot connect yet. It connects from OpenAI's servers and signs in through your browser instead of using a token. Browser sign-in arrives in a later release and needs a public HTTPS address. Codex works today."
-    )
+  it('has no token steps for the clients that only sign in', () => {
+    expect(agentClient('claude')).not.toHaveProperty('setup')
+    expect(agentClient('chatgpt')).not.toHaveProperty('setup')
+    // Every install link that holds a token says where the token goes.
+    for (const client of tokenClients)
+      for (const { note } of client.setup(URL_, TOKEN).links)
+        expect(note).toMatch(/^The link contains the token/)
   })
 
   it('hands a shell the token as one intact argument', () => {
@@ -395,6 +413,334 @@ describe('MCP client setup', () => {
   })
 })
 
+describe('signing in', () => {
+  it('pins the Claude Code command and steps', () => {
+    expect(signInSnippet('claude-code', 'command')).toBe(
+      'claude mcp add --transport http flare https://files.example.com/api/mcp'
+    )
+    expect(signInSteps('claude-code')).toEqual([
+      'Run this in a terminal, in the project you want to use Flare from. Add `--scope user` to use it in every project.',
+      `In Claude Code, run \`/mcp\`, choose flare and authenticate. ${CONSENT}`,
+    ])
+  })
+
+  it('pins the Codex commands and steps', () => {
+    expect(signInSnippet('codex', 'command')).toBe(
+      'codex mcp add flare --url https://files.example.com/api/mcp'
+    )
+    expect(signInSnippet('codex', 'login')).toBe('codex mcp login flare')
+    expect(signIn('codex').steps).toEqual([
+      {
+        text: `Run this in a terminal. Codex starts the sign-in itself. ${CONSENT}`,
+        snippet: 'command',
+      },
+      {
+        text: 'If Codex did not start the sign-in, run this.',
+        snippet: 'login',
+      },
+    ])
+  })
+
+  it('pins the Cursor install link, file and steps', () => {
+    const server = { url: URL_ }
+    const [{ href, label, note }] = signIn('cursor').links
+    expect(label).toBe('Add to Cursor')
+    expect(note).toBeUndefined()
+    expect(href).toBe(
+      `cursor://anysphere.cursor-deeplink/mcp/install?name=flare&config=${encodeURIComponent(
+        Buffer.from('{"url":"https://files.example.com/api/mcp"}').toString(
+          'base64'
+        )
+      )}`
+    )
+    const parsed = new URL(href)
+    expect(parsed.searchParams.get('name')).toBe('flare')
+    expect(
+      JSON.parse(
+        Buffer.from(parsed.searchParams.get('config')!, 'base64').toString()
+      )
+    ).toEqual(server)
+    expect(signInSnippet('cursor', 'file')).toBe(
+      JSON.stringify({ mcpServers: { flare: server } }, null, 2)
+    )
+    expect(JSON.parse(signInSnippet('cursor', 'file'))).toEqual({
+      mcpServers: { flare: { url: URL_ } },
+    })
+    expect(signIn('cursor').steps).toEqual([
+      {
+        text: 'Use this link on the computer that runs Cursor, then confirm the install in Cursor.',
+        link: 'install',
+      },
+      { text: `Cursor then offers to sign in. ${CONSENT}` },
+    ])
+  })
+
+  it('pins the VS Code command, install link and steps', () => {
+    const named =
+      '{"name":"flare","type":"http","url":"https://files.example.com/api/mcp"}'
+    expect(signInSnippet('vscode', 'command')).toBe(`code --add-mcp '${named}'`)
+    const [{ href, label, note }] = signIn('vscode').links
+    expect(label).toBe('Add to VS Code')
+    expect(note).toBeUndefined()
+    expect(href).toBe(`vscode:mcp/install?${encodeURIComponent(named)}`)
+    expect(
+      JSON.parse(decodeURIComponent(href.slice('vscode:mcp/install?'.length)))
+    ).toEqual({ name: 'flare', type: 'http', url: URL_ })
+    expect(signIn('vscode').steps).toEqual([
+      {
+        text: 'Use this link on the computer that runs VS Code, then confirm the install in VS Code.',
+        link: 'install',
+      },
+      {
+        text: `VS Code asks to sign in the first time it uses the server. ${CONSENT}`,
+      },
+    ])
+  })
+
+  it('pins the Gemini CLI command and steps', () => {
+    expect(signInSnippet('gemini-cli', 'command')).toBe(
+      'gemini mcp add --transport http flare https://files.example.com/api/mcp'
+    )
+    expect(signInSteps('gemini-cli')).toEqual([
+      'Run this in a terminal.',
+      `Gemini CLI starts the sign-in the first time it uses the server. ${CONSENT}`,
+    ])
+  })
+
+  it('pins the click path for Claude and the general one for ChatGPT', () => {
+    expect(signIn('claude').steps).toEqual([
+      {
+        text: 'In Claude, open Customize, then Connectors. Choose "+ Add", then "Add custom connector".',
+      },
+      { text: 'Name it Flare and paste this URL.', snippet: 'url' },
+      { text: `Add the connector, then sign in. ${CONSENT}` },
+    ])
+    expect(signIn('chatgpt').steps).toEqual([
+      {
+        text: "In ChatGPT's connector settings, add a custom MCP server (connector) with this URL and OAuth as its authentication.",
+        snippet: 'url',
+      },
+      { text: `Sign in when ChatGPT asks. ${CONSENT}` },
+    ])
+    for (const id of ['claude', 'chatgpt']) {
+      expect(signInSnippet(id, 'url')).toBe(URL_)
+      expect(signIn(id).snippets).toHaveLength(1)
+      expect(signIn(id).links).toEqual([])
+    }
+  })
+
+  it('pins the URL and what to expect for other clients', () => {
+    expect(signInSnippet('other', 'url')).toBe(URL_)
+    expect(signInSteps('other')).toEqual([
+      'Add a remote MCP server with this URL. The transport is Streamable HTTP.',
+      `The client signs in with OAuth. ${CONSENT} If the client cannot do that, use a token instead.`,
+    ])
+  })
+
+  it('gives every client steps whose snippets and links exist', () => {
+    for (const client of clients) {
+      const { steps, snippets, links } = client.signIn(URL_)
+      expect(steps.length).toBeGreaterThan(1)
+      const snippetIds = snippets.map(({ id }) => id)
+      const linkIds = links.map(({ id }) => id)
+      expect(new Set(snippetIds).size).toBe(snippetIds.length)
+      for (const step of steps) {
+        if (step.snippet) expect(snippetIds).toContain(step.snippet)
+        if (step.link) expect(linkIds).toContain(step.link)
+      }
+      // The first step always has something to copy or open.
+      expect(
+        Boolean(steps[0].snippet || steps[0].link || steps[1].snippet)
+      ).toBe(true)
+      for (const id of linkIds)
+        expect(steps.some((step) => step.link === id)).toBe(true)
+      for (const { language, code } of snippets)
+        if (language === 'json') expect(() => JSON.parse(code)).not.toThrow()
+      // Every client ends in the browser, on Flare's own screen. Said once.
+      expect(steps.filter(({ text }) => text.includes(CONSENT))).toHaveLength(1)
+      expect(() => client.signIn('')).toThrow(
+        'Setup steps need the server URL.'
+      )
+    }
+  })
+
+  it('holds no secret and no token wording', () => {
+    for (const client of clients) {
+      const { steps, snippets, links } = client.signIn(URL_)
+      const everything = [
+        ...steps.map(({ text }) => text),
+        ...snippets.flatMap(({ code, note, title }) => [code, note, title]),
+        ...links.flatMap(({ href, label, note }) => [
+          decodeURIComponent(href),
+          label,
+          note,
+        ]),
+      ].join('\n')
+      expect(everything).not.toMatch(/Bearer|Authorization|header|FLARE_TOKEN/)
+      expect(everything).not.toMatch(/[\u2013\u2014]/)
+      // Backticks come in pairs.
+      for (const { text } of steps) expect(text.split('`').length % 2).toBe(1)
+      // Only "use a token instead" for a client that may not manage OAuth.
+      expect(/token/.test(everything)).toBe(client.id === 'other')
+    }
+  })
+
+  it('hands a shell the address as one intact argument', () => {
+    const odd = "https://files.example.com/api/mcp?a=1&b=$(id)'`x`"
+    expect(shellArguments(signInSnippet('claude-code', 'command'))).toEqual([
+      'mcp',
+      'add',
+      '--transport',
+      'http',
+      'flare',
+      URL_,
+    ])
+    expect(
+      shellArguments(signInSnippet('claude-code', 'command', odd))
+    ).toEqual(['mcp', 'add', '--transport', 'http', 'flare', odd])
+    expect(shellArguments(signInSnippet('codex', 'command', odd))).toEqual([
+      'mcp',
+      'add',
+      'flare',
+      '--url',
+      odd,
+    ])
+    expect(shellArguments(signInSnippet('codex', 'login'))).toEqual([
+      'mcp',
+      'login',
+      'flare',
+    ])
+    expect(shellArguments(signInSnippet('gemini-cli', 'command', odd))).toEqual(
+      ['mcp', 'add', '--transport', 'http', 'flare', odd]
+    )
+    const [flag, config] = shellArguments(
+      signInSnippet('vscode', 'command', odd)
+    )
+    expect(flag).toBe('--add-mcp')
+    expect(JSON.parse(config)).toEqual({
+      name: 'flare',
+      type: 'http',
+      url: odd,
+    })
+  })
+
+  it('keeps an odd address inside its string in files and links', () => {
+    const odd = 'https://files.example.com/api/mcp?q="é✓"&x=\\'
+    expect(
+      JSON.parse(signInSnippet('cursor', 'file', odd)).mcpServers.flare.url
+    ).toBe(odd)
+    const cursor = new URL(signIn('cursor', odd).links[0].href)
+    expect(
+      JSON.parse(
+        Buffer.from(cursor.searchParams.get('config')!, 'base64').toString()
+      )
+    ).toEqual({ url: odd })
+    const vscode = signIn('vscode', odd).links[0].href
+    expect(
+      JSON.parse(decodeURIComponent(vscode.slice(vscode.indexOf('?') + 1))).url
+    ).toBe(odd)
+  })
+
+  it('says plainly when a cloud client cannot reach the address', () => {
+    const local = 'http://localhost:3000/api/mcp'
+    expect(outOfReach(agentClient('claude'), local)).toBe(
+      "Claude on desktop and the web connects from Anthropic's servers, so it needs a public HTTPS address. This instance's address is not one. A local client such as Claude Code works with it."
+    )
+    expect(outOfReach(agentClient('chatgpt'), local)).toBe(
+      "ChatGPT connects from OpenAI's servers, so it needs a public HTTPS address. This instance's address is not one. A local client such as Codex works with it."
+    )
+    expect(outOfReach(agentClient('claude'), URL_)).toBeNull()
+    expect(outOfReach(agentClient('chatgpt'), URL_)).toBeNull()
+    // Clients on the person's computer reach whatever the browser reaches.
+    for (const client of tokenClients) {
+      expect(outOfReach(client, local)).toBeNull()
+      expect(outOfReach(client, 'http://192.168.1.20/api/mcp')).toBeNull()
+    }
+  })
+})
+
+describe('a client name on screen', () => {
+  it.each([
+    ['Claude Code', 'Claude Code'],
+    ['  Claude\n\tCode  ', 'Claude Code'],
+    ['Claude   Code', 'Claude Code'],
+    // Right-to-left overrides and zero-width characters draw nothing.
+    ['‮edoC edualC‬', 'edoC edualC'],
+    ['Clau​de⁦ Code⁩', 'Claude Code'],
+    ['<b onclick="x()">Hi</b>', '<b onclick="x()">Hi</b>'],
+    ['', 'Unnamed agent'],
+    [' ​\n', 'Unnamed agent'],
+  ])('%j is shown as %j', (name, shown) => {
+    expect(shownClientName(name)).toBe(shown)
+  })
+})
+
+describe('where a sign-in returns to', () => {
+  it.each([
+    ['https://claude.ai/api/mcp/auth_callback', 'claude.ai', 'claude.ai'],
+    ['https://chatgpt.com/connector_platform_oauth_redirect', 'chatgpt.com'],
+    ['https://example.com:8443/cb', 'example.com:8443'],
+    // A lookalike name (a Cyrillic "a") shows as what it is.
+    ['https://cl\u0430ude.ai/cb', 'xn--clude-5ve.ai'],
+    ['http://localhost:54321/callback', 'this device', 'Local app'],
+    ['http://127.0.0.1:8080/', 'this device', 'Local app'],
+    ['http://[::1]:9/cb', 'this device', 'Local app'],
+    [
+      'cursor://anysphere.cursor-mcp/oauth/callback',
+      'an app on this device (cursor://)',
+      'Local app (cursor://)',
+    ],
+    [
+      'vscode://dynamicauthprovider/files.example.com/authorize',
+      'an app on this device (vscode://)',
+      'Local app (vscode://)',
+    ],
+    [
+      'com.example.app:/oauth',
+      'an app on this device (com.example.app://)',
+      'Local app (com.example.app://)',
+    ],
+  ])('%s: %s', (uri, here, listed = here) => {
+    const destination = returnDestination(uri)!
+    expect(destinationLabel(destination, true)).toBe(here)
+    expect(destinationLabel(destination, false)).toBe(listed)
+  })
+
+  it('tells a website, this device and an app apart', () => {
+    expect(returnDestination('https://claude.ai/cb')).toEqual({
+      kind: 'site',
+      host: 'claude.ai',
+    })
+    expect(returnDestination('http://localhost:1/cb')).toEqual({
+      kind: 'device',
+    })
+    expect(returnDestination('cursor://x/cb')).toEqual({
+      kind: 'app',
+      scheme: 'cursor://',
+    })
+    // A name that only starts like this computer's is a website.
+    expect(returnDestination('https://localhost.example.com/cb')).toEqual({
+      kind: 'site',
+      host: 'localhost.example.com',
+    })
+    expect(returnDestination('not a url')).toBeNull()
+    expect(returnDestination('')).toBeNull()
+  })
+
+  it('has no destination for an address the browser would run or show itself', () => {
+    for (const uri of [
+      'javascript:alert(1)',
+      'JavaScript://x/%0aalert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'vbscript:msgbox(1)',
+      'blob:https://files.example.com/1',
+      'file:///etc/passwd',
+      'about:blank',
+    ])
+      expect(returnDestination(uri), uri).toBeNull()
+  })
+})
+
 describe('whether cloud clients can reach an address', () => {
   it.each([
     ['https://files.example.com/api/mcp', true],
@@ -449,5 +795,118 @@ describe('permission presets', () => {
         expect(MCP_SCOPES).toContain(scope)
         expect(scope).not.toBe('mcp')
       }
+  })
+
+  it('offers a role only the presets it can tell apart', () => {
+    expect(offeredPresets(groupScopes).map(({ id }) => id)).toEqual([
+      'read',
+      'upload',
+      'all',
+    ])
+    // Without uploading, Read and upload is Read only under another name.
+    const noUpload = groupScopes.filter((scope) => scope !== 'files:upload')
+    expect(offeredPresets(noUpload).map(({ id }) => id)).toEqual([
+      'read',
+      'all',
+    ])
+    expect(offeredPresets(['files:upload'])).toEqual([
+      expect.objectContaining({ id: 'upload', scopes: ['files:upload'] }),
+    ])
+    expect(offeredPresets([])).toEqual([])
+  })
+})
+
+describe('what a permission picker starts on', () => {
+  const available = API_SCOPE_CATALOG.map(({ scope }) => scope).filter(
+    (scope) => scope !== 'mcp'
+  )
+  const [read, upload] = AGENT_PRESETS.map(({ scopes }) => [...scopes])
+  const inOrder = (scopes: readonly string[]) =>
+    available.filter((scope) => scopes.includes(scope))
+  const ids = (choices: { presets: { id: string }[] }) =>
+    choices.presets.map(({ id }) => id)
+
+  it('starts a new connection on Read and upload', () => {
+    const choices = agentScopeChoices(available)
+    expect(choices.offered).toEqual(available)
+    expect(ids(choices)).toEqual(['read', 'upload', 'all'])
+    expect(choices.choice).toBe('upload')
+    expect(choices.scopes).toEqual(inOrder(upload))
+    // A client that asks for everything changes nothing.
+    expect(agentScopeChoices(available, { ceiling: available })).toEqual(
+      choices
+    )
+    // Neither does one that names only scopes Flare does not have.
+    expect(agentScopeChoices(available, { ceiling: [] })).toEqual(choices)
+  })
+
+  it('never offers more than the client asked for', () => {
+    const readOnly = agentScopeChoices(available, { ceiling: read })
+    expect(readOnly.offered).toEqual(inOrder(read))
+    expect(ids(readOnly)).toEqual(['read'])
+    expect(readOnly.choice).toBe('read')
+    expect(readOnly.scopes).toEqual(inOrder(read))
+
+    // No preset fits inside two scopes, so both are simply ticked.
+    const narrow = agentScopeChoices(available, {
+      ceiling: ['files:upload', 'files:read', 'made:up'],
+    })
+    expect(narrow.offered).toEqual(['files:upload', 'files:read'])
+    expect(narrow.presets).toEqual([])
+    expect(narrow.choice).toBe('custom')
+    expect(narrow.scopes).toEqual(['files:upload', 'files:read'])
+
+    // A ceiling between two presets offers the smaller one.
+    const between = agentScopeChoices(available, {
+      ceiling: [...upload, 'files:delete'],
+    })
+    expect(ids(between)).toEqual(['read', 'upload'])
+    expect(between.choice).toBe('upload')
+    expect(between.offered).toContain('files:delete')
+  })
+
+  it('never offers what the role cannot use', () => {
+    const role = ['files:read', 'files:content', 'urls:read']
+    const choices = agentScopeChoices(role, { ceiling: available })
+    expect(choices.offered).toEqual(role)
+    expect(ids(choices)).toEqual(['read'])
+    expect(choices.choice).toBe('read')
+    // Nothing the client asked for is something this role can use.
+    expect(agentScopeChoices(role, { ceiling: ['files:delete'] })).toEqual({
+      offered: [],
+      presets: [],
+      choice: 'custom',
+      scopes: [],
+    })
+    expect(agentScopeChoices([])).toEqual({
+      offered: [],
+      presets: [],
+      choice: 'custom',
+      scopes: [],
+    })
+  })
+
+  it('starts an edit on what the connection holds', () => {
+    expect(agentScopeChoices(available, { held: read })).toMatchObject({
+      choice: 'read',
+      scopes: inOrder(read),
+    })
+    expect(
+      agentScopeChoices(available, { held: [...upload].reverse() })
+    ).toMatchObject({ choice: 'upload', scopes: inOrder(upload) })
+    expect(
+      agentScopeChoices(available, { held: ['files:read', 'files:delete'] })
+    ).toMatchObject({
+      choice: 'custom',
+      scopes: ['files:read', 'files:delete'],
+    })
+    // A scope the role lost is not carried into the edit.
+    expect(
+      agentScopeChoices(['files:read'], { held: ['files:read', 'urls:write'] })
+    ).toMatchObject({ choice: 'read', scopes: ['files:read'] })
+    expect(agentScopeChoices(available, { held: [] })).toMatchObject({
+      choice: 'custom',
+      scopes: [],
+    })
   })
 })

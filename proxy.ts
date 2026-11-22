@@ -8,6 +8,7 @@ import {
   recoveryRequestHeaders,
 } from './lib/customization/recovery-request'
 import { identifyCrawler } from './lib/embeds/crawlers'
+import { FRAMING_HEADERS, refusesFraming } from './lib/middleware/agent-sign-in'
 import { checkAuthentication } from './lib/middleware/auth-checker'
 import {
   PUBLIC_PATHS,
@@ -65,7 +66,11 @@ export async function proxy(request: NextRequest) {
   const authResponse = await checkAuthentication(request)
   if (authResponse) return authResponse
 
-  return next()
+  const response = next()
+  if (refusesFraming(pathname))
+    for (const [name, value] of Object.entries(FRAMING_HEADERS))
+      response.headers.set(name, value)
+  return response
 }
 
 export const config = {

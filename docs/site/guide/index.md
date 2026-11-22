@@ -44,20 +44,20 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 
 <Screenshot src="/screenshots/navigation/admin-menu.webp" alt="Dashboard bar with Files, Upload, Paste, and Links, then a divider and an open Admin menu listing Users, Roles, Audit log, and Settings, each with a short description" caption="Administration pages share one Admin menu, so the bar stays the same length however much access you have." />
 
-| Place                      | What you can do                                                                                                      |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Files**                  | Search, preview, download, organize, and manage access to uploaded files and pastes.                                 |
-| **Upload**                 | Queue files and choose the destination, upload profile, visibility, password, and expiration.                        |
-| **Paste**                  | Save text or code as a shareable file.                                                                               |
-| **Links**                  | Create short redirects under your instance's domain and see their click counts.                                      |
-| **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.                                    |
-| **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.                                   |
-| **Profile → Integrations** | Create scoped API tokens and outgoing webhooks, and [connect an AI agent](./agents) where your instance allows it.   |
-| **Profile → Your data**    | Check storage use, export data, or delete your account.                                                              |
-| **Admin → Users**          | Manage accounts and their roles. Needs `users.read`; the **Invites** tab needs `invites.create` or `invites.manage`. |
-| **Admin → Roles**          | Create and combine permission groups. Needs `roles.manage`.                                                          |
-| **Admin → Audit log**      | Investigate activity across the instance. Needs `audit.read`.                                                        |
-| **Admin → Settings**       | Configure the instance. Needs `settings.read`.                                                                       |
+| Place                      | What you can do                                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Files**                  | Search, preview, download, organize, and manage access to uploaded files and pastes.                                                                  |
+| **Upload**                 | Queue files and choose the destination, upload profile, visibility, password, and expiration.                                                         |
+| **Paste**                  | Save text or code as a shareable file.                                                                                                                |
+| **Links**                  | Create short redirects under your instance's domain and see their click counts.                                                                       |
+| **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.                                                                     |
+| **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.                                                                    |
+| **Profile → Integrations** | Create scoped API tokens and outgoing webhooks, and [connect an AI agent](./agents) and manage the ones you signed in, where your instance allows it. |
+| **Profile → Your data**    | Check storage use, export data, or delete your account.                                                                                               |
+| **Admin → Users**          | Manage accounts and their roles. Needs `users.read`; the **Invites** tab needs `invites.create` or `invites.manage`.                                  |
+| **Admin → Roles**          | Create and combine permission groups. Needs `roles.manage`.                                                                                           |
+| **Admin → Audit log**      | Investigate activity across the instance. Needs `audit.read`.                                                                                         |
+| **Admin → Settings**       | Configure the instance. Needs `settings.read`.                                                                                                        |
 
 What you see depends on your [roles](/admin/roles): Everyone supplies the starting permissions, other roles add to them, and administrators can restrict the baseline. A missing place or unavailable action usually means your roles don't include it.
 

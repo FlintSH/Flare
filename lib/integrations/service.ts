@@ -8,6 +8,12 @@ import { HttpError } from '@/lib/http/errors'
 import { scopeAvailable } from '@/lib/mcp/catalog'
 import { mcpEnabled } from '@/lib/mcp/settings'
 import {
+  listConnections,
+  lockConnection,
+  revokeConnection,
+} from '@/lib/oauth/connections'
+import { SIGN_IN_SCOPES, signInScopes } from '@/lib/oauth/urls'
+import {
   type Permission,
   type PermissionSubject,
   hasPermission,
@@ -62,6 +68,13 @@ const createWebhookCommand = z
     url: z.string().max(WEBHOOK_URL_MAX_LENGTH),
   })
   .strict()
+const updateAgentCommand = z
+  .object({
+    action: z.literal('update-agent'),
+    id: z.string().min(1),
+    scopes: z.array(z.enum(API_SCOPES)).min(1).max(API_SCOPES.length),
+  })
+  .strict()
 const integrationCommand = z.discriminatedUnion('action', [
   createTokenCommand,
   z
@@ -84,6 +97,10 @@ const integrationCommand = z.discriminatedUnion('action', [
   z
     .object({ action: z.literal('retry-delivery'), id: z.string().min(1) })
     .strict(),
+  z
+    .object({ action: z.literal('disconnect-agent'), id: z.string().min(1) })
+    .strict(),
+  updateAgentCommand,
 ])
 
 const commandPermission = {
@@ -94,6 +111,9 @@ const commandPermission = {
   'delete-webhook': 'webhooks.manage',
   'test-webhook': 'webhooks.manage',
   'retry-delivery': 'webhooks.manage',
+  // An agent that signed in is managed by whoever may create a token.
+  'disconnect-agent': 'tokens.manage',
+  'update-agent': 'tokens.manage',
 } satisfies Record<z.infer<typeof integrationCommand>['action'], Permission>
 
 const tokenSelect = {
@@ -136,7 +156,7 @@ export async function listIntegrations(account: Account) {
   const userId = account.id
   const managesTokens = hasPermission(account, 'tokens.manage')
   const managesWebhooks = hasPermission(account, 'webhooks.manage')
-  const [tokens, webhooks, deliveries, profiles, mcp] = await Promise.all([
+  const [tokens, webhooks, deliveries, profiles, agents] = await Promise.all([
     prisma.apiToken.findMany({
       where: { userId },
       select: tokenSelect,
@@ -169,15 +189,29 @@ export async function listIntegrations(account: Account) {
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     }),
-    // Agents connect with tokens, so only an account that manages them is told.
-    managesTokens ? agentAccess() : undefined,
+    // Agents connect with tokens or sign in, and both are managed with the
+    // same permission, so only an account that holds it is told about them.
+    managesTokens ? agentScreen(userId) : undefined,
   ])
   return {
     tokens: managesTokens ? tokens : [],
     webhooks: managesWebhooks ? webhooks : [],
     deliveries: managesWebhooks ? deliveries : [],
     profiles: managesTokens ? profiles : [],
-    ...(mcp && { mcp }),
+    ...agents,
+  }
+}
+
+/**
+ * What the screen shows about agents: whether they can connect and where,
+ * and the agents that signed in to this account. While the MCP server is off
+ * no connection works, and none is listed.
+ */
+async function agentScreen(userId: string) {
+  const mcp = await agentAccess()
+  return {
+    mcp,
+    connections: mcp.enabled ? await listConnections(userId) : [],
   }
 }
 
@@ -217,6 +251,10 @@ export async function runIntegrationCommand(account: Account, body: unknown) {
         return testWebhook(tx, userId, command.id)
       case 'retry-delivery':
         return retryDelivery(tx, userId, command.id)
+      case 'disconnect-agent':
+        return disconnectAgent(tx, userId, command.id)
+      case 'update-agent':
+        return updateAgent(tx, account, command)
     }
   })
 }
@@ -433,5 +471,62 @@ async function retryDelivery(tx: Transaction, userId: string, id: string) {
       leaseUntil: null,
     },
   })
+  return { ok: true }
+}
+
+const AGENT_GONE = 'Agent not found or already disconnected.'
+
+/** Ends an agent's connection: every token it holds stops working at once. */
+async function disconnectAgent(tx: Transaction, userId: string, id: string) {
+  if (!(await revokeConnection(tx, { id, userId }, 'disconnected')))
+    throw new IntegrationError(AGENT_GONE)
+  return { ok: true }
+}
+
+/**
+ * Changes what an agent that signed in may do. Like a token for agents, the
+ * new set holds nothing the account's role cannot use right now. It never
+ * holds Agent access: that marks a named token, and a sign-in cannot grant
+ * it. The tokens the agent already has follow the change on their next
+ * call, because what they can do is read from the connection every time.
+ */
+async function updateAgent(
+  tx: Transaction,
+  account: Account,
+  input: z.infer<typeof updateAgentCommand>
+) {
+  if (!(await readConfig(tx)).settings.general.mcp.enabled)
+    throw new IntegrationError(
+      'The MCP server is turned off on this instance, so agent permissions cannot be changed.'
+    )
+  const ungrantable = input.scopes.filter(
+    (scope) => !SIGN_IN_SCOPES.includes(scope)
+  )
+  if (ungrantable.length)
+    throw new IntegrationError(
+      `An agent that signed in cannot hold ${scopeLabels(ungrantable)}. Remove ${ungrantable.length === 1 ? 'it' : 'them'} and try again.`
+    )
+  const unavailable = input.scopes.filter(
+    (scope) =>
+      !scopeAvailable(
+        scope,
+        (permission) => hasPermission(account, permission),
+        true
+      )
+  )
+  if (unavailable.length)
+    throw new IntegrationError(
+      `Your role does not allow ${scopeLabels(unavailable)}. Remove ${unavailable.length === 1 ? 'it' : 'them'} and try again.`
+    )
+  // In catalog order, each once.
+  const scopes = signInScopes(input.scopes)
+  // The row first, as everything that ends or edits a connection takes it:
+  // an upload publishing for it finishes before a permission is taken away.
+  await lockConnection(tx, input.id)
+  const { count } = await tx.agentConnection.updateMany({
+    where: { id: input.id, userId: account.id, revokedAt: null },
+    data: { scopes },
+  })
+  if (!count) throw new IntegrationError(AGENT_GONE)
   return { ok: true }
 }

@@ -95,6 +95,33 @@ describe('signed-out proxy handling', () => {
       )
     }
   })
+
+  it('lets an MCP client read the sign-in metadata before anyone has signed in', async () => {
+    for (const path of [
+      '/.well-known/oauth-protected-resource',
+      '/.well-known/oauth-protected-resource/api/mcp',
+      '/.well-known/oauth-authorization-server',
+    ]) {
+      expect(isFileUrlPath(path), path).toBe(false)
+      // A client is no browser, and names itself however it likes.
+      for (const agent of [
+        'claude-code/2.1',
+        'node',
+        'Mozilla/5.0 Firefox/131.0',
+      ])
+        expect(await reachesFlare(path, agent), `${path} as ${agent}`).toBe(
+          true
+        )
+    }
+  })
+
+  it('sends a signed-out visitor from the consent screen to sign in', async () => {
+    const response = await proxy(request('/auth/connect?request=blob'))
+    expect(response.status).toBe(307)
+    expect(new URL(response.headers.get('location')!).pathname).toBe(
+      '/auth/login'
+    )
+  })
 })
 
 describe('link-preview fetchers', () => {
