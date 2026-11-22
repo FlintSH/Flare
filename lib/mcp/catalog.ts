@@ -89,6 +89,18 @@ export const TOOL_CATALOG = {
         scopes: ['files:upload'],
         permissions: [...action('uploadFiles'), 'uploadProfiles.manage'],
       },
+      // A connection that may change profiles sees every one with its
+      // settings, whether or not it may upload.
+      manage_upload_profiles: {
+        scopes: ['account:write'],
+        permissions: ['uploadProfiles.manage'],
+      },
+      // What `update_profile` can change, so an agent can read before it
+      // writes.
+      profile_settings: {
+        scopes: ['account:write'],
+        permissions: route('PUT', '/api/profile'),
+      },
     },
     annotations: read,
   },
@@ -231,6 +243,103 @@ export const TOOL_CATALOG = {
     scopes: ['urls:write'],
     permissions: route('DELETE', '/api/urls/example'),
     annotations: destroy,
+  },
+  // Extracting reads an archive's contents and uploads what is inside it.
+  extract_archive: {
+    title: 'Extract an archive',
+    scopes: ['files:content', 'files:upload'],
+    permissions: action('extractArchive'),
+    annotations: add,
+  },
+  create_archive: {
+    title: 'Create an archive',
+    scopes: ['files:content', 'files:upload'],
+    permissions: action('createArchive'),
+    annotations: add,
+  },
+  update_profile: {
+    title: 'Change account settings',
+    scopes: ['account:write'],
+    permissions: route('PUT', '/api/profile'),
+    effects: {
+      theme_mode: { scopes: [], permissions: ['appearance.personal'] },
+      embed: { scopes: [], permissions: ['files.share'] },
+      // A default expiry acts on every later upload, so it needs what the
+      // expiry does when it runs, as scheduling one on a file does.
+      default_expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: action('deleteFiles'),
+      },
+      default_expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+      // An avatar is a copy of the image that anyone can load, so choosing
+      // one reads the file, and a file that is not public is published.
+      avatar_file: {
+        scopes: ['files:content'],
+        permissions: action('viewFiles'),
+      },
+      avatar_private_file: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+    },
+    // A default expiry can delete later uploads, a new vanity id breaks links
+    // under the old one, and an avatar is public.
+    annotations: destroy,
+  },
+  save_upload_profile: {
+    title: 'Create or change an upload profile',
+    scopes: ['account:write'],
+    permissions: ['uploadProfiles.manage'],
+    // A profile's expiry and visibility act on every later upload that uses
+    // it, so a change needs what it does to those uploads.
+    effects: {
+      expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: action('deleteFiles'),
+      },
+      expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+      visibility_public: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+    },
+    annotations: { ...add, destructive: true },
+  },
+  delete_upload_profile: {
+    title: 'Delete an upload profile',
+    scopes: ['account:write'],
+    permissions: ['uploadProfiles.manage'],
+    // Deleting the default profile hands uploads back to the account's own
+    // settings: an expiry the profile was holding off, or public uploads
+    // where it kept them private.
+    effects: {
+      expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: action('deleteFiles'),
+      },
+      expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+      visibility_public: {
+        scopes: ['files:share'],
+        permissions: action('shareFiles'),
+      },
+    },
+    annotations: destroy,
+  },
+  // The export holds every file and link, so it needs every read scope.
+  export_account: {
+    title: 'Export the account',
+    scopes: ['files:read', 'files:content', 'urls:read'],
+    permissions: action('exportAccount'),
+    annotations: read,
   },
 } as const satisfies Record<string, ToolRow>
 

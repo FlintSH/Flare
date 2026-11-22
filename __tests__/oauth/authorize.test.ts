@@ -80,6 +80,7 @@ const ALL_SCOPES = [
   'files:delete',
   'urls:read',
   'urls:write',
+  'account:write',
 ]
 
 const client = {
@@ -1250,6 +1251,27 @@ describe('POST /api/oauth/authorize: the decision', () => {
       ).toBe(
         'Your role does not allow "Delete files", "Manage short links". Remove them and try again.'
       )
+    })
+
+    it('grants changing account settings to a role that can use it, and to no other', async () => {
+      // Tokens alone are no account setting an agent can change.
+      signedIn({ permissions: ['tokens.manage', 'files.read'] })
+      expect(
+        await refusal(await approve(['files:read', 'account:write']))
+      ).toBe(
+        'Your role does not allow "Change account settings". Remove it and try again.'
+      )
+      // Either of the things the scope is for is enough.
+      for (const permission of ['profile.update', 'uploadProfiles.manage']) {
+        signedIn({ permissions: ['tokens.manage', 'files.read', permission] })
+        mocks.createCode.mockClear()
+        const response = await approve(['account:write', 'files:read'])
+        expect(response.status, permission).toBe(200)
+        expect(mocks.createCode.mock.calls[0][0].data.scopes).toEqual([
+          'files:read',
+          'account:write',
+        ])
+      }
     })
 
     it('refuses an approval that grants nothing', async () => {

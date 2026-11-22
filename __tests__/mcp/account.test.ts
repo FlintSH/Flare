@@ -7,12 +7,14 @@ import type { AgentPrincipal } from '@/lib/mcp/auth'
 import { TOOL_NAMES, toolAllowed } from '@/lib/mcp/catalog'
 import { mcpHandler } from '@/lib/mcp/server'
 import { accountTools } from '@/lib/mcp/tools/account'
+import { accountSettingsSchema, profileTools } from '@/lib/mcp/tools/profile'
 import { DEFAULT_PERMISSIONS, hasPermission } from '@/lib/permissions/catalog'
 
 const mocks = vi.hoisted(() => ({
   config: vi.fn(),
   user: vi.fn(),
   profiles: vi.fn(),
+  tagNames: vi.fn(),
 }))
 vi.mock('@/lib/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/config')>()),
@@ -22,12 +24,13 @@ vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     user: { findUnique: mocks.user },
     uploadProfile: { findMany: mocks.profiles },
+    vaultTag: { findMany: mocks.tagNames },
   },
 }))
 
 const MB = 1024 * 1024
 const GB = 1024 * MB
-const EVERY_SCOPE = [
+const FILE_AND_LINK_SCOPES = [
   'files:upload',
   'files:read',
   'files:content',
@@ -37,6 +40,7 @@ const EVERY_SCOPE = [
   'urls:read',
   'urls:write',
 ]
+const EVERY_SCOPE = [...FILE_AND_LINK_SCOPES, 'account:write']
 
 function principal(
   scopes: string[],
@@ -137,7 +141,44 @@ type Account = {
   }
   storage?: { used_bytes: number; quota_bytes?: number }
   uploads?: { max_file_bytes: number; remaining_bytes?: number }
-  upload_profiles?: { id: string; name: string; default?: boolean }[]
+  upload_profiles?: {
+    id: string
+    name: string
+    default?: boolean
+    revision?: string
+    [setting: string]: unknown
+  }[]
+  settings?: Record<string, unknown>
+}
+
+/** The account's row. Each reader selects what it needs from it. */
+const accountRow = {
+  storageUsed: 1024,
+  defaultUploadProfileId: 'profile-screens',
+  name: 'Alex',
+  email: 'alex@signin.example',
+  password: '$2b$10$stored-password-hash',
+  vanityId: 'alex-files',
+  randomizeFileUrls: true,
+  defaultFileExpiration: 'WEEK',
+  defaultFileExpirationAction: 'SET_PRIVATE',
+  image: '/api/avatars/user-1-abc.jpg',
+  preferences: {
+    customization: { themeMode: 'dark' },
+    embed: { mode: 'rich', design: 'custom', title: '{{filename}}' },
+  },
+}
+/** The same account, as `update_profile` answers its settings. */
+const settings = {
+  name: 'Alex',
+  vanity_id: 'alex-files',
+  randomize_file_urls: true,
+  default_expiry: 'week',
+  default_expiry_action: 'make_private',
+  theme_mode: 'dark',
+  embed: { mode: 'rich', design: 'custom', title: '{{filename}}' },
+  personal_embeds: true,
+  avatar_url: 'https://files.example.com/api/avatars/user-1-abc.jpg',
 }
 
 /** `get_account` as the server answers it, checked against its output schema. */
@@ -168,18 +209,33 @@ beforeEach(() => {
     }
     return config
   })
-  mocks.user.mockResolvedValue({
-    storageUsed: 1024,
-    defaultUploadProfileId: 'profile-screens',
-  })
+  mocks.user.mockResolvedValue(accountRow)
   // Like the database, the list holds only the rows the filter names.
   mocks.profiles.mockImplementation(
     async ({ where }: { where: { id?: string } }) =>
       [
-        { id: 'profile-private', name: 'Private' },
-        { id: 'profile-screens', name: 'Screenshots' },
+        {
+          id: 'profile-private',
+          name: 'Private',
+          options: { visibility: 'PRIVATE' },
+          updatedAt: new Date('2026-11-20T10:00:00.000Z'),
+        },
+        {
+          id: 'profile-screens',
+          name: 'Screenshots',
+          options: {
+            visibility: 'PUBLIC',
+            expiration: 'WEEK',
+            expiryAction: 'SET_PRIVATE',
+            randomizeFileUrls: true,
+            shareStyle: 'minimal',
+            tagIds: ['tag-work', 'tag-gone'],
+          },
+          updatedAt: new Date('2026-11-21T11:30:00.000Z'),
+        },
       ].filter((profile) => !where.id || profile.id === where.id)
   )
+  mocks.tagNames.mockResolvedValue([{ id: 'tag-work', name: 'Work' }])
 })
 afterEach(() => vi.unstubAllEnvs())
 
@@ -439,10 +495,10 @@ describe('get_account', () => {
       expect(mocks.profiles).not.toHaveBeenCalled()
     })
 
-    it('are not listed for an account that manages profiles but may not upload', async () => {
+    it('are not listed for an account that manages profiles but may not upload, without the scope to change them', async () => {
       const answer = await getAccount(
         principal(
-          EVERY_SCOPE,
+          FILE_AND_LINK_SCOPES,
           DEFAULT_PERMISSIONS.filter(
             (permission) => permission !== 'files.upload'
           )
@@ -464,7 +520,7 @@ describe('get_account', () => {
     it.each([
       [[]],
       [['files:read']],
-      [EVERY_SCOPE.filter((scope) => scope !== 'files:upload')],
+      [FILE_AND_LINK_SCOPES.filter((scope) => scope !== 'files:upload')],
     ])(
       'are not listed for a connection with %j, whatever the role allows',
       async (scopes) => {
@@ -484,6 +540,301 @@ describe('get_account', () => {
         { id: 'profile-private', name: 'Private' },
         { id: 'profile-screens', name: 'Screenshots' },
       ])
+    })
+  })
+
+  describe('upload profiles for a connection that may change them', () => {
+    /** Every profile as save_upload_profile answers it. */
+    const managed = [
+      {
+        id: 'profile-private',
+        name: 'Private',
+        revision: '2026-11-20T10:00:00.000Z',
+        visibility: 'private',
+      },
+      {
+        id: 'profile-screens',
+        name: 'Screenshots',
+        default: true,
+        revision: '2026-11-21T11:30:00.000Z',
+        visibility: 'public',
+        expiry: 'week',
+        expiry_action: 'make_private',
+        randomize_file_urls: true,
+        share_style: 'minimal',
+        // By name; a tag that no longer exists is left out.
+        tags: ['Work'],
+      },
+    ]
+    const names = [
+      { id: 'profile-private', name: 'Private' },
+      { id: 'profile-screens', name: 'Screenshots', default: true },
+    ]
+    const boundTo = (profileId: string, scopes: string[]) => {
+      const who = principal(scopes)
+      who.user.apiToken = { ...who.user.apiToken!, profileId }
+      return who
+    }
+
+    it('are listed with their settings and revision for account:write alone, uploading or not', async () => {
+      const answer = await getAccount(principal(['account:write']))
+      expect(answer.upload_profiles).toEqual(managed)
+      expect(mocks.profiles).toHaveBeenCalledExactlyOnceWith({
+        where: { userId: 'user-1' },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, options: true, updatedAt: true },
+      })
+      expect(mocks.tagNames).toHaveBeenCalledExactlyOnceWith({
+        where: { userId: 'user-1', id: { in: ['tag-work', 'tag-gone'] } },
+        select: { id: true, name: true },
+      })
+      // Changing profiles is not uploading: no limits, no storage.
+      expect(answer).not.toHaveProperty('uploads')
+      expect(answer).not.toHaveProperty('storage')
+      // The role needs only the permission to manage profiles for it.
+      expect(
+        (
+          await getAccount(
+            principal(['account:write'], ['uploadProfiles.manage'])
+          )
+        ).upload_profiles
+      ).toEqual(managed)
+    })
+
+    it('are listed by name alone for files:upload alone', async () => {
+      const answer = await getAccount(principal(['files:upload']))
+      expect(answer.upload_profiles).toEqual(names)
+      expect(mocks.tagNames).not.toHaveBeenCalled()
+      expect(JSON.stringify(answer)).not.toContain('revision')
+    })
+
+    it('are listed with their settings for both scopes', async () => {
+      const answer = await getAccount(
+        principal(['files:upload', 'account:write'])
+      )
+      expect(answer.upload_profiles).toEqual(managed)
+      expect(answer.uploads).toEqual({ max_file_bytes: 250 * MB })
+      expect(mocks.profiles).toHaveBeenCalledOnce()
+    })
+
+    it('are only the bound one, by name, for a bound token, whatever it may change', async () => {
+      // A bound token may change no profile, so it is shown what it
+      // uploads with and nothing it could not use.
+      for (const scopes of [
+        ['files:upload', 'account:write'],
+        ['account:write'],
+        EVERY_SCOPE,
+      ]) {
+        mocks.profiles.mockClear()
+        const answer = await getAccount(boundTo('profile-private', scopes))
+        expect(answer.connection.upload_profile).toEqual({
+          id: 'profile-private',
+          name: 'Private',
+        })
+        expect(answer.upload_profiles, scopes.join(' ')).toEqual([names[0]])
+        expect(mocks.profiles).toHaveBeenCalledExactlyOnceWith({
+          where: { userId: 'user-1', id: 'profile-private' },
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true },
+        })
+        expect(JSON.stringify(answer.upload_profiles)).not.toContain('revision')
+        expect(JSON.stringify(answer)).not.toContain('Screenshots')
+      }
+      expect(mocks.tagNames).not.toHaveBeenCalled()
+    })
+
+    it('are only the bound one, by name, for a bound token that may not change them', async () => {
+      const answer = await getAccount(
+        boundTo('profile-private', ['files:upload'])
+      )
+      expect(answer.upload_profiles).toEqual([names[0]])
+      expect(mocks.profiles).toHaveBeenCalledExactlyOnceWith({
+        where: { userId: 'user-1', id: 'profile-private' },
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true },
+      })
+      expect(JSON.stringify(answer)).not.toContain('Screenshots')
+    })
+
+    it('are not listed when the role does not manage profiles, whatever the scopes', async () => {
+      const cannotManage = DEFAULT_PERMISSIONS.filter(
+        (permission) => permission !== 'uploadProfiles.manage'
+      )
+      for (const scopes of [
+        ['account:write'],
+        ['files:upload', 'account:write'],
+        EVERY_SCOPE,
+      ]) {
+        const answer = await getAccount(principal(scopes, cannotManage))
+        expect(answer).not.toHaveProperty('upload_profiles')
+        expect(answer.connection.tools).not.toContain('save_upload_profile')
+      }
+      expect(mocks.profiles).not.toHaveBeenCalled()
+      expect(mocks.tagNames).not.toHaveBeenCalled()
+    })
+
+    it('are listed with their settings whenever save_upload_profile may be called by a token that is not bound, and only then', async () => {
+      for (const [scopes, permissions] of [
+        [['account:write'], DEFAULT_PERMISSIONS],
+        [EVERY_SCOPE, DEFAULT_PERMISSIONS],
+        [EVERY_SCOPE, ['administrator']],
+        [FILE_AND_LINK_SCOPES, ['administrator']],
+        [['account:write'], ['profile.update']],
+        [[], ['administrator']],
+      ] as const) {
+        const answer = await getAccount(principal([...scopes], permissions))
+        const saves = answer.connection.tools.includes('save_upload_profile')
+        expect(
+          answer.upload_profiles?.every((profile) => 'revision' in profile) ??
+            false,
+          `${scopes.join(' ')} with ${permissions.join(' ')}`
+        ).toBe(saves)
+      }
+    })
+
+    it('are an empty list for an account that has none, and read no tags', async () => {
+      mocks.profiles.mockResolvedValue([])
+      const answer = await getAccount(principal(['account:write']))
+      expect(answer.upload_profiles).toEqual([])
+      expect(mocks.tagNames).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('settings', () => {
+    it('are answered to a connection that may change them, as update_profile answers them', async () => {
+      const answer = await getAccount(principal(['account:write']))
+      expect(answer.settings).toEqual(settings)
+      // The row is read as the connection's own account.
+      expect(mocks.user).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        select: {
+          name: true,
+          vanityId: true,
+          randomizeFileUrls: true,
+          defaultFileExpiration: true,
+          defaultFileExpirationAction: true,
+          image: true,
+          preferences: true,
+        },
+      })
+      // The permission to change the profile is all the role needs.
+      expect(
+        (await getAccount(principal(['account:write'], ['profile.update'])))
+          .settings
+      ).toEqual(settings)
+    })
+
+    it('are one schema and one reader with update_profile, so the two cannot drift', () => {
+      const update = profileTools.find(({ name }) => name === 'update_profile')!
+      expect(update.output).toBe(accountSettingsSchema)
+      expect(accountTools[0].output.shape.settings.unwrap()).toBe(
+        accountSettingsSchema
+      )
+      expect(accountSettingsSchema.parse(settings)).toEqual(settings)
+    })
+
+    it.each<[string, string[], readonly string[]]>([
+      ['without the scope', FILE_AND_LINK_SCOPES, DEFAULT_PERMISSIONS],
+      ['without any scope', [], ['administrator']],
+      [
+        'whose role may not change the profile',
+        EVERY_SCOPE,
+        DEFAULT_PERMISSIONS.filter(
+          (permission) => permission !== 'profile.update'
+        ),
+      ],
+      [
+        'whose role only manages upload profiles',
+        ['account:write'],
+        ['uploadProfiles.manage'],
+      ],
+    ])(
+      'are not answered to a connection %s',
+      async (_what, scopes, permissions) => {
+        const answer = await getAccount(principal(scopes, permissions))
+        expect(answer).not.toHaveProperty('settings')
+        expect(answer.connection.tools).not.toContain('update_profile')
+        const text = JSON.stringify(answer)
+        for (const field of ['vanity_id', 'default_expiry', 'avatar_url'])
+          expect(text).not.toContain(field)
+      }
+    )
+
+    it('are answered whenever update_profile may be called, and only then', async () => {
+      for (const [scopes, permissions] of [
+        [['account:write'], DEFAULT_PERMISSIONS],
+        [EVERY_SCOPE, ['administrator']],
+        [FILE_AND_LINK_SCOPES, ['administrator']],
+        [['account:write'], ['uploadProfiles.manage']],
+        [['account:write'], ['profile.update']],
+        [[], DEFAULT_PERMISSIONS],
+      ] as const) {
+        const answer = await getAccount(principal([...scopes], permissions))
+        expect(
+          'settings' in answer,
+          `${scopes.join(' ')} with ${permissions.join(' ')}`
+        ).toBe(answer.connection.tools.includes('update_profile'))
+      }
+    })
+
+    it('are answered to a token bound to an upload profile too', async () => {
+      const who = principal(['files:upload', 'account:write'])
+      who.user.apiToken = {
+        ...who.user.apiToken!,
+        profileId: 'profile-private',
+      }
+      expect((await getAccount(who)).settings).toEqual(settings)
+    })
+
+    it('leave out what the account has not set, and read defaults for what was never saved', async () => {
+      mocks.user.mockResolvedValue({
+        ...accountRow,
+        name: null,
+        vanityId: null,
+        randomizeFileUrls: false,
+        defaultFileExpiration: 'DISABLED',
+        defaultFileExpirationAction: 'DELETE',
+        image: null,
+        preferences: {},
+      })
+      expect((await getAccount(principal(['account:write']))).settings).toEqual(
+        {
+          randomize_file_urls: false,
+          default_expiry: 'never',
+          default_expiry_action: 'delete',
+          theme_mode: 'inherit',
+          embed: { mode: 'inherit', design: 'inherit' },
+          personal_embeds: true,
+        }
+      )
+    })
+
+    it('give an avatar kept elsewhere its own address', async () => {
+      mocks.user.mockResolvedValue({
+        ...accountRow,
+        image: 'https://cdn.example/avatars/user-1.jpg',
+      })
+      expect(
+        (await getAccount(principal(['account:write']))).settings
+      ).toMatchObject({ avatar_url: 'https://cdn.example/avatars/user-1.jpg' })
+    })
+
+    it('say when the instance uses one embed for every account', async () => {
+      mocks.config.mockImplementation(async () => {
+        const config = structuredClone(DEFAULT_CONFIG)
+        config.settings.customization.published.sharing.personalEmbeds = false
+        return config
+      })
+      expect(
+        (await getAccount(principal(['account:write']))).settings
+      ).toMatchObject({ personal_embeds: false })
+    })
+
+    it('are left out for an account whose row is gone', async () => {
+      mocks.user.mockResolvedValue(null)
+      const answer = await getAccount(principal(['account:write']))
+      expect(answer).not.toHaveProperty('settings')
+      expect(answer.account.id).toBe('user-1')
     })
   })
 
@@ -614,18 +965,60 @@ describe('get_account', () => {
       }
     )
 
-    it('lists the seven read tools for the read-only scopes', async () => {
+    const readTools = [
+      'get_account',
+      'search_files',
+      'get_file',
+      'read_file',
+      'list_folders',
+      'list_tags',
+      'list_short_links',
+      'export_account',
+    ]
+
+    it('lists the eight tools that only read for the read-only scopes', async () => {
       const answer = await getAccount(
         principal(['files:read', 'files:content', 'urls:read'])
       )
+      expect(answer.connection.tools).toEqual(readTools)
+    })
+
+    it('lists thirteen tools for read and upload: uploads and archives on top', async () => {
+      const answer = await getAccount(
+        principal(['files:read', 'files:content', 'urls:read', 'files:upload'])
+      )
       expect(answer.connection.tools).toEqual([
+        ...readTools.slice(0, -1),
+        'upload_file',
+        'create_paste',
+        'create_upload_url',
+        'extract_archive',
+        'create_archive',
+        'export_account',
+      ])
+      expect(answer.connection.tools).toHaveLength(13)
+    })
+
+    it('lists all 28 tools for every scope, and the account tools only with account:write', async () => {
+      const everything = await getAccount(principal(EVERY_SCOPE))
+      expect(everything.connection.tools).toEqual(TOOL_NAMES)
+      expect(everything.connection.tools).toHaveLength(28)
+      const files = await getAccount(principal(FILE_AND_LINK_SCOPES))
+      expect(
+        TOOL_NAMES.filter((name) => !files.connection.tools.includes(name))
+      ).toEqual([
+        'update_profile',
+        'save_upload_profile',
+        'delete_upload_profile',
+      ])
+      // The scope alone opens those three.
+      expect(
+        (await getAccount(principal(['account:write']))).connection.tools
+      ).toEqual([
         'get_account',
-        'search_files',
-        'get_file',
-        'read_file',
-        'list_folders',
-        'list_tags',
-        'list_short_links',
+        'update_profile',
+        'save_upload_profile',
+        'delete_upload_profile',
       ])
     })
 
@@ -659,6 +1052,12 @@ describe('get_account', () => {
     expect(text).not.toContain('"t1"')
     expect(text).not.toContain('urlId')
     expect(text).not.toContain('permissions')
+    // The settings it answers are those update_profile can change, and
+    // nothing about signing in is one of them.
+    expect(text).toContain('"settings"')
+    expect(text).not.toContain('alex@signin.example')
+    expect(text).not.toContain('stored-password-hash')
+    expect(text).not.toMatch(/email|password/i)
   })
 })
 
@@ -667,6 +1066,12 @@ describe('the account tools', () => {
     expect(accountTools.map((tool) => tool.name)).toEqual(['get_account'])
     expect(accountTools[0].input.parse({})).toEqual({})
     expect(accountTools[0].description).toMatch(/Call it first/)
+    expect(accountTools[0].description).toMatch(
+      /A connection that may change account settings also gets them as they stand, under `settings`, in the form update_profile answers\./
+    )
+    expect(accountTools[0].description).toMatch(
+      /One that may change upload profiles gets each profile with its settings and `revision`/
+    )
     expect(accountTools[0].description).not.toMatch(/[\u2013\u2014]/)
   })
 })

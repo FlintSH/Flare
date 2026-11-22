@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client'
 import type * as z from 'zod'
 
 import type { AgentPrincipal } from './auth'
@@ -37,6 +38,18 @@ export type ToolContext = {
   allows(effect: string): boolean
   /** Refuse the call, saying what is missing, unless the effect is allowed. */
   requireEffect(effect: string): void
+  /**
+   * The call's access, asked again in the transaction that saves. Everything
+   * above is judged by the credential and the role as the call began, and a
+   * call can wait: for a lock, or while it reads a file. So a service that
+   * saves for a tool is handed this, and runs it once it holds the role lock
+   * and the account's row and before it writes. It refuses unless the
+   * credential is still live, the server still on, and the credential and
+   * the role still hold what the tool needs and what every effect the call
+   * required needs. The credential's row is held from here to the commit,
+   * so nothing is saved after its end has committed.
+   */
+  recheck(tx: Prisma.TransactionClient): Promise<void>
 }
 
 export type ToolDefinition<

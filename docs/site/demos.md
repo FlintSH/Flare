@@ -378,13 +378,13 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 #### Connect an agent
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Connect an agent by signing in: 39-second silent Flare recording" :poster="withBase('/screenshots/agents/connect-agent-poster.webp')" :src="withBase('/demos/connect-agent.webm')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Connect an agent by signing in: 36-second silent Flare recording" :poster="withBase('/screenshots/agents/connect-agent-poster.webp')" :src="withBase('/demos/connect-agent.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
 <details class="demo-transcript">
 <summary>Transcript</summary>
 
 1. As the demonstration account **Alex**, open **Profile → Integrations**. The **Agents** card shows the **Server URL** of this local instance and, under **Connected agents**, one agent that signed in earlier: **Claude Code (flare)**. Choose **Connect an agent**.
-2. The dialog opens on the steps for **Claude Code**. Choose **Codex** under **Client**. Its two steps appear: the command `codex mcp add flare --url http://localhost:3198/api/mcp`, and `codex mcp login flare` in case Codex does not start the sign-in itself. Copy the first command; its button shows a check mark. Choose **Done**.
+2. The dialog opens on the steps for **Claude Code**. Choose **Codex** under **Client**. Its two steps appear: the command `codex mcp add flare --url http://localhost:3195/api/mcp`, and `codex mcp login flare` in case Codex does not start the sign-in itself. Copy the first command; its button shows a check mark. Choose **Done**.
 3. Off screen, the Codex CLI runs the copied command in a terminal and opens the browser at Flare. The recording continues in the browser, which is already signed in as Alex.
 4. Flare's **Connect an agent** screen says **Only allow a connection you started yourself.** and shows **Agent** Codex, **Returns to** this device, and **Account** Alex. **Read and upload** is selected under **Allowed actions**. Choose **Read only**, then **Allow**.
 5. The browser returns to Codex, whose own page reads `Authentication complete. You may close this window.` In its terminal, Codex prints `Successfully logged in.`

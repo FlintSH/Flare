@@ -21,6 +21,7 @@ type ScopeEntry = (typeof API_SCOPE_CATALOG)[number]
 const GROUPS = [
   { id: 'files', label: 'Files' },
   { id: 'links', label: 'Short links' },
+  { id: 'account', label: 'Account' },
 ] as const
 
 /** The scopes a token can hold besides Agent access, for an account that `can`. */
@@ -39,7 +40,7 @@ export function offeredScopes(
  * While it is on, either Agent access is a checkbox that reveals the scopes
  * only agents use (`agent="optional"`, the token form), or the token is for
  * an agent and all of them show (`agent="always"`); with those scopes in view
- * the list is long enough to group under Files and Short links.
+ * the list is long enough to group under Files, Short links and Account.
  */
 export function ScopePicker({
   selected,
@@ -213,8 +214,8 @@ export function AgentScopes({
   if (!offered.length)
     return (
       <p className="text-pretty text-sm text-muted-foreground">
-        Your role allows no file or short link actions, so the agent will only
-        see your account details.
+        Your role allows no file, short link or account setting actions, so the
+        agent will only see your account details.
       </p>
     )
   return (

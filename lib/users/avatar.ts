@@ -17,6 +17,8 @@ import { queueStorageDeletion } from '@/lib/storage/deletion'
 import { captureStorageTarget, parseStorageTarget } from '@/lib/storage/targets'
 import { assertFits, uploadCapacity } from '@/lib/uploads/capacity'
 
+import type { SaveCheck } from './preferences'
+
 const logger = loggers.users
 
 function avatarPath(filename: string) {
@@ -109,10 +111,15 @@ async function authorizeAvatarWrite(
  * Journal the write before touching storage. A pending writer is never eligible
  * for deletion: if this process crashes, an operator must stop writers before
  * releasing its retained intent for cleanup.
+ *
+ * A `check` runs in the transaction that makes the image the avatar, with
+ * the role lock and the account row held, and throws to refuse it: the bytes
+ * are stored by then, and are queued for deletion like any failed write.
  */
 export async function uploadAvatar(
   userId: string,
-  image: Buffer
+  image: Buffer,
+  check?: SaveCheck
 ): Promise<string> {
   const storage = await getStorageProvider()
   const target = captureStorageTarget(storage)
@@ -140,6 +147,7 @@ export async function uploadAvatar(
     const url = publicUrl || avatarAddress(filename)
     await prisma.$transaction(async (tx) => {
       const user = await authorizeAvatarWrite(tx, userId, image.length)
+      await check?.(tx)
       const writing = await tx.storageDeletion.findUnique({
         where: { id: intent.id },
       })
@@ -177,20 +185,44 @@ export async function uploadAvatar(
   }
 }
 
+/** Drops an account's avatar and queues its bytes, in a transaction that has checked who asks. */
+async function clearAvatar(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  check?: SaveCheck
+) {
+  await lockUserRow(tx, userId)
+  await check?.(tx)
+  const user = await tx.user.findUnique({ where: { id: userId } })
+  if (!user) throw new PermissionError('User not found', 404)
+  await queueAvatarDeletion(tx, user)
+  await tx.user.update({
+    where: { id: userId },
+    data: {
+      image: null,
+      avatarStoragePath: null,
+      avatarStorageTarget: Prisma.DbNull,
+    },
+  })
+}
+
 /** An administrator clears an account's avatar; its bytes are queued for deletion. */
 export async function removeAvatar(actorId: string, userId: string) {
-  await mutateAccount(actorId, userId, 'users.update', async (tx) => {
-    await lockUserRow(tx, userId)
-    const user = await tx.user.findUnique({ where: { id: userId } })
-    if (!user) throw new PermissionError('User not found', 404)
-    await queueAvatarDeletion(tx, user)
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        image: null,
-        avatarStoragePath: null,
-        avatarStorageTarget: Prisma.DbNull,
-      },
-    })
-  })
+  await mutateAccount(actorId, userId, 'users.update', (tx) =>
+    clearAvatar(tx, userId)
+  )
+}
+
+/**
+ * An account clears its own avatar, which needs what uploading one needs. A
+ * `check` can refuse it with the role lock and the account row held.
+ */
+export async function removeOwnAvatar(userId: string, check?: SaveCheck) {
+  await mutateAccount(
+    userId,
+    userId,
+    'profile.update',
+    (tx) => clearAvatar(tx, userId, check),
+    true
+  )
 }

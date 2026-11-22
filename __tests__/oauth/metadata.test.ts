@@ -49,6 +49,7 @@ const SCOPES = [
   'files:delete',
   'urls:read',
   'urls:write',
+  'account:write',
 ]
 
 const events: Partial<AuditInput>[] = []
@@ -153,7 +154,7 @@ describe('the 401 challenge', () => {
   it('names no scope: what an agent may do is chosen on the consent screen', () => {
     const challenge = bearerChallenge(get('/api/mcp'))
     expect(challenge).not.toMatch(/scope/i)
-    expect(challenge).not.toMatch(/files:|urls:/)
+    expect(challenge).not.toMatch(/files:|urls:|account:/)
     // The scopes there are to choose from are in the metadata it points at.
     expect(protectedResourceMetadata(get('/')).scopes_supported).toEqual(SCOPES)
     expect(authorizationServerMetadata(get('/')).scopes_supported).toEqual(

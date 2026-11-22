@@ -2,7 +2,6 @@ import { fileTypeFromBuffer } from 'file-type'
 import * as z from 'zod'
 
 import { getConfig } from '@/lib/config'
-import { prisma } from '@/lib/database/prisma'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { FILE_PASSWORD_MIN_LENGTH } from '@/lib/files/password-policy'
 import { connectionHolds } from '@/lib/oauth/connections'
@@ -23,7 +22,15 @@ import { TOOL_CATALOG, type ToolName } from '../catalog'
 import { compact, readableBytes } from '../results'
 import { type ToolContext, ToolError, defineTool } from '../tool'
 import { UPLOAD_MINUTES, createUploadUrl } from '../transfer'
-import { NONE, accountFolders, pickFolder, pickTags } from './shared'
+import {
+  NONE,
+  accountFolders,
+  newFileSchema,
+  pickFolder,
+  pickProfile,
+  pickTags,
+  shellSafeOrigin,
+} from './shared'
 
 /** The most text one call carries, and the most binary data once decoded. */
 const MAX_TEXT_BYTES = 256 * 1024
@@ -99,37 +106,6 @@ type OptionArgs = z.infer<z.ZodObject<typeof optionFields>>
 
 const DEFAULTS_NOTE =
   'Options left out follow the account defaults and its upload profile.'
-
-/** The account's upload profile an argument names, by ID or by name; null for "none". */
-async function pickProfile(
-  userId: string,
-  value: string
-): Promise<string | null> {
-  const wanted = value.trim()
-  if (wanted.toLowerCase() === NONE) return null
-  const profiles = await prisma.uploadProfile.findMany({
-    where: { userId },
-    select: { id: true, name: true },
-  })
-  const exact =
-    profiles.find((profile) => profile.id === wanted) ??
-    profiles.find((profile) => profile.name === wanted)
-  if (exact) return exact.id
-  // Names differ by case at most here; one match is what the caller meant.
-  const named = profiles.filter(
-    (profile) => profile.name.toLowerCase() === wanted.toLowerCase()
-  )
-  if (named.length === 1) return named[0].id
-  if (named.length > 1)
-    throw new ToolError(
-      `Several upload profiles match "${value}": ${named
-        .map((profile) => profile.name)
-        .join(', ')}. Use the exact name or the profile ID.`
-    )
-  throw new ToolError(
-    `No upload profile matches "${value}". Call get_account to see the upload profiles.`
-  )
-}
 
 /**
  * The REST upload options a tool's arguments ask for. An option the caller
@@ -230,20 +206,6 @@ function decodeBase64(value: string): Buffer {
 /** The address of the request built here; it is never fetched. */
 const INTERNAL_UPLOAD_URL = 'http://flare.internal/api/files'
 
-const uploadedFile = z.object({
-  file: z.object({
-    id: z.string(),
-    name: z.string(),
-    type: z.string().describe('MIME type'),
-    size_bytes: z.number(),
-    url: z
-      .string()
-      .describe('The share page; private files need the owner signed in'),
-    raw_url: z.string().describe('The bytes, shown in the browser'),
-    download_url: z.string().describe('The bytes, as a download'),
-  }),
-})
-
 /**
  * For an agent that signed in: the last check on its upload, in the
  * transaction that publishes the file. The connection is read again there,
@@ -277,7 +239,7 @@ async function publishInline(
     options: UploadRequestOptions
     isPaste?: boolean
   }
-): Promise<{ structured: z.infer<typeof uploadedFile> }> {
+): Promise<{ structured: z.infer<typeof newFileSchema> }> {
   try {
     await uploadLimiter.consume(principal.credentialKey)
   } catch {
@@ -343,7 +305,7 @@ const uploadFile = defineTool({
       ),
     ...optionFields,
   }),
-  output: uploadedFile,
+  output: newFileSchema,
   async run(args, context) {
     const text = args.text || undefined
     const base64 = args.base64 || undefined
@@ -377,7 +339,7 @@ const createPaste = defineTool({
     filename: filename.optional().describe('Default paste.txt'),
     ...optionFields,
   }),
-  output: uploadedFile,
+  output: newFileSchema,
   async run(args, context) {
     if (!args.content.trim())
       throw new ToolError('`content` is empty. Give the text or code to share.')
@@ -393,12 +355,6 @@ const createPaste = defineTool({
     })
   },
 })
-
-/**
- * What an address may hold inside double quotes in a shell command without
- * the shell reading any of it: URL characters, less `!` and `$`.
- */
-const SHELL_PLAIN = /^[A-Za-z0-9\-._~:/?#[\]@%&'()*+,;=]+$/
 
 const createUploadUrlTool = defineTool({
   name: 'create_upload_url',
@@ -425,11 +381,7 @@ const createUploadUrlTool = defineTool({
       .describe('Run once, with /path/to/file replaced by the file to upload'),
   }),
   async run(args, { principal, origin }) {
-    // The rest of the URL is a fixed path and a base64url secret.
-    if (!SHELL_PLAIN.test(origin))
-      throw new ToolError(
-        'The address of this Flare instance holds characters that are not safe in a shell command. Ask its administrator to check the address it is served under.'
-      )
+    shellSafeOrigin(origin)
     const name = args.filename ? cleanName(args.filename) : undefined
     const requested = await uploadOptions(principal, args)
     // Refused now, not when the file arrives: a folder, tag or profile that is

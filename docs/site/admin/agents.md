@@ -28,9 +28,50 @@ From the next request on:
 
 An agent acts as the account that connected it, and three things bound it:
 
-- **The actions that person allowed** when connecting: reading, uploading, organizing, changing sharing, deleting, short links. For an agent that signed in, they can change these afterwards.
+- **The actions that person allowed** when connecting. For an agent that signed in, they can change these afterwards.
 - **The account's role, checked on every call.** An agent can never do what its owner's role does not allow, and a role change applies at once.
-- **Its owner's own content.** Agents work with that account's files, folders, tags, and short links only.
+- **Its owner's own account.** Agents work with that account's files, folders, tags, short links, upload profiles, and settings only.
+
+The actions a person can allow, as the consent screen and the token form name them:
+
+| Action                      | Scope            | Lets the agent                                                                                                                      | Role permissions it uses                                                                                     |
+| --------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Upload files**            | `files:upload`   | Upload files and create pastes; with **Read file contents**, extract archives and create them                                       | `files.upload`, `pastes.create`; archives also need `files.read`, and extracting `folders.manage`            |
+| **Read files**              | `files:read`     | List and search files, folders, and tags                                                                                            | `files.read`                                                                                                 |
+| **Read file contents**      | `files:content`  | Read files and what is inside archives, and get download links, private files included                                              | `files.read`                                                                                                 |
+| **Organize files**          | `files:organize` | Manage folders and tags, move and tag files, schedule an expiry                                                                     | `files.update`, `folders.manage`, `tags.manage`                                                              |
+| **Change sharing**          | `files:share`    | Change visibility and passwords, share folders                                                                                      | `files.share`, `folders.manage`, `folders.share`                                                             |
+| **Delete files**            | `files:delete`   | Delete files permanently                                                                                                            | `files.delete`                                                                                               |
+| **Read short links**        | `urls:read`      | List short links                                                                                                                    | `links.read`                                                                                                 |
+| **Manage short links**      | `urls:write`     | Create and delete short links                                                                                                       | `links.create`, `links.delete`                                                                               |
+| **Change account settings** | `account:write`  | Change the display name, vanity URL, upload defaults, theme, link embed, and avatar, and create, change, and delete upload profiles | `profile.update`, `uploadProfiles.manage`; the theme needs `appearance.personal` and the embed `files.share` |
+
+With **Read files**, **Read file contents**, and **Read short links** together, which is the **Read only** preset, an agent can also export the account, if the role holds `profile.export`. The [reference](/api/mcp#authorization-matrix) has the exact needs of every tool.
+
+### What Change account settings covers
+
+**Change account settings** is part of the **Everything in my account** preset and a checkbox under **Custom**. It lets an agent do what its owner does under **Profile → Account** (**Identity** and **Appearance**), **Profile → Uploads**, and **Profile → Embeds**:
+
+- **Display name, vanity URL, and avatar.** The avatar is an image the agent picks from the account's own files, and an avatar is public. Picking one therefore also needs **Read file contents**, and **Change sharing** when the image is private or has a password.
+- **Upload defaults:** randomized file URLs, the default expiration, and what it does.
+- **Theme** (`appearance.personal`) and **link embed** (`files.share`, and only while the instance [allows personal embeds](./appearance)).
+- **Upload profiles:** create, change, delete, and choose the default (`uploadProfiles.manage`).
+
+Expirations act on every later upload, so Flare checks what each change does to them. For every way of uploading (no profile named, the account's own defaults, and each upload profile) it works out the expiration action and the length a file takes from what is saved. A change that makes the saved action of any of them `delete` also needs **Delete files** and `files.delete`, and one that makes it `make_private` needs **Change sharing** and `files.share`, even while no length is saved, because an upload can set its own expiration and take the saved action. A length that is new for any of them needs both, because an upload can name either action itself and take the saved length. That includes turning on a default expiration that an existing profile's action then applies to, and removing or deleting a default profile when uploads that name no profile then take another action or length from the account. Naming an expiration action always needs that action's scope, even while no expiration length is set. Turning an expiration off needs neither. Visibility is checked the same way: a change to an upload profile, or to which profile is the default, that would make later uploads public where they were private needs **Change sharing** and `files.share`. The [reference](/api/mcp#rules-for-later-uploads) has the details.
+
+It never covers how the account signs in. No agent, whatever it was allowed, can change the email address, the password, passkeys, two-factor authentication, or recovery codes, read or revoke sessions, or delete the account.
+
+A named token that is [bound to an upload profile](/api/authentication#bind-uploads-to-a-profile) cannot change upload profiles or the account's upload defaults through MCP, even with **Change account settings**: it would otherwise be able to rewrite the settings it was bound to. Its other account settings work.
+
+To keep agents on your instance from any of this, remove the role permission behind it. A role without `profile.update` has no `update_profile` tool, one without `uploadProfiles.manage` cannot touch upload profiles, and one without `profile.export` cannot export. Those permissions also govern what people do in Profile, so removing one removes it for both.
+
+### Archives and exports
+
+Agents extract and create archives through the same code as the library, with the same [limits](/guide/archives#supported-sizes-and-formats). They also share its capacity: Flare runs one archive operation for an account at a time and two in each Flare process, whether a person or an agent started them, so while an agent's operation runs, someone's **Extract all** is refused with **Another archive operation is running. Try again shortly.**, and the other way round.
+
+An export is downloaded through a temporary URL that needs no sign-in and works once, if the download starts within 15 minutes. Whoever holds that URL in those minutes gets every file of the account, so it is worth more than any other link an agent receives. It appears in the agent's transcript and in [proxy access logs](/hosting/configuration#mcp-server).
+
+### What no agent can do
 
 This release has no tools for administration. An agent connected by an administrator cannot read or change users, roles, invites, instance settings, the audit log, or other accounts' files. No agent can create or read API tokens, upload tokens, or webhooks, connect or change another agent, or change how anyone signs in. The [reference](/api/mcp#what-mcp-covers-of-the-http-api) lists every route and whether a tool covers it.
 
@@ -77,12 +118,12 @@ Nothing is deleted. Tokens are kept as they are, and so are the connections of a
 
 Every tool call an agent makes is recorded in the [audit log](./audit). Set **Category** to `mcp` to see them; the category is offered once the first call has been recorded:
 
-- **Action** is `mcp.` and the tool, such as `mcp.read_file`, `mcp.set_file_sharing`, or `mcp.delete_files`.
+- **Action** is `mcp.` and the tool, such as `mcp.read_file`, `mcp.set_file_sharing`, or `mcp.delete_files`. The tools this page describes above are `mcp.extract_archive`, `mcp.create_archive`, `mcp.export_account`, `mcp.update_profile`, `mcp.save_upload_profile`, and `mcp.delete_upload_profile`.
 - **Outcome** is `success`, `denied` when the connection or the role did not allow the call, or `failure`.
-- The actor is the account. The event's details carry the ID of the token used, or `connection:` and the connection's ID for an agent that signed in, never a secret. The target is the file, folder, tag, or short link.
-- Downloads and uploads through the temporary URLs agents receive appear as `mcp.transfer.download` and `mcp.transfer.upload`.
+- The actor is the account. The event's details carry the ID of the token used, or `connection:` and the connection's ID for an agent that signed in, never a secret. The target is the file, folder, tag, short link, or upload profile, or the account itself for a settings change or an export.
+- Downloads and uploads through the temporary URLs agents receive appear as `mcp.transfer.download` for a file, `mcp.transfer.archive-entry` for one file inside an archive, `mcp.transfer.upload`, and `mcp.transfer.export` for an account export. An `mcp.export_account` event means an agent asked for an export URL; the `mcp.transfer.export` event that follows means the export was downloaded.
 
-The changes themselves also appear as the usual events, such as `file.create`, in their own categories. The [reference](/api/mcp#audit) has the details.
+The changes themselves also appear as the usual events, such as `file.create`, `user.update`, or `upload_profile.create`, in their own categories. The [reference](/api/mcp#audit) has the details.
 
 <Screenshot src="/screenshots/agents/audit-mcp.webp" alt="Audit log filtered to the mcp category: a denied MCP delete files call, then successful set file sharing, search files, tag files, move files and transfer upload events by Alex, with invoice-2026-10.pdf, 2 files and team-offsite.png as targets" caption="Two agents at work on demonstration files. The read-only one was refused when it tried to delete." />
 

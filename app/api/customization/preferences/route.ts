@@ -1,10 +1,8 @@
-import type { InputJsonValue } from '@prisma/client/runtime/library'
-
+import { savePersonalAppearance } from '@/lib/customization/personal'
 import {
   personalAppearanceSchema,
   readPersonalAppearance,
 } from '@/lib/customization/schema'
-import { lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
@@ -30,29 +28,9 @@ export const PATCH = api(
     const preference = await readJson(request, personalAppearanceSchema, {
       limit: 1024,
     })
-    await prisma.$transaction(async (tx) => {
-      await lockUserRow(tx, session.user.id)
-      const user = await tx.user.findUniqueOrThrow({
-        where: { id: session.user.id },
-        select: { preferences: true },
-      })
-      const previous =
-        user.preferences &&
-        typeof user.preferences === 'object' &&
-        !Array.isArray(user.preferences)
-          ? user.preferences
-          : {}
-      await tx.user.update({
-        where: { id: session.user.id },
-        data: {
-          preferences: {
-            ...previous,
-            customization: preference,
-          } as InputJsonValue,
-        },
-      })
-    })
-    return { data: preference }
+    return {
+      data: await savePersonalAppearance(session.user.id, preference),
+    }
   },
   {
     invalid: () =>

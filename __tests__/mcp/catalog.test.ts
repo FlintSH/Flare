@@ -113,7 +113,7 @@ describe('the tool list and the catalog', () => {
     expect(sorted(defined)).toEqual(sorted(TOOL_NAMES))
   })
 
-  it('has the 22 content tools of the first change, in the order clients list them', () => {
+  it('has the 28 tools of an account, in the order clients list them', () => {
     expect(TOOL_NAMES).toEqual([
       'get_account',
       'search_files',
@@ -137,6 +137,12 @@ describe('the tool list and the catalog', () => {
       'delete_tag',
       'create_short_link',
       'delete_short_link',
+      'extract_archive',
+      'create_archive',
+      'update_profile',
+      'save_upload_profile',
+      'delete_upload_profile',
+      'export_account',
     ])
   })
 
@@ -205,7 +211,8 @@ type Needs = { scopes: ApiScope[]; permissions: Permission[] }
  * tool and effect needs. A row that drifts from the approved table fails here.
  * One refinement since: upload limits and upload profiles are shown only to
  * an account that may upload, so both also need `files.upload`. A scope that
- * works over REST is then offered for MCP to exactly the same roles.
+ * works over REST is then offered for MCP to exactly the same roles. The
+ * design's "or `account:write`" for the profile list is its own effect.
  */
 const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
   get_account: {
@@ -219,6 +226,14 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
       upload_profiles: {
         scopes: ['files:upload'],
         permissions: ['files.upload', 'uploadProfiles.manage'],
+      },
+      manage_upload_profiles: {
+        scopes: ['account:write'],
+        permissions: ['uploadProfiles.manage'],
+      },
+      profile_settings: {
+        scopes: ['account:write'],
+        permissions: ['profile.update'],
       },
     },
   },
@@ -280,6 +295,75 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
   delete_tag: { scopes: ['files:organize'], permissions: ['tags.manage'] },
   create_short_link: { scopes: ['urls:write'], permissions: ['links.create'] },
   delete_short_link: { scopes: ['urls:write'], permissions: ['links.delete'] },
+  extract_archive: {
+    scopes: ['files:content', 'files:upload'],
+    permissions: ['files.read', 'files.upload', 'folders.manage'],
+  },
+  create_archive: {
+    scopes: ['files:content', 'files:upload'],
+    permissions: ['files.read', 'files.upload'],
+  },
+  update_profile: {
+    scopes: ['account:write'],
+    permissions: ['profile.update'],
+    effects: {
+      theme_mode: { scopes: [], permissions: ['appearance.personal'] },
+      embed: { scopes: [], permissions: ['files.share'] },
+      default_expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: ['files.delete'],
+      },
+      default_expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+      avatar_file: { scopes: ['files:content'], permissions: ['files.read'] },
+      avatar_private_file: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+    },
+  },
+  save_upload_profile: {
+    scopes: ['account:write'],
+    permissions: ['uploadProfiles.manage'],
+    effects: {
+      expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: ['files.delete'],
+      },
+      expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+      visibility_public: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+    },
+  },
+  delete_upload_profile: {
+    scopes: ['account:write'],
+    permissions: ['uploadProfiles.manage'],
+    effects: {
+      expiry_delete: {
+        scopes: ['files:delete'],
+        permissions: ['files.delete'],
+      },
+      expiry_make_private: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+      visibility_public: {
+        scopes: ['files:share'],
+        permissions: ['files.share'],
+      },
+    },
+  },
+  export_account: {
+    scopes: ['files:read', 'files:content', 'urls:read'],
+    permissions: ['profile.export', 'files.read', 'links.read'],
+  },
 }
 
 type Mirror = {
@@ -287,7 +371,25 @@ type Mirror = {
   actions?: Action[]
   /** Account routes whose permissions the tool must need. */
   routes?: [method: string, path: string][]
+  /**
+   * Routes only a browser session may call, which the bearer route table
+   * does not hold: the tool must need the permission each one's handler
+   * passes to `requireSession`, read from the route file.
+   */
+  session?: [method: string, file: string][]
 }
+
+/** The permission a session-only route's handler requires, from its source. */
+function sessionPermission(method: string, file: string): string | undefined {
+  const source = readFileSync(resolve(process.cwd(), file), 'utf8')
+  const start = source.indexOf(`export const ${method} = api(`)
+  if (start < 0) return undefined
+  const next = source.indexOf('\nexport const ', start + 1)
+  const handler = source.slice(start, next < 0 ? undefined : next)
+  return /await requireSession\(\s*request,\s*'([^']+)'/.exec(handler)?.[1]
+}
+
+const PROFILE_ROUTES = 'app/api/upload-profiles'
 
 /**
  * What each tool does over REST or in the dashboard today, per design 3.6.
@@ -305,6 +407,11 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
         },
         // Checked against the profile list route in its own test below.
         upload_profiles: {},
+        manage_upload_profiles: {
+          session: [['GET', `${PROFILE_ROUTES}/route.ts`]],
+        },
+        // Reading the settings needs what changing them over REST needs.
+        profile_settings: { routes: [['PUT', '/api/profile']] },
       },
     },
     search_files: { actions: ['viewFiles'], routes: [['GET', '/api/files']] },
@@ -373,6 +480,57 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
     delete_tag: { routes: [['DELETE', '/api/tags/tag-id']] },
     create_short_link: { routes: [['POST', '/api/urls']] },
     delete_short_link: { routes: [['DELETE', '/api/urls/link-id']] },
+    extract_archive: { actions: ['extractArchive'] },
+    create_archive: { actions: ['createArchive'] },
+    update_profile: {
+      routes: [['PUT', '/api/profile']],
+      session: [['POST', 'app/api/profile/avatar/route.ts']],
+      effects: {
+        theme_mode: {
+          session: [['PATCH', 'app/api/customization/preferences/route.ts']],
+        },
+        embed: { session: [['PATCH', 'app/api/profile/embed/route.ts']] },
+        default_expiry_delete: {
+          actions: [EXPIRY_EFFECTS[ExpiryAction.DELETE]],
+        },
+        default_expiry_make_private: {
+          actions: [EXPIRY_EFFECTS[ExpiryAction.SET_PRIVATE]],
+        },
+        // The avatar is a readable copy of the file, and a public one.
+        avatar_file: { actions: ['viewFiles'] },
+        avatar_private_file: { actions: ['shareFiles'] },
+      },
+    },
+    save_upload_profile: {
+      session: [
+        ['POST', `${PROFILE_ROUTES}/route.ts`],
+        ['PUT', `${PROFILE_ROUTES}/[id]/route.ts`],
+        ['PUT', `${PROFILE_ROUTES}/default/route.ts`],
+      ],
+      effects: {
+        expiry_delete: { actions: [EXPIRY_EFFECTS[ExpiryAction.DELETE]] },
+        expiry_make_private: {
+          actions: [EXPIRY_EFFECTS[ExpiryAction.SET_PRIVATE]],
+        },
+        // Publishing later uploads is what making a file public needs.
+        visibility_public: { actions: ['shareFiles'] },
+      },
+    },
+    delete_upload_profile: {
+      session: [['DELETE', `${PROFILE_ROUTES}/[id]/route.ts`]],
+      effects: {
+        expiry_delete: { actions: [EXPIRY_EFFECTS[ExpiryAction.DELETE]] },
+        expiry_make_private: {
+          actions: [EXPIRY_EFFECTS[ExpiryAction.SET_PRIVATE]],
+        },
+        // Publishing later uploads is what making a file public needs.
+        visibility_public: { actions: ['shareFiles'] },
+      },
+    },
+    export_account: {
+      actions: ['exportAccount'],
+      routes: [['GET', '/api/profile/export']],
+    },
   }
 
 function expectMirrors(needs: ToolNeeds, mirror: Mirror, what: string) {
@@ -394,6 +552,16 @@ function expectMirrors(needs: ToolNeeds, mirror: Mirror, what: string) {
       expect(needs.scopes, `${what} against ${method} ${path}`).toEqual([
         restScope,
       ])
+  }
+  for (const [method, file] of mirror.session ?? []) {
+    const permission = sessionPermission(method, file)
+    expect(permission, `${method} in ${file} requires a permission`).toEqual(
+      expect.any(String)
+    )
+    expect(
+      sorted(needs.permissions),
+      `${what} against ${method} ${file}`
+    ).toEqual([permission])
   }
 }
 
@@ -428,7 +596,10 @@ describe('the authorization matrix', () => {
 
   it('lists every tool that has a REST route or dashboard action to mirror', () => {
     const unmirrored = TOOL_NAMES.filter(
-      (name) => !MIRRORS[name].actions?.length && !MIRRORS[name].routes?.length
+      (name) =>
+        !MIRRORS[name].actions?.length &&
+        !MIRRORS[name].routes?.length &&
+        !MIRRORS[name].session?.length
     )
     // Only the tool that describes the connection itself has neither.
     expect(unmirrored).toEqual(['get_account'])
@@ -480,6 +651,151 @@ describe('the authorization matrix', () => {
     ).toBe(true)
   })
 
+  it('reads the permission a session-only route requires from its handler', () => {
+    expect(sessionPermission('GET', `${PROFILE_ROUTES}/route.ts`)).toBe(
+      'uploadProfiles.manage'
+    )
+    expect(
+      sessionPermission('PATCH', 'app/api/customization/preferences/route.ts')
+    ).toBe('appearance.personal')
+    // A method the file does not answer, and a handler that requires nothing.
+    expect(
+      sessionPermission('DELETE', `${PROFILE_ROUTES}/route.ts`)
+    ).toBeUndefined()
+    expect(
+      sessionPermission('GET', 'app/api/customization/preferences/route.ts')
+    ).toBeUndefined()
+  })
+
+  it('lists upload profiles with their settings to a connection that may change them, uploading or not', () => {
+    const { effects } = TOOL_CATALOG.get_account
+    const save = TOOL_CATALOG.save_upload_profile
+    // Whoever may call save_upload_profile sees what there is to save.
+    expect(effects.manage_upload_profiles).toEqual({
+      scopes: save.scopes,
+      permissions: save.permissions,
+    })
+    expect(TOOL_CATALOG.delete_upload_profile.scopes).toEqual(save.scopes)
+    expect(TOOL_CATALOG.delete_upload_profile.permissions).toEqual(
+      save.permissions
+    )
+    const manages = (scopes: string[], permissions: Permission[]) =>
+      needsMet(effects.manage_upload_profiles, subject(scopes, permissions))
+    expect(manages(['account:write'], ['uploadProfiles.manage'])).toBe(true)
+    // Uploading is neither needed nor enough.
+    expect(
+      manages(['files:upload'], ['files.upload', 'uploadProfiles.manage'])
+    ).toBe(false)
+    expect(manages(['account:write'], ['profile.update', 'files.upload'])).toBe(
+      false
+    )
+    expect(
+      needsMet(
+        effects.upload_profiles,
+        subject(['account:write'], ['uploadProfiles.manage'])
+      )
+    ).toBe(false)
+  })
+
+  it('gives a default expiry what an expiry on a file needs', () => {
+    const { effects } = TOOL_CATALOG.update_profile
+    const expiry = TOOL_CATALOG.set_file_expiry.effects
+    expect(effects.default_expiry_delete).toEqual(expiry.delete)
+    expect(effects.default_expiry_make_private).toEqual(expiry.make_private)
+    // The theme and the embed are the account's own: no scope beyond the
+    // tool's, only the role permission their routes require.
+    expect(effects.theme_mode.scopes).toEqual([])
+    expect(effects.embed.scopes).toEqual([])
+    expect(Object.keys(effects).sort()).toEqual([
+      'avatar_file',
+      'avatar_private_file',
+      'default_expiry_delete',
+      'default_expiry_make_private',
+      'embed',
+      'theme_mode',
+    ])
+  })
+
+  it("gives a profile's expiry what an expiry on a file needs, as the account default has", () => {
+    const { effects } = TOOL_CATALOG.save_upload_profile
+    const expiry = TOOL_CATALOG.set_file_expiry.effects
+    const defaults = TOOL_CATALOG.update_profile.effects
+    expect(effects.expiry_delete).toEqual(expiry.delete)
+    expect(effects.expiry_make_private).toEqual(expiry.make_private)
+    // A default profile acts on the same uploads the account default does.
+    expect(effects.expiry_delete).toEqual(defaults.default_expiry_delete)
+    expect(effects.expiry_make_private).toEqual(
+      defaults.default_expiry_make_private
+    )
+    expect(Object.keys(effects).sort()).toEqual([
+      'expiry_delete',
+      'expiry_make_private',
+      'visibility_public',
+    ])
+    // Making later uploads public needs what making a file public does.
+    const sharing = TOOL_CATALOG.set_file_sharing
+    expect(effects.visibility_public).toEqual({
+      scopes: sharing.scopes,
+      permissions: sharing.permissions,
+    })
+    // The row alone still saves a profile that never expires.
+    const save = TOOL_CATALOG.save_upload_profile
+    const plain = subject(save.scopes, save.permissions)
+    expect(toolAllowed('save_upload_profile', plain)).toBe(true)
+    expect(needsMet(effects.expiry_delete, plain)).toBe(false)
+    expect(needsMet(effects.expiry_make_private, plain)).toBe(false)
+    // Deleting the default profile can hand uploads to the account's own
+    // expiry, so deleting needs what saving does for the same outcome.
+    expect(TOOL_CATALOG.delete_upload_profile.effects).toEqual(effects)
+    expect(
+      needsMet(TOOL_CATALOG.delete_upload_profile.effects.expiry_delete, plain)
+    ).toBe(false)
+  })
+
+  it('gives an avatar what reading a file needs, and one from a hidden file what publishing it needs', () => {
+    const { effects } = TOOL_CATALOG.update_profile
+    // An avatar is a copy anyone can load, so choosing one reads the file.
+    expect(effects.avatar_file).toEqual({
+      scopes: TOOL_CATALOG.read_file.scopes,
+      permissions: TOOL_CATALOG.read_file.permissions,
+    })
+    // And a file that is not public is made public by it.
+    expect(effects.avatar_private_file).toEqual({
+      scopes: TOOL_CATALOG.set_file_sharing.scopes,
+      permissions: TOOL_CATALOG.set_file_sharing.permissions,
+    })
+    const row = TOOL_CATALOG.update_profile
+    const settingsOnly = subject(row.scopes, row.permissions)
+    expect(toolAllowed('update_profile', settingsOnly)).toBe(true)
+    expect(needsMet(effects.avatar_file, settingsOnly)).toBe(false)
+    // Reading contents is not enough for a file that is hidden.
+    const reader = subject(
+      [...row.scopes, 'files:content'],
+      [...row.permissions, 'files.read']
+    )
+    expect(needsMet(effects.avatar_file, reader)).toBe(true)
+    expect(needsMet(effects.avatar_private_file, reader)).toBe(false)
+  })
+
+  it('shows the account settings to exactly the connections that may change them', () => {
+    const { effects } = TOOL_CATALOG.get_account
+    const update = TOOL_CATALOG.update_profile
+    expect(effects.profile_settings).toEqual({
+      scopes: update.scopes,
+      permissions: update.permissions,
+    })
+    for (const candidate of [
+      subject(['account:write'], ['profile.update']),
+      subject(['account:write'], ['uploadProfiles.manage']),
+      subject(['files:read', 'files:content'], ['profile.update']),
+      subject(ALL_SCOPES, ORDINARY_PERMISSIONS),
+      subject([], ['administrator']),
+    ])
+      expect(needsMet(effects.profile_settings, candidate)).toBe(
+        toolAllowed('update_profile', candidate)
+      )
+  })
+
   it('gives an expiry what it does when it runs: delete needs deleting, make_private needs sharing', () => {
     const { effects } = TOOL_CATALOG.set_file_expiry
     expect(effects.delete).toEqual({
@@ -524,6 +840,8 @@ describe('annotations', () => {
       'list_folders',
       'list_tags',
       'list_short_links',
+      // It hands out a download of everything and changes nothing.
+      'export_account',
     ])
     for (const name of readTools) {
       const { annotations }: ToolRow = TOOL_CATALOG[name]
@@ -543,7 +861,35 @@ describe('annotations', () => {
       'set_folder_sharing',
       'delete_tag',
       'delete_short_link',
+      // A default expiry can delete later uploads, a new vanity ID breaks
+      // links, and an avatar is public; a profile's expiry deletes too.
+      'update_profile',
+      'save_upload_profile',
+      'delete_upload_profile',
     ])
+  })
+
+  it('marks the account tools by what a repeated call does', () => {
+    // The same settings saved twice are the same settings.
+    expect(TOOL_CATALOG.update_profile.annotations).toEqual({
+      readOnly: false,
+      destructive: true,
+      idempotent: true,
+      openWorld: false,
+    })
+    // Without `profile`, the same call creates a second profile or fails.
+    expect(TOOL_CATALOG.save_upload_profile.annotations).toEqual({
+      readOnly: false,
+      destructive: true,
+      idempotent: false,
+      openWorld: false,
+    })
+    expect(TOOL_CATALOG.delete_upload_profile.annotations).toEqual({
+      readOnly: false,
+      destructive: true,
+      idempotent: true,
+      openWorld: false,
+    })
   })
 
   it('marks no tool both read-only and destructive', () => {
@@ -641,6 +987,7 @@ describe('where a scope works', () => {
       'files:organize',
       'files:share',
       'files:delete',
+      'account:write',
       'mcp',
     ])
     for (const scope of mcpOnly) {
@@ -756,6 +1103,21 @@ describe('scopeAvailable', () => {
         ['files.update'],
         ['links.delete'],
         without(ORDINARY_PERMISSIONS, 'files.delete'),
+      ],
+    ],
+    [
+      'account:write',
+      // The profile and the upload profiles each stand alone.
+      [['profile.update'], ['uploadProfiles.manage']],
+      [
+        [],
+        ['files.read'],
+        // What an argument of update_profile needs is no use without the tool.
+        ['appearance.personal', 'files.share', 'files.delete'],
+        ORDINARY_PERMISSIONS.filter(
+          (permission) =>
+            !['profile.update', 'uploadProfiles.manage'].includes(permission)
+        ),
       ],
     ],
   ])(

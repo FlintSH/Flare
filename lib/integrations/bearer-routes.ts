@@ -68,6 +68,13 @@ export const API_SCOPE_CATALOG = [
     surfaces: ['api', 'mcp'],
   },
   {
+    scope: 'account:write',
+    label: 'Change account settings',
+    description: 'Profile, avatar, theme, embed style and upload profiles',
+    group: 'account',
+    surfaces: ['mcp'],
+  },
+  {
     scope: 'mcp',
     label: 'Agent access',
     description: 'Use this token with the MCP server',

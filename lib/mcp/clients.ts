@@ -656,7 +656,8 @@ export const AGENT_PRESETS = [
   {
     id: 'all',
     label: 'Everything in my account',
-    description: 'All file and short link actions, deleting included.',
+    description:
+      'All file, short link and account setting actions, deleting included.',
     scopes: [
       'files:upload',
       'files:read',
@@ -666,6 +667,7 @@ export const AGENT_PRESETS = [
       'files:delete',
       'urls:read',
       'urls:write',
+      'account:write',
     ],
   },
 ] as const satisfies readonly {

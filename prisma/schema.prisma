@@ -370,7 +370,7 @@ model AgentTransfer {
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   // The credential it was made for: `token:<id>` or `connection:<id>`.
   credential String
-  // `download` or `upload`.
+  // `download`, `upload`, `archive-entry` or `export`.
   kind       String
   fileId     String?
   // An upload's fixed options, with its password already hashed.

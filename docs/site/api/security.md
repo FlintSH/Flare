@@ -19,7 +19,7 @@ Earlier builds accepted only the exact `NEXTAUTH_URL` origin here, refused a mut
 
 ### Agents and the MCP server
 
-An AI agent connected through the [MCP server](./mcp), whether it signed in or uses a token, is in the same position as any named token here: no MCP tool reaches these routes. Authenticators, passkeys, recovery codes, browser sessions, and login history are managed only in the browser, and the server's [coverage table](./mcp#signing-in) marks every route in the table below as never exposed. Changing a password or a plain email address through `PUT /api/profile` needs the [browser proof](#password-and-plain-email-changes) that no token can give. A person can therefore always secure or recover an account whatever an agent connected to it does.
+An AI agent connected through the [MCP server](./mcp), whether it signed in or uses a token, is in the same position as any named token here: no MCP tool reaches these routes. Authenticators, passkeys, recovery codes, browser sessions, and login history are managed only in the browser, and the server's [coverage table](./mcp#signing-in) marks every route in the table below as never exposed. Changing a password or a plain email address through `PUT /api/profile` needs the [browser proof](#password-and-plain-email-changes) that no token can give. The MCP tool `update_profile` saves that route's other settings, such as the display name and upload defaults, and has no argument for an email address or a password. A person can therefore always secure or recover an account whatever an agent connected to it does.
 
 What a security change does to a connected agent depends on how it connected:
 

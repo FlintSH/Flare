@@ -715,6 +715,262 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
       expect(await prisma.agentTransfer.count()).toBe(0)
     })
 
+    describe('for an entry of an archive', () => {
+      const LINKS_FULL = (cap: number) =>
+        `This connection already has ${cap} download links waiting. Wait a few minutes for them to expire.`
+
+      it('keep the archive and the entry, and are found only as an entry link', async () => {
+        const principal = await principalOf()
+        const byPath = await transfer.createEntryUrl(
+          principal,
+          ORIGIN,
+          'file-1',
+          { path: 'docs/readme.md' }
+        )
+        const byPosition = await transfer.createEntryUrl(
+          principal,
+          ORIGIN,
+          'file-1',
+          { position: 7 }
+        )
+        expect(isTransferUrl(byPath.url)).toBe(true)
+        const row = await rowOf(byPath.url)
+        expect(row).toMatchObject({
+          userId: 'mcp-alex',
+          credential: 'token:token-agent',
+          kind: 'archive-entry',
+          fileId: 'file-1',
+          options: { entry: { path: 'docs/readme.md' } },
+          claimedAt: null,
+        })
+        expect(transfer.entryOf(row)).toEqual({ path: 'docs/readme.md' })
+        expect(transfer.entryOf(await rowOf(byPosition.url))).toEqual({
+          position: 7,
+        })
+        // Ten minutes, as for the link to a file.
+        const lifetime = row.expiresAt.getTime() - Date.now()
+        expect(lifetime).toBeGreaterThan(9 * 60_000)
+        expect(lifetime).toBeLessThanOrEqual(10 * 60_000)
+
+        const secret = secretOf(byPath.url)
+        expect(
+          await transfer.findTransfer(secret, 'archive-entry')
+        ).toMatchObject({ id: row.id })
+        for (const kind of ['download', 'upload', 'export'] as const)
+          expect(await transfer.findTransfer(secret, kind)).toBeNull()
+        expect(
+          await transfer.findTransfer(secret, [
+            'download',
+            'archive-entry',
+            'export',
+          ])
+        ).toMatchObject({ id: row.id })
+        await expire({ id: row.id })
+        expect(await transfer.findTransfer(secret, 'archive-entry')).toBeNull()
+      })
+
+      it('make no row for an entry that is neither a path nor a position', async () => {
+        const principal = await principalOf()
+        for (const entry of [
+          { path: '' },
+          { position: -1 },
+          { path: 'a.txt', position: 1 },
+        ])
+          await expect(
+            transfer.createEntryUrl(principal, ORIGIN, 'file-1', entry as never)
+          ).rejects.toThrow()
+        expect(await prisma.agentTransfer.count()).toBe(0)
+      })
+
+      it('share the count of download links with links to files, and leave uploads and exports theirs', async () => {
+        const principal = await principalOf()
+        const cap = transfer.MAX_OUTSTANDING_TRANSFERS
+        for (let made = 0; made < cap; made++)
+          await (made % 2
+            ? transfer.createDownloadUrl(principal, ORIGIN, `file-${made}`)
+            : transfer.createEntryUrl(principal, ORIGIN, 'file-1', {
+                position: made,
+              }))
+        // Twenty in all, ten of each: neither kind has another to give.
+        await expect(
+          transfer.createEntryUrl(principal, ORIGIN, 'file-1', { path: 'a' })
+        ).rejects.toThrow(LINKS_FULL(cap))
+        await expect(
+          transfer.createDownloadUrl(principal, ORIGIN, 'one-too-many')
+        ).rejects.toThrow(LINKS_FULL(cap))
+        expect(
+          await prisma.agentTransfer.groupBy({
+            by: ['kind'],
+            _count: true,
+            orderBy: { kind: 'asc' },
+          })
+        ).toEqual([
+          { kind: 'archive-entry', _count: cap / 2 },
+          { kind: 'download', _count: cap / 2 },
+        ])
+        // Upload URLs and export URLs are counted apart from them.
+        await transfer.createUploadUrl(principal, ORIGIN, { options: {} })
+        await transfer.createExportUrl(principal, ORIGIN)
+        // And the account's other token has its own twenty.
+        const other = await principalOf(OTHER_TOKEN)
+        await transfer.createEntryUrl(other, ORIGIN, 'file-1', { path: 'a' })
+        // An expired link of either kind makes room for one of either.
+        const [first] = await prisma.agentTransfer.findMany({
+          where: { kind: 'download', credential: 'token:token-agent' },
+          take: 1,
+        })
+        await expire({ id: first.id })
+        await transfer.createEntryUrl(principal, ORIGIN, 'file-1', {
+          path: 'a',
+        })
+        await expect(
+          transfer.createDownloadUrl(principal, ORIGIN, 'one-too-many')
+        ).rejects.toThrow(LINKS_FULL(cap))
+      })
+
+      it('never go past the shared cap when links to files and to entries are asked for at once', async () => {
+        const principal = await principalOf()
+        const cap = transfer.MAX_OUTSTANDING_TRANSFERS
+        const asked = await Promise.allSettled(
+          Array.from({ length: cap * 3 }, (_, index) =>
+            index % 2
+              ? transfer.createDownloadUrl(principal, ORIGIN, `file-${index}`)
+              : transfer.createEntryUrl(principal, ORIGIN, 'file-1', {
+                  position: index,
+                })
+          )
+        )
+        expect(
+          asked.filter((result) => result.status === 'fulfilled')
+        ).toHaveLength(cap)
+        expect(
+          await prisma.agentTransfer.count({
+            where: { kind: { in: ['download', 'archive-entry'] } },
+          })
+        ).toBe(cap)
+        const reasons = new Set(
+          asked.flatMap((result) =>
+            result.status === 'rejected' ? [String(result.reason?.message)] : []
+          )
+        )
+        expect(reasons).toEqual(new Set([LINKS_FULL(cap)]))
+      })
+    })
+
+    describe('for the account export', () => {
+      const EXPORTS_FULL = (cap: number) =>
+        `This connection already has ${cap} export URLs waiting. Use one, or wait: one that was never used expires 15 minutes after it was made.`
+
+      it('name nothing but the account, wait 15 minutes, and are found only as an export URL', async () => {
+        const principal = await principalOf()
+        const made = await transfer.createExportUrl(principal, ORIGIN)
+        expect(isTransferUrl(made.url)).toBe(true)
+        const row = await rowOf(made.url)
+        expect(row).toMatchObject({
+          userId: 'mcp-alex',
+          credential: 'token:token-agent',
+          kind: 'export',
+          fileId: null,
+          options: null,
+          claimedAt: null,
+        })
+        const lifetime = row.expiresAt.getTime() - Date.now()
+        expect(lifetime).toBeGreaterThan(14 * 60_000)
+        expect(lifetime).toBeLessThanOrEqual(15 * 60_000)
+        expect(made.expires_at).toBe(row.expiresAt.toISOString())
+        expect(
+          await transfer.findTransfer(secretOf(made.url), 'export')
+        ).toMatchObject({ id: row.id })
+        for (const kind of ['download', 'archive-entry', 'upload'] as const)
+          expect(
+            await transfer.findTransfer(secretOf(made.url), kind)
+          ).toBeNull()
+      })
+
+      it('stop at twenty waiting, on a count of their own, however many are asked for at once', async () => {
+        const principal = await principalOf()
+        const cap = transfer.MAX_OUTSTANDING_TRANSFERS
+        const asked = await Promise.allSettled(
+          Array.from({ length: cap + 10 }, () =>
+            transfer.createExportUrl(principal, ORIGIN)
+          )
+        )
+        expect(
+          asked.filter((result) => result.status === 'fulfilled')
+        ).toHaveLength(cap)
+        expect(
+          new Set(
+            asked.flatMap((result) =>
+              result.status === 'rejected'
+                ? [String(result.reason?.message)]
+                : []
+            )
+          )
+        ).toEqual(new Set([EXPORTS_FULL(cap)]))
+        expect(
+          await prisma.agentTransfer.count({ where: { kind: 'export' } })
+        ).toBe(cap)
+        // Reading and uploading are not held up by exports that wait.
+        await transfer.createDownloadUrl(principal, ORIGIN, 'file-1')
+        await transfer.createUploadUrl(principal, ORIGIN, { options: {} })
+      })
+
+      it('go to exactly one of several simultaneous claims, and stay taken while the export is sent', async () => {
+        const principal = await principalOf()
+        for (let round = 0; round < 5; round++) {
+          const { url } = await transfer.createExportUrl(principal, ORIGIN)
+          const { id } = await rowOf(url)
+          const claims = await Promise.all(
+            Array.from({ length: 8 }, () => transfer.claimExport(id))
+          )
+          expect(
+            claims.filter(Boolean),
+            `round ${round}: ${claims.join(', ')}`
+          ).toHaveLength(1)
+          const held = await rowOf(url)
+          expect(held.claimedAt).toBeInstanceOf(Date)
+          // Kept a day for the download that took it, and still counted.
+          expect(held.expiresAt.getTime() - Date.now()).toBeGreaterThan(
+            23 * 3_600_000
+          )
+          expect(await transfer.claimExport(id)).toBe(false)
+          // The sweep an hour on leaves it to the download still running.
+          expect(
+            await transfer.deleteExpiredTransfers(
+              new Date(Date.now() + 3_600_000)
+            )
+          ).toBe(0)
+        }
+        expect(
+          await prisma.agentTransfer.count({ where: { kind: 'export' } })
+        ).toBe(5)
+      })
+
+      it('are given back with the time they had when the export fails before it starts, and removed when its download ends', async () => {
+        const principal = await principalOf()
+        const { url } = await transfer.createExportUrl(principal, ORIGIN)
+        const before = await rowOf(url)
+        expect(await transfer.claimExport(before.id)).toBe(true)
+        await transfer.releaseExport(before.id)
+        const after = await rowOf(url)
+        expect(after.claimedAt).toBeNull()
+        // Fifteen minutes from when it was made, give or take the clocks.
+        expect(
+          Math.abs(after.expiresAt.getTime() - before.expiresAt.getTime())
+        ).toBeLessThan(5_000)
+        expect(await transfer.claimExport(before.id)).toBe(true)
+
+        await transfer.endExport(before.id)
+        expect(await prisma.agentTransfer.count()).toBe(0)
+        expect(await transfer.findTransfer(secretOf(url), 'export')).toBeNull()
+        expect(await transfer.claimExport(before.id)).toBe(false)
+        // Ending or releasing something that is gone is not an error.
+        await transfer.endExport(before.id)
+        await transfer.releaseExport(before.id)
+        expect(await prisma.agentTransfer.count()).toBe(0)
+      })
+    })
+
     it('go with their account when it is deleted', async () => {
       const principal = await principalOf()
       await transfer.createDownloadUrl(principal, ORIGIN, 'file-1')
@@ -1195,6 +1451,832 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
           details: expect.objectContaining({ tokenId: 'token-agent' }),
         }),
       ])
+    })
+
+    describe('archives and the account export, through the real services', () => {
+      let transferRoute: typeof import('@/app/api/mcp/transfer/[ticket]/route')
+      let storageModule: typeof import('@/lib/storage')
+      let targetProvider: typeof import('@/lib/storage/target-provider')
+      let codec: typeof import('@/lib/archives/codec')
+      let indexCache: typeof import('@/lib/archives/index-cache')
+
+      beforeAll(async () => {
+        transferRoute = await import('@/app/api/mcp/transfer/[ticket]/route')
+        storageModule = await import('@/lib/storage')
+        targetProvider = await import('@/lib/storage/target-provider')
+        codec = await import('@/lib/archives/codec')
+        indexCache = await import('@/lib/archives/index-cache')
+      })
+      beforeEach(async () => {
+        indexCache.clearArchiveIndexCache()
+        await prisma.storageDeletion.deleteMany()
+        await enable(true)
+        // What the archive tools and the export need of the role, on top of
+        // reading files and links.
+        await prisma.role.create({
+          data: {
+            name: 'Archivists',
+            position: 10,
+            permissions: [
+              'files.upload',
+              'files.share',
+              'folders.manage',
+              'profile.export',
+            ],
+            users: { connect: { id: 'mcp-alex' } },
+          },
+        })
+        await prisma.apiToken.update({
+          where: { id: 'token-agent' },
+          data: {
+            scopes: [
+              'mcp',
+              'files:read',
+              'files:content',
+              'files:upload',
+              'urls:read',
+            ],
+          },
+        })
+      })
+      afterEach(() => vi.restoreAllMocks())
+
+      /**
+       * Object storage kept in memory. Every file is recorded as stored
+       * there, so the archive reader and the export read these bytes back.
+       */
+      function useStorage() {
+        const objects = new Map<string, Buffer>()
+        const stored = (path: string) => {
+          const bytes = objects.get(path)
+          if (!bytes) throw new Error(`No object at ${path}`)
+          return bytes
+        }
+        const storage = {
+          kind: 's3',
+          target: {
+            provider: 's3',
+            bucket: 'database-suite',
+            region: 'us-east-1',
+            endpoint: '',
+            forcePathStyle: false,
+          },
+          async uploadStream(stream: AsyncIterable<Uint8Array>, path: string) {
+            const chunks: Buffer[] = []
+            for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+            objects.set(path, Buffer.concat(chunks))
+            return { size: stored(path).length }
+          },
+          async getFileStream(
+            path: string,
+            range?: { start?: number; end?: number }
+          ) {
+            const { Readable } = await import('node:stream')
+            const bytes = stored(path)
+            return Readable.from([
+              range
+                ? bytes.subarray(
+                    range.start ?? 0,
+                    range.end === undefined ? undefined : range.end + 1
+                  )
+                : bytes,
+            ])
+          },
+          async getFileSize(path: string) {
+            return stored(path).length
+          },
+          async deleteFile(path: string) {
+            objects.delete(path)
+          },
+        }
+        vi.spyOn(storageModule, 'getStorageProvider').mockResolvedValue(
+          storage as never
+        )
+        vi.spyOn(
+          targetProvider,
+          'getStorageProviderForTarget'
+        ).mockResolvedValue(storage as never)
+        return objects
+      }
+
+      /** A real ZIP of these entries, made by the codec the app extracts with. */
+      async function zipOf(entries: { path: string; data: string | Buffer }[]) {
+        const { mkdtemp, readFile, rm, writeFile } =
+          await import('node:fs/promises')
+        const { tmpdir } = await import('node:os')
+        const { join } = await import('node:path')
+        const directory = await mkdtemp(join(tmpdir(), 'mcp-suite-'))
+        try {
+          const inputs = []
+          for (const [index, entry] of entries.entries()) {
+            const localPath = join(directory, `entry-${index}`)
+            await writeFile(localPath, entry.data)
+            inputs.push({
+              path: entry.path,
+              localPath,
+              size: Buffer.byteLength(entry.data),
+            })
+          }
+          const output = join(directory, 'made.zip')
+          await codec.createArchive(output, 'zip', inputs)
+          return await readFile(output)
+        } finally {
+          await rm(directory, { recursive: true, force: true })
+        }
+      }
+      /** The paths in a ZIP, read by the same codec. */
+      async function entriesOf(bytes: Buffer) {
+        const { mkdtemp, rm, writeFile } = await import('node:fs/promises')
+        const { tmpdir } = await import('node:os')
+        const { join } = await import('node:path')
+        const directory = await mkdtemp(join(tmpdir(), 'mcp-suite-'))
+        try {
+          const path = join(directory, 'read.zip')
+          await writeFile(path, bytes)
+          const manifest = await codec.readArchive(path, 'read.zip')
+          return manifest.entries.map((entry) => entry.path).sort()
+        } finally {
+          await rm(directory, { recursive: true, force: true })
+        }
+      }
+
+      const get = (url: string, init?: RequestInit) =>
+        transferRoute.GET(new Request(url, init), {
+          params: Promise.resolve({ ticket: secretOf(url) }),
+        })
+      /** What read_file answered: its data, and the blocks after it. */
+      async function read(args: Record<string, unknown>) {
+        const answer = await callTool('read_file', args)
+        expect(
+          answer.body.result.isError,
+          JSON.stringify(answer.body)
+        ).toBeFalsy()
+        const [first, ...blocks] = answer.body.result.content as {
+          type: string
+          text: string
+        }[]
+        return { data: JSON.parse(first.text), blocks }
+      }
+      /** A tool's structured answer, which must not be an error. */
+      async function structured(name: string, args: Record<string, unknown>) {
+        const answer = await callTool(name, args)
+        expect(
+          answer.body.result.isError,
+          JSON.stringify(answer.body)
+        ).toBeFalsy()
+        return answer.body.result.structuredContent
+      }
+      /** Uploads bytes as curl would, through an upload URL the agent asked for. */
+      async function upload(name: string, bytes: Buffer, type: string) {
+        const { upload_url } = await structured('create_upload_url', {
+          filename: name,
+        })
+        const form = new FormData()
+        form.set('file', new Blob([new Uint8Array(bytes)], { type }), name)
+        const encoded = new Response(form)
+        const response = await transferRoute.POST(
+          new Request(upload_url, {
+            method: 'POST',
+            headers: { 'content-type': encoded.headers.get('content-type')! },
+            body: new Uint8Array(await encoded.arrayBuffer()),
+          }),
+          { params: Promise.resolve({ ticket: secretOf(upload_url) }) }
+        )
+        expect(response.status).toBe(200)
+        return (await response.json()).data.id as string
+      }
+
+      const README = '# Read me\n\nHéllo wörld ✓\n'
+      const NOTES = 'Plain notes, line one.\nLine two.\n'
+      const BLOB = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2, 3, 0xff, 0])
+
+      it('lists a real ZIP, reads its entries, extracts it, packs files and exports the account', async () => {
+        const objects = useStorage()
+        const zip = await zipOf([
+          { path: 'docs/readme.md', data: README },
+          { path: 'notes.txt', data: NOTES },
+          { path: 'data/blob.bin', data: BLOB },
+        ])
+        const archiveId = await upload('bundle.zip', zip, 'application/zip')
+        events.length = 0
+
+        // The listing: every entry with its position, and whether it extracts.
+        const listing = await read({ file: archiveId })
+        expect(listing.blocks).toEqual([])
+        expect(listing.data).toMatchObject({
+          id: archiveId,
+          name: 'bundle.zip',
+          type: 'application/zip',
+          shown: 'entries',
+          total: 3,
+          can_extract: true,
+        })
+        expect(listing.data.entries).toEqual([
+          {
+            position: 0,
+            path: 'docs/readme.md',
+            size_bytes: Buffer.byteLength(README),
+          },
+          { position: 1, path: 'notes.txt', size_bytes: NOTES.length },
+          { position: 2, path: 'data/blob.bin', size_bytes: BLOB.length },
+        ])
+        expect(listing.data).not.toHaveProperty('download_url')
+
+        // A text entry, by path: its text in an untrusted block.
+        const readme = await read({ file: archiveId, entry: 'docs/readme.md' })
+        expect(readme.data).toMatchObject({
+          shown: 'text',
+          entry: 'docs/readme.md',
+          entry_size_bytes: Buffer.byteLength(README),
+          offset: 0,
+        })
+        expect(readme.blocks).toHaveLength(1)
+        expect(readme.blocks[0].text).toContain(
+          `Below is the contents of the archive entry (bytes 0 to ${Buffer.byteLength(README)} of ${Buffer.byteLength(README)}).`
+        )
+        expect(readme.blocks[0].text).toContain(
+          `\n${README}\n</untrusted-data-`
+        )
+        // By position, in windows that fall inside its two-byte characters.
+        let offset: number | undefined = 0
+        let text = ''
+        while (offset !== undefined) {
+          const part = await read({
+            file: archiveId,
+            entry: 0,
+            offset,
+            max_bytes: 64,
+          })
+          const block = part.blocks[0].text
+          text += block.slice(
+            block.indexOf('>\n') + 2,
+            block.lastIndexOf('\n</untrusted-data-')
+          )
+          offset = part.data.next_offset
+        }
+        expect(text).toBe(README)
+
+        // A binary entry: not shown, and a link to that entry in its place.
+        const blob = await read({ file: archiveId, entry: 'data/blob.bin' })
+        expect(blob.blocks).toEqual([])
+        expect(blob.data).toMatchObject({
+          shown: 'nothing',
+          entry: 'data/blob.bin',
+          entry_size_bytes: BLOB.length,
+          note: 'This entry holds binary data, so it is not shown. Use the download link.',
+        })
+        expect(isTransferUrl(blob.data.download_url)).toBe(true)
+        expect(await rowOf(blob.data.download_url)).toMatchObject({
+          kind: 'archive-entry',
+          fileId: archiveId,
+          options: { entry: { path: 'data/blob.bin' } },
+          credential: 'token:token-agent',
+          claimedAt: null,
+        })
+        // The link sends the entry, whole or in ranges, again and again.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const sent = await get(blob.data.download_url)
+          expect(sent.status).toBe(200)
+          expect(sent.headers.get('cache-control')).toBe('no-store')
+          expect(sent.headers.get('referrer-policy')).toBe('no-referrer')
+          expect(sent.headers.get('content-disposition')).toMatch(
+            /^attachment; filename="blob\.bin"/
+          )
+          expect(Buffer.from(await sent.arrayBuffer())).toEqual(BLOB)
+        }
+        const part = await get(blob.data.download_url, {
+          headers: { Range: 'bytes=1-3' },
+        })
+        expect(part.status).toBe(206)
+        expect(part.headers.get('content-range')).toBe(
+          `bytes 1-3/${BLOB.length}`
+        )
+        expect(Buffer.from(await part.arrayBuffer())).toEqual(
+          BLOB.subarray(1, 4)
+        )
+        // An entry the archive does not have is a refusal that says how to ask.
+        const missing = await callTool('read_file', {
+          file: archiveId,
+          entry: 'nope.txt',
+        })
+        expect(missing.body.result.isError).toBe(true)
+        expect(missing.body.result.content[0].text).toMatch(
+          /^No file in this archive matches `entry`\./
+        )
+
+        // Extraction, into a new folder that follows the archive's own.
+        const extracted = await structured('extract_archive', {
+          file: archiveId,
+          folder_name: 'Unpacked',
+        })
+        expect(extracted).toEqual({
+          folder: { id: expect.any(String), path: 'Unpacked' },
+          files_created: 3,
+        })
+        const folders = await prisma.vaultFolder.findMany({
+          where: { userId: 'mcp-alex' },
+          select: { id: true, name: true, parentId: true },
+        })
+        const unpacked = folders.find(({ name }) => name === 'Unpacked')!
+        expect(unpacked.id).toBe(extracted.folder.id)
+        expect(
+          folders
+            .map(({ name, parentId }) => [name, parentId])
+            .sort(([left], [right]) =>
+              String(left).localeCompare(String(right))
+            )
+        ).toEqual([
+          ['data', unpacked.id],
+          ['docs', unpacked.id],
+          ['Unpacked', null],
+        ])
+        const made = await prisma.file.findMany({
+          where: { userId: 'mcp-alex', id: { not: archiveId } },
+          orderBy: { name: 'asc' },
+        })
+        expect(made.map(({ name }) => name)).toEqual([
+          'blob.bin',
+          'notes.txt',
+          'readme.md',
+        ])
+        // Private, as the app extracts without an upload profile.
+        expect(new Set(made.map(({ visibility }) => visibility))).toEqual(
+          new Set(['PRIVATE'])
+        )
+        const [blobFile, notesFile, readmeFile] = made
+        expect(notesFile.folderId).toBe(unpacked.id)
+        expect(readmeFile.folderId).toBe(
+          folders.find(({ name }) => name === 'docs')!.id
+        )
+        // The files exist: their bytes are what the archive held.
+        expect(objects.get(blobFile.path)).toEqual(BLOB)
+        expect(objects.get(notesFile.path)!.toString()).toBe(NOTES)
+        expect(objects.get(readmeFile.path)!.toString()).toBe(README)
+        // And an agent finds them where it would look.
+        const found = await structured('search_files', {
+          folder: 'Unpacked/docs',
+        })
+        expect(found.files.map((file: { name: string }) => file.name)).toEqual([
+          'readme.md',
+        ])
+
+        // A tar.gz of two of them, answered as an upload is.
+        const packed = await structured('create_archive', {
+          files: [notesFile.id, readmeFile.id],
+          name: 'pair',
+          format: 'tar.gz',
+          folder: 'Unpacked',
+        })
+        const pair = await prisma.file.findUniqueOrThrow({
+          where: { id: packed.file.id },
+        })
+        expect(packed).toEqual({
+          file: {
+            id: pair.id,
+            name: 'pair.tar.gz',
+            type: 'application/gzip',
+            size_bytes: objects.get(pair.path)!.length,
+            // Under the address the library gave it.
+            url: `${ORIGIN}${pair.urlPath}`,
+            raw_url: `${ORIGIN}/api/files${pair.urlPath}`,
+            download_url: `${ORIGIN}/api/files/${pair.id}/download`,
+          },
+        })
+        expect(pair).toMatchObject({
+          visibility: 'PRIVATE',
+          folderId: unpacked.id,
+          mimeType: 'application/gzip',
+        })
+        // The new archive can be looked inside like any other. A tar.gz is
+        // read through before it lists, so the first answer may say to wait.
+        let inside = await read({ file: pair.id })
+        for (let attempt = 0; inside.data.indexing && attempt < 50; attempt++) {
+          expect(inside.data.note).toMatch(
+            /^Flare is still reading this archive/
+          )
+          inside = await read({ file: pair.id })
+        }
+        expect(
+          inside.data.entries
+            .map((entry: { path: string }) => entry.path)
+            .sort()
+        ).toEqual(['notes.txt', 'readme.md'])
+        expect(
+          (await read({ file: pair.id, entry: 'notes.txt' })).blocks[0].text
+        ).toContain(NOTES)
+
+        // The export: a URL for one download of everything.
+        const exported = await structured('export_account', {})
+        expect(Object.keys(exported).sort()).toEqual([
+          'curl',
+          'download_url',
+          'expires_at',
+        ])
+        expect(isTransferUrl(exported.download_url)).toBe(true)
+        expect(exported.curl).toBe(
+          `curl -fsS -o flare-export.zip "${exported.download_url}"`
+        )
+        const exportRow = await rowOf(exported.download_url)
+        expect(exportRow).toMatchObject({
+          kind: 'export',
+          fileId: null,
+          options: null,
+          claimedAt: null,
+        })
+        expect(exported.expires_at).toBe(exportRow.expiresAt.toISOString())
+        const download = await get(exported.download_url)
+        expect(download.status).toBe(200)
+        expect(download.headers.get('content-type')).toBe('application/zip')
+        expect(download.headers.get('content-disposition')).toMatch(
+          /^attachment; filename="flare-data-export-\d+\.zip"$/
+        )
+        expect(download.headers.get('cache-control')).toBe('no-store')
+        // Taken while it is sent.
+        expect((await rowOf(exported.download_url)).claimedAt).toBeInstanceOf(
+          Date
+        )
+        const taken = await get(exported.download_url)
+        expect(taken.status).toBe(409)
+        const exportBytes = Buffer.from(await download.arrayBuffer())
+        const date = new Date().toISOString().split('T')[0]
+        expect(await entriesOf(exportBytes)).toEqual(
+          [
+            `files/${date}/blob.bin`,
+            `files/${date}/bundle.zip`,
+            `files/${date}/notes.txt`,
+            `files/${date}/pair.tar.gz`,
+            `files/${date}/readme.md`,
+            'user-data.json',
+          ].sort()
+        )
+        // Used up once it has been sent: the same command finds nothing.
+        expect(
+          await prisma.agentTransfer.count({ where: { kind: 'export' } })
+        ).toBe(0)
+        const again = await get(exported.download_url)
+        expect(again.status).toBe(404)
+        expect(await again.json()).toEqual({ error: 'Not found' })
+
+        // Nothing here was a visit.
+        expect(
+          await prisma.file.count({
+            where: {
+              userId: 'mcp-alex',
+              OR: [{ views: { gt: 0 } }, { downloads: { gt: 0 } }],
+            },
+          })
+        ).toBe(0)
+
+        // What the audit log holds: each call and transfer under the token,
+        // and the archive services' own events beside them.
+        await audit.auditSettled()
+        const actions = (category: string) =>
+          events
+            .filter((event) => event.category === category)
+            .map((event) => event.action)
+        const called = actions('mcp')
+        for (const action of [
+          'mcp.read_file',
+          'mcp.transfer.archive-entry',
+          'mcp.extract_archive',
+          'mcp.create_archive',
+          'mcp.export_account',
+          'mcp.transfer.export',
+        ])
+          expect(called, action).toContain(action)
+        expect(
+          events.find((event) => event.action === 'mcp.extract_archive')
+        ).toMatchObject({
+          outcome: 'success',
+          actorId: 'mcp-alex',
+          targetType: 'file',
+          targetId: archiveId,
+          targetName: 'bundle.zip',
+          details: expect.objectContaining({ tokenId: 'token-agent' }),
+        })
+        expect(
+          events.find((event) => event.action === 'mcp.create_archive')
+        ).toMatchObject({
+          outcome: 'success',
+          targetType: 'file',
+          targetId: pair.id,
+          targetName: 'pair.tar.gz',
+        })
+        expect(
+          events.filter((event) => event.action === 'mcp.transfer.export')
+        ).toEqual([
+          expect.objectContaining({
+            outcome: 'success',
+            status: 200,
+            actorId: 'mcp-alex',
+            targetType: 'user',
+            targetId: 'mcp-alex',
+          }),
+          // The second request, while the first held the URL.
+          expect.objectContaining({ outcome: 'failure', status: 409 }),
+        ])
+        // The request after the URL was used up found no row to say what it
+        // had been, so it is a plain download that failed.
+        expect(
+          events.filter((event) => event.action === 'mcp.transfer.download')
+        ).toEqual([
+          expect.objectContaining({ outcome: 'failure', status: 404 }),
+        ])
+        expect(
+          events.find((event) => event.action === 'mcp.export_account')
+        ).toMatchObject({
+          outcome: 'success',
+          targetType: 'user',
+          targetId: 'mcp-alex',
+        })
+        const archived = actions('archives')
+        // Reading entries, staging sources, and one event per extracted file.
+        expect(archived).toContain('archive.member.read')
+        expect(archived).toContain('archive.source.read')
+        expect(
+          archived.filter((action) => action === 'archive.member.extract')
+        ).toHaveLength(3)
+        expect(
+          events
+            .filter((event) => event.action === 'archive.member.extract')
+            .map((event) => event.targetName)
+            .sort()
+        ).toEqual(['blob.bin', 'notes.txt', 'readme.md'])
+        for (const event of events.filter(
+          (event) => event.category === 'archives'
+        ))
+          expect(event).toMatchObject({
+            actorId: 'mcp-alex',
+            route: expect.stringMatching(/^\/api\/mcp/),
+            details: expect.objectContaining({ tokenId: 'token-agent' }),
+          })
+        // No secret of a transfer URL is recorded anywhere.
+        for (const url of [blob.data.download_url, exported.download_url])
+          expect(JSON.stringify(events)).not.toContain(secretOf(url))
+      })
+
+      it('ends an entry link and an export URL with the credential they were made for', async () => {
+        useStorage()
+        const zip = await zipOf([{ path: 'blob.bin', data: BLOB }])
+        const archiveId = await upload('one.zip', zip, 'application/zip')
+        const { data } = await read({ file: archiveId, entry: 'blob.bin' })
+        const entryUrl: string = data.download_url
+        const { download_url: exportUrl } = await structured(
+          'export_account',
+          {}
+        )
+        const works = async () => {
+          const sent = await get(entryUrl)
+          expect(sent.status).toBe(200)
+          expect(Buffer.from(await sent.arrayBuffer())).toEqual(BLOB)
+        }
+        /** Both URLs answer what a URL nobody was given answers. */
+        const dead = async () => {
+          const unknown = await get(`${TRANSFER_PREFIX}${'A'.repeat(43)}`)
+          for (const url of [entryUrl, exportUrl]) {
+            const refused = await get(url)
+            expect(refused.status).toBe(404)
+            expect(Object.fromEntries(refused.headers)).toEqual(
+              Object.fromEntries(unknown.headers)
+            )
+            expect(await refused.json()).toEqual({ error: 'Not found' })
+          }
+          // The export URL was not taken by the request that was refused.
+          expect((await rowOf(exportUrl)).claimedAt).toBeNull()
+        }
+        const token = (data: Prisma.ApiTokenUpdateInput) =>
+          prisma.apiToken.update({ where: { id: 'token-agent' }, data })
+        const scopes = [
+          'mcp',
+          'files:read',
+          'files:content',
+          'files:upload',
+          'urls:read',
+        ]
+        await works()
+
+        // Each way the credential or the server stops allowing it, in turn.
+        await token({
+          scopes: scopes.filter((scope) => scope !== 'files:content'),
+        })
+        await dead()
+        await token({ scopes })
+        await works()
+
+        await token({ scopes: scopes.filter((scope) => scope !== 'mcp') })
+        await dead()
+        await token({ scopes })
+
+        await prisma.role.update({
+          where: { systemKey: 'everyone' },
+          data: { permissions: ['links.read'] },
+        })
+        await dead()
+        await prisma.role.update({
+          where: { systemKey: 'everyone' },
+          data: { permissions: ['files.read', 'links.read'] },
+        })
+
+        await enable(false)
+        await dead()
+        await enable(true)
+        await works()
+
+        await token({ revokedAt: new Date() })
+        await dead()
+        // Nothing was ever counted as a view or a download.
+        expect(
+          await prisma.file.findUniqueOrThrow({
+            where: { id: archiveId },
+            select: { views: true, downloads: true },
+          })
+        ).toEqual({ views: 0, downloads: 0 })
+        await audit.auditSettled()
+        // Each refusal of a row that was found is recorded as one, under the
+        // action of its kind, and still answers 404.
+        for (const action of [
+          'mcp.transfer.archive-entry',
+          'mcp.transfer.export',
+        ]) {
+          const refusals = events.filter(
+            (event) => event.action === action && event.outcome === 'denied'
+          )
+          expect(refusals.length, action).toBeGreaterThanOrEqual(4)
+          for (const event of refusals) expect(event.status).toBe(404)
+        }
+      })
+
+      it('publishes with the upload profile a token is bound to, and refuses it any other', async () => {
+        const objects = useStorage()
+        const profile = await prisma.uploadProfile.create({
+          data: {
+            userId: 'mcp-alex',
+            name: 'Shared',
+            options: { visibility: 'PUBLIC', shareStyle: 'minimal' },
+          },
+        })
+        const other = await prisma.uploadProfile.create({
+          data: { userId: 'mcp-alex', name: 'Other', options: {} },
+        })
+        for (const [id, data] of [
+          ['src-a', 'alpha'],
+          ['src-b', 'beta'],
+        ]) {
+          const path = `uploads/mcp-alex/${id}/${id}.txt`
+          objects.set(path, Buffer.from(data))
+          await prisma.file.create({
+            data: {
+              id,
+              userId: 'mcp-alex',
+              name: `${id}.txt`,
+              urlPath: `/mcp-alex/${id}.txt`,
+              mimeType: 'text/plain',
+              size: data.length / 1024 ** 2,
+              path,
+            },
+          })
+        }
+        await prisma.apiToken.update({
+          where: { id: 'token-agent' },
+          data: { profileId: profile.id },
+        })
+        const args = { files: ['src-a', 'src-b'], name: 'bound', format: 'zip' }
+
+        // Named or not, the bound profile is the one that publishes.
+        for (const named of [
+          {},
+          { profile: 'Shared' },
+          { profile: profile.id },
+        ]) {
+          const packed = await structured('create_archive', {
+            ...args,
+            ...named,
+          })
+          const file = await prisma.file.findUniqueOrThrow({
+            where: { id: packed.file.id },
+          })
+          expect(file.visibility).toBe('PUBLIC')
+          expect(file.uploadOptions).toMatchObject({
+            profileId: profile.id,
+            visibility: 'PUBLIC',
+            shareStyle: 'minimal',
+          })
+        }
+        // Any other, and none at all, is refused before anything is made.
+        const before = await prisma.file.count()
+        for (const named of ['Other', other.id, 'none']) {
+          const refused = await callTool('create_archive', {
+            ...args,
+            profile: named,
+          })
+          expect(refused.body.result.isError).toBe(true)
+          expect(refused.body.result.content[0].text).toBe(
+            'This token is bound to an upload profile and publishes only with it. Leave `profile` out.'
+          )
+        }
+        expect(await prisma.file.count()).toBe(before)
+
+        // Extraction follows the same rule.
+        const zip = await zipOf([{ path: 'inner.txt', data: 'inside' }])
+        objects.set('uploads/mcp-alex/src-zip/in.zip', zip)
+        await prisma.file.create({
+          data: {
+            id: 'src-zip',
+            userId: 'mcp-alex',
+            name: 'in.zip',
+            urlPath: '/mcp-alex/in.zip',
+            mimeType: 'application/zip',
+            size: zip.length / 1024 ** 2,
+            path: 'uploads/mcp-alex/src-zip/in.zip',
+          },
+        })
+        await structured('extract_archive', {
+          file: 'src-zip',
+          folder_name: 'Bound',
+        })
+        const inner = await prisma.file.findFirstOrThrow({
+          where: { name: 'inner.txt' },
+        })
+        expect(inner.visibility).toBe('PUBLIC')
+        expect(inner.uploadOptions).toMatchObject({ profileId: profile.id })
+
+        // Once the profile is deleted the token publishes nothing, as its
+        // uploads do not.
+        await prisma.uploadProfile.delete({ where: { id: profile.id } })
+        const gone = await callTool('create_archive', args)
+        expect(gone.body.result.isError).toBe(true)
+        expect(await prisma.file.count({ where: { name: 'bound.zip' } })).toBe(
+          3
+        )
+      })
+
+      it('says a second archive operation of the account has to wait, and lets it through afterwards', async () => {
+        const objects = useStorage()
+        const zip = await zipOf([{ path: 'a.txt', data: 'alpha' }])
+        const archiveId = await upload('one.zip', zip, 'application/zip')
+        // The first extraction is held while its file is being stored.
+        let stored!: () => void
+        const storing = new Promise<void>((resolve) => (stored = resolve))
+        let go!: () => void
+        const held = new Promise<void>((resolve) => (go = resolve))
+        const storage = await storageModule.getStorageProvider()
+        const uploadStream = storage.uploadStream.bind(storage)
+        storage.uploadStream = async (...parameters) => {
+          const result = await uploadStream(...parameters)
+          stored()
+          await held
+          return result
+        }
+        const first = callTool('extract_archive', {
+          file: archiveId,
+          folder_name: 'First',
+        })
+        await storing
+        const second = await callTool('extract_archive', {
+          file: archiveId,
+          folder_name: 'Second',
+        })
+        expect(second.body.result.isError).toBe(true)
+        expect(second.body.result.content[0].text).toBe(
+          'Another archive operation is running: Flare runs one for an account at a time, and 2 at once on this server. Nothing was created. Wait for it to finish, which takes up to 2 minutes, then call again.'
+        )
+        go()
+        expect((await first).body.result.isError).toBeFalsy()
+        storage.uploadStream = uploadStream
+        const third = await structured('extract_archive', {
+          file: archiveId,
+          folder_name: 'Second',
+        })
+        expect(third.files_created).toBe(1)
+        expect(
+          (await prisma.vaultFolder.findMany({ select: { name: true } }))
+            .map(({ name }) => name)
+            .sort()
+        ).toEqual(['First', 'Second'])
+        expect(objects.size).toBe(3)
+      })
+
+      it('creates nothing when a folder of that name is already there, and says to choose another', async () => {
+        useStorage()
+        const zip = await zipOf([{ path: 'a.txt', data: 'alpha' }])
+        const archiveId = await upload('one.zip', zip, 'application/zip')
+        await structured('extract_archive', {
+          file: archiveId,
+          folder_name: 'Taken',
+        })
+        const again = await callTool('extract_archive', {
+          file: archiveId,
+          folder_name: 'taken',
+        })
+        expect(again.body.result.isError).toBe(true)
+        expect(again.body.result.content[0].text).toBe(
+          'A folder with that name already exists here. Choose another name. Nothing was created. Look at what is there now, then call again.'
+        )
+        expect(await prisma.vaultFolder.count()).toBe(1)
+        expect(await prisma.file.count({ where: { name: 'a.txt' } })).toBe(1)
+        // What it had stored for the second attempt is queued to be removed.
+        expect(await prisma.storageDeletion.count()).toBe(1)
+      })
     })
   })
 
@@ -3271,6 +4353,7 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
               request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
               origin: ORIGIN,
               allows: () => true,
+              recheck: async () => {},
               requireEffect: () => {},
             }
           )
@@ -3661,6 +4744,1514 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
               expect(storage.objects.size).toBe(0)
             }
           )
+        })
+      })
+
+      describe('an archive result that is publishing and the end of its credential', () => {
+        let archives: typeof import('@/lib/mcp/tools/archives')
+        let codec: typeof import('@/lib/archives/codec')
+        /** A real ZIP of two small files, made once. */
+        let zip: Buffer
+
+        beforeAll(async () => {
+          archives = await import('@/lib/mcp/tools/archives')
+          codec = await import('@/lib/archives/codec')
+          const { mkdtemp, readFile, rm, writeFile } =
+            await import('node:fs/promises')
+          const { tmpdir } = await import('node:os')
+          const { join } = await import('node:path')
+          const directory = await mkdtemp(join(tmpdir(), 'mcp-suite-'))
+          try {
+            const inputs = []
+            for (const [name, data] of [
+              ['one.txt', 'first'],
+              ['inner/two.txt', 'second'],
+            ]) {
+              const localPath = join(directory, name.replace('/', '-'))
+              await writeFile(localPath, data)
+              inputs.push({ path: name, localPath, size: data.length })
+            }
+            const output = join(directory, 'made.zip')
+            await codec.createArchive(output, 'zip', inputs)
+            zip = await readFile(output)
+          } finally {
+            await rm(directory, { recursive: true, force: true })
+          }
+        })
+        beforeEach(async () => {
+          await prisma.storageDeletion.deleteMany()
+          // Extraction makes folders, on top of what uploading needs.
+          await prisma.role.create({
+            data: {
+              name: 'Folder makers',
+              position: 11,
+              permissions: ['folders.manage'],
+              users: { connect: { id: 'mcp-alex' } },
+            },
+          })
+        })
+
+        // A test that fails part way must not leave its operation held: the
+        // account has one at a time, and the next test would wait for it.
+        const gates: Array<() => void> = []
+        const running: Promise<unknown>[] = []
+        afterEach(async () => {
+          for (const open of gates.splice(0)) open()
+          await Promise.allSettled(running.splice(0))
+        })
+        /** A door that is opened when its test ends, if not before. */
+        function gate() {
+          const made = door()
+          gates.push(made.open)
+          return made
+        }
+
+        /** What the account holds before the operation: an archive and two files. */
+        const sources = (): [string, string, string, Buffer][] => [
+          ['src-zip', 'bundle.zip', 'application/zip', zip],
+          ['src-a', 'a.txt', 'text/plain', Buffer.from('alpha')],
+          ['src-b', 'b.txt', 'text/plain', Buffer.from('beta')],
+        ]
+        const pathOf = (id: string, name: string) =>
+          `uploads/mcp-alex/${id}/${name}`
+        /**
+         * Storage that keeps bytes in memory, holds the sources, and can hold
+         * back what the operation stores.
+         */
+        async function useStorage(arriving?: Promise<void>) {
+          const objects = new Map<string, Buffer>()
+          for (const [id, name, mimeType, bytes] of sources()) {
+            objects.set(pathOf(id, name), bytes)
+            await prisma.file.create({
+              data: {
+                id,
+                userId: 'mcp-alex',
+                name,
+                urlPath: `/mcp-alex/${name}`,
+                mimeType,
+                size: bytes.length / 1024 ** 2,
+                path: pathOf(id, name),
+              },
+            })
+          }
+          const started = door()
+          const stored = (path: string) => {
+            const bytes = objects.get(path)
+            if (!bytes) throw new Error(`No object at ${path}`)
+            return bytes
+          }
+          vi.spyOn(storageModule, 'getStorageProvider').mockResolvedValue({
+            kind: 'local',
+            target: { provider: 'local' },
+            async uploadStream(
+              stream: AsyncIterable<Uint8Array>,
+              path: string
+            ) {
+              const chunks: Buffer[] = []
+              for await (const chunk of stream) chunks.push(Buffer.from(chunk))
+              objects.set(path, Buffer.concat(chunks))
+              started.open()
+              await arriving
+              return { size: stored(path).length }
+            },
+            async getFileStream(
+              path: string,
+              range?: { start?: number; end?: number }
+            ) {
+              const { Readable } = await import('node:stream')
+              const bytes = stored(path)
+              return Readable.from([
+                range
+                  ? bytes.subarray(
+                      range.start ?? 0,
+                      range.end === undefined ? undefined : range.end + 1
+                    )
+                  : bytes,
+              ])
+            },
+            async getFileSize(path: string) {
+              return stored(path).length
+            },
+            async deleteFile(path: string) {
+              objects.delete(path)
+            },
+          } as never)
+          return { objects, started: started.opened }
+        }
+        /**
+         * Holds a publication at the very end of its first file: every
+         * authorization read is done and the row is written, and nothing is
+         * committed until the door opens.
+         */
+        function pausePublication() {
+          const hold = gate()
+          const reached = door()
+          const real = webhooks.enqueueFileReady
+          vi.spyOn(webhooks, 'enqueueFileReady').mockImplementation(
+            async (...parameters: Parameters<typeof real>) => {
+              await real(...parameters)
+              reached.open()
+              await hold.opened
+            }
+          )
+          return { reached: reached.opened, release: hold.open }
+        }
+        const quiet = <T>(promise: Promise<T>) => {
+          promise.catch(() => {})
+          return promise
+        }
+
+        const CALLS = {
+          extract_archive: { file: 'src-zip', folder_name: 'Unpacked' },
+          create_archive: {
+            files: ['src-a', 'src-b'],
+            name: 'pair',
+            format: 'zip',
+          },
+        }
+        type Name = keyof typeof CALLS
+        /** One archive tool, as the MCP server calls it for this credential. */
+        async function operate(name: Name, accessToken: string) {
+          const principal = (await auth.authenticateAgent(bearer(accessToken)))!
+          const tool = archives.archivesTools.find(
+            (candidate) => candidate.name === name
+          )!
+          const operation = tool.run(tool.input.parse(CALLS[name]) as never, {
+            principal,
+            request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
+            origin: ORIGIN,
+            allows: () => true,
+            recheck: async () => {},
+            requireEffect: () => {},
+          })
+          running.push(operation.catch(() => {}))
+          return operation
+        }
+        /** What the operation made: files and folders beyond the sources. */
+        const made = async () => ({
+          files: await prisma.file.count({
+            where: {
+              userId: 'mcp-alex',
+              id: { notIn: sources().map(([id]) => id) },
+            },
+          }),
+          folders: await prisma.vaultFolder.count({
+            where: { userId: 'mcp-alex' },
+          }),
+        })
+        const RESULT: Record<Name, { files: number; folders: number }> = {
+          // Two files, in the new folder and the one inside it.
+          extract_archive: { files: 2, folders: 2 },
+          create_archive: { files: 1, folders: 0 },
+        }
+        /** Nothing was published, and what had been stored is queued to go. */
+        async function expectNothing(
+          name: Name,
+          storage: { objects: Map<string, Buffer> }
+        ) {
+          expect(await made()).toEqual({ files: 0, folders: 0 })
+          const written = [...storage.objects.keys()]
+            .filter(
+              (path) =>
+                !sources().some(([id, file]) => path === pathOf(id, file))
+            )
+            .sort()
+          expect(written).toHaveLength(RESULT[name].files)
+          expect(
+            (await prisma.storageDeletion.findMany({ select: { path: true } }))
+              .map(({ path }) => path)
+              .sort()
+          ).toEqual(written)
+        }
+        const ENDED =
+          'This connection was disconnected, lost the access this call needs, or the MCP server was turned off while the call was running. Nothing was created.'
+        const SIGNED_OUT =
+          'The account was signed out everywhere, or removed, while this call was running. Nothing was created. If this connection still works, call again.'
+
+        const archivist = () =>
+          connect({ scopes: ['files:read', 'files:content', 'files:upload'] })
+        const alex = () => administrator('mcp-alex')
+        type Agent = Awaited<ReturnType<typeof archivist>>
+        /** Each way a connection ends or loses what the archive tools need. */
+        const endings: Array<{
+          name: string
+          end: (agent: Agent) => Promise<unknown>
+          refusal: string
+          after: (agent: Agent) => Promise<void>
+        }> = [
+          {
+            name: 'disconnecting it',
+            end: ({ connectionId }) =>
+              integrations.runIntegrationCommand(alex(), {
+                action: 'disconnect-agent',
+                id: connectionId,
+              }),
+            refusal: ENDED,
+            after: async ({ connectionId }) => {
+              expect(await connectionRow(connectionId)).toMatchObject({
+                revokedReason: 'disconnected',
+              })
+            },
+          },
+          {
+            name: 'its client revoking a token',
+            end: ({ pair }) => revoke(pair.refresh_token),
+            refusal: ENDED,
+            after: async ({ connectionId }) => {
+              expect(await connectionRow(connectionId)).toMatchObject({
+                revokedReason: 'revoked',
+              })
+            },
+          },
+          {
+            name: 'taking files:upload away from it',
+            end: ({ connectionId }) =>
+              integrations.runIntegrationCommand(alex(), {
+                action: 'update-agent',
+                id: connectionId,
+                scopes: ['files:read', 'files:content'],
+              }),
+            refusal: ENDED,
+            after: async ({ connectionId }) => {
+              expect((await connectionRow(connectionId)).scopes.sort()).toEqual(
+                ['files:content', 'files:read']
+              )
+            },
+          },
+          {
+            name: 'taking files:content away from it',
+            end: ({ connectionId }) =>
+              integrations.runIntegrationCommand(alex(), {
+                action: 'update-agent',
+                id: connectionId,
+                scopes: ['files:read', 'files:upload'],
+              }),
+            refusal: ENDED,
+            after: async ({ connectionId }) => {
+              expect((await connectionRow(connectionId)).scopes.sort()).toEqual(
+                ['files:read', 'files:upload']
+              )
+            },
+          },
+          {
+            name: 'signing the account out everywhere',
+            end: () =>
+              prisma.$transaction((tx) =>
+                security.revokeSecuritySessions(tx, 'mcp-alex')
+              ),
+            // The services notice the session version first, as for a browser.
+            refusal: SIGNED_OUT,
+            after: async ({ connectionId }) => {
+              expect(await connectionRow(connectionId)).toMatchObject({
+                revokedReason: 'sessions-revoked',
+              })
+            },
+          },
+        ]
+
+        describe.each(['extract_archive', 'create_archive'] as const)(
+          'through %s',
+          (name) => {
+            it.each(endings)(
+              'makes $name wait until the result is published, when the operation was checked first',
+              async ({ end, after }) => {
+                const agent = await archivist()
+                await useStorage()
+                const publication = pausePublication()
+
+                const operating = operate(name, agent.pair.access_token)
+                // Checked, written, and holding its locks; not yet committed.
+                await publication.reached
+                expect(await made()).toEqual({ files: 0, folders: 0 })
+                let ended = false
+                // What the library held at the moment the ending went through.
+                const ending = end(agent).then(() => {
+                  ended = true
+                  return made()
+                })
+                // The ending is behind a row the publication holds.
+                await untilWaiting()
+                expect(
+                  (await connectionRow(agent.connectionId)).revokedAt
+                ).toBeNull()
+                expect(ended).toBe(false)
+                publication.release()
+
+                await operating
+                // The result first, then the ending: never the other way round.
+                expect(await ending).toEqual(RESULT[name])
+                expect(await made()).toEqual(RESULT[name])
+                expect(await prisma.storageDeletion.count()).toBe(0)
+                await after(agent)
+              }
+            )
+
+            it.each(endings)(
+              'publishes nothing after $name has committed, though the operation had started',
+              async ({ end, after, refusal }) => {
+                const agent = await archivist()
+                // What it made is still being stored when the ending commits.
+                const arriving = gate()
+                const storage = await useStorage(arriving.opened)
+
+                const operating = quiet(operate(name, agent.pair.access_token))
+                await storage.started
+                await end(agent)
+                await after(agent)
+                arriving.open()
+
+                await expect(operating).rejects.toThrow(refusal)
+                await expectNothing(name, storage)
+              }
+            )
+
+            it.each([
+              {
+                name: 'a disconnect',
+                // Holds the connection's row.
+                end: (
+                  tx: Parameters<typeof connections.revokeConnection>[0],
+                  id: string
+                ) => connections.revokeConnection(tx, { id }, 'disconnected'),
+                refusal: ENDED,
+              },
+              {
+                name: 'a sign-out everywhere',
+                // Holds the account's row, and its connections' rows.
+                end: (tx: Parameters<typeof connections.revokeConnection>[0]) =>
+                  security.revokeSecuritySessions(tx, 'mcp-alex'),
+                refusal: SIGNED_OUT,
+              },
+            ])(
+              'waits for $name that has not committed yet, then publishes nothing',
+              async ({ end, refusal }) => {
+                const agent = await archivist()
+                const arriving = gate()
+                const storage = await useStorage(arriving.opened)
+                const operating = quiet(operate(name, agent.pair.access_token))
+                await storage.started
+                // The ending has done its work and not yet committed.
+                const commit = gate()
+                const done = door()
+                const ending = prisma.$transaction(async (tx) => {
+                  await end(tx, agent.connectionId)
+                  done.open()
+                  await commit.opened
+                })
+                await done.opened
+                arriving.open()
+                // The operation's last check is behind the ending's lock.
+                await untilWaiting()
+                expect(await made()).toEqual({ files: 0, folders: 0 })
+                commit.open()
+                await ending
+
+                await expect(operating).rejects.toThrow(refusal)
+                await expectNothing(name, storage)
+              }
+            )
+
+            it('publishes nothing once the MCP server is turned off, though the operation had started', async () => {
+              const agent = await archivist()
+              const arriving = gate()
+              const storage = await useStorage(arriving.opened)
+              const operating = quiet(operate(name, agent.pair.access_token))
+              await storage.started
+              await enable(false)
+              arriving.open()
+              await expect(operating).rejects.toThrow(ENDED)
+              await expectNothing(name, storage)
+            })
+
+            describe('by a named token', () => {
+              const revokeToken = () =>
+                integrations.runIntegrationCommand(alex(), {
+                  action: 'revoke-token',
+                  id: 'token-agent',
+                })
+              const tokenRow = () =>
+                prisma.apiToken.findUniqueOrThrow({
+                  where: { id: 'token-agent' },
+                })
+              /** As an edit of the token's scopes would leave it. */
+              const narrow = (scopes: string[]) =>
+                prisma.apiToken.update({
+                  where: { id: 'token-agent' },
+                  data: { scopes },
+                })
+              beforeEach(async () => {
+                await narrow([
+                  'mcp',
+                  'files:read',
+                  'files:content',
+                  'files:upload',
+                ])
+              })
+              const changes: Array<[string, () => Promise<unknown>]> = [
+                ['revoking it', revokeToken],
+                [
+                  'taking files:upload away from it',
+                  () => narrow(['mcp', 'files:read', 'files:content']),
+                ],
+                [
+                  'taking Agent access away from it',
+                  () => narrow(['files:read', 'files:content', 'files:upload']),
+                ],
+              ]
+
+              it.each(changes)(
+                'makes %s wait until the result is published, when the operation was checked first',
+                async (_what, change) => {
+                  await useStorage()
+                  const publication = pausePublication()
+                  const operating = operate(name, TOKEN)
+                  await publication.reached
+                  expect(await made()).toEqual({ files: 0, folders: 0 })
+                  const before = await tokenRow()
+                  let changed = false
+                  // What the library held at the moment the change went through.
+                  const changing = change().then(() => {
+                    changed = true
+                    return made()
+                  })
+                  // Behind the token's row, which the publication holds.
+                  await untilWaiting()
+                  expect(await tokenRow()).toEqual(before)
+                  expect(changed).toBe(false)
+                  publication.release()
+                  await operating
+                  // The result first, then the change: never the other way round.
+                  expect(await changing).toEqual(RESULT[name])
+                  expect(await tokenRow()).not.toEqual(before)
+                }
+              )
+
+              it.each(changes)(
+                'publishes nothing after %s, though the operation had started',
+                async (_what, change) => {
+                  const arriving = gate()
+                  const storage = await useStorage(arriving.opened)
+                  const operating = quiet(operate(name, TOKEN))
+                  await storage.started
+                  await change()
+                  arriving.open()
+                  await expect(operating).rejects.toThrow(ENDED)
+                  await expectNothing(name, storage)
+                }
+              )
+
+              it('waits for a revocation that has not committed yet, then publishes nothing', async () => {
+                const arriving = gate()
+                const storage = await useStorage(arriving.opened)
+                const operating = quiet(operate(name, TOKEN))
+                await storage.started
+                const commit = gate()
+                const done = door()
+                const revoking = prisma.$transaction(async (tx) => {
+                  await tx.apiToken.update({
+                    where: { id: 'token-agent' },
+                    data: { revokedAt: new Date() },
+                  })
+                  done.open()
+                  await commit.opened
+                })
+                await done.opened
+                arriving.open()
+                // The operation's last check is behind the token's row.
+                await untilWaiting()
+                expect(await made()).toEqual({ files: 0, folders: 0 })
+                commit.open()
+                await revoking
+                await expect(operating).rejects.toThrow(ENDED)
+                await expectNothing(name, storage)
+              })
+            })
+          }
+        )
+
+        it('takes its rows in the order uploads do: the role lock, the account, then the credential', async () => {
+          const agent = await archivist()
+          await useStorage()
+          const publication = pausePublication()
+          const operating = operate('create_archive', agent.pair.access_token)
+          await publication.reached
+          // While the publication holds its locks, each is taken: a role
+          // change, the account's row and the connection's row all wait.
+          const waits = async (
+            take: (tx: Prisma.TransactionClient) => Promise<unknown>
+          ) => {
+            const taking = quiet(
+              prisma.$transaction(async (tx) => {
+                await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '300ms'`)
+                await take(tx)
+              })
+            )
+            await expect(taking).rejects.toThrow()
+          }
+          await waits((tx) => locks.lockRoleChanges(tx))
+          await waits((tx) => locks.lockUserRow(tx, 'mcp-alex'))
+          await waits((tx) =>
+            connections.lockConnection(tx, agent.connectionId)
+          )
+          // Held as it is, not for a change: another reader shares it.
+          await prisma.$transaction(async (tx) => {
+            await tx.$executeRawUnsafe(`SET LOCAL lock_timeout = '300ms'`)
+            await connections.holdConnection(tx, agent.connectionId)
+          })
+          publication.release()
+          await operating
+        })
+      })
+    })
+
+    describe('a change to later uploads beside other changes to the same account', () => {
+      const SETTINGS_TOKEN =
+        'flr_database-suite-setts-token-0123456789abcdefghij'
+      /** The same agent, allowed to delete files too. */
+      const DELETING_TOKEN =
+        'flr_database-suite-delet-token-0123456789abcdefghij'
+      /** An agent that may change settings and nothing about sharing. */
+      const PLAIN_TOKEN = 'flr_database-suite-plain-token-0123456789abcdefghij'
+      let profileTools: typeof import('@/lib/mcp/tools/profile')
+      let uploadProfileTools: typeof import('@/lib/mcp/tools/upload-profiles')
+      let uploadProfiles: typeof import('@/lib/uploads/profiles')
+      let userProfile: typeof import('@/lib/users/profile')
+      let catalog: typeof import('@/lib/mcp/catalog')
+      let toolModule: typeof import('@/lib/mcp/tool')
+
+      beforeAll(async () => {
+        profileTools = await import('@/lib/mcp/tools/profile')
+        uploadProfileTools = await import('@/lib/mcp/tools/upload-profiles')
+        uploadProfiles = await import('@/lib/uploads/profiles')
+        userProfile = await import('@/lib/users/profile')
+        catalog = await import('@/lib/mcp/catalog')
+        toolModule = await import('@/lib/mcp/tool')
+      })
+
+      beforeEach(async () => {
+        // The account may do everything; the token may change sharing and
+        // may not delete files.
+        await prisma.role.create({
+          data: {
+            name: 'Settings',
+            position: 12,
+            permissions: [
+              'profile.update',
+              'uploadProfiles.manage',
+              'files.share',
+              'files.delete',
+            ],
+            users: { connect: { id: 'mcp-alex' } },
+          },
+        })
+        await prisma.apiToken.create({
+          data: {
+            id: 'token-settings',
+            userId: 'mcp-alex',
+            name: 'Settings agent',
+            hash: tokens.hashApiToken(SETTINGS_TOKEN),
+            scopes: ['mcp', 'account:write', 'files:share'],
+          },
+        })
+        await prisma.apiToken.create({
+          data: {
+            id: 'token-deleting',
+            userId: 'mcp-alex',
+            name: 'Deleting agent',
+            hash: tokens.hashApiToken(DELETING_TOKEN),
+            scopes: ['mcp', 'account:write', 'files:share', 'files:delete'],
+          },
+        })
+        await prisma.apiToken.create({
+          data: {
+            id: 'token-plain',
+            userId: 'mcp-alex',
+            name: 'Plain agent',
+            hash: tokens.hashApiToken(PLAIN_TOKEN),
+            scopes: ['mcp', 'account:write'],
+          },
+        })
+        await prisma.user.update({
+          where: { id: 'mcp-alex' },
+          data: {
+            defaultFileExpiration: 'DISABLED',
+            defaultFileExpirationAction: 'SET_PRIVATE',
+          },
+        })
+      })
+      const gates: Array<() => void> = []
+      afterEach(() => {
+        for (const open of gates.splice(0)) open()
+        vi.restoreAllMocks()
+      })
+      function gate() {
+        const made = door()
+        gates.push(made.open)
+        return made
+      }
+
+      /** One of the profile tools, as the MCP server calls it for the token. */
+      async function run(
+        name: string,
+        args: Record<string, unknown>,
+        token = SETTINGS_TOKEN
+      ) {
+        const principal = await principalOf(token)
+        const tool = [
+          ...profileTools.profileTools,
+          ...uploadProfileTools.uploadProfileTools,
+        ].find((candidate) => candidate.name === name)!
+        const row = catalog.TOOL_CATALOG[
+          tool.name
+        ] as import('@/lib/mcp/catalog').ToolRow
+        return tool.run(tool.input.parse(args) as never, {
+          principal,
+          request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
+          origin: ORIGIN,
+          allows: (effect) => catalog.needsMet(row.effects![effect], principal),
+          recheck: async () => {},
+          requireEffect(effect) {
+            if (!catalog.needsMet(row.effects![effect], principal))
+              throw new toolModule.ToolError(
+                `Not allowed: ${effect}.`,
+                'denied'
+              )
+          },
+        })
+      }
+      const quiet = <T>(promise: Promise<T>) => {
+        promise.catch(() => {})
+        return promise
+      }
+      const held = (options: Prisma.InputJsonValue) =>
+        prisma.uploadProfile.create({
+          data: { id: 'p-held', userId: 'mcp-alex', name: 'Held', options },
+        })
+      const state = async () => {
+        const account = await prisma.user.findUniqueOrThrow({
+          where: { id: 'mcp-alex' },
+          select: { defaultFileExpiration: true },
+        })
+        const profile = await prisma.uploadProfile.findUniqueOrThrow({
+          where: { id: 'p-held' },
+          select: { options: true },
+        })
+        return { length: account.defaultFileExpiration, held: profile.options }
+      }
+
+      /**
+       * Holds a service of a tool: before it starts, until `start` opens,
+       * and, once its expiry check has passed with the account's row
+       * locked, until `commit` opens. `reached` opens when the tool calls
+       * it, with everything the tool reads first read, and `checked` once
+       * the check has passed.
+       */
+      function hold(
+        service: 'updateProfileSettings' | 'saveProfileAndDefault',
+        start: Promise<void>
+      ) {
+        const reached = door()
+        const checked = door()
+        const commit = gate()
+        const owner = (service === 'updateProfileSettings'
+          ? userProfile
+          : uploadProfiles) as unknown as Record<
+          string,
+          (...args: unknown[]) => Promise<unknown>
+        >
+        const real = owner[service]
+        vi.spyOn(owner, service).mockImplementation((async (
+          ...args: unknown[]
+        ) => {
+          reached.open()
+          await start
+          const check = args.at(-1) as (...inner: unknown[]) => Promise<void>
+          return real(...args.slice(0, -1), async (...inner: unknown[]) => {
+            await check(...inner)
+            checked.open()
+            await commit.opened
+          })
+        }) as never)
+        return {
+          reached: reached.opened,
+          checked: checked.opened,
+          commit: commit.open,
+        }
+      }
+
+      // Each call alone is allowed: the profile's own length holds its
+      // delete action off, and taking that length out leaves it on the
+      // account's, which is off. Together, its uploads would be deleted
+      // after an hour, which this token may not ask for.
+      const LENGTH = { default_expiry: 'hour' }
+      const UNHOLD = { profile: 'Held', expiry: null }
+      const REFUSED =
+        'Uploads with the profile "Held" would be deleted when they expire. Not allowed: '
+
+      it('lets either call alone through', async () => {
+        await held({ expiration: 'DISABLED', expiryAction: 'DELETE' })
+        // A new length needs what either action needs, so the agent that
+        // may delete sets it; alone, the other agent could not.
+        await expect(run('update_profile', LENGTH)).rejects.toThrow(
+          'Uploads that name no profile or `none` that ask to be deleted when they expire would be deleted after the new time. Not allowed: default_expiry_delete.'
+        )
+        await run('update_profile', LENGTH, DELETING_TOKEN)
+        expect((await state()).length).toBe('HOUR')
+        await prisma.user.update({
+          where: { id: 'mcp-alex' },
+          data: { defaultFileExpiration: 'DISABLED' },
+        })
+        await run('save_upload_profile', UNHOLD)
+        expect(await state()).toEqual({
+          length: 'DISABLED',
+          held: { expiryAction: 'DELETE' },
+        })
+      })
+
+      it.each([
+        {
+          first: 'the account default',
+          // Set by the agent that may delete; the other then takes the
+          // profile's own length out from under it.
+          one: [
+            'updateProfileSettings',
+            'update_profile',
+            LENGTH,
+            DELETING_TOKEN,
+          ] as const,
+          two: [
+            'saveProfileAndDefault',
+            'save_upload_profile',
+            UNHOLD,
+          ] as const,
+          effect: 'expiry_delete',
+          after: {
+            length: 'HOUR',
+            held: { expiration: 'DISABLED', expiryAction: 'DELETE' },
+          },
+        },
+        {
+          first: 'the profile',
+          one: [
+            'saveProfileAndDefault',
+            'save_upload_profile',
+            UNHOLD,
+          ] as const,
+          two: ['updateProfileSettings', 'update_profile', LENGTH] as const,
+          effect: 'default_expiry_delete',
+          after: { length: 'DISABLED', held: { expiryAction: 'DELETE' } },
+        },
+      ])(
+        'refuses the second of two calls that each read the account before either saved, with $first first',
+        async ({ one, two, effect, after }) => {
+          await held({ expiration: 'DISABLED', expiryAction: 'DELETE' })
+          const startOne = door()
+          const startTwo = door()
+          const first = hold(one[0], startOne.opened)
+          const second = hold(two[0], startTwo.opened)
+          const calls = [
+            quiet(run(one[1], one[2], one[3])),
+            quiet(run(two[1], two[2])),
+          ]
+          // Both calls have read everything they read outside the lock.
+          await Promise.all([first.reached, second.reached])
+          startOne.open()
+          await first.checked
+          // The second waits for the first's lock, then judges what it
+          // committed, not what it read.
+          startTwo.open()
+          await untilWaiting()
+          first.commit()
+          await calls[0]
+          await expect(calls[1]).rejects.toThrow(`${REFUSED}${effect}.`)
+          expect(await state()).toEqual(after)
+        }
+      )
+
+      it("judges a profile edit the owner committed after the tool's first read", async () => {
+        await held({})
+        const start = gate()
+        const service = hold('updateProfileSettings', start.opened)
+        const calling = quiet(run('update_profile', LENGTH))
+        // The tool has read the account and found no profile that deletes.
+        await service.reached
+        const { updatedAt } = await prisma.uploadProfile.findUniqueOrThrow({
+          where: { id: 'p-held' },
+        })
+        // The browser's edit, through the service the profile route calls.
+        await uploadProfiles.updateProfile(
+          'mcp-alex',
+          'p-held',
+          updatedAt.toISOString(),
+          { name: 'Held', options: { expiryAction: 'DELETE' } }
+        )
+        start.open()
+        await expect(calling).rejects.toThrow(
+          `${REFUSED}default_expiry_delete.`
+        )
+        expect(await state()).toEqual({
+          length: 'DISABLED',
+          held: { expiryAction: 'DELETE' },
+        })
+      })
+
+      it('keeps a private default profile unless the call may change sharing', async () => {
+        await prisma.uploadProfile.create({
+          data: {
+            id: 'p-private',
+            userId: 'mcp-alex',
+            name: 'Private',
+            options: { visibility: 'PRIVATE' },
+          },
+        })
+        await prisma.user.update({
+          where: { id: 'mcp-alex' },
+          data: { defaultUploadProfileId: 'p-private' },
+        })
+        // Without it, uploads that name no profile would be public.
+        await expect(
+          run('delete_upload_profile', { profile: 'Private' }, PLAIN_TOKEN)
+        ).rejects.toThrow(
+          'Uploads that name no profile would be public. Not allowed: visibility_public.'
+        )
+        expect(
+          await prisma.user.findUniqueOrThrow({
+            where: { id: 'mcp-alex' },
+            select: { defaultUploadProfileId: true },
+          })
+        ).toEqual({ defaultUploadProfileId: 'p-private' })
+        expect(await prisma.uploadProfile.count()).toBe(1)
+        await run('delete_upload_profile', { profile: 'Private' })
+        expect(await prisma.uploadProfile.count()).toBe(0)
+      })
+
+      describe('a profile saved and made the default, or no longer, in one call', () => {
+        /** The profile "Safe" holds off the account's day-long deleting. */
+        async function safeDefault() {
+          await prisma.uploadProfile.create({
+            data: {
+              id: 'p-safe',
+              userId: 'mcp-alex',
+              name: 'Safe',
+              options: { expiration: 'DISABLED' },
+            },
+          })
+          await prisma.user.update({
+            where: { id: 'mcp-alex' },
+            data: {
+              defaultFileExpiration: 'DAY',
+              defaultFileExpirationAction: 'DELETE',
+              defaultUploadProfileId: 'p-safe',
+            },
+          })
+          return prisma.uploadProfile.findUniqueOrThrow({
+            where: { id: 'p-safe' },
+          })
+        }
+        const now = async () => ({
+          profile: await prisma.uploadProfile.findUniqueOrThrow({
+            where: { id: 'p-safe' },
+          }),
+          defaultId: (
+            await prisma.user.findUniqueOrThrow({
+              where: { id: 'mcp-alex' },
+              select: { defaultUploadProfileId: true },
+            })
+          ).defaultUploadProfileId,
+        })
+        const RENAME = { profile: 'Safe', name: 'Renamed', make_default: false }
+
+        it('changes nothing, the name included, when stopping the default is refused', async () => {
+          const before = await safeDefault()
+          await expect(run('save_upload_profile', RENAME)).rejects.toThrow(
+            'Uploads that name no profile would be deleted when they expire. Not allowed: expiry_delete.'
+          )
+          expect(await now()).toEqual({ profile: before, defaultId: 'p-safe' })
+        })
+
+        it('applies both with a connection that may delete files', async () => {
+          await safeDefault()
+          await run('save_upload_profile', RENAME, DELETING_TOKEN)
+          const { profile, defaultId } = await now()
+          expect(profile).toMatchObject({
+            name: 'Renamed',
+            options: { expiration: 'DISABLED' },
+          })
+          expect(defaultId).toBeNull()
+        })
+
+        it('refuses to make a profile the default at a revision it has left', async () => {
+          await prisma.uploadProfile.create({
+            data: {
+              id: 'p-safe',
+              userId: 'mcp-alex',
+              name: 'Safe',
+              options: {},
+            },
+          })
+          const read = await prisma.uploadProfile.findUniqueOrThrow({
+            where: { id: 'p-safe' },
+          })
+          // The owner makes it delete after an hour once the agent read it.
+          const { updatedAt } = await uploadProfiles.updateProfile(
+            'mcp-alex',
+            'p-safe',
+            read.updatedAt.toISOString(),
+            {
+              name: 'Safe',
+              options: { expiration: 'HOUR', expiryAction: 'DELETE' },
+            }
+          )
+          await expect(
+            run(
+              'save_upload_profile',
+              {
+                profile: 'Safe',
+                revision: read.updatedAt.toISOString(),
+                make_default: true,
+              },
+              DELETING_TOKEN
+            )
+          ).rejects.toThrow(
+            `Nothing was saved: the upload profile "Safe" changed after revision ${read.updatedAt.toISOString()}. It is now at revision ${updatedAt}.`
+          )
+          expect((await now()).defaultId).toBeNull()
+          // At the revision it now has, it becomes the default.
+          await run(
+            'save_upload_profile',
+            { profile: 'Safe', revision: updatedAt, make_default: true },
+            DELETING_TOKEN
+          )
+          expect((await now()).defaultId).toBe('p-safe')
+        })
+
+        it('makes a profile the default without a revision, as it stands', async () => {
+          await prisma.uploadProfile.create({
+            data: {
+              id: 'p-safe',
+              userId: 'mcp-alex',
+              name: 'Safe',
+              options: {},
+            },
+          })
+          await run('save_upload_profile', {
+            profile: 'Safe',
+            make_default: true,
+          })
+          expect((await now()).defaultId).toBe('p-safe')
+        })
+      })
+    })
+
+    describe('a save of account settings beside the end of its credential', () => {
+      const SAVER_TOKEN = 'flr_database-suite-saver-token-0123456789abcdefghij'
+      const ENDED =
+        'This connection was disconnected, lost the access this call needs, or the MCP server was turned off while the call was running.'
+      let profileTools: typeof import('@/lib/mcp/tools/profile')
+      let uploadProfileTools: typeof import('@/lib/mcp/tools/upload-profiles')
+      let server: typeof import('@/lib/mcp/server')
+      let avatars: typeof import('@/lib/users/avatar')
+      let storage: typeof import('@/lib/storage')
+
+      beforeAll(async () => {
+        profileTools = await import('@/lib/mcp/tools/profile')
+        uploadProfileTools = await import('@/lib/mcp/tools/upload-profiles')
+        server = await import('@/lib/mcp/server')
+        avatars = await import('@/lib/users/avatar')
+        storage = await import('@/lib/storage')
+      })
+
+      beforeEach(async () => {
+        await prisma.role.create({
+          data: {
+            id: 'role-savers',
+            name: 'Savers',
+            position: 14,
+            permissions: [
+              'profile.update',
+              'uploadProfiles.manage',
+              'appearance.personal',
+              'files.share',
+              'files.delete',
+            ],
+            users: { connect: { id: 'mcp-alex' } },
+          },
+        })
+        await prisma.apiToken.create({
+          data: {
+            id: 'token-saver',
+            userId: 'mcp-alex',
+            name: 'Saving agent',
+            hash: tokens.hashApiToken(SAVER_TOKEN),
+            scopes: ['mcp', 'account:write', 'files:delete', 'files:content'],
+          },
+        })
+        await prisma.uploadProfile.create({
+          data: { id: 'p-kept', userId: 'mcp-alex', name: 'Kept', options: {} },
+        })
+        // Removing an avatar goes through the account service, which keeps
+        // an administrator who can sign in.
+        await prisma.role.create({
+          data: {
+            name: 'Administrators',
+            position: 15,
+            permissions: ['administrator'],
+            users: {
+              create: {
+                id: 'mcp-admin',
+                name: 'Admin',
+                urlId: 'mcp-admin',
+                uploadToken: 'legacy-mcp-admin',
+                email: 'admin@example.com',
+                password: 'a-password-hash',
+              },
+            },
+          },
+        })
+      })
+      afterEach(() => {
+        vi.restoreAllMocks()
+      })
+
+      type Principal = Awaited<ReturnType<typeof principalOf>>
+      /** One of the settings tools, with the context the MCP server gives it. */
+      async function call(
+        name: string,
+        args: Record<string, unknown>,
+        principal?: Principal
+      ) {
+        const tool = [
+          ...profileTools.profileTools,
+          ...uploadProfileTools.uploadProfileTools,
+        ].find((candidate) => candidate.name === name)!
+        return tool.run(
+          tool.input.parse(args) as never,
+          server.toolContext(
+            tool as never,
+            principal ?? (await principalOf(SAVER_TOKEN)),
+            new Request(`${ORIGIN}/api/mcp`, { method: 'POST' })
+          )
+        )
+      }
+      /**
+       * Starts a call, which comes to wait for the account's row, lets
+       * `change` commit meanwhile, and answers how the call ended.
+       */
+      async function whileItWaits(
+        work: () => Promise<unknown>,
+        change: () => Promise<unknown>
+      ) {
+        const release = await holding(row('User', 'id', 'mcp-alex'))
+        const ended = work().then(
+          () => 'saved',
+          (error: Error) => error.message
+        )
+        await untilWaiting()
+        await change()
+        await release()
+        return ended
+      }
+      const account = () =>
+        prisma.user.findUniqueOrThrow({
+          where: { id: 'mcp-alex' },
+          select: {
+            name: true,
+            image: true,
+            preferences: true,
+            defaultFileExpiration: true,
+          },
+        })
+      const profileNames = async () =>
+        (await prisma.uploadProfile.findMany({ orderBy: { name: 'asc' } })).map(
+          ({ name }) => name
+        )
+
+      const revokeToken = () =>
+        prisma.apiToken.update({
+          where: { id: 'token-saver' },
+          data: { revokedAt: new Date() },
+        })
+      const leaveScopes = (scopes: string[]) => () =>
+        prisma.apiToken.update({
+          where: { id: 'token-saver' },
+          data: { scopes: ['mcp', ...scopes] },
+        })
+      const leavePermissions = (permissions: string[]) => () =>
+        prisma.role.update({
+          where: { id: 'role-savers' },
+          data: { permissions },
+        })
+
+      /** Each part of `update_profile` goes to a service of its own. */
+      const PARTS: [string, Record<string, unknown>][] = [
+        ['the display name', { name: 'Renamed' }],
+        ['the theme', { theme_mode: 'dark' }],
+        ['the embed', { embed: { title: 'Mine' } }],
+        ['removing the avatar', { avatar_file: null }],
+      ]
+
+      it.each(PARTS)(
+        'saves %s when nothing changes meanwhile',
+        async (_, args) => {
+          await prisma.user.update({
+            where: { id: 'mcp-alex' },
+            data: { image: '/api/avatars/before.jpg' },
+          })
+          const before = await account()
+          expect(
+            await whileItWaits(
+              () => call('update_profile', args),
+              async () => {}
+            )
+          ).toBe('saved')
+          expect(await account()).not.toEqual(before)
+        }
+      )
+
+      describe.each(PARTS)('update_profile saving %s', (_, args) => {
+        it.each<[string, () => Promise<unknown>, string]>([
+          ['the token was revoked', revokeToken, ENDED],
+          [
+            'the token lost Change account settings',
+            leaveScopes(['files:delete', 'files:content']),
+            ENDED,
+          ],
+          ['the MCP server was turned off', () => enable(false), ENDED],
+          [
+            'the role lost profile.update',
+            leavePermissions([
+              'uploadProfiles.manage',
+              'appearance.personal',
+              'files.share',
+              'files.delete',
+            ]),
+            // Removing an avatar asks the role itself first, as the app does.
+            'profile.update',
+          ],
+        ])('is refused when %s while it waited', async (_what, change, why) => {
+          await prisma.user.update({
+            where: { id: 'mcp-alex' },
+            data: { image: '/api/avatars/before.jpg' },
+          })
+          const before = await account()
+          const ended = await whileItWaits(
+            () => call('update_profile', args),
+            change
+          )
+          expect(ended).toContain(why)
+          expect(ended).toContain('Nothing was changed.')
+          expect(await account()).toEqual(before)
+        })
+      })
+
+      /** A new length needs what either action needs, so the agent holds both. */
+      const DELETES_AND_SHARES = [
+        'account:write',
+        'files:delete',
+        'files:share',
+        'files:content',
+      ]
+      const WITHOUT_DELETE = ['account:write', 'files:share', 'files:content']
+
+      it('refuses a default expiry that deletes once the token lost Delete files while it waited', async () => {
+        await leaveScopes(DELETES_AND_SHARES)()
+        const ended = await whileItWaits(
+          () =>
+            call('update_profile', {
+              default_expiry: 'hour',
+              default_expiry_action: 'delete',
+            }),
+          leaveScopes(WITHOUT_DELETE)
+        )
+        expect(ended).toBe(`${ENDED} Nothing was changed.`)
+        expect((await account()).defaultFileExpiration).not.toBe('HOUR')
+      })
+
+      it('refuses a new profile that deletes uploads once the token lost Delete files while it waited', async () => {
+        await leaveScopes(DELETES_AND_SHARES)()
+        const ended = await whileItWaits(
+          () =>
+            call('save_upload_profile', {
+              name: 'Short lived',
+              expiry: 'hour',
+              expiry_action: 'delete',
+            }),
+          leaveScopes(WITHOUT_DELETE)
+        )
+        expect(ended).toBe(`${ENDED} Nothing was changed.`)
+        expect(await profileNames()).toEqual(['Kept'])
+      })
+
+      describe.each<[string, Record<string, unknown>]>([
+        ['save_upload_profile', { name: 'Another' }],
+        ['delete_upload_profile', { profile: 'Kept' }],
+      ])('%s', (name, args) => {
+        it.each<[string, () => Promise<unknown>, string]>([
+          ['the token was revoked', revokeToken, ENDED],
+          [
+            'the token lost Change account settings',
+            leaveScopes(['files:delete', 'files:content']),
+            ENDED,
+          ],
+          ['the MCP server was turned off', () => enable(false), ENDED],
+          [
+            'the role lost uploadProfiles.manage',
+            leavePermissions(['profile.update', 'files.share', 'files.delete']),
+            "The account's role stopped holding uploadProfiles.manage while the call was running. An administrator can change that under Roles.",
+          ],
+        ])('is refused when %s while it waited', async (_what, change, why) => {
+          expect(await whileItWaits(() => call(name, args), change)).toBe(
+            `${why} Nothing was changed.`
+          )
+          expect(await profileNames()).toEqual(['Kept'])
+        })
+      })
+
+      it('saves and deletes a profile when nothing changes meanwhile', async () => {
+        expect(
+          await whileItWaits(
+            () => call('save_upload_profile', { name: 'Another' }),
+            async () => {}
+          )
+        ).toBe('saved')
+        expect(
+          await whileItWaits(
+            () => call('delete_upload_profile', { profile: 'Kept' }),
+            async () => {}
+          )
+        ).toBe('saved')
+        expect(await profileNames()).toEqual(['Another'])
+      })
+
+      describe('an agent that signed in', () => {
+        const signedIn = async (scopes = ['account:write']) => {
+          const made = await connect({ scopes })
+          const principal = await principalFor(made.pair.access_token)
+          if (!principal) throw new Error('The connection did not authenticate')
+          return { ...made, principal }
+        }
+
+        it('is refused when it was disconnected while its save waited', async () => {
+          const { principal, connectionId } = await signedIn()
+          const before = await account()
+          const ended = await whileItWaits(
+            () => call('update_profile', { theme_mode: 'dark' }, principal),
+            () =>
+              prisma.$transaction((tx) =>
+                connections.revokeConnection(
+                  tx,
+                  { id: connectionId },
+                  'disconnected'
+                )
+              )
+          )
+          expect(ended).toBe(`${ENDED} Nothing was changed.`)
+          expect(await account()).toEqual(before)
+        })
+
+        it('is refused when Edit permissions took the action away while its save waited', async () => {
+          const { principal, connectionId } = await signedIn()
+          const ended = await whileItWaits(
+            () => call('update_profile', { name: 'Renamed' }, principal),
+            () =>
+              prisma.agentConnection.update({
+                where: { id: connectionId },
+                data: { scopes: ['files:read'] },
+              })
+          )
+          expect(ended).toBe(`${ENDED} Nothing was changed.`)
+          expect((await account()).name).toBe('mcp-alex')
+        })
+
+        it('makes a disconnect wait for a save that has passed its check, and the save stands', async () => {
+          const { principal, connectionId } = await signedIn()
+          const checked = door()
+          const commit = door()
+          const profiles = await import('@/lib/uploads/profiles')
+          const save = profiles.saveProfileAndDefault
+          vi.spyOn(profiles, 'saveProfileAndDefault').mockImplementation(
+            (userId, change, check) =>
+              save(userId, change, async (tx) => {
+                await check?.(tx)
+                checked.open()
+                await commit.opened
+              })
+          )
+          const { order, track } = settling()
+          const saving = track(
+            'save',
+            call('save_upload_profile', { name: 'Another' }, principal)
+          )
+          await checked.opened
+          const ending = track(
+            'disconnect',
+            prisma.$transaction((tx) =>
+              connections.revokeConnection(
+                tx,
+                { id: connectionId },
+                'disconnected'
+              )
+            )
+          )
+          await untilWaiting()
+          expect(order).toEqual([])
+          // The disconnect is waiting for the save's transaction to end.
+          commit.open()
+          await saving
+          await ending
+          expect(await profileNames()).toEqual(['Another', 'Kept'])
+          expect((await connectionRow(connectionId)).revokedAt).toBeInstanceOf(
+            Date
+          )
+        })
+      })
+
+      describe('an image chosen as the avatar', () => {
+        const PNG = Buffer.concat([
+          Buffer.from('\x89PNG\r\n\x1a\n', 'latin1'),
+          Buffer.alloc(64, 1),
+        ])
+        const PATH = 'uploads/mcp-alex/pic/pic.png'
+
+        beforeEach(async () => {
+          await prisma.storageDeletion.deleteMany()
+          await prisma.file.create({
+            data: {
+              id: 'pic',
+              userId: 'mcp-alex',
+              name: 'pic.png',
+              urlPath: '/mcp-alex/pic.png',
+              mimeType: 'image/png',
+              size: PNG.length / (1024 * 1024),
+              path: PATH,
+              visibility: 'PUBLIC',
+            },
+          })
+          const objects = new Map<string, Buffer>([[PATH, PNG]])
+          vi.spyOn(storage, 'getStorageProvider').mockResolvedValue({
+            kind: 'local',
+            target: { provider: 'local' },
+            async getFileStream(path: string) {
+              const { Readable } = await import('node:stream')
+              return Readable.from([objects.get(path) ?? Buffer.alloc(0)])
+            },
+            async uploadFile(bytes: Buffer, path: string) {
+              objects.set(path, bytes)
+            },
+            async getPublicUrl() {
+              return null
+            },
+          } as never)
+        })
+
+        /** Lets `change` commit after the image was read and before it is published. */
+        function afterTheRead(change: () => Promise<unknown>) {
+          const publish = avatars.uploadAvatar
+          vi.spyOn(avatars, 'uploadAvatar').mockImplementation(
+            async (...args) => {
+              await change()
+              return publish(...args)
+            }
+          )
+        }
+        const choose = () =>
+          call('update_profile', { avatar_file: 'pic' }).then(
+            () => 'saved',
+            (error: Error) => error.message
+          )
+        const avatar = async () => (await account()).image
+
+        it('becomes the avatar when the file stays public', async () => {
+          afterTheRead(async () => {})
+          expect(await choose()).toBe('saved')
+          expect(await avatar()).toMatch(/^\/api\/avatars\/mcp-alex-/)
+        })
+
+        it.each<[string, Prisma.FileUpdateInput]>([
+          ['made private', { visibility: 'PRIVATE' }],
+          ['given a password', { password: 'a-password-hash' }],
+        ])(
+          'is not published when the file was %s while it was read, without Change sharing',
+          async (_what, data) => {
+            afterTheRead(() =>
+              prisma.file.update({ where: { id: 'pic' }, data })
+            )
+            const ended = await choose()
+            expect(ended).toContain(
+              'an avatar is visible to anyone, so making it the avatar needs Change sharing'
+            )
+            expect(ended).toContain('It was hidden while the call was running.')
+            expect(ended).toContain('Nothing was changed.')
+            expect(await avatar()).toBeNull()
+            // The bytes that were stored for it are queued for deletion.
+            expect(
+              await prisma.storageDeletion.count({
+                where: { ownerId: 'mcp-alex', writePending: false },
+              })
+            ).toBe(1)
+          }
+        )
+
+        it('is published for a connection that may change sharing, though the file was made private meanwhile', async () => {
+          await leaveScopes(['account:write', 'files:content', 'files:share'])()
+          afterTheRead(() =>
+            prisma.file.update({
+              where: { id: 'pic' },
+              data: { visibility: 'PRIVATE' },
+            })
+          )
+          expect(await choose()).toBe('saved')
+          expect(await avatar()).toMatch(/^\/api\/avatars\/mcp-alex-/)
+        })
+
+        it('is not published when the file was deleted while it was read', async () => {
+          afterTheRead(() => prisma.file.delete({ where: { id: 'pic' } }))
+          expect(await choose()).toBe(
+            '"pic.png" was deleted or is being changed right now, so it was not made the avatar. Call again if it should still be. Nothing was changed.'
+          )
+          expect(await avatar()).toBeNull()
+        })
+
+        it('does not wait for a file somebody is changing: it is refused at once', async () => {
+          let release = async () => {}
+          afterTheRead(async () => {
+            release = await holding(row('File', 'id', 'pic'))
+          })
+          const ended = await promptly(choose())
+          await release()
+          expect(ended).toContain('is being changed right now')
+          expect(await avatar()).toBeNull()
+        })
+
+        it('makes hiding the file wait for an avatar that has passed its check', async () => {
+          const checked = door()
+          const commit = door()
+          const publish = avatars.uploadAvatar
+          vi.spyOn(avatars, 'uploadAvatar').mockImplementation(
+            (userId, image, check) =>
+              publish(userId, image, async (tx) => {
+                await check?.(tx)
+                checked.open()
+                await commit.opened
+              })
+          )
+          const { order, track } = settling()
+          const choosing = track('avatar', choose())
+          await checked.opened
+          const hiding = track(
+            'hide',
+            prisma.file.update({
+              where: { id: 'pic' },
+              data: { visibility: 'PRIVATE' },
+            })
+          )
+          await untilWaiting()
+          expect(order).toEqual([])
+          // Hiding the file is waiting for the avatar's transaction to end.
+          commit.open()
+          expect(await choosing).toBe('saved')
+          await hiding
+          expect(await avatar()).toMatch(/^\/api\/avatars\/mcp-alex-/)
         })
       })
     })

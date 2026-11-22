@@ -38,8 +38,12 @@ export interface AccountEditor {
   kind: keyof typeof refusals
   /** Whether account email is enabled, which makes addresses unique in any letter case. */
   emailEnabled: boolean
-  /** Proves the person may make this edit, once the account row is locked. */
-  prove?: (account: User) => Promise<void>
+  /**
+   * Proves the person may make this edit, once the account row is locked:
+   * with the account as it now stands, and the transaction, to read what
+   * else the edit's rules depend on under that lock.
+   */
+  prove?: (account: User, tx: Prisma.TransactionClient) => Promise<void>
   /** Role assignments to save with the edit, decided with the account row locked. */
   roles?: (account: User) => Promise<Prisma.UserUpdateInput['roles']>
 }
@@ -71,7 +75,7 @@ export async function updateAccount<Select extends Prisma.UserSelect>(
   // Public IDs are claimed under the role lock, which goes before row locks.
   if (claimsIds) await lockRoleChanges(tx)
   const account = await lockEmailUser(tx, seen.id)
-  await editor.prove?.(account)
+  await editor.prove?.(account, tx)
   if (
     (emailChanged && account.email !== seen.email) ||
     (edit.password !== undefined &&

@@ -410,6 +410,29 @@ describe('ZIP index', () => {
     expect((await read(bytes, 'zip', 'ok.txt')).toString()).toBe('ok')
   })
 
+  it('lists one page of entries when asked for a limit, with how many there are', async () => {
+    const bytes = rawZip(
+      ['a.txt', 'b.txt', 'c.txt', 'd.txt', 'e.txt'].map((name) => ({
+        name: Buffer.from(name),
+        data: Buffer.from('x'),
+      }))
+    )
+    const { index } = await indexOf(bytes, 'zip')
+    const page = index.listing(1, 2)
+    expect(page.entries.map(({ path }) => path)).toEqual(['b.txt', 'c.txt'])
+    expect(page.listed).toBe(5)
+    expect(index.listing(4, 2).entries.map(({ path }) => path)).toEqual([
+      'e.txt',
+    ])
+    // Without a limit the listing is whole, and says nothing more.
+    const whole = index.listing(1)
+    expect(whole.entries).toHaveLength(4)
+    expect(whole).not.toHaveProperty('listed')
+    expect(index.progress(3, 1).entries.map(({ path }) => path)).toEqual([
+      'd.txt',
+    ])
+  })
+
   it('reports a damaged member when its contents are read, not when listing', async () => {
     const bytes = rawZip([
       { name: Buffer.from('good.txt'), data: Buffer.from('good'), method: 8 },
