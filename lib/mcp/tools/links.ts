@@ -2,8 +2,10 @@ import * as z from 'zod'
 
 import { setAuditTarget } from '@/lib/audit'
 import {
+  SHORT_CODE_MAX_LENGTH,
   type ShortLink,
   shortLinkInputSchema,
+  shortLinkUpdateSchema,
   shortLinkUrl,
 } from '@/lib/links/schema'
 import {
@@ -13,6 +15,7 @@ import {
   findAccountShortLink,
   listAccountShortLinks,
   listOwnShortLinks,
+  updateOwnShortLink,
 } from '@/lib/links/service'
 
 import { compact, decodeCursor, encodeCursor, pageOf } from '../results'
@@ -114,14 +117,29 @@ const listShortLinks = defineTool({
 const createShortLinkTool = defineTool({
   name: 'create_short_link',
   description:
-    'Shorten an http or https URL. Returns a short URL on this Flare instance that redirects anyone who opens it to the target and counts the visit. The code is random and cannot be chosen, and a link cannot be edited: to point somewhere else, delete it and create another.',
+    'Shorten an http or https URL. Returns a short URL on this Flare instance that redirects anyone who opens it to the target and counts the visit. Give `code` to choose what follows /u/ (letters, numbers, - and _); without it the code is random. A code another link uses in any letter case is refused. The code never changes later; update_short_link changes where the link leads.',
   input: z.object({
     url: z.string().max(2048).describe('The http or https URL to shorten'),
+    code: z
+      .string()
+      .trim()
+      .max(SHORT_CODE_MAX_LENGTH)
+      .regex(
+        /^[A-Za-z0-9_-]*$/,
+        'Endings can use letters, numbers, - and _ only.'
+      )
+      .optional()
+      .describe(
+        'The ending after /u/, such as "launch"; omit for a random one'
+      ),
   }),
   output: z.object({ link: linkRowSchema }),
   async run(args, { principal, origin }) {
-    const { url } = shortLinkInputSchema.parse({ url: args.url })
-    const link = await createShortLink(principal.user.id, url)
+    const { url, code } = shortLinkInputSchema.parse({
+      url: args.url,
+      code: args.code,
+    })
+    const link = await createShortLink(principal.user.id, url, code)
     setAuditTarget({ type: 'link', id: link.id, name: link.shortCode })
     return { structured: { link: linkRow(link, origin) } }
   },
@@ -140,11 +158,59 @@ function shortCodeOf(value: string) {
   return /^\/u\/([^/]+)\/?$/.exec(path)?.[1] ?? value
 }
 
+/** This account's link named by its ID, code or short URL. */
+async function ownLink(userId: string, named: string) {
+  const value = named.trim()
+  const code = shortCodeOf(value)
+  // Only this account's links are searched, so a code or ID that belongs
+  // to someone else answers like one that does not exist.
+  const links = await listOwnShortLinks(userId)
+  const link =
+    links.find((candidate) => candidate.id === value) ??
+    links.find((candidate) => candidate.shortCode === code)
+  if (!link)
+    throw new ToolError(
+      `No short link of this account matches "${named}". Call list_short_links to see them.`
+    )
+  return link
+}
+
+const updateShortLink = defineTool({
+  name: 'update_short_link',
+  description:
+    "Change where one of this account's short links leads, named by its ID, its code or its short URL. The short URL stays the same, so everyone who already has it goes to the new target from now on, and its click count is kept.",
+  input: z.object({
+    link: z
+      .string()
+      .min(1)
+      .max(2048)
+      .describe('The link ID, its short code, or its short URL'),
+    url: z.string().max(2048).describe('The new http or https target'),
+  }),
+  output: z.object({
+    link: linkRowSchema,
+    previous_target_url: z.string().describe('Where the link led before'),
+  }),
+  async run(args, { principal, origin }) {
+    const userId = principal.user.id
+    const { url } = shortLinkUpdateSchema.parse({ url: args.url })
+    const link = await ownLink(userId, args.link)
+    setAuditTarget({ type: 'link', id: link.id, name: link.shortCode })
+    const updated = await updateOwnShortLink(userId, link.id, url)
+    return {
+      structured: {
+        link: linkRow(updated, origin),
+        previous_target_url: link.targetUrl,
+      },
+    }
+  },
+})
+
 const deleteShortLink = defineTool({
   name: 'delete_short_link',
   moderation: true,
   description:
-    "Delete one of this account's short links, named by its ID, its code or its short URL. The short URL stops working at once and its click count is lost. This cannot be undone: a new link to the same target gets a different code. With `account`, a link of that account, deleted as a moderator.",
+    "Delete one of this account's short links, named by its ID, its code or its short URL. The short URL stops working at once and its click count is lost for good. The code becomes free again, for any account: a new link gets a random code unless one is chosen. With `account`, a link of that account, deleted as a moderator.",
   input: z.object({
     link: z
       .string()
@@ -183,16 +249,7 @@ const deleteShortLink = defineTool({
       }
     }
     const userId = context.principal.user.id
-    // Only this account's links are searched, so a code or ID that belongs
-    // to someone else answers like one that does not exist.
-    const links = await listOwnShortLinks(userId)
-    const link =
-      links.find((candidate) => candidate.id === value) ??
-      links.find((candidate) => candidate.shortCode === code)
-    if (!link)
-      throw new ToolError(
-        `No short link of this account matches "${args.link}". Call list_short_links to see them.`
-      )
+    const link = await ownLink(userId, args.link)
     setAuditTarget({ type: 'link', id: link.id, name: link.shortCode })
     await deleteOwnShortLink(userId, link.id)
     return {
@@ -205,4 +262,9 @@ const deleteShortLink = defineTool({
   },
 })
 
-export const linksTools = [listShortLinks, createShortLinkTool, deleteShortLink]
+export const linksTools = [
+  listShortLinks,
+  createShortLinkTool,
+  updateShortLink,
+  deleteShortLink,
+]

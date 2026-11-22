@@ -386,7 +386,7 @@ The steps for Cursor, VS Code, and Gemini CLI follow each vendor's documentation
 | **Change sharing**          | Make files public or private, set or remove their passwords, and create or revoke a folder's public link                                                               |
 | **Delete files**            | Delete files permanently, now or through a scheduled expiry                                                                                                            |
 | **Read short links**        | List your short links and their click counts                                                                                                                           |
-| **Manage short links**      | Create short links and delete them                                                                                                                                     |
+| **Manage short links**      | Create short links, change where they lead, and delete them                                                                                                            |
 | **Change account settings** | Change your display name, vanity URL, upload defaults, theme, link embed, and avatar, and create, change, and delete upload profiles                                   |
 | **Manage invites**          | List your invite links, create new ones, and revoke them. Not in any preset                                                                                            |
 

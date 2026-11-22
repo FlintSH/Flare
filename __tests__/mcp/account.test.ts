@@ -1078,13 +1078,13 @@ describe('get_account', () => {
       expect(answer.connection.tools).toHaveLength(13)
     })
 
-    it('lists all 28 tools of an account for every scope of one, and the account tools only with account:write', async () => {
+    it('lists all 29 tools of an account for every scope of one, and the account tools only with account:write', async () => {
       const everything = await getAccount(principal(EVERY_SCOPE))
       // Invites and administration come after them, each with its own scope.
       expect(everything.connection.tools).toEqual(
         TOOL_NAMES.slice(0, TOOL_NAMES.indexOf('list_invites'))
       )
-      expect(everything.connection.tools).toHaveLength(28)
+      expect(everything.connection.tools).toHaveLength(29)
       const files = await getAccount(principal(FILE_AND_LINK_SCOPES))
       expect(
         everything.connection.tools.filter(

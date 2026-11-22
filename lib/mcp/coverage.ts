@@ -138,6 +138,7 @@ export const API_COVERAGE: Record<
     OPTIONS: preflight,
   },
   '/api/urls/{id}': {
+    PATCH: tools('update_short_link'),
     DELETE: tools('delete_short_link'),
     OPTIONS: preflight,
   },

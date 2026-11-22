@@ -156,7 +156,7 @@ describe('the tool list and the catalog', () => {
     expect(sorted(defined)).toEqual(sorted(TOOL_NAMES))
   })
 
-  it('has the 28 tools of an account, then invites and administration, in the order clients list them', () => {
+  it('has the 29 tools of an account, then invites and administration, in the order clients list them', () => {
     expect(TOOL_NAMES).toEqual([
       'get_account',
       'search_files',
@@ -179,6 +179,7 @@ describe('the tool list and the catalog', () => {
       'save_tag',
       'delete_tag',
       'create_short_link',
+      'update_short_link',
       'delete_short_link',
       'extract_archive',
       'create_archive',
@@ -204,7 +205,7 @@ describe('the tool list and the catalog', () => {
       'send_test_email',
       'update_instance_appearance',
     ])
-    expect(TOOL_NAMES).toHaveLength(45)
+    expect(TOOL_NAMES).toHaveLength(46)
   })
 
   it('lets exactly the tools whose rows have moderation needs take an account', () => {
@@ -451,6 +452,11 @@ const DESIGN: Record<
   },
   delete_tag: { scopes: ['files:organize'], permissions: ['tags.manage'] },
   create_short_link: { scopes: ['urls:write'], permissions: ['links.create'] },
+  // A new target retires the old redirect, as a delete would.
+  update_short_link: {
+    scopes: ['urls:write'],
+    permissions: ['links.create', 'links.delete'],
+  },
   delete_short_link: {
     scopes: ['urls:write'],
     permissions: ['links.delete'],
@@ -832,6 +838,7 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
     },
     delete_tag: { routes: [['DELETE', '/api/tags/tag-id']] },
     create_short_link: { routes: [['POST', '/api/urls']] },
+    update_short_link: { routes: [['PATCH', '/api/urls/link-id']] },
     delete_short_link: {
       routes: [['DELETE', '/api/urls/link-id']],
       moderation: {
@@ -1410,6 +1417,8 @@ describe('annotations', () => {
       'delete_folder',
       'set_folder_sharing',
       'delete_tag',
+      // Everyone who has the short URL goes somewhere new.
+      'update_short_link',
       'delete_short_link',
       // A default expiry can delete later uploads, a new vanity ID breaks
       // links, and an avatar is public; a profile's expiry deletes too.
@@ -1493,6 +1502,7 @@ describe('annotations', () => {
       'set_file_sharing',
       'set_folder_sharing',
       'create_short_link',
+      'update_short_link',
       'send_test_email',
     ])
   })

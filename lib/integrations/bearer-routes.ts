@@ -63,7 +63,7 @@ export const API_SCOPE_CATALOG = [
   {
     scope: 'urls:write',
     label: 'Manage short links',
-    description: 'Create and delete your short links',
+    description: 'Create, redirect and delete your short links',
     group: 'links',
     surfaces: ['api', 'mcp'],
   },
