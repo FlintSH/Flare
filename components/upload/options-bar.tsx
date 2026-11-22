@@ -165,12 +165,19 @@ export function UploadOptionsBar({
     setChoices((current) => ({ ...current, ...change }))
 
   const profileList = profiles.data?.profiles ?? []
+  // The page says which lists exist, so chips don't appear as they load.
   const showProfiles =
-    can.chooseProfile && (profileList.length > 0 || !!state.saved.profile)
+    can.chooseProfile && (state.saved.has.profiles || profileList.length > 0)
   const showFolders =
-    can.chooseFolder && (folders.folders.length > 0 || !!choices.folderId)
+    can.chooseFolder &&
+    (state.saved.has.folders ||
+      folders.folders.length > 0 ||
+      !!choices.folderId)
   const showTags =
-    can.tag && (tags.tags.length > 0 || effective.tagIds.length > 0)
+    can.tag &&
+    (state.saved.has.tags ||
+      tags.tags.length > 0 ||
+      effective.tagIds.length > 0)
   const sortedFolders = [...folders.folders].sort((a, b) =>
     folderPath(folders.folders, a.id).localeCompare(
       folderPath(folders.folders, b.id)
@@ -674,11 +681,13 @@ function ExpiryChip({
           if (!open) requestAnimationFrame(() => trigger.current?.focus())
         }}
         onConfirm={async (date, chosen) => {
-          const picked = (chosen as ExpiryAction | undefined) ?? action
-          onChange(
-            date ? { kind: 'at', at: date } : { kind: 'never' },
-            permittedAction(picked, canAct) ?? picked
+          if (!date) return onChange({ kind: 'never' }, action)
+          // The dialog only opens when some action is allowed.
+          const allowed = permittedAction(
+            (chosen as ExpiryAction | undefined) ?? action,
+            canAct
           )
+          if (allowed) onChange({ kind: 'at', at: date }, allowed)
         }}
         initialDate={expiry.kind === 'at' ? expiry.at : null}
         initialAction={action as ExpiryActionEnum}

@@ -69,7 +69,11 @@ import { useHydrated } from '@/hooks/use-hydrated'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
-/** A destination as people read it: without `https://`, which says nothing. */
+/**
+ * A destination as people read it: without `https://`, which says nothing.
+ * `http://` stays, since an insecure destination is worth seeing. (Upload
+ * shows its own links without either: their scheme is the instance's.)
+ */
 const readable = (url: string) => url.replace(/^https:\/\//i, '')
 
 const problem = (failure: unknown, fallback: string) =>
@@ -97,6 +101,7 @@ export function LinksManager() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const requestVersion = useRef(0)
+  const loaded = useRef(false)
   const [query, setQuery] = useState('')
   const [fresh, setFresh] = useState<string>()
   const [copied, setCopied] = useState<string>()
@@ -105,7 +110,8 @@ export function LinksManager() {
   const [announcement, setAnnouncement] = useState('')
 
   const load = useCallback(
-    async (signal?: AbortSignal) => {
+    /** `quiet`: a re-read after a change, which keeps the list on failure. */
+    async (signal?: AbortSignal, quiet = false) => {
       const version = ++requestVersion.current
       try {
         const data = await apiRequest<{ urls?: ShortLink[] }>('/api/urls', {
@@ -114,8 +120,12 @@ export function LinksManager() {
         if (signal?.aborted || version !== requestVersion.current) return
         setLinks(data.urls ?? [])
         setLoadError('')
+        loaded.current = true
       } catch (failure) {
         if (signal?.aborted || version !== requestVersion.current) return
+        // The list on screen, the new row included, stays right; only a
+        // list that never loaded needs the error and Try again.
+        if (quiet && loaded.current) return
         setLoadError(
           failure instanceof RefusedRequest || !(failure instanceof Error)
             ? 'Could not load your links. Try again.'
@@ -138,7 +148,7 @@ export function LinksManager() {
   // After a change, read the list again. A read already under way started
   // before the change and would put the old list back, so its answer is
   // dropped (see `requestVersion`) in favour of this one.
-  const reconcile = () => void load()
+  const reconcile = () => void load(undefined, true)
 
   // A new link is marked for a moment, then looks like the rest.
   useEffect(() => {
