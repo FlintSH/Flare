@@ -198,6 +198,8 @@ export const API_COVERAGE: Record<
       'get_account'
     ),
   },
+  // Which page tips an account hid is how Flare's own pages look to it.
+  '/api/profile/tips': { POST: browser },
   '/api/profile/sessions': { GET: signIn, DELETE: signIn },
   '/api/profile/sessions/{id}': { DELETE: signIn },
   '/api/profile/login-history': { GET: signIn },

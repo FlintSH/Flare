@@ -1360,11 +1360,12 @@ The third column is either tool names or one of these:
 | `/api/upload-profiles/{id}`        | PUT         | `save_upload_profile`             |                                                                                                                                        |
 | `/api/upload-profiles/{id}`        | DELETE      | `delete_upload_profile`           |                                                                                                                                        |
 | `/api/upload-profiles/{id}/export` | GET         | `get_account`                     | get_account lists each profile's settings; no tool makes the recipe file.                                                              |
+| `/api/profile/tips`                | POST        | Not applicable: Flare's own pages |                                                                                                                                        |
 | `/api/profile/sessions`            | GET, DELETE | Never: sign-in                    |                                                                                                                                        |
 | `/api/profile/sessions/{id}`       | DELETE      | Never: sign-in                    |                                                                                                                                        |
 | `/api/profile/login-history`       | GET         | Never: sign-in                    |                                                                                                                                        |
 
-Deleting the account an agent acts as is listed under sign-in because it is how the account's owner would lose it. `/api/profile/export/progress` is the stream the export page follows its own download through; an export an agent downloads reports no progress there.
+Deleting the account an agent acts as is listed under sign-in because it is how the account's owner would lose it. `/api/profile/export/progress` is the stream the export page follows its own download through; an export an agent downloads reports no progress there. `/api/profile/tips` hides a tip on Flare's pages, such as the one on an empty Upload page.
 
 ### Credentials
 

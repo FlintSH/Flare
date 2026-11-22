@@ -23,6 +23,7 @@ import { useDropzone } from 'react-dropzone'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 
+import { apiRequest } from '@/lib/client/request'
 import { folderDestination, libraryHref } from '@/lib/library/contract'
 import type { UploadResponse } from '@/lib/uploads/client'
 import { namePastedFile, pasteBelongsElsewhere } from '@/lib/uploads/clipboard'
@@ -32,9 +33,11 @@ import { formatTransfer } from '@/lib/uploads/speed'
 import { cn, formatBytes } from '@/lib/utils'
 
 import { useHydrated } from '@/hooks/use-hydrated'
+import { useToast } from '@/hooks/use-toast'
 import { copyUploadLinks, useUploadQueue } from '@/hooks/use-upload-queue'
 
 import { UploadOptionsBar } from './options-bar'
+import { UploadTips, type UploadTipsShown } from './upload-tips'
 import { useUploadOptions } from './use-upload-options'
 
 type Finished = {
@@ -62,11 +65,14 @@ export function UploadForm({
   maxSize,
   saved,
   folder,
+  tips: initialTips = null,
 }: {
   maxSize: number
   saved: SavedUploadSettings
   /** The folder a link to Upload names, when it is the account's. */
   folder?: { id: string; name: string } | null
+  /** The tips to show while nothing is listed, unless the account hid them. */
+  tips?: UploadTipsShown | null
 }) {
   const hydrated = useHydrated()
   const mounted = useRef(true)
@@ -103,6 +109,8 @@ export function UploadForm({
   // links arrive. Keep showing them for that moment so the page doesn't jump.
   const [ending, setEnding] = useState<readonly QueuedFile[] | null>(null)
   const rows = queued.length || !ending ? queued : ending
+  const { toast } = useToast()
+  const [tips, setTips] = useState(initialTips)
 
   // Previews of finished files are this page's, so release them with it.
   const previews = useRef(new Set<string>())
@@ -128,7 +136,7 @@ export function UploadForm({
     [queue, maxSize]
   )
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, rootRef } = useDropzone({
     onDrop: add,
     disabled: uploading,
   })
@@ -186,6 +194,30 @@ export function UploadForm({
         () => setCopied((current) => (current === value ? undefined : current)),
         2000
       )
+    }
+  }
+
+  // Hidden at once and for good. If that can't be saved, the tips come back
+  // rather than return unannounced on the next visit.
+  const hideTips = async () => {
+    const shown = tips
+    setTips(null)
+    rootRef.current?.focus()
+    try {
+      await apiRequest('/api/profile/tips', {
+        method: 'POST',
+        body: { hide: 'upload' },
+        fallback: 'Your choice could not be saved.',
+      })
+    } catch (failure) {
+      if (!mounted.current) return
+      setTips(shown)
+      toast({
+        variant: 'destructive',
+        title: 'Couldn’t hide the tips',
+        description:
+          failure instanceof Error ? failure.message : 'Please try again.',
+      })
     }
   }
 
@@ -296,6 +328,10 @@ export function UploadForm({
                 : `Upload ${files(queued.length)}`}
         </Button>
       </UploadOptionsBar>
+
+      {!hasRows && tips && (
+        <UploadTips shown={tips} onHide={() => void hideTips()} />
+      )}
 
       {hasRows && (
         <section

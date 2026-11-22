@@ -247,7 +247,10 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     sameOptions(options, editing.options)
 
   return (
-    <div className="space-y-6">
+    <div
+      id={embedded ? 'upload-profiles' : undefined}
+      className="scroll-mt-6 space-y-6"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           {!embedded && (

@@ -1,4 +1,5 @@
 import { PATCH as saveThemeMode } from '@/app/api/customization/preferences/route'
+import { POST as hideTipRoute } from '@/app/api/profile/tips/route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { savePersonalAppearance } from '@/lib/customization/personal'
@@ -6,6 +7,7 @@ import { DEFAULT_APPEARANCE } from '@/lib/customization/schema'
 import { personalEmbedsAllowed, savePersonalEmbed } from '@/lib/embeds/personal'
 import { DEFAULT_PERSONAL_EMBED } from '@/lib/embeds/schema'
 import { savePreference } from '@/lib/users/preferences'
+import { hideTip, readHiddenTips } from '@/lib/users/tips'
 
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
@@ -242,6 +244,70 @@ describe('the personal embed', () => {
     })
     expect(mocks.lock).not.toHaveBeenCalled()
     expect(mocks.findUser).not.toHaveBeenCalled()
+    expect(mocks.updateUser).not.toHaveBeenCalled()
+  })
+})
+
+describe('hidden tips', () => {
+  const hide = (body: unknown, origin = 'https://flare.example') =>
+    hideTipRoute(
+      new Request('https://flare.example/api/profile/tips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify(body),
+      })
+    )
+
+  it('reads only the tips Flare shows', () => {
+    expect(readHiddenTips({ hidden: ['upload', 'gone', 3] })).toEqual([
+      'upload',
+    ])
+    expect(readHiddenTips(undefined)).toEqual([])
+    expect(readHiddenTips({ hidden: 'upload' })).toEqual([])
+    expect(readHiddenTips(['upload'])).toEqual([])
+  })
+
+  it('are saved under `tips` once, beside the other preferences', async () => {
+    mocks.findUser.mockResolvedValue({
+      preferences: {
+        customization: { themeMode: 'dark' },
+        tips: { hidden: ['upload'] },
+      },
+    })
+    expect(await hideTip('owner', 'upload')).toEqual(['upload'])
+    expect(savedPreferences().data.preferences).toEqual({
+      customization: { themeMode: 'dark' },
+      tips: { hidden: ['upload'] },
+    })
+  })
+
+  it('are hidden by the route for any signed-in account', async () => {
+    // Hiding a tip changes only how Flare's pages look to the account, so
+    // it needs no permission.
+    mocks.session.mockResolvedValue({ user: { id: 'owner', permissions: [] } })
+    const response = await hide({ hide: 'upload' })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ data: { hidden: ['upload'] } })
+    expect(savedPreferences()).toEqual({
+      where: { id: 'owner' },
+      data: { preferences: { tips: { hidden: ['upload'] } } },
+    })
+  })
+
+  it('refuses unknown tips, other sites and signed-out visitors', async () => {
+    mocks.session.mockResolvedValue({ user: { id: 'owner', permissions: [] } })
+    for (const body of [{ hide: 'everything' }, {}, { hide: 'upload', x: 1 }]) {
+      const response = await hide(body)
+      expect(response.status).toBe(400)
+      expect(await response.json()).toEqual({
+        error: 'Choose a tip Flare shows.',
+      })
+    }
+    expect(
+      (await hide({ hide: 'upload' }, 'https://elsewhere.example')).status
+    ).toBe(403)
+    mocks.session.mockResolvedValue(null)
+    expect((await hide({ hide: 'upload' })).status).toBe(401)
     expect(mocks.updateUser).not.toHaveBeenCalled()
   })
 })

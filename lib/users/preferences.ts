@@ -5,7 +5,7 @@ import { lockRoleChanges, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 
 /** The parts of an account's preferences, each saved by its own setting. */
-export type PreferencePart = 'customization' | 'embed'
+export type PreferencePart = 'customization' | 'embed' | 'tips'
 
 /**
  * A caller's last word on a save of an account's own settings: run in the

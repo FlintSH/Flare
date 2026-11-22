@@ -78,6 +78,17 @@ The link ends in a URL-friendly version of the filename: `My Report.PDF` is shar
 
 <Screenshot src="/screenshots/workspace/upload-complete.png" alt="Four uploaded files, each row with its link, Copy link and an open button, and Copy all links and Clear above the list" caption="Uploaded files keep their links in the list until you clear it." />
 
+## Tips on an empty Upload page
+
+Until you hide them, an empty Upload page shows up to two tips under the options row:
+
+- **Upload profiles** explains [profiles](./upload-profiles), and **Create a profile** opens **Profile → Uploads** at your profiles. It shows while your role has `uploadProfiles.manage` and you haven't saved a profile yet.
+- **Screenshot tools** explains that [ShareX, iTake, Flameshot, Spectacle and the Bash script](./screenshot-tools) upload with your default profile, and **Set up a tool** opens their downloads. It shows while your role has `files.upload` and `tokens.manage`.
+
+<Screenshot src="/screenshots/workspace/upload-tips.png" alt="Upload page for a new account: under the drop area and the options row, a box with two tips, Upload profiles with a Create a profile link and Screenshot tools with a Set up a tool link, and a close button" caption="A new account's Upload page. The tips step aside while files are listed." />
+
+The tips step aside while files are listed and come back when you clear the list. Choose **×** (**Hide these tips**) to hide them for good. Flare saves that on your account, so they stay hidden on your other devices too. If the choice can't be saved, the tips stay and Flare says so; try again. Nothing brings them back once hidden: profiles and the tools stay under **Profile → Uploads**.
+
 ## Size limits and larger files
 
 The drop area shows the maximum allowed file size. A larger file isn't added to the list, and the page says how many weren't. Your account may also have a total storage quota, visible under **Profile → Your data**. A file can fit the per-file limit and still exceed your remaining quota. A file over either limit is refused as a whole: Flare shows **A file exceeds the upload size limit.** or **This would exceed your storage quota.**, and none of the file is saved or counted against your quota. Uploads that finish at the same time are checked one after another against your remaining quota, so together they can't go over it. Extracting or creating an [archive](./archives) applies the same limits with the same messages. Earlier versions worded these refusals six ways, for example **You have reached your storage quota.** or **The output files would exceed your storage quota.**
