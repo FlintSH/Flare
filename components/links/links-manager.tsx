@@ -188,6 +188,27 @@ export function LinksManager() {
     }
   }
 
+  const listError = (
+    <Alert variant="destructive">
+      <AlertCircle aria-hidden="true" />
+      <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+        <span>{loadError}</span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            // Rows already on screen stay while the list is read again.
+            if (!links.length) setLoading(true)
+            void load()
+          }}
+        >
+          <RefreshCw aria-hidden="true" />
+          Try again
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
+
   return (
     <>
       {/* Title and search share a row; on phones the create bar comes
@@ -252,52 +273,42 @@ export function LinksManager() {
               </div>
             ))}
           </div>
-        ) : loadError ? (
-          <Alert variant="destructive">
-            <AlertCircle aria-hidden="true" />
-            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
-              <span>{loadError}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setLoading(true)
-                  void load()
-                }}
-              >
-                <RefreshCw aria-hidden="true" />
-                Try again
-              </Button>
-            </AlertDescription>
-          </Alert>
         ) : links.length === 0 ? (
-          <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-            No links yet.
-          </p>
+          loadError ? (
+            listError
+          ) : (
+            <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+              No links yet.
+            </p>
+          )
         ) : shown.length === 0 ? (
           <p className="rounded-xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
             No links match “{query.trim()}”.
           </p>
         ) : (
-          <ul
-            aria-labelledby="links-heading"
-            className="divide-y divide-border/70 overflow-hidden rounded-xl border"
-          >
-            {shown.map((link) => (
-              <LinkRow
-                key={link.id}
-                link={link}
-                origin={origin}
-                fresh={fresh === link.id}
-                copied={copied === link.id}
-                canEdit={canEdit}
-                canDelete={canDelete}
-                onCopy={() => void copy(link)}
-                onEdit={() => setEditing(link)}
-                onDelete={() => setDeleting(link)}
-              />
-            ))}
-          </ul>
+          <>
+            {/* Links made here stay usable while the list can't load. */}
+            {loadError && <div className="mb-3">{listError}</div>}
+            <ul
+              aria-labelledby="links-heading"
+              className="divide-y divide-border/70 overflow-hidden rounded-xl border"
+            >
+              {shown.map((link) => (
+                <LinkRow
+                  key={link.id}
+                  link={link}
+                  origin={origin}
+                  fresh={fresh === link.id}
+                  copied={copied === link.id}
+                  canEdit={canEdit}
+                  canDelete={canDelete}
+                  onCopy={() => void copy(link)}
+                  onEdit={() => setEditing(link)}
+                  onDelete={() => setDeleting(link)}
+                />
+              ))}
+            </ul>
+          </>
         )}
       </div>
 

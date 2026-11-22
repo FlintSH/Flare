@@ -27,7 +27,7 @@ Text that is only spaces or empty lines can't be created. While the paste is bei
 
 ### Your draft
 
-What you've written stays while you move around Flare: open **Files** and come back, and the text and name are still there. Reloading the page, closing the tab or signing out ends the draft, and the browser asks before you leave with unsaved text. Drafts are kept in the tab's memory only, never in browser storage, because pastes often hold logs, keys and other private text.
+What you've written stays while you move around Flare: open **Files** and come back, and the text and name are still there. Reloading the page, closing the tab or signing out ends the draft, so while it has text the browser asks first, on whichever Flare page is open. A paste that finishes after you left and came back clears its own text only, not anything you typed since. Drafts are kept in the tab's memory only, never in browser storage, because pastes often hold logs, keys and other private text.
 
 Earlier versions used a plain text box, offered no expiration, folder or tag choice, and lost the text when you left the page.
 

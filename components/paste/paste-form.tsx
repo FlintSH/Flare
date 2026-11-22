@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useId, useState } from 'react'
+import { useId, useState } from 'react'
 
 import dynamic from 'next/dynamic'
 
@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast'
 
 import { UploadOptionsBar } from '../upload/options-bar'
 import { useUploadOptions } from '../upload/use-upload-options'
-import { type PasteDraft, readDraft, writeDraft } from './draft'
+import { type PasteDraft, clearDraft, readDraft, writeDraft } from './draft'
 
 const PasteEditor = dynamic(
   () => import('./paste-editor').then((module) => module.PasteEditor),
@@ -99,17 +99,6 @@ export function PasteForm({
 
   const language = pasteLanguage(draft.name)
   const empty = !draft.content.trim()
-  const unsaved = !empty && !created
-
-  // Reloading or closing the tab would lose the text; moving around Flare
-  // keeps it (see ./draft).
-  useEffect(() => {
-    if (!unsaved) return
-    const warn = (event: BeforeUnloadEvent) => event.preventDefault()
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [unsaved])
-
   const blocked = submitting || empty || !!options.problem || options.pending
 
   const create = async () => {
@@ -120,6 +109,7 @@ export function PasteForm({
     setSubmitting(true)
     setError('')
     try {
+      const submitted = draft
       const name = pasteName(draft.name)
       const file = new File([draft.content], name, { type: 'text/plain' })
       const paste = await uploadPaste(file, options.options)
@@ -135,8 +125,8 @@ export function PasteForm({
         ].join(' · '),
       })
       setCopied(false)
-      writeDraft(owner, null)
-      setDraft(readDraft(owner))
+      clearDraft(submitted)
+      setDraft({ content: '', name: '' })
       options.clearPassword()
     } catch (failure) {
       setError(
