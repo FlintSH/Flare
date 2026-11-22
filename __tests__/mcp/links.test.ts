@@ -241,6 +241,20 @@ describe('create_short_link with a chosen code', () => {
     })
   })
 
+  it('takes a 64-character code with spaces around it, as the route does', async () => {
+    const code = 'a'.repeat(64)
+    mocks.create.mockResolvedValue(link(9, { shortCode: code }))
+    await call('create_short_link', {
+      url: 'https://example.com',
+      code: `  ${code}  `,
+    })
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'https://example.com',
+      code
+    )
+  })
+
   it('refuses a code the route refuses, before a link is made', async () => {
     await expect(
       call('create_short_link', { url: 'https://example.com', code: 'a/b' })
