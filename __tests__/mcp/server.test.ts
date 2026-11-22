@@ -923,7 +923,9 @@ describe('the last check a tool is handed', () => {
       ['account:write', 'files:content', 'files:share'],
       ['profile.update', 'appearance.personal', 'files.read', 'files.share']
     )
-    const context = toolContext(tool, who, request)
+    const context = toolContext(tool, who, request, null, {
+      countAdminWrite: () => {},
+    })
     context.requireEffect('theme_mode')
     context.requireEffect('avatar_file')
     // Asked about, and not leaned on.
@@ -938,7 +940,9 @@ describe('the last check a tool is handed', () => {
 
   it('counts an effect once, and never one that was refused', async () => {
     const who = principal(['account:write'], ['profile.update'])
-    const context = toolContext(tool, who, request)
+    const context = toolContext(tool, who, request, null, {
+      countAdminWrite: () => {},
+    })
     expect(() => context.requireEffect('avatar_file')).toThrow('Not allowed')
     await context.recheck(tx)
     expect(mocks.stillAllowed).toHaveBeenLastCalledWith(tx, who, [row])
@@ -949,7 +953,9 @@ describe('the last check a tool is handed', () => {
       ['account:write', 'files:delete'],
       ['profile.update', 'files.delete']
     )
-    const context = toolContext(tool, who, request)
+    const context = toolContext(tool, who, request, null, {
+      countAdminWrite: () => {},
+    })
     await context.recheck(tx)
     context.requireEffect('default_expiry_delete')
     context.requireEffect('default_expiry_delete')

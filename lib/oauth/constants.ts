@@ -31,6 +31,17 @@ export const PAIRS_PER_HOUR = 30
 /** How long a sign-in waits for the person: the cookie and the consent request. */
 export const PENDING_SECONDS = 10 * 60
 
+/**
+ * A connection that holds an administration scope ends this long after it
+ * was authorized, used or not. Those scopes are granted only at sign-in, so
+ * the connection's creation is when the grant was made.
+ */
+export const ADMIN_CONNECTION_DAYS = 30
+/** The furthest expiry a named token with an administration scope may have. */
+export const ADMIN_TOKEN_MAX_DAYS = 90
+/** How far past 90 days such an expiry may fall: a browser clock running ahead. */
+export const ADMIN_TOKEN_EXPIRY_LEEWAY_SECONDS = 5 * 60
+
 /** Agents one account may have signed in at once. */
 export const MAX_CONNECTIONS = 50
 

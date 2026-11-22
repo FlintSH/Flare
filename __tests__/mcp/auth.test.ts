@@ -16,6 +16,10 @@ const mocks = vi.hoisted(() => ({
   pair: vi.fn(),
   connection: vi.fn(),
   connectionUpdate: vi.fn(),
+  administration: vi.fn(),
+}))
+vi.mock('@/lib/mcp/settings', () => ({
+  administrationOn: mocks.administration,
 }))
 // Both would answer an administrator if anything asked them.
 vi.mock('@/lib/auth', () => ({
@@ -153,6 +157,7 @@ beforeEach(() => {
     role('everyone', [...DEFAULT_PERMISSIONS], 'everyone')
   )
   mocks.policy.mockReturnValue(false)
+  mocks.administration.mockResolvedValue(false)
   mocks.session.mockResolvedValue({ user: { id: 'admin' } })
   mocks.serverSession.mockResolvedValue({ user: { id: 'admin' } })
 })
@@ -857,5 +862,108 @@ describe('credentialPrincipal', () => {
     expect(await credentialPrincipal(key)).toBeNull()
     expect(mocks.token).not.toHaveBeenCalled()
     expectNoOtherCredentialTried()
+  })
+})
+
+describe('administration scopes', () => {
+  const ADMIN = ['admin:read', 'admin:users', 'admin:content', 'admin:settings']
+  const DAY = 86_400_000
+
+  it('are dropped from a named token while administration through MCP is off', async () => {
+    withToken({ scopes: ['files:read', ...ADMIN, 'invites:write', 'mcp'] })
+    for (const principal of [
+      await authenticateAgent(request('Bearer flr_AgentToken')),
+      await credentialPrincipal('token:token-1'),
+    ]) {
+      expect(principal!.scopes).toEqual(['files:read', 'invites:write'])
+      // Whatever reads the user's token scopes sees the same.
+      expect(principal!.user.apiToken!.scopes).toEqual([
+        'files:read',
+        'invites:write',
+        'mcp',
+      ])
+    }
+  })
+
+  it('are kept on a named token while it is on', async () => {
+    mocks.administration.mockResolvedValue(true)
+    withToken({ scopes: ['files:read', 'admin:read', 'mcp'] })
+    const principal = await authenticateAgent(request('Bearer flr_AgentToken'))
+    expect(principal!.scopes).toEqual(['files:read', 'admin:read'])
+  })
+
+  it('are dropped from a connection, and from a narrowed pair, while it is off', async () => {
+    withConnection({ scopes: ['files:read', 'admin:read', 'admin:content'] })
+    expect(
+      (await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`)))!.scopes
+    ).toEqual(['files:read'])
+    withPair({ narrowed: true, scopes: ['admin:read'] })
+    const narrowed = await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+    expect(narrowed!.scopes).toEqual([])
+    expect(narrowed!.user.agentConnection!.scopes).toEqual([])
+    expect(
+      (await credentialPrincipal('connection:connection-1'))!.scopes
+    ).toEqual(['files:read'])
+  })
+
+  it('are kept on a connection while it is on', async () => {
+    mocks.administration.mockResolvedValue(true)
+    withConnection({ scopes: ['files:read', 'admin:read'] })
+    const principal = await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+    expect(principal!.scopes).toEqual(['files:read', 'admin:read'])
+    expect(principal!.user.agentConnection!.scopes).toEqual([
+      'files:read',
+      'admin:read',
+    ])
+  })
+
+  it('cost nothing when a credential holds none: the settings are not read', async () => {
+    await authenticateAgent(request('Bearer flr_AgentToken'))
+    await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+    await credentialPrincipal('connection:connection-1')
+    expect(mocks.administration).not.toHaveBeenCalled()
+  })
+
+  describe('a connection that holds one', () => {
+    beforeEach(() => mocks.administration.mockResolvedValue(true))
+
+    it('works until 30 days after it was authorized, used or not', async () => {
+      withConnection({
+        scopes: ['files:read', 'admin:read'],
+        createdAt: new Date(Date.now() - 30 * DAY + 60_000),
+      })
+      expect(
+        await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+      ).not.toBeNull()
+      expect(
+        await credentialPrincipal('connection:connection-1')
+      ).not.toBeNull()
+    })
+
+    it('is refused from then on, at the endpoint and for its transfer URLs', async () => {
+      withConnection({
+        scopes: ['files:read', 'admin:read'],
+        createdAt: new Date(Date.now() - 30 * DAY - 1000),
+      })
+      expect(
+        await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+      ).toBeNull()
+      expect(await credentialPrincipal('connection:connection-1')).toBeNull()
+      // Whatever the switch says: the grant itself has ended.
+      mocks.administration.mockResolvedValue(false)
+      expect(
+        await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+      ).toBeNull()
+    })
+
+    it('does not end a connection without one, however old', async () => {
+      withConnection({
+        scopes: ['files:read', 'invites:write'],
+        createdAt: new Date(Date.now() - 365 * DAY),
+      })
+      expect(
+        await authenticateAgent(request(`Bearer ${ACCESS_TOKEN}`))
+      ).not.toBeNull()
+    })
   })
 })

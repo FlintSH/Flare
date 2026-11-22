@@ -8,7 +8,6 @@ import { TOOL_CATALOG, TOOL_NAMES, type ToolRow } from '@/lib/mcp/catalog'
 import {
   API_COVERAGE,
   type Coverage,
-  LATER_AREAS,
   UNEXPOSED_REASONS,
 } from '@/lib/mcp/coverage'
 
@@ -144,9 +143,7 @@ describe('the coverage contract', () => {
         expect(new Set(coverage.tools).size).toBe(coverage.tools.length)
       } else {
         expect(Object.keys(UNEXPOSED_REASONS)).toContain(coverage.reason)
-        if (coverage.reason === 'later')
-          expect(Object.keys(LATER_AREAS)).toContain(coverage.area)
-        else expect(coverage).not.toHaveProperty('area')
+        expect(coverage).not.toHaveProperty('area')
       }
       // A preflight is the only thing OPTIONS answers, and only OPTIONS does.
       expect('reason' in coverage && coverage.reason === 'preflight').toBe(
@@ -161,18 +158,16 @@ describe('the coverage contract', () => {
 
   it('gives each reason one plain sentence', () => {
     expect(Object.keys(UNEXPOSED_REASONS)).toEqual([
-      'later',
       'credentials',
       'sign-in',
       'full-control',
+      'mail-delivery',
+      'logos',
       'browser',
       'preflight',
       'mcp',
     ])
-    for (const sentence of [
-      ...Object.values(UNEXPOSED_REASONS),
-      ...Object.values(LATER_AREAS),
-    ]) {
+    for (const sentence of Object.values(UNEXPOSED_REASONS)) {
       expect(sentence).toMatch(/^[A-Z]/)
       expect(sentence).not.toMatch(/[\u2013\u2014]/)
     }
@@ -182,16 +177,20 @@ describe('the coverage contract', () => {
     }
   })
 
-  it('uses every reason and every later area it defines', () => {
+  it('uses every reason it defines', () => {
     const reasons = new Set<string>()
-    const areas = new Set<string>()
     for (const [, coverage] of entries)
-      if ('reason' in coverage) {
-        reasons.add(coverage.reason)
-        if (coverage.reason === 'later') areas.add(coverage.area)
-      }
+      if ('reason' in coverage) reasons.add(coverage.reason)
     expect([...reasons].sort()).toEqual(Object.keys(UNEXPOSED_REASONS).sort())
-    expect([...areas].sort()).toEqual(Object.keys(LATER_AREAS).sort())
+  })
+
+  it('leaves nothing for a later change', () => {
+    expect(UNEXPOSED_REASONS).not.toHaveProperty('later')
+    expect(
+      entries
+        .filter(([, coverage]) => 'reason' in coverage)
+        .map(([, coverage]) => coverage)
+    ).not.toContainEqual(expect.objectContaining({ reason: 'later' }))
   })
 })
 
@@ -236,20 +235,6 @@ describe('archives and account settings', () => {
     expect(table.get(operation)).toEqual({ reason })
   })
 
-  it('leaves nothing of them for a later change', () => {
-    expect(Object.keys(LATER_AREAS)).toEqual(['invites', 'administration'])
-    const later = entries
-      .filter(
-        ([, coverage]) => 'reason' in coverage && coverage.reason === 'later'
-      )
-      .map(([operation]) => operation.split(' ')[1])
-    expect(later.length).toBeGreaterThan(0)
-    for (const path of later)
-      expect(path).not.toMatch(
-        /^\/api\/(profile|upload-profiles|customization\/preferences|files)(\/|$)/
-      )
-  })
-
   it('says where a tool does less than its route', () => {
     const note = (operation: string) => table.get(operation)?.note ?? ''
     // No tool changes how the account signs in.
@@ -270,6 +255,107 @@ describe('archives and account settings', () => {
     )
     expect(note('GET /api/upload-profiles/{id}/export')).toMatch(
       /no tool makes the recipe file/
+    )
+  })
+})
+
+describe('invites, administration and moderation', () => {
+  const table = new Map<string, Coverage>(entries)
+
+  it.each<[string, string[]]>([
+    ['GET /api/invites', ['list_invites']],
+    ['POST /api/invites', ['create_invite']],
+    ['DELETE /api/invites/{id}', ['revoke_invite']],
+    ['GET /api/users', ['list_users']],
+    ['POST /api/users', ['create_user']],
+    ['PUT /api/users', ['update_user']],
+    ['DELETE /api/users/{id}', ['delete_user']],
+    ['POST /api/users/{id}/login', ['get_user']],
+    ['DELETE /api/users/{id}/avatar', ['update_user']],
+    ['DELETE /api/users/{id}/sessions', ['update_user']],
+    ['GET /api/users/{id}/email', ['get_user']],
+    ['POST /api/users/{id}/email', ['update_user']],
+    ['GET /api/roles', ['list_roles']],
+    ['POST /api/roles', ['save_role']],
+    ['PATCH /api/roles/{id}', ['save_role']],
+    ['DELETE /api/roles/{id}', ['delete_role']],
+    ['GET /api/audit', ['search_audit_log']],
+    ['GET /api/settings', ['get_instance_settings']],
+    ['PATCH /api/settings', ['update_instance_settings']],
+    ['GET /api/settings/invites', ['get_instance_settings']],
+    ['PUT /api/settings/invites', ['update_instance_settings']],
+    ['GET /api/settings/email', ['get_instance_settings']],
+    ['PUT /api/settings/email', ['update_email_settings']],
+    ['GET /api/settings/email/impact', ['get_instance_settings']],
+    ['POST /api/settings/email/impact', ['update_email_settings']],
+    ['POST /api/settings/email/test', ['send_test_email']],
+    ['GET /api/updates/check', ['get_instance_settings']],
+    ['GET /api/customization', ['get_instance_settings']],
+    ['POST /api/customization', ['update_instance_appearance']],
+    // Moderation: the account's own tools, given another account.
+    ['GET /api/users/{id}/files', ['search_files']],
+    ['PATCH /api/users/{id}/files/{fileId}', ['set_file_sharing']],
+    ['DELETE /api/users/{id}/files/{fileId}', ['delete_files']],
+    ['GET /api/users/{id}/urls', ['list_short_links']],
+    ['DELETE /api/users/{id}/urls/{urlId}', ['delete_short_link']],
+  ])('%s is covered by %j', (operation, covering) => {
+    expect(toolsOf(table.get(operation)!)).toEqual(covering)
+  })
+
+  it.each([
+    // The legacy write replaces every setting at once.
+    ['POST /api/settings', 'full-control'],
+    ['POST /api/settings/email/retry', 'mail-delivery'],
+    ['POST /api/customization/assets', 'logos'],
+    ['POST /api/settings/favicon', 'logos'],
+    ['DELETE /api/settings/favicon', 'logos'],
+  ])('%s stays without a tool: %s', (operation, reason) => {
+    expect(table.get(operation)).toEqual({ reason })
+  })
+
+  it('says the moderation routes take a tool with `account`', () => {
+    for (const operation of [
+      'GET /api/users/{id}/files',
+      'PATCH /api/users/{id}/files/{fileId}',
+      'DELETE /api/users/{id}/files/{fileId}',
+      'GET /api/users/{id}/urls',
+      'DELETE /api/users/{id}/urls/{urlId}',
+    ])
+      expect(table.get(operation)?.note, operation).toMatch(/with `account`/i)
+  })
+
+  it('says where a tool does less than its route', () => {
+    const note = (operation: string) => table.get(operation)?.note ?? ''
+    // Nothing an agent does sets how anyone signs in.
+    expect(note('POST /api/users')).toMatch(/no password/)
+    expect(note('PUT /api/users')).toMatch(
+      /does not change the email address or the password/
+    )
+    expect(note('PUT /api/settings/email')).toMatch(
+      /does not change the SMTP connection/
+    )
+    // No call grants a key permission or acts on the acting account.
+    for (const operation of [
+      'GET /api/invites',
+      'POST /api/invites',
+      'POST /api/users',
+      'PUT /api/users',
+      'POST /api/users/{id}/email',
+      'POST /api/roles',
+      'PATCH /api/roles/{id}',
+      'PUT /api/settings/invites',
+    ])
+      expect(note(operation), operation).toMatch(/key permission/)
+    expect(note('DELETE /api/users/{id}')).toMatch(/this connection acts as/)
+    expect(note('DELETE /api/users/{id}/sessions')).toMatch(
+      /this connection acts as/
+    )
+    // Secrets and visitors' code are never read or written.
+    expect(note('GET /api/settings')).toMatch(/whether one is saved/)
+    expect(note('PATCH /api/settings')).toMatch(/both S3 keys/)
+    expect(note('POST /api/settings/email/test')).toMatch(/saved settings only/)
+    expect(note('POST /api/customization')).toMatch(
+      /no appearance pack and takes no logo/
     )
   })
 })

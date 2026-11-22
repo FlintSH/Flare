@@ -5,6 +5,7 @@ import { requireSession } from '@/lib/http/access'
 import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 import { hasPermission } from '@/lib/permissions/catalog'
 
 const api = routes('/api/customization', {
@@ -30,7 +31,7 @@ export const GET = api(async (request) => {
 
 export const POST = api(
   async (request) => {
-    await requireSession(request, 'appearance.manage')
+    await requireSession(request, ADMIN_PERMISSIONS.manageAppearance)
     const command = await readJson(request, appearanceCommandSchema, {
       limit: 1_000_000,
     })

@@ -11,11 +11,22 @@ function matches(row: Row, where: Where): boolean {
   return Object.entries(where).every(([key, condition]) => {
     const value = row[key]
     if (condition === undefined) return true
+    if (key === 'NOT') return !matches(row, condition as Where)
     if (condition === null) return value === null
     if (condition instanceof Date)
       return value instanceof Date && value.getTime() === condition.getTime()
     if (typeof condition === 'object') {
-      const test = condition as { gt?: Date; lte?: Date; not?: unknown }
+      const test = condition as {
+        gt?: Date
+        lte?: Date
+        not?: unknown
+        hasSome?: unknown[]
+      }
+      if ('hasSome' in test)
+        // A row written without the column holds none, as its default does.
+        return ((value as unknown[] | undefined) ?? []).some((item) =>
+          test.hasSome!.includes(item)
+        )
       if ('gt' in test) return (value as Date) > test.gt!
       if ('lte' in test) return (value as Date) <= test.lte!
       if ('not' in test) return value !== test.not
@@ -36,7 +47,8 @@ export function fakeDatabase() {
   }
   const calls: string[] = []
   let next = 1
-  const state = { failing: false }
+  /** `settings` is the saved settings document a transaction reads, or null for none. */
+  const state = { failing: false, settings: null as unknown }
   const note = (call: string) => {
     calls.push(call)
     if (state.failing) throw new Error('connection to 10.0.0.3:5432 refused')
@@ -174,6 +186,11 @@ export function fakeDatabase() {
       credential: string
     ) => {
       const sql = statement.join('?')
+      // The settings lock: nobody else is here to hold it.
+      if (/^SELECT pg_advisory_xact_lock\(721150092\)$/.test(sql)) {
+        note('settingsLock')
+        return 1
+      }
       if (
         !/FROM "AgentTransfer"\s+WHERE "credential" = \?\s+ORDER BY "id" FOR UPDATE SKIP LOCKED/.test(
           sql
@@ -182,6 +199,12 @@ export function fakeDatabase() {
         throw new Error(`The fake database has no statement like this: ${sql}`)
       note('agentTransfer.delete')
       return deleteMany('transfers', { credential }).count
+    },
+    config: {
+      findUnique: async () => {
+        note('config.findUnique')
+        return state.settings === null ? null : { value: state.settings }
+      },
     },
     // Row locks: one request runs at a time here, so there is nothing to wait for.
     $queryRaw: async () => {
@@ -204,6 +227,7 @@ export function fakeDatabase() {
       calls.length = 0
       next = 1
       state.failing = false
+      state.settings = null
     },
   }
 }

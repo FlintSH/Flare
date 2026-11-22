@@ -337,6 +337,11 @@ describe("every action that ends an account's agents", () => {
       ['an administrator signing the account out'],
     ],
     [
+      'lib/mcp/tools/users.ts',
+      'revokeSecuritySessions',
+      ['an agent signing another account out with update_user'],
+    ],
+    [
       'lib/users/update-account.ts',
       'changeCredentials',
       [

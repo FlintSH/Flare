@@ -12,6 +12,7 @@ import {
 } from '@/lib/integrations/bearer-routes'
 import { scopeAvailable } from '@/lib/mcp/catalog'
 import { agentScopeChoices } from '@/lib/mcp/clients'
+import { ADMIN_CONNECTION_DAYS } from '@/lib/oauth/constants'
 import type { Permission } from '@/lib/permissions/catalog'
 import { cn } from '@/lib/utils'
 
@@ -22,15 +23,36 @@ const GROUPS = [
   { id: 'files', label: 'Files' },
   { id: 'links', label: 'Short links' },
   { id: 'account', label: 'Account' },
+  { id: 'administration', label: 'Administration' },
 ] as const
 
-/** The scopes a token can hold besides Agent access, for an account that `can`. */
+/** What a picker's choices are for: the rules on how long they last differ. */
+export type ScopeCredential = 'token' | 'connection'
+
+/**
+ * The line under the Administration group. A token's limit is told beside
+ * its expiry, where it applies; a connection has no expiry to choose.
+ */
+export const ADMINISTRATION_NOTE: Record<ScopeCredential, string> = {
+  token: 'These let the agent act on other accounts and the instance itself.',
+  connection: `These let the agent act on other accounts and the instance itself, and a connection that holds one ends after ${ADMIN_CONNECTION_DAYS} days.`,
+}
+
+/** Why a scope the connection does not hold cannot be ticked in Edit permissions. */
+export const SIGN_IN_ONLY_REASON = 'Connect the agent again to grant this.'
+
+/**
+ * The scopes a token can hold besides Agent access, for an account that
+ * `can`. `administration` says whether administration through MCP is on.
+ */
 export function offeredScopes(
   can: (permission: Permission) => boolean,
-  mcp: boolean
+  mcp: boolean,
+  administration: boolean
 ): ScopeEntry[] {
   return API_SCOPE_CATALOG.filter(
-    ({ scope }) => scope !== MCP_SCOPE && scopeAvailable(scope, can, mcp)
+    ({ scope }) =>
+      scope !== MCP_SCOPE && scopeAvailable(scope, can, mcp, administration)
   )
 }
 
@@ -40,15 +62,19 @@ export function offeredScopes(
  * While it is on, either Agent access is a checkbox that reveals the scopes
  * only agents use (`agent="optional"`, the token form), or the token is for
  * an agent and all of them show (`agent="always"`); with those scopes in view
- * the list is long enough to group under Files, Short links and Account.
+ * the list is long enough to group under Files, Short links, Account and,
+ * while administration through MCP is on, Administration.
  */
 export function ScopePicker({
   selected,
   onChange,
   can,
   mcp,
+  administration,
+  credential,
   agent = 'optional',
   only,
+  locked = [],
   narrow = false,
 }: {
   selected: readonly string[]
@@ -56,16 +82,21 @@ export function ScopePicker({
   can: (permission: Permission) => boolean
   /** Whether the MCP server is on. */
   mcp: boolean
+  /** Whether administration through MCP is on. */
+  administration: boolean
+  credential: ScopeCredential
   agent?: 'optional' | 'always'
   /** Show no scope outside this list, such as what a sign-in asked for. */
   only?: readonly string[]
+  /** Scopes shown that cannot be ticked; see `SIGN_IN_ONLY_REASON`. */
+  locked?: readonly string[]
   /** One column at every width, for a card too narrow for two. */
   narrow?: boolean
 }) {
   const id = useId()
   const agentAccess = API_SCOPE_CATALOG.find(({ scope }) => scope === MCP_SCOPE)
   const agentOn = mcp && (agent === 'always' || selected.includes(MCP_SCOPE))
-  const shown = offeredScopes(can, mcp).filter(
+  const shown = offeredScopes(can, mcp, administration).filter(
     ({ scope }) =>
       (agentOn || scopeWorksOverApi(scope)) && (!only || only.includes(scope))
   )
@@ -83,32 +114,57 @@ export function ScopePicker({
     )
   }
 
-  const row = ({ scope, label, description }: ScopeEntry) => (
-    <label
-      key={scope}
-      className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-    >
-      <input
-        type="checkbox"
-        className="mt-0.5"
-        checked={selected.includes(scope)}
-        onChange={(event) => toggle(scope, event.target.checked)}
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{label}</span>
-        {/* In the grouped columns a description can wrap, so it sets its
-            own line height there. */}
-        <span
-          className={cn(
-            'text-xs text-muted-foreground',
-            mcp && 'mt-0.5 block text-pretty'
+  const row = ({ scope, label, description }: ScopeEntry) => {
+    // A locked scope that is still ticked can be unticked, not ticked again.
+    const lockedOff = locked.includes(scope) && !selected.includes(scope)
+    return (
+      <label
+        key={scope}
+        className={cn(
+          'flex cursor-pointer items-start gap-3 rounded-lg border p-3',
+          lockedOff && 'cursor-not-allowed'
+        )}
+      >
+        <input
+          type="checkbox"
+          // The shared checkbox has no look of its own for off.
+          className={cn('mt-0.5', lockedOff && 'cursor-not-allowed opacity-50')}
+          checked={selected.includes(scope)}
+          disabled={lockedOff}
+          aria-describedby={lockedOff ? `${id}-${scope}-locked` : undefined}
+          onChange={(event) => toggle(scope, event.target.checked)}
+        />
+        <span className="min-w-0">
+          <span
+            className={cn(
+              'block text-sm font-medium',
+              lockedOff && 'text-muted-foreground'
+            )}
+          >
+            {label}
+          </span>
+          {/* In the grouped columns a description can wrap, so it sets its
+              own line height there. */}
+          <span
+            className={cn(
+              'text-xs text-muted-foreground',
+              mcp && 'mt-0.5 block text-pretty'
+            )}
+          >
+            {description}
+          </span>
+          {lockedOff && (
+            <span
+              id={`${id}-${scope}-locked`}
+              className="mt-1 block text-pretty text-xs font-medium text-muted-foreground"
+            >
+              {SIGN_IN_ONLY_REASON}
+            </span>
           )}
-        >
-          {description}
         </span>
-      </span>
-    </label>
-  )
+      </label>
+    )
+  }
 
   if (!mcp) return <div className="space-y-2">{shown.map(row)}</div>
 
@@ -119,19 +175,31 @@ export function ScopePicker({
         GROUPS.map((group) => {
           const scopes = shown.filter((entry) => entry.group === group.id)
           if (!scopes.length) return null
+          const note = group.id === 'administration'
           return (
             <div
               key={group.id}
               role="group"
               aria-labelledby={`${id}-${group.id}`}
+              aria-describedby={note ? `${id}-${group.id}-note` : undefined}
               className="space-y-2"
             >
-              <p
-                id={`${id}-${group.id}`}
-                className="text-xs font-medium text-muted-foreground"
-              >
-                {group.label}
-              </p>
+              <div className="space-y-0.5">
+                <p
+                  id={`${id}-${group.id}`}
+                  className="text-xs font-medium text-muted-foreground"
+                >
+                  {group.label}
+                </p>
+                {note && (
+                  <p
+                    id={`${id}-${group.id}-note`}
+                    className="text-pretty text-xs text-muted-foreground"
+                  >
+                    {ADMINISTRATION_NOTE[credential]}
+                  </p>
+                )}
+              </div>
               <div className={columns}>{scopes.map(row)}</div>
             </div>
           )
@@ -195,16 +263,24 @@ export function useAgentScopes(
   }
 }
 
-/** `only` already holds what the role can use, so nothing more is filtered. */
+/**
+ * `only` already holds what the role can use and the instance allows, so
+ * nothing more is filtered.
+ */
 const everything = () => true
 
 /** The presets and Custom, with the checkboxes Custom opens. */
 export function AgentScopes({
   picker,
+  credential,
+  locked,
   disabled,
   narrow = false,
 }: {
   picker: ReturnType<typeof useAgentScopes>
+  credential: ScopeCredential
+  /** Scopes shown that cannot be ticked; see `SIGN_IN_ONLY_REASON`. */
+  locked?: readonly string[]
   disabled?: boolean
   /** One column at every width, for a card too narrow for two. */
   narrow?: boolean
@@ -263,8 +339,13 @@ export function AgentScopes({
             onChange={picker.setCustom}
             can={everything}
             mcp
+            // Like the role, whether administration is on is already in
+            // `only`: its scopes are there only while it is.
+            administration
+            credential={credential}
             agent="always"
             only={offered}
+            locked={locked}
             narrow={narrow}
           />
         </div>

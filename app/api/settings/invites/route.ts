@@ -6,6 +6,7 @@ import { HttpError } from '@/lib/http/errors'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
 import { everyoneCanInvite, setEveryoneCanInvite } from '@/lib/invites/service'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 
 const policySchema = z.object({ everyoneCanInvite: z.boolean() }).strict()
 
@@ -14,7 +15,7 @@ const api = routes('/api/settings/invites', {
 })
 
 export const GET = api(async (request) => {
-  await requireSession(request, 'settings.read')
+  await requireSession(request, ADMIN_PERMISSIONS.readSettings)
   const config = await getConfig()
   return {
     everyoneCanInvite: await everyoneCanInvite(),
@@ -24,7 +25,10 @@ export const GET = api(async (request) => {
 
 export const PUT = api(
   async (request) => {
-    const { user } = await requireSession(request, 'settings.security')
+    const { user } = await requireSession(
+      request,
+      ADMIN_PERMISSIONS.setEveryoneCanInvite
+    )
     const parsed = policySchema.safeParse(
       await readJson(request, { limit: 32 * 1024 })
     )

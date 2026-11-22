@@ -5,7 +5,7 @@ description: Browser-session APIs for creating, listing, and revoking invite lin
 
 # Invite contracts
 
-These routes serve [Profile → Invites](/guide/invites), **Users → Invites**, and the [invite settings](/admin/users#invite-links). Except for registration, they require a current browser session. **Neither named API tokens nor the legacy upload credential authorize them**, and bearer requests without a session cookie receive `401`. Mutations reject cross-origin requests, and `POST`/`PUT` bodies must be `application/json`.
+These routes serve [Profile → Invites](/guide/invites), **Users → Invites**, and the [invite settings](/admin/users#invite-links). Except for registration, they require a current browser session. **Neither named API tokens nor the legacy upload credential authorize them**, and bearer requests without a session cookie receive `401`. An AI agent does this work through the [MCP invite tools](./mcp#invites), which call the same code with the same limits. Mutations reject cross-origin requests, and `POST`/`PUT` bodies must be `application/json`.
 
 The [OpenAPI document](/openapi.json) continues to describe only named-token operations under `paths`; these session routes are deliberately excluded. Existing token scopes and the `file.ready` webhook contract are unchanged.
 

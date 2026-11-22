@@ -23,6 +23,7 @@ import {
   endExport,
   entryOf,
   findTransfer,
+  modeOf,
   releaseExport,
   releaseUpload,
   uploadOf,
@@ -688,6 +689,81 @@ describe('a link to one entry of an archive', () => {
       'rejected',
     ])
     expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
+  })
+})
+
+describe('a link made in moderator mode', () => {
+  it('records that it was, and for which account, on a file link', async () => {
+    await createDownloadUrl(
+      principal('token:mod', 'moderator'),
+      ORIGIN,
+      'file-9',
+      'sam'
+    )
+    const [row] = table.rows
+    // The row belongs to the moderator and the moderator's credential.
+    expect(row).toMatchObject({
+      userId: 'moderator',
+      credential: 'token:mod',
+      kind: 'download',
+      fileId: 'file-9',
+      options: { moderating: 'sam' },
+    })
+    expect(modeOf(row as never)).toEqual({ as: 'moderator', accountId: 'sam' })
+  })
+
+  it('records it beside the entry on an archive-entry link', async () => {
+    await createEntryUrl(
+      principal('token:mod', 'moderator'),
+      ORIGIN,
+      'file-9',
+      { position: 3 },
+      'sam'
+    )
+    const [row] = table.rows
+    expect(row.options).toEqual({ entry: { position: 3 }, moderating: 'sam' })
+    expect(entryOf(row as never)).toEqual({ position: 3 })
+    expect(modeOf(row as never)).toEqual({ as: 'moderator', accountId: 'sam' })
+  })
+
+  it('leaves an owner link as it always was, and reads it as one', async () => {
+    await createDownloadUrl(principal(), ORIGIN, 'file-1')
+    await createEntryUrl(principal(), ORIGIN, 'file-2', { path: 'a.txt' })
+    expect(table.rows.map((row) => row.options)).toEqual([
+      null,
+      { entry: { path: 'a.txt' } },
+    ])
+    for (const row of table.rows)
+      expect(modeOf(row as never)).toEqual({ as: 'owner' })
+  })
+
+  it.each([
+    [{ moderating: '' }],
+    [{ moderating: null }],
+    [{ moderating: 7 }],
+    [{ moderating: ['sam'] }],
+    [{ entry: { path: 'a.txt' }, moderating: { id: 'sam' } }],
+  ])(
+    'reads no mode from a row that holds %j, so nothing may use it',
+    (options) => {
+      expect(modeOf({ options } as never)).toBeNull()
+    }
+  )
+
+  it("counts toward the moderator's own limit of download links, with its owner links", async () => {
+    const moderator = principal('token:mod', 'moderator')
+    for (let index = 0; index < MAX_OUTSTANDING_TRANSFERS - 1; index++)
+      await createDownloadUrl(moderator, ORIGIN, `file-${index}`)
+    await createDownloadUrl(moderator, ORIGIN, 'file-sam', 'sam')
+    await expect(
+      createDownloadUrl(moderator, ORIGIN, 'file-more', 'sam')
+    ).rejects.toBeInstanceOf(TransferLimitError)
+    await expect(
+      createEntryUrl(moderator, ORIGIN, 'file-more', { position: 0 }, 'sam')
+    ).rejects.toBeInstanceOf(TransferLimitError)
+    // The moderated account's own allowance is untouched.
+    await createDownloadUrl(principal('token:sam', 'sam'), ORIGIN, 'file-sam')
+    expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS + 1)
   })
 })
 

@@ -62,6 +62,9 @@ function contextFor(
     principal,
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: ORIGIN,
+    moderating: null,
+    mayModerate: false,
+    requireModeration: () => {},
     allows: (effectName) => needsMet(effect(effectName), principal),
     recheck: async () => {},
     requireEffect(effectName) {

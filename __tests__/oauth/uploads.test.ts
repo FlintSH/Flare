@@ -103,6 +103,9 @@ function context(user: AuthenticatedUser): ToolContext {
     principal,
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: ORIGIN,
+    moderating: null,
+    mayModerate: false,
+    requireModeration: () => {},
     allows: () => true,
     recheck: async () => {},
     requireEffect: () => {},
@@ -178,7 +181,7 @@ describe.each(inline)('%s by an agent that signed in', (name, args) => {
     await expect(authorize(tx)).resolves.toBeUndefined()
     expect(findUnique).toHaveBeenCalledExactlyOnceWith({
       where: { id: 'connection-1' },
-      select: { revokedAt: true, scopes: true },
+      select: { revokedAt: true, scopes: true, createdAt: true },
     })
     expect(mocks.outside).not.toHaveBeenCalled()
     // Its row is held first, to the end of the transaction: disconnecting it

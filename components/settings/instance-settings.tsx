@@ -41,11 +41,24 @@ import {
   PreferencesShell,
 } from '@/components/preferences/preferences-shell'
 import { InstanceVersion } from '@/components/settings/instance-version'
-import { numberFieldClassName } from '@/components/shared/form-styles'
+import {
+  destructiveActionClassName,
+  numberFieldClassName,
+} from '@/components/shared/form-styles'
 import { Icons } from '@/components/shared/icons'
 import { SaveBar } from '@/components/shared/save-bar'
 import { ThemeCustomizer } from '@/components/theme/theme-customizer'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -225,6 +238,10 @@ export function InstanceSettings({
     initialEveryoneCanInvite
   )
   const inviteAccessChanged = everyoneCanInvite !== savedEveryoneCanInvite
+  // Turning administration through MCP off takes its permissions from every
+  // agent for good, so that waits for a confirmation.
+  const [confirmingAdministrationOff, setConfirmingAdministrationOff] =
+    useState(false)
 
   const hasChanges =
     !deepEqual(savedConfig, workingConfig) ||
@@ -370,6 +387,11 @@ export function InstanceSettings({
     },
     []
   )
+
+  const setAdministration = (administration: boolean) =>
+    handleSettingChange('general', {
+      mcp: { ...workingConfig.settings.general.mcp, administration },
+    })
 
   const isFieldChanged = useCallback(
     <T extends keyof FlareConfig['settings']>(
@@ -1245,6 +1267,77 @@ export function InstanceSettings({
                     />
                   </div>
                 </div>
+                {workingConfig.settings.general.mcp.enabled && (
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <Label htmlFor="mcp-administration">
+                        Allow administration through MCP
+                      </Label>
+                      <p
+                        id="mcp-administration-description"
+                        className="text-pretty text-sm text-muted-foreground"
+                      >
+                        Agents can be given permission to manage users, roles,
+                        other accounts&apos; content and instance settings, up
+                        to what the account&apos;s role allows.
+                        {!can('administrator') &&
+                          ' Only an administrator can change this.'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {isFieldChanged('general', ['mcp', 'administration']) && (
+                        <ChangeIndicator />
+                      )}
+                      <Switch
+                        id="mcp-administration"
+                        aria-describedby="mcp-administration-description"
+                        checked={
+                          workingConfig.settings.general.mcp.administration
+                        }
+                        disabled={!can('administrator')}
+                        onCheckedChange={(checked) => {
+                          // Only a saved grant has anything to take away.
+                          if (
+                            !checked &&
+                            savedConfig.settings.general.mcp.administration
+                          )
+                            setConfirmingAdministrationOff(true)
+                          else setAdministration(checked)
+                        }}
+                        className={getFieldClasses('general', [
+                          'mcp',
+                          'administration',
+                        ])}
+                      />
+                    </div>
+                    <AlertDialog
+                      open={confirmingAdministrationOff}
+                      onOpenChange={setConfirmingAdministrationOff}
+                    >
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>
+                            Turn off administration through MCP?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            When you save, every agent connection and token
+                            loses its administration permissions. Turning this
+                            on again does not give them back.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => setAdministration(false)}
+                            className={destructiveActionClassName}
+                          >
+                            Turn off
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
                 {workingConfig.settings.general.mcp.enabled && (
                   <div className="space-y-2">
                     <Label htmlFor="mcp-server-url">Server URL</Label>

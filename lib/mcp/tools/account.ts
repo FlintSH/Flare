@@ -7,7 +7,7 @@ import { storageQuotaBytes, uploadCapacity } from '@/lib/uploads/capacity'
 import { profileView } from '@/lib/uploads/profiles'
 import { mbToBytes } from '@/lib/utils/size'
 
-import { TOOL_NAMES, toolAllowed } from '../catalog'
+import { TOOL_NAMES, toolAllowed, toolListed } from '../catalog'
 import { compact } from '../results'
 import { defineTool } from '../tool'
 import { accountSettingsSchema, readAccountSettings } from './profile'
@@ -35,10 +35,12 @@ async function managedProfiles(
   )
 }
 
+const nonEmpty = (names: string[]) => (names.length ? names : undefined)
+
 const getAccount = defineTool({
   name: 'get_account',
   description:
-    'Who this connection acts as in Flare and what it may do: the account, the scopes and tools this connection has, storage used and quota, the largest file it may upload, and the upload profiles it can name when uploading. A connection that may change account settings also gets them as they stand, under `settings`, in the form update_profile answers. One that may change upload profiles gets each profile with its settings and `revision`, as save_upload_profile takes them. Call it first.',
+    "Who this connection acts as in Flare and what it may do: the account, the scopes and tools this connection has, storage used and quota, the largest file it may upload, and the upload profiles it can name when uploading. A connection that may change account settings also gets them as they stand, under `settings`, in the form update_profile answers. One that may change upload profiles gets each profile with its settings and `revision`, as save_upload_profile takes them. Tools it may call only on other accounts' content, with `account`, are named under `moderator_only`. Call it first.",
   input: z.object({}),
   output: z.object({
     account: z.object({
@@ -53,6 +55,12 @@ const getAccount = defineTool({
     connection: z.object({
       scopes: z.array(z.string()),
       tools: z.array(z.string()),
+      moderator_only: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Tools of `tools` this connection may call only with `account`, on another account's content as a moderator, and not on its own"
+        ),
       upload_profile: z
         .object({ id: z.string(), name: z.string().optional() })
         .optional()
@@ -147,7 +155,14 @@ const getAccount = defineTool({
         instance: { url: origin, version: getBuildInfo().version },
         connection: compact({
           scopes: [...principal.scopes],
-          tools: TOOL_NAMES.filter((name) => toolAllowed(name, principal)),
+          // Listed in either mode, so the list matches what the client sees.
+          tools: TOOL_NAMES.filter((name) => toolListed(name, principal)),
+          moderator_only: nonEmpty(
+            TOOL_NAMES.filter(
+              (name) =>
+                toolListed(name, principal) && !toolAllowed(name, principal)
+            )
+          ),
           upload_profile: bound
             ? compact({
                 id: bound,

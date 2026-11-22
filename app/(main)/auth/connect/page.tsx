@@ -12,7 +12,7 @@ import { SIGN_IN_PATH } from '@/lib/auth/sign-in'
 import { API_SCOPES, MCP_SCOPE } from '@/lib/integrations/bearer-routes'
 import { scopeAvailable } from '@/lib/mcp/catalog'
 import { returnDestination, shownClientName } from '@/lib/mcp/clients'
-import { mcpEnabled } from '@/lib/mcp/settings'
+import { administrationOn, mcpEnabled } from '@/lib/mcp/settings'
 import { readConsentRequest } from '@/lib/oauth/authorize'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 
@@ -62,6 +62,7 @@ export default async function ConnectPage({
     hasPermission(session.user, permission)
   // Signing an agent in needs what creating a token for one needs.
   const allowed = can('tokens.manage')
+  const administration = allowed && (await administrationOn())
   return (
     <AuthShell
       title="Connect an agent"
@@ -80,7 +81,8 @@ export default async function ConnectPage({
           allowed
             ? API_SCOPES.filter(
                 (scope) =>
-                  scope !== MCP_SCOPE && scopeAvailable(scope, can, true)
+                  scope !== MCP_SCOPE &&
+                  scopeAvailable(scope, can, true, administration)
               )
             : null
         }

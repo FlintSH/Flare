@@ -195,8 +195,10 @@ export async function consumeChallenge(
  * Every one of them comes through here:
  *
  * - "I may be compromised": signing out everywhere, an administrator signing
- *   the account out, and a new password, whether changed in the profile, set
- *   by an administrator or reset from an emailed link.
+ *   the account out (in the browser, or through an agent's `update_user`
+ *   with `sign_out`, which never reaches the acting account), and a new
+ *   password, whether changed in the profile, set by an administrator or
+ *   reset from an emailed link.
  * - "How I sign in changed": a new sign-in address; turning the authenticator
  *   on or off, or replacing its recovery codes; adding or removing a passkey;
  *   requiring passkeys or no longer requiring them; replacing passkey

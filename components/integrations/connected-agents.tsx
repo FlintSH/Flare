@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 
 import { apiRequest } from '@/lib/client/request'
+import { isAdminScope } from '@/lib/integrations/bearer-routes'
 import {
   destinationLabel,
   returnDestination,
@@ -34,6 +35,7 @@ import { scrollFadeRef } from '@/lib/utils/scroll-fade'
 import { usePermissions } from '@/hooks/use-permissions'
 
 import { AgentScopes, offeredScopes, useAgentScopes } from './scope-picker'
+import { adminConnectionEnd } from './shared'
 
 /** An agent that signed in through the browser, as the integrations query lists it. */
 export type AgentConnection = {
@@ -50,17 +52,29 @@ export type AgentConnection = {
 const SAVE_FAILED = 'Could not save the permissions.'
 
 /**
+ * When a connection that holds an administration scope ends: 30 days after
+ * it was authorized, as `connectionExpired` decides it. Null for any other.
+ */
+const connectionEnds = (connection: AgentConnection): string | null =>
+  connection.scopes.some(isAdminScope)
+    ? adminConnectionEnd(connection.createdAt, 'list')
+    : null
+
+/**
  * The agents that signed in to this account: what each may do, with a way to
  * change that and to disconnect it. Nothing is drawn while there are none.
  * Agents that use a token are in the API tokens list instead.
  */
 export function ConnectedAgents({
   connections,
+  administration,
   disabled,
   onDisconnect,
   onSaved,
 }: {
   connections: readonly AgentConnection[]
+  /** Whether administration through MCP is on. */
+  administration: boolean
   disabled?: boolean
   onDisconnect: (connection: AgentConnection) => void
   /** A connection's permissions changed; the list should load again. */
@@ -69,7 +83,7 @@ export function ConnectedAgents({
   const id = useId()
   const { can } = usePermissions()
   if (!connections.length) return null
-  const available = offeredScopes(can, true)
+  const available = offeredScopes(can, true, administration)
 
   return (
     <section aria-labelledby={`${id}-title`} className="space-y-3">
@@ -86,6 +100,7 @@ export function ConnectedAgents({
           const held = available.filter(({ scope }) =>
             connection.scopes.includes(scope)
           )
+          const ends = connectionEnds(connection)
           return (
             <li
               key={connection.id}
@@ -115,6 +130,14 @@ export function ConnectedAgents({
                       ? `Used ${new Date(connection.lastUsedAt).toLocaleDateString()}`
                       : 'Not used yet',
                   },
+                  ...(ends
+                    ? [
+                        {
+                          key: 'ends',
+                          text: `Ends ${ends}`,
+                        },
+                      ]
+                    : []),
                 ]}
               />
               {held.length > 0 && (
@@ -129,6 +152,7 @@ export function ConnectedAgents({
               <div className="mt-auto flex flex-wrap gap-2 pt-4">
                 <EditPermissionsDialog
                   connection={connection}
+                  administration={administration}
                   disabled={disabled}
                   onSaved={onSaved}
                 />
@@ -156,10 +180,12 @@ export function ConnectedAgents({
  */
 function EditPermissionsDialog({
   connection,
+  administration,
   disabled,
   onSaved,
 }: {
   connection: AgentConnection
+  administration: boolean
   disabled?: boolean
   onSaved: () => void
 }) {
@@ -182,6 +208,7 @@ function EditPermissionsDialog({
             agent holds now. */}
         <EditPermissions
           connection={connection}
+          administration={administration}
           saving={saving}
           onSavingChange={setSaving}
           onClose={() => setOpen(false)}
@@ -197,21 +224,28 @@ function EditPermissionsDialog({
 
 function EditPermissions({
   connection,
+  administration,
   saving,
   onSavingChange,
   onClose,
   onSaved,
 }: {
   connection: AgentConnection
+  administration: boolean
   saving: boolean
   onSavingChange: (saving: boolean) => void
   onClose: () => void
   onSaved: () => void
 }) {
   const { can } = usePermissions()
-  const picker = useAgentScopes(
-    offeredScopes(can, true).map(({ scope }) => scope),
-    { held: connection.scopes }
+  const available = offeredScopes(can, true, administration).map(
+    ({ scope }) => scope
+  )
+  const picker = useAgentScopes(available, { held: connection.scopes })
+  // An administration scope is granted only at sign-in, which starts its
+  // 30 days, so one the connection lacks can be seen here but not added.
+  const locked = available.filter(
+    (scope) => isAdminScope(scope) && !connection.scopes.includes(scope)
   )
   const [error, setError] = useState('')
 
@@ -254,7 +288,12 @@ function EditPermissions({
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <AgentScopes picker={picker} disabled={saving} />
+          <AgentScopes
+            picker={picker}
+            credential="connection"
+            locked={locked}
+            disabled={saving}
+          />
           <p className="text-pretty text-xs text-muted-foreground">
             A removed permission applies on the agent&apos;s next call. An added
             one appears once the client reloads its tools.

@@ -8,6 +8,7 @@ import {
   applyConfigUpdate,
   getConfig,
 } from '@/lib/config'
+import { type SettingsPatch, patchSettings } from '@/lib/config/patch'
 import {
   keepSavedCredentials,
   publicSettings,
@@ -23,12 +24,9 @@ import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
 import { hasPermission } from '@/lib/permissions/catalog'
 import {
-  PermissionError,
   assertAccessibleAdministrator,
-  getUserAccess,
   requireActorPermission,
 } from '@/lib/permissions/server'
-import { settingsPatchAllowed } from '@/lib/permissions/settings'
 
 /** A change to some sections, or one section by name. */
 const settingsPatch = z.object({
@@ -75,29 +73,10 @@ export const PATCH = api(
     const settings = (body.settings ??
       (body.section
         ? { [body.section as string]: body.data }
-        : null)) as Partial<FlareConfig['settings']> | null
+        : null)) as SettingsPatch | null
     if (!settings || typeof settings !== 'object' || Array.isArray(settings))
       throw new HttpError(400, 'Choose settings to update')
-    if (!settingsPatchAllowed(user, settings))
-      throw new HttpError(
-        403,
-        'You do not have permission to change these settings.'
-      )
-    keepSavedCredentials(settings)
-    await prisma.$transaction(async (tx) => {
-      await lockRoleChanges(tx)
-      const access = await getUserAccess(user.id, tx)
-      if (!settingsPatchAllowed(access, settings))
-        throw new PermissionError(
-          'You no longer have permission to change these settings.'
-        )
-      // Validate current email access as well as authority before committing.
-      const permission = access.permissions[0]
-      if (!permission) throw new PermissionError('Permission denied')
-      await requireActorPermission(tx, user.id, permission)
-      await applyConfigUpdate(tx, { settings })
-      await assertAccessibleAdministrator(tx)
-    })
+    await patchSettings(user, settings)
     return apiResponse({ message: 'Settings updated successfully' })
   },
   { failure: { message: SETTINGS_NOT_SAVED } }

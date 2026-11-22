@@ -35,6 +35,8 @@ const mocks = vi.hoisted(() => ({
   /** The account's row lock, and the row as the transaction reads it under it. */
   lock: vi.fn(),
   lockedAccount: vi.fn(),
+  settingsLock: vi.fn(),
+  savedConfig: vi.fn(),
 }))
 vi.mock('@/lib/config', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/config')>()),
@@ -47,6 +49,9 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('next-auth', () => ({ getServerSession: mocks.serverSession }))
 vi.mock('@/lib/database/prisma', () => {
   const tx = {
+    // The settings lock, and the settings as saved, for an administration grant.
+    $executeRaw: mocks.settingsLock,
+    config: { findUnique: mocks.savedConfig },
     $queryRaw: mocks.lock,
     user: { findUnique: mocks.lockedAccount },
     oAuthClient: { updateMany: mocks.markUsed, findUnique: mocks.findClient },
@@ -81,6 +86,11 @@ const ALL_SCOPES = [
   'urls:read',
   'urls:write',
   'account:write',
+  'invites:write',
+  'admin:read',
+  'admin:users',
+  'admin:content',
+  'admin:settings',
 ]
 
 const client = {
@@ -514,7 +524,7 @@ describe('GET /api/oauth/authorize: the resource and the scopes', () => {
     expect(
       (
         await consent({
-          scope: 'files:read mcp claudeai openid offline_access admin:users',
+          scope: 'files:read mcp claudeai openid offline_access admin:all',
         })
       ).scopeCeiling
     ).toEqual(['files:read'])
@@ -1274,6 +1284,90 @@ describe('POST /api/oauth/authorize: the decision', () => {
       }
     })
 
+    describe('administration scopes', () => {
+      const administration = (on: boolean, saved = on) => {
+        const config = (value: boolean) => {
+          const config = structuredClone(DEFAULT_CONFIG)
+          config.settings.general.mcp.enabled = enabled
+          config.settings.general.mcp.administration = value
+          return config
+        }
+        mocks.config.mockImplementation(async () => config(on))
+        // What the transaction reads under the settings lock.
+        mocks.savedConfig.mockResolvedValue({ value: config(saved) })
+      }
+
+      it('refuses them while administration through MCP is off, even to an administrator', async () => {
+        signedIn({ permissions: ['administrator'] })
+        administration(false)
+        expect(
+          await refusal(
+            await approve(['files:read', 'admin:read', 'admin:users'])
+          )
+        ).toBe(
+          'Administration through MCP is turned off on this instance, so agents cannot have "View administration", "Manage users and roles". Remove them and try again.'
+        )
+      })
+
+      it('grants them while it is on, to a role that can use them', async () => {
+        signedIn({
+          permissions: ['tokens.manage', 'files.read', 'content.read'],
+        })
+        administration(true)
+        const response = await approve(['files:read', 'admin:content'])
+        expect(response.status).toBe(200)
+        expect(mocks.createCode.mock.calls[0][0].data.scopes).toEqual([
+          'files:read',
+          'admin:content',
+        ])
+      })
+
+      it('reads the switch again under the settings lock, first, and refuses when it went off meanwhile', async () => {
+        signedIn({
+          permissions: ['tokens.manage', 'files.read', 'content.read'],
+        })
+        administration(true, false)
+        expect(
+          await refusal(await approve(['files:read', 'admin:content']))
+        ).toBe(
+          'Administration through MCP is turned off on this instance, so agents cannot have "Moderate content". Remove it and try again.'
+        )
+        // The settings lock before the account's row.
+        expect(mocks.settingsLock).toHaveBeenCalledOnce()
+        expect(mocks.lock).not.toHaveBeenCalled()
+        administration(true)
+        mocks.settingsLock.mockClear()
+        expect((await approve(['files:read', 'admin:content'])).status).toBe(
+          200
+        )
+        expect(mocks.settingsLock.mock.invocationCallOrder[0]).toBeLessThan(
+          mocks.lock.mock.invocationCallOrder[0]
+        )
+      })
+
+      it('takes no settings lock for a grant without one', async () => {
+        expect((await approve(['files:read'])).status).toBe(200)
+        expect(mocks.settingsLock).not.toHaveBeenCalled()
+        expect(mocks.savedConfig).not.toHaveBeenCalled()
+      })
+
+      it("refuses one the account's role cannot use while it is on", async () => {
+        signedIn({ permissions: ['tokens.manage', 'files.read', 'users.read'] })
+        administration(true)
+        expect(
+          await refusal(await approve(['admin:read', 'admin:settings']))
+        ).toBe(
+          'Your role does not allow "Change instance settings". Remove it and try again.'
+        )
+      })
+
+      it('grants invites without the switch: they are not administration', async () => {
+        signedIn({ permissions: ['tokens.manage', 'invites.create'] })
+        administration(false)
+        expect((await approve(['invites:write'])).status).toBe(200)
+      })
+    })
+
     it('refuses an approval that grants nothing', async () => {
       expect(await refusal(await approve([]))).toBe(
         'Choose at least one permission.'
@@ -1312,6 +1406,18 @@ describe('POST /api/oauth/authorize: the decision', () => {
           userId: 'user-alex',
           revokedAt: null,
           tokens: { some: { refreshExpiresAt: { gt: expect.any(Date) } } },
+          // Nor one past the 30 days of an administration grant.
+          NOT: {
+            scopes: {
+              hasSome: [
+                'admin:read',
+                'admin:users',
+                'admin:content',
+                'admin:settings',
+              ],
+            },
+            createdAt: { lte: expect.any(Date) },
+          },
         },
       })
     })

@@ -24,13 +24,27 @@ async function consumeEmailLimit(key: string, limit: number, seconds: number) {
   if (!allowed) throw new EmailRateLimitError(resetsIn)
 }
 
+/** Counts an email request by its client address, then by `address` when it sends to one. */
 export async function limitEmailRequest(
   req: Request,
   config: EmailConfig,
   address?: string
 ) {
   const ip = clientIp(req.headers) ?? 'unknown'
-  await consumeEmailLimit(`email:ip:${ip}`, config.limits.ipPerHour, 3600)
+  await limitEmailRequestBy(`ip:${ip}`, config, address)
+}
+
+/**
+ * The same limits keyed by another requester, such as `account:<id>` for a
+ * caller with no client address of its own. The requester gets the per-IP
+ * hourly limit; the recipient limits are shared with every other caller.
+ */
+export async function limitEmailRequestBy(
+  requester: string,
+  config: EmailConfig,
+  address?: string
+) {
+  await consumeEmailLimit(`email:${requester}`, config.limits.ipPerHour, 3600)
   if (address) {
     const normalized = address.trim().toLowerCase()
     await consumeEmailLimit(

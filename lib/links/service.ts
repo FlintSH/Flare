@@ -5,7 +5,11 @@ import { setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
-import type { AccountShortLinkPage, ShortLink } from '@/lib/links/schema'
+import type {
+  AccountShortLink,
+  AccountShortLinkPage,
+  ShortLink,
+} from '@/lib/links/schema'
 
 class ShortLinkError extends HttpError {
   constructor(message: string, status: number) {
@@ -108,6 +112,24 @@ export async function listAccountShortLinks(
     urls: links.map((link) => linkView(link)),
     pagination: { total, pages, page, limit },
   }
+}
+
+/**
+ * One link of an account, by its id or else by its code, for moderators who
+ * name a link the way its owner would; null when the account has none such.
+ */
+export async function findAccountShortLink(
+  userId: string,
+  { id, shortCode }: { id: string; shortCode: string }
+): Promise<AccountShortLink | null> {
+  const select = { ...shortLinkSelect, userId: false }
+  const link =
+    (await prisma.shortenedUrl.findFirst({ where: { id, userId }, select })) ??
+    (await prisma.shortenedUrl.findFirst({
+      where: { shortCode, userId },
+      select,
+    }))
+  return link && linkView(link)
 }
 
 /** Moderators delete by account and id together; any other link is missing. */

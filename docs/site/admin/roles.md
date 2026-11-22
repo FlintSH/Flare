@@ -143,6 +143,8 @@ Example responsibilities:
 
 Custom CSS/head HTML requires Administrator because it can execute code in other people’s browser sessions; a delegated designer cannot use those advanced editors.
 
+Turning on [administration through MCP](./agents#administration-through-mcp) also requires Administrator, though the MCP server switch beside it needs only `settings.security`: it lets agents act on users, roles, and settings for the people who connect them.
+
 `audit.read` is a separate instance-wide permission. Administrator includes it; Everyone does not receive it by default. Delegating it exposes retained activity across all accounts, including filenames and actor identities for private content and accounts above the reader’s role. It does not confer `content.read`, `users.sessions`, or a way to edit/delete audit events. Review the [audit privacy and retention boundaries](./audit#access-and-privacy) before granting it.
 
 Invitations are separate from account creation. `invites.create` lets a person bring in new accounts that receive Everyone, subject to the [member invite limits](./users#set-member-limits) unless they also have `users.create`. Attaching roles to an invite additionally requires `users.roles` and follows the delegation rules above, checked again when the link is used. `invites.manage` is instance-wide like content moderation, but it never reveals another person's invite link. The **Let everyone create invites** switch in Settings changes Everyone's `invites.create` grant; it requires `settings.security` and your own `invites.create`.
@@ -150,6 +152,18 @@ Invitations are separate from account creation. `invites.create` lets a person b
 Content moderation is instance-wide and does not use the account-management hierarchy: these grants can apply to content owned by higher-ranked accounts. Content reading is sensitive: a moderator with `content.read` can see private content and bypass file passwords. Explain this access to the people using your instance. [Sharing and privacy](/guide/sharing) describes the reader-facing boundaries.
 
 The group summaries count stored grants in this role, including unsaved edits, against the entire group even while search shows fewer switches. They do not add Everyone’s grants or another assigned role’s permissions. For a role containing **Administrator**, the summary reads **All N via Administrator** instead of showing explicit-grant counts: the wildcard gives full access regardless of individual switches. Searching temporarily opens matching groups; clear search to return to the groups you had opened. Selecting another role starts with its groups collapsed. No permission or assignment migration is needed for existing installations.
+
+### Key permissions
+
+Three permissions hold the keys to the instance: **Administrator** (`administrator`), **Security settings** (`settings.security`), which covers registration, single sign-on, and the MCP server switch, and **Email settings** (`settings.email`), which covers the SMTP connection that account mail, password resets included, goes out through. With any of them an account can decide who administers the instance, how people get in, or where their mail goes.
+
+The delegation rules above already keep them a closed set: an account manages only accounts whose permissions it holds, and grants only permissions it holds. [AI agents](./agents#what-an-agent-can-never-do-whatever-it-was-granted) are held to a stricter rule. No agent can grant a key permission to anyone, whatever it was granted and whatever its account's role:
+
+- It cannot give a user, or attach to an invite, a role that holds one, and cannot add one to any role, Everyone included. A role that already holds one keeps it, and an agent may still edit or remove that role within the usual rules.
+- It cannot exempt an account that holds one from email verification.
+- **While Everyone holds one**, every account and every new account holds it, so agents cannot create users or invites, open registration, or let everyone invite, and see no invite links at all. Everyone can never hold Administrator, but you can give it **Security settings** or **Email settings** here; doing so stops those agent actions until you take it off.
+
+Agents can still give out roles with other powerful permissions, such as managing users or moderating content, where their account may. The [agent access](./agents#what-a-misled-agent-can-still-do) page explains what that means.
 
 ### Manage permissions on a phone
 

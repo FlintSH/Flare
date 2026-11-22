@@ -4,7 +4,11 @@ import {
   requestPermissions,
   requiredApiScope,
 } from '@/lib/integrations/bearer-routes'
-import { settingsPatchAllowed } from '@/lib/permissions/settings'
+import { ALL_PERMISSIONS } from '@/lib/permissions/catalog'
+import {
+  settingsFieldPermission,
+  settingsPatchAllowed,
+} from '@/lib/permissions/settings'
 
 describe('bearer route permissions', () => {
   it.each([
@@ -145,6 +149,57 @@ describe('delegated settings', () => {
       )
     ).toBe(true)
   })
+  it('lets only an administrator turn administration through MCP on or off', () => {
+    const security = { permissions: ['settings.security'] }
+    const administrator = { permissions: ['administrator'] }
+    // Every permission but administrator, so every key but one.
+    const everything = {
+      permissions: ALL_PERMISSIONS.filter(
+        (permission) => permission !== 'administrator'
+      ),
+    }
+    for (const administration of [true, false]) {
+      const settings = { general: { mcp: { administration } } }
+      expect(settingsPatchAllowed(administrator, settings)).toBe(true)
+      expect(settingsPatchAllowed(security, settings)).toBe(false)
+      expect(settingsPatchAllowed(everything, settings)).toBe(false)
+      // Beside the server switch, which Security settings may change.
+      const both = { general: { mcp: { enabled: true, administration } } }
+      expect(settingsPatchAllowed(security, both)).toBe(false)
+      expect(settingsPatchAllowed(everything, both)).toBe(false)
+      expect(settingsPatchAllowed(administrator, both)).toBe(true)
+    }
+    // Security settings still turns the server itself on and off.
+    expect(
+      settingsPatchAllowed(security, { general: { mcp: { enabled: false } } })
+    ).toBe(true)
+  })
+  it('names the permission of each settings field as the patch rule does', () => {
+    expect(settingsFieldPermission('general.mcp.enabled')).toBe(
+      'settings.security'
+    )
+    expect(settingsFieldPermission('general.mcp.administration')).toBe(
+      'administrator'
+    )
+    expect(settingsFieldPermission('general.registrations')).toBe(
+      'settings.security'
+    )
+    expect(settingsFieldPermission('general.storage')).toBe('settings.storage')
+    expect(settingsFieldPermission('appearance.theme')).toBe(
+      'appearance.manage'
+    )
+    expect(settingsFieldPermission('advanced.customHead')).toBe('administrator')
+    for (const path of [
+      'general.setup',
+      'general.mcp',
+      'general.mcp.unknown',
+      'general.toString',
+      'email.smtp',
+      'customization',
+      'constructor',
+    ])
+      expect(settingsFieldPermission(path), path).toBeUndefined()
+  })
   it('refuses an MCP change that names no field, a field it does not know, or no object', () => {
     const security = { permissions: ['settings.security'] }
     for (const mcp of [
@@ -153,9 +208,11 @@ describe('delegated settings', () => {
       true,
       'on',
       [{ enabled: true }],
+      // Security settings is not enough for this one.
       { administration: true },
       { enabled: true, administration: true },
       { unknown: 1 },
+      { toString: 1 },
     ])
       expect(
         settingsPatchAllowed(security, { general: { mcp } }),

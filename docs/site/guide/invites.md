@@ -32,6 +32,8 @@ An invite link looks like `https://files.example.com/auth/register?invite=…`, 
 
 Selecting a role that includes **Administrator** shows a warning: anyone who uses that link becomes a full administrator of the instance.
 
+An [AI agent you connected](./agents#invite-people) with **Manage invites** can list, create, and revoke your invites too, within the same limits. It never attaches a role that holds **Administrator**, **Security settings**, or **Email settings**, the [key permissions](/admin/roles#key-permissions), and it never sees the link of such an invite.
+
 ## What the invited person sees
 
 Opening an active link shows **You’re invited** with the name of the person who created the link. If the link grants roles, they appear under **You’ll join with these roles**. The person chooses a **Username**, **Email address**, and **Password**, then chooses **Create account**.

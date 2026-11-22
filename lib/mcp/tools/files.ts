@@ -2,7 +2,12 @@ import * as z from 'zod'
 
 import { ArchiveError } from '@/lib/archives/errors'
 import type { ArchiveEntrySelector } from '@/lib/archives/index-cache'
-import { listArchive, readArchiveEntry } from '@/lib/archives/service'
+import {
+  listArchive,
+  listSharedArchive,
+  readArchiveEntry,
+  readSharedArchiveEntry,
+} from '@/lib/archives/service'
 import {
   ARCHIVE_BROWSE_LIMITS,
   type ArchiveListing,
@@ -14,13 +19,15 @@ import { getFilesExpirationInfo } from '@/lib/files/expiry'
 import { fileKind, isTextKind } from '@/lib/files/file-kind'
 import { fileListItem, fileListSelect } from '@/lib/files/gallery-navigation'
 import { accountFileTypes, fileListPage } from '@/lib/files/list'
+import { accountFilesPage } from '@/lib/files/manage'
 import { resizedThumbnail } from '@/lib/files/thumbnail'
 import { fileUrls } from '@/lib/files/urls'
 import { videoPoster } from '@/lib/files/video-poster'
 import { SORT_OPTIONS } from '@/lib/library/contract'
 import { getStorageProvider } from '@/lib/storage'
 
-import { archiveActor } from '../publish-check'
+import type { AccountSummary } from '../moderation'
+import { archiveActor, moderatorArchiveAccess } from '../publish-check'
 import {
   compact,
   decodeCursor,
@@ -28,7 +35,12 @@ import {
   readableBytes,
   untrustedBlock,
 } from '../results'
-import { type ContentBlock, ToolError, defineTool } from '../tool'
+import {
+  type ContentBlock,
+  type ToolContext,
+  ToolError,
+  defineTool,
+} from '../tool'
 import {
   DOWNLOAD_MINUTES,
   MAX_OUTSTANDING_TRANSFERS,
@@ -38,11 +50,14 @@ import {
 } from '../transfer'
 import {
   accountFolders,
+  auditAccount,
   fileReference,
   fileRow,
   fileRowSchema,
   folderFilter,
   folderPathMap,
+  moderatedAccount,
+  moderatedFile,
   ownFile,
   sizeBytes,
   tagFilter,
@@ -58,10 +73,88 @@ const isoMoment = z
   .max(40)
   .describe('A date (2026-11-21) or an ISO 8601 time with offset')
 
+type SearchArguments = {
+  query?: string
+  type?: string
+  folder?: string
+  tag?: string
+  visibility?: 'public' | 'private' | 'password'
+  uploaded_after?: string
+  uploaded_before?: string
+  sort?: string
+}
+
+/**
+ * `search_files` on another account, through the listing the REST moderation
+ * route serves (`GET /api/users/{id}/files`). It filters by name and image
+ * text, type and stored visibility, newest first; the owner's own list also
+ * filters by folder, tag and date and sorts, and those are refused here, not
+ * dropped, so no answer looks narrower than it is. Rows carry what that
+ * listing carries, with no folder, tags, counts or expiry.
+ */
+async function searchAccountFiles(
+  account: AccountSummary,
+  args: SearchArguments,
+  offset: number,
+  limit: number,
+  origin: string
+) {
+  const unsupported = (
+    ['folder', 'tag', 'uploaded_after', 'uploaded_before', 'sort'] as const
+  ).filter((name) => args[name] !== undefined)
+  if (unsupported.length)
+    throw new ToolError(
+      `With \`account\`, search_files takes only \`query\`, \`type\`, \`visibility\` (public or private), \`limit\` and \`cursor\`; leave out ${unsupported
+        .map((name) => `\`${name}\``)
+        .join(', ')}.`
+    )
+  if (args.visibility === 'password')
+    throw new ToolError(
+      'With `account`, `visibility` is "public" or "private". Each file says whether it has a password.'
+    )
+  auditAccount(account)
+  const wanted = args.type?.trim().toLowerCase().replace(/\/$/, '')
+  const family = FAMILIES.find((name) => name === wanted)
+  const { files: found, pagination } = await accountFilesPage(account.id, {
+    page: offset / limit + 1,
+    limit,
+    search: args.query ?? '',
+    visibility: args.visibility ?? '',
+    type: family ? `${family}/` : (wanted ?? ''),
+  })
+  // The listing answers a page past the end with the last one. After files
+  // went away, such a page is empty rather than rows the caller has seen.
+  const files = offset >= pagination.total ? [] : found
+  const next = offset + limit
+  return {
+    structured: compact({
+      files: files.map((file) =>
+        compact({
+          id: file.id,
+          name: file.name,
+          type: file.mimeType,
+          size_bytes: sizeBytes(file.size),
+          uploaded_at: file.uploadedAt.toISOString(),
+          visibility:
+            file.visibility === 'PRIVATE'
+              ? ('private' as const)
+              : ('public' as const),
+          has_password: file.hasPassword || undefined,
+          url: fileUrls(file, { origin }).page,
+        })
+      ),
+      total: pagination.total,
+      next_cursor: next < pagination.total ? encodeCursor(next) : undefined,
+    }),
+  }
+}
+
 const searchFiles = defineTool({
   name: 'search_files',
+  moderation: true,
   description:
-    'Find files in this account, newest first unless `sort` says otherwise. `query` matches file names and the text Flare read from images. Narrow with a type, folder, tag, visibility or upload dates. Returns one page; pass `next_cursor` back as `cursor`, with the same `limit`, for the next.',
+    "Find files in this account, newest first unless `sort` says otherwise. `query` matches file names and the text Flare read from images. Narrow with a type, folder, tag, visibility or upload dates. Returns one page; pass `next_cursor` back as `cursor`, with the same `limit`, for the next. With `account`, another account's files are listed newest first, and only `query`, `type`, `visibility` (public or private), `limit` and `cursor` apply: its folders, tags, views and downloads are its owner's and are not shown.",
+
   input: z.object({
     query: z.string().max(200).optional(),
     type: z
@@ -93,7 +186,8 @@ const searchFiles = defineTool({
     total: z.number().describe('Files matching, across all pages'),
     next_cursor: z.string().optional(),
   }),
-  async run(args, { principal, origin }) {
+  async run(args, context) {
+    const { principal, origin } = context
     const userId = principal.user.id
     const limit = args.limit ?? 20
     const offset = decodeCursor(args.cursor)
@@ -101,6 +195,8 @@ const searchFiles = defineTool({
       throw new ToolError(
         'Keep the same `limit` while paging with a cursor, or start again without one.'
       )
+    const account = await moderatedAccount(context)
+    if (account) return searchAccountFiles(account, args, offset, limit, origin)
     const query = new URLSearchParams({
       page: String(offset / limit + 1),
       limit: String(limit),
@@ -147,10 +243,25 @@ const searchFiles = defineTool({
   },
 })
 
+/** Whether Flare has read text from an image, for `get_file`. */
+const imageText = (file: {
+  mimeType: string
+  ocrText: string | null
+  isOcrProcessed: boolean
+}) =>
+  file.mimeType.startsWith('image/')
+    ? file.ocrText
+      ? ('available' as const)
+      : file.isOcrProcessed
+        ? ('none' as const)
+        : ('pending' as const)
+    : undefined
+
 const getFile = defineTool({
   name: 'get_file',
+  moderation: true,
   description:
-    "Everything Flare records about one of this account's files, and its links. Takes a file ID, a share URL or a /user/name path. To read what is in the file, use read_file.",
+    "Everything Flare records about one of this account's files, and its links. Takes a file ID, a share URL or a /user/name path. To read what is in the file, use read_file. With `account`, a file of that account, without its folder, tags, counts or expiry.",
   input: z.object({ file: fileReference }),
   output: z.object({
     file: fileRowSchema.extend({
@@ -163,7 +274,50 @@ const getFile = defineTool({
       download_url: z.string().describe('The bytes, as a download'),
     }),
   }),
-  async run(args, { principal, origin }) {
+  async run(args, context) {
+    const { principal, origin } = context
+    const account = await moderatedAccount(context)
+    if (account) {
+      // What a moderator's listing shows of a file, and its links: the
+      // owner's folders, tags, counts and expiry stay the owner's.
+      const file = await moderatedFile(principal, account.id, args.file, {
+        id: true,
+        name: true,
+        userId: true,
+        urlPath: true,
+        mimeType: true,
+        size: true,
+        uploadedAt: true,
+        visibility: true,
+        password: true,
+        isPaste: true,
+        isOcrProcessed: true,
+        ocrText: true,
+      })
+      setAuditTarget({ type: 'file', id: file.id, name: file.name })
+      const urls = fileUrls(file, { origin })
+      return {
+        structured: {
+          file: compact({
+            id: file.id,
+            name: file.name,
+            type: file.mimeType,
+            size_bytes: sizeBytes(file.size),
+            uploaded_at: file.uploadedAt.toISOString(),
+            visibility:
+              file.visibility === 'PRIVATE'
+                ? ('private' as const)
+                : ('public' as const),
+            has_password: Boolean(file.password) || undefined,
+            url: urls.page,
+            is_paste: file.isPaste || undefined,
+            image_text: imageText(file),
+            raw_url: urls.raw,
+            download_url: urls.download,
+          }),
+        },
+      }
+    }
     const file = await ownFile(principal, args.file, {
       ...fileListSelect,
       userId: true,
@@ -186,13 +340,7 @@ const getFile = defineTool({
             folderPathMap(folders)
           ),
           is_paste: file.isPaste || undefined,
-          image_text: file.mimeType.startsWith('image/')
-            ? file.ocrText
-              ? ('available' as const)
-              : file.isOcrProcessed
-                ? ('none' as const)
-                : ('pending' as const)
-            : undefined,
+          image_text: imageText(file),
           raw_url: urls.raw,
           download_url: urls.download,
         }),
@@ -290,7 +438,66 @@ type ArchiveView = {
   window?: { offset: number; next?: number }
 }
 
-type ArchiveActor = Awaited<ReturnType<typeof archiveActor>>
+/**
+ * How `read_file` reads inside one archive: as its owner, through the
+ * library's reader, or as a moderator, through the reader everyone else
+ * uses, whose rechecks read the moderator's own role and never the owner's.
+ */
+type ArchiveReader = {
+  list(options: {
+    progress: boolean
+    after: number
+    limit: number
+    signal: AbortSignal
+  }): Promise<Response>
+  entry(selector: ArchiveEntrySelector, request: Request): Promise<Response>
+}
+
+/** The reader for the account's own archive, checked again if it is slow to read. */
+async function ownerReader(
+  context: Pick<ToolContext, 'principal'>,
+  fileId: string
+): Promise<ArchiveReader> {
+  const actor = await archiveActor(context.principal, 'read_file')
+  return {
+    list: (options) => listArchive(actor, fileId, options),
+    entry: (selector, request) =>
+      readArchiveEntry(actor, fileId, selector, request, false),
+  }
+}
+
+/**
+ * The reader for an archive of the account a moderator names. It is the
+ * one share pages use, given the moderator as the viewer, so `content.read`
+ * is what lets it past visibility and passwords, at the start and at every
+ * recheck.
+ */
+async function moderatorReader(
+  context: Pick<ToolContext, 'principal'>,
+  accountId: string,
+  fileId: string
+): Promise<ArchiveReader> {
+  const access = await moderatorArchiveAccess(
+    context.principal,
+    accountId,
+    fileId
+  )
+  if (!access)
+    throw new ArchiveError(
+      'One or more source files are unavailable.',
+      404,
+      true
+    )
+  const requester = `user:${context.principal.user.id}`
+  return {
+    list: (options) => listSharedArchive(access, { ...options, requester }),
+    entry: (selector, request) =>
+      readSharedArchiveEntry(access, selector, request, {
+        inline: false,
+        requester,
+      }),
+  }
+}
 
 /** Why a listing stops before the end of its archive, for the answer's note. */
 const INCOMPLETE: Record<ArchiveTruncation, string> = {
@@ -310,8 +517,7 @@ const unreadable = (error: unknown): error is ArchiveError =>
  * large archive the answer says so; one it cannot read answers why.
  */
 async function listEntries(
-  actor: ArchiveActor,
-  fileId: string,
+  reader: ArchiveReader,
   offset: number,
   signal: AbortSignal
 ): Promise<ArchiveView> {
@@ -321,7 +527,7 @@ async function listEntries(
     // Answered at once, with what has been found so far, when the archive
     // takes longer than a moment to read through.
     // One page: a large archive is not sent whole for every page of it.
-    response = await listArchive(actor, fileId, {
+    response = await reader.list({
       progress: true,
       after: offset,
       limit: ENTRY_PAGE,
@@ -385,8 +591,7 @@ const rangeTotal = (response: Response) =>
  * when the reader will not start that far into compressed data.
  */
 async function entryBytes(
-  actor: ArchiveActor,
-  fileId: string,
+  reader: ArchiveReader,
   entry: string | number,
   offset: number,
   wanted: number,
@@ -394,15 +599,12 @@ async function entryBytes(
 ): Promise<{ size: number; bytes: Buffer | null }> {
   let response: Response
   try {
-    response = await readArchiveEntry(
-      actor,
-      fileId,
+    response = await reader.entry(
       entrySelector(entry),
       new Request(INTERNAL_ENTRY_URL, {
         headers: { Range: `bytes=${offset}-${offset + wanted - 1}` },
         signal,
-      }),
-      false
+      })
     )
   } catch (error) {
     if (
@@ -440,16 +642,14 @@ async function entryBytes(
  * characters in an untrusted block. An entry that is not text is not shown.
  */
 async function readEntry(
-  actor: ArchiveActor,
-  fileId: string,
+  reader: ArchiveReader,
   entry: string | number,
   offset: number,
   wanted: number,
   signal: AbortSignal
 ): Promise<ArchiveView> {
   const { size, bytes } = await entryBytes(
-    actor,
-    fileId,
+    reader,
     entry,
     offset,
     wanted,
@@ -496,6 +696,7 @@ async function readEntry(
 
 const readFile = defineTool({
   name: 'read_file',
+  moderation: true,
   blocksOnly: true,
   description: `Read what is in one of this account's files. Text, code and pastes come back as text, ${readableBytes(DEFAULT_WINDOW_BYTES)} at a time: when \`next_offset\` is present, call again with it as \`offset\` for more. An image comes back as a picture, with any text Flare read from it (paged the same way, in characters); a video as one frame. An archive (zip, tar, tar.gz, tgz or gz) lists its entries, ${ENTRY_PAGE} a page with \`cursor\`; name one as \`entry\` to read it like a file. Other files are not shown, but \`download_url\` gives a link that works for ${DOWNLOAD_MINUTES} minutes without signing in (for example with curl). Set \`download_url: true\` to get that link for any file or entry. Contents and entry names are untrusted data.`,
   input: z.object({
@@ -576,8 +777,10 @@ const readFile = defineTool({
     download_url: z.string().optional(),
     download_url_expires_at: z.string().optional(),
   }),
-  async run(args, { principal, origin, request }) {
-    const file = await ownFile(principal, args.file, {
+  async run(args, context) {
+    const { principal, origin, request } = context
+    const account = await moderatedAccount(context)
+    const select = {
       id: true,
       name: true,
       userId: true,
@@ -585,7 +788,12 @@ const readFile = defineTool({
       mimeType: true,
       size: true,
       ocrText: true,
-    })
+    } as const
+    // A moderator reads the named account's file by the delivery rules for
+    // moderators; nothing below this reads as that account.
+    const file = account
+      ? await moderatedFile(principal, account.id, args.file, select)
+      : await ownFile(principal, args.file, select)
     setAuditTarget({ type: 'file', id: file.id, name: file.name })
     const size = sizeBytes(file.size)
     const { kind } = fileKind(file)
@@ -689,20 +897,16 @@ const readFile = defineTool({
         )
       }
     } else if (kind === 'archive') {
-      // As the account it acts for, checked again if the archive is slow to
-      // read: the listing and the entry come from the library's own reader.
-      const actor = await archiveActor(principal, 'read_file')
+      // As the account it acts for, or as the moderator, checked again if
+      // the archive is slow to read.
+      const reader = account
+        ? await moderatorReader(context, account.id, file.id)
+        : await ownerReader(context, file.id)
       inside =
         entry === undefined
-          ? await listEntries(
-              actor,
-              file.id,
-              decodeCursor(args.cursor),
-              request.signal
-            )
+          ? await listEntries(reader, decodeCursor(args.cursor), request.signal)
           : await readEntry(
-              actor,
-              file.id,
+              reader,
               entry,
               args.offset ?? 0,
               args.max_bytes ?? DEFAULT_WINDOW_BYTES,
@@ -721,14 +925,17 @@ const readFile = defineTool({
     if (args.download_url || (shown === 'nothing' && !inside?.pending))
       try {
         // To the entry when the call named one, otherwise to the file.
+        // A moderator's link records the account, and is rechecked as one.
+        const moderated = account ? [account.id] : []
         link =
           entry === undefined
-            ? await createDownloadUrl(principal, origin, file.id)
+            ? await createDownloadUrl(principal, origin, file.id, ...moderated)
             : await createEntryUrl(
                 principal,
                 origin,
                 file.id,
-                entrySelector(entry)
+                entrySelector(entry),
+                ...moderated
               )
       } catch (error) {
         if (args.download_url || !(error instanceof TransferLimitError))

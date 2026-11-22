@@ -25,7 +25,6 @@ import { AGENT_CLIENTS, AGENT_PRESETS } from '@/lib/mcp/clients'
 import {
   API_COVERAGE,
   type Coverage,
-  LATER_AREAS,
   UNEXPOSED_REASONS,
 } from '@/lib/mcp/coverage'
 import { UPLOAD_HOLD_HOURS } from '@/lib/mcp/transfer'
@@ -80,6 +79,8 @@ const REASON_LABELS = {
   credentials: 'Never: credentials',
   'sign-in': 'Never: sign-in',
   'full-control': 'Never: full control',
+  'mail-delivery': 'Never: mail delivery',
+  logos: 'Never: logos and favicon',
   browser: "Not applicable: Flare's own pages",
   mcp: 'The MCP server itself',
 } as const
@@ -193,20 +194,65 @@ describe('the MCP reference (docs/site/api/mcp.md)', () => {
     for (const name of TOOL_NAMES) {
       const needs: ToolNeeds = TOOL_CATALOG[name]
       const row = rows.find(([tool]) => tool === code(name))
+      // Every permission named before "one of" is needed; the ones after it
+      // are alternatives, of which the role must hold at least one.
+      const [every = '', ...rest] = (row?.[2] ?? '').split(/\bone of\b/i)
+      const alternatives = rest.join(' ')
       if (
         !row ||
+        rest.length > 1 ||
         !sameSet(named(row[1]), needs.scopes) ||
-        !sameSet(named(row[2]), needs.permissions)
+        !sameSet(named(every), needs.permissions) ||
+        !sameSet(named(alternatives), needs.anyPermission ?? [])
       )
         problems.push(
           markdownRow([
             code(name),
             codes(needs.scopes, 'Any'),
-            codes(needs.permissions, 'None'),
+            [
+              ...(needs.permissions.length || !needs.anyPermission?.length
+                ? [codes(needs.permissions, 'None')]
+                : []),
+              ...(needs.anyPermission?.length
+                ? [`one of ${codes(needs.anyPermission, '')}`]
+                : []),
+            ]
+              .join(', and ')
+              .replace(/^one/, 'One'),
           ])
         )
     }
     expect(rows).toHaveLength(TOOL_NAMES.length)
+    expect(problems).toEqual([])
+  })
+
+  it('lists every tool that takes `account`, with what moderator mode needs', () => {
+    const rows = tableRows(reference, 'Moderator mode')
+    const problems: string[] = []
+    const moderated = TOOL_NAMES.filter(
+      (name) => (TOOL_CATALOG[name] as ToolRow).moderation
+    )
+    for (const name of moderated) {
+      const needs = (TOOL_CATALOG[name] as ToolRow).moderation!
+      const row = rows.find(([tool]) => tool === code(name))
+      if (
+        !row ||
+        !row[1] ||
+        !sameSet(named(row[2]), needs.scopes) ||
+        !sameSet(named(row[3]), needs.permissions)
+      )
+        problems.push(
+          markdownRow([
+            code(name),
+            row?.[1] || '(what it does with `account`)',
+            codes(needs.scopes, 'None'),
+            codes(needs.permissions, 'None'),
+          ])
+        )
+    }
+    for (const [tool] of rows)
+      if (!moderated.some((name) => code(name) === tool))
+        problems.push(`${tool} is listed but takes no \`account\`.`)
     expect(problems).toEqual([])
   })
 
@@ -279,8 +325,6 @@ describe('the MCP reference (docs/site/api/mcp.md)', () => {
      */
     function covered(coverage: Coverage): string | null {
       if ('tools' in coverage) return codes(coverage.tools, '')
-      if (coverage.reason === 'later')
-        return `Later: ${LATER_AREAS[coverage.area]}`
       if (coverage.reason === 'preflight') return null
       return REASON_LABELS[coverage.reason]
     }
@@ -293,8 +337,6 @@ describe('the MCP reference (docs/site/api/mcp.md)', () => {
             REASON_LABELS[reason as keyof typeof REASON_LABELS]
           )
       }
-      for (const area of Object.values(LATER_AREAS))
-        expect(reference).toContain(`Later: ${area}`)
     })
 
     it('has a row for every route and method, with its tools or its reason', () => {

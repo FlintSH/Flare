@@ -4,8 +4,16 @@ import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { parseInput, readJson } from '@/lib/http/request'
 import type { RouteContract } from '@/lib/http/route'
+import { assertEmailEncryptionKey } from '@/lib/security/secret-box'
 
-import { emailConfigSchema } from './schema'
+import { getSavedEmailConfig, resolveEmailConfig } from './config'
+import { hasVerifiedEmail, satisfiesEmailPolicy } from './policy'
+import {
+  type EmailConfig,
+  emailConfigSchema,
+  validateEnabledEmail,
+} from './schema'
+import { describeMailError, sendTestEmail, verifySmtp } from './transport'
 
 export const emailSettingsRoutes: RouteContract = {
   invalid: (error) =>
@@ -69,4 +77,65 @@ export async function emailDiagnostics(enabled: boolean) {
       recipient: row.recipient.replace(/^(.).*(@.*)$/, '$1***$2'),
     })),
   }
+}
+
+/** How many accounts an email policy leaves unverified, and how many it shuts out. */
+export async function emailPolicyImpact(config: EmailConfig) {
+  const users = await prisma.user.findMany({
+    select: {
+      email: true,
+      emailVerifiedFor: true,
+      emailVerified: true,
+      emailVerificationSource: true,
+      emailExempt: true,
+    },
+  })
+  const unverified = users.filter((user) => !hasVerifiedEmail(user, config))
+  // The accounts all-user verification shuts out once its grace period ends.
+  const affected = users.filter((user) => !satisfiesEmailPolicy(user, config))
+  return {
+    unverifiedUsers: unverified.length,
+    affectedUsers: affected.length,
+  }
+}
+
+/** Check the SMTP connection, or send one test message to a recipient. */
+export interface EmailTest {
+  action: 'connection' | 'send'
+  recipient?: string
+}
+
+/**
+ * Tests delivery with email settings as they are stored, with an encrypted
+ * password: the saved ones, or a draft `prepareEmailConfig` made. Answers
+ * the message to show.
+ */
+export async function testEmailSettings(
+  settings: EmailConfig,
+  test: EmailTest
+): Promise<string> {
+  const config = resolveEmailConfig(settings, process.env, {
+    testDelivery: true,
+  }).config
+  validateEnabledEmail(config)
+  assertEmailEncryptionKey()
+  try {
+    if (test.action === 'connection') await verifySmtp(config)
+    else if (!test.recipient)
+      throw new HttpError(400, 'A test recipient is required')
+    else await sendTestEmail(config, test.recipient)
+  } catch (error) {
+    // Flare's own refusals, such as a full daily mail cap, answer as they
+    // are; provider errors are described without their details.
+    if (error instanceof HttpError) throw error
+    throw new HttpError(400, describeMailError(error))
+  }
+  return test.action === 'connection'
+    ? 'SMTP connection and authentication succeeded'
+    : 'SMTP server accepted the test message. Check your inbox to confirm delivery.'
+}
+
+/** Tests delivery with the saved email settings and nothing else. */
+export async function testSavedEmailSettings(test: EmailTest) {
+  return testEmailSettings(await getSavedEmailConfig(), test)
 }

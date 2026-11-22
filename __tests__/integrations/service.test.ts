@@ -15,12 +15,13 @@ const db = vi.hoisted(() => ({
   list: vi.fn(),
   connections: vi.fn(),
   mcpEnabled: vi.fn(),
+  administrationOn: vi.fn(),
   tx: {
     $executeRaw: vi.fn(),
     // Row locks.
     $queryRaw: vi.fn(),
     apiToken: { count: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
-    agentConnection: { updateMany: vi.fn() },
+    agentConnection: { updateMany: vi.fn(), findFirst: vi.fn() },
     agentToken: { deleteMany: vi.fn() },
     config: { findUnique: vi.fn() },
     uploadProfile: { findFirst: vi.fn() },
@@ -50,7 +51,10 @@ vi.mock('@/lib/database/prisma', () => ({
     agentConnection: { findMany: db.connections },
   },
 }))
-vi.mock('@/lib/mcp/settings', () => ({ mcpEnabled: db.mcpEnabled }))
+vi.mock('@/lib/mcp/settings', () => ({
+  mcpEnabled: db.mcpEnabled,
+  administrationOn: db.administrationOn,
+}))
 vi.mock('@/lib/integrations/security', () => ({
   resolveWebhookTarget: vi.fn(async () => ({})),
 }))
@@ -385,6 +389,145 @@ describe('tokens for agents', () => {
   })
 })
 
+describe('administration scopes on a token', () => {
+  const DAY = 86_400_000
+  const administrator = { id: 'owner', permissions: ['administrator'] }
+  const settings = (administration: boolean) => {
+    const config = structuredClone(DEFAULT_CONFIG)
+    config.settings.general.mcp.enabled = true
+    config.settings.general.mcp.administration = administration
+    db.tx.config.findUnique.mockResolvedValue({ value: config })
+  }
+  const create = (
+    scopes: string[],
+    expiresAt: string | null | undefined,
+    account: typeof owner = administrator
+  ) =>
+    runIntegrationCommand(account, {
+      ...commands['create-token'],
+      scopes,
+      ...(expiresAt !== undefined && { expiresAt }),
+    })
+  const inDays = (days: number) =>
+    new Date(Date.now() + days * DAY).toISOString()
+
+  beforeEach(() => {
+    db.tx.apiToken.count.mockResolvedValue(0)
+    db.tx.apiToken.create.mockResolvedValue({ id: 'token' })
+  })
+
+  it('refuses them while administration through MCP is off, even to an administrator', async () => {
+    settings(false)
+    expect(
+      (await refusal(create(['mcp', 'admin:read'], inDays(7)))).message
+    ).toBe(
+      'Administration through MCP is turned off on this instance, so agents cannot have "View administration". Remove it, or ask an administrator to turn it on in Settings.'
+    )
+    expect(db.tx.apiToken.create).not.toHaveBeenCalled()
+    // Invites are not administration: they need no switch of their own.
+    await expect(
+      create(['mcp', 'invites:write'], null, {
+        id: 'owner',
+        permissions: ['tokens.manage', 'invites.create'],
+      })
+    ).resolves.toMatchObject({ secretKind: 'token' })
+  })
+
+  it('creates one with an expiry no more than 90 days away while it is on', async () => {
+    settings(true)
+    await expect(
+      create(['mcp', 'admin:read', 'admin:users'], inDays(90))
+    ).resolves.toMatchObject({ secretKind: 'token' })
+    expect(db.tx.apiToken.create.mock.calls[0][0].data.scopes).toEqual([
+      'mcp',
+      'admin:read',
+      'admin:users',
+    ])
+  })
+
+  /** The advisory locks the command took, in order. */
+  const locks = () =>
+    db.tx.$executeRaw.mock.calls
+      .map(([statement]) => (statement as string[]).join('?'))
+      .filter((sql) => sql.includes('pg_advisory_xact_lock'))
+      .map((sql) => (sql.includes('721150092') ? 'settings' : 'integrations'))
+
+  it('takes the settings lock before anything else, and reads the switch under it', async () => {
+    settings(true)
+    await create(['mcp', 'admin:read'], inDays(7))
+    expect(locks()).toEqual(['settings', 'integrations'])
+    expect(db.tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      db.tx.config.findUnique.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('takes no settings lock for a token without one', async () => {
+    settings(true)
+    await create(['mcp', 'files:read'], null)
+    expect(locks()).toEqual(['integrations'])
+  })
+
+  it('allows a browser clock a few minutes ahead at the 90-day edge', async () => {
+    settings(true)
+    const at = (milliseconds: number) =>
+      new Date(Date.now() + 90 * DAY + milliseconds).toISOString()
+    // Up to five minutes past 90 days is still the 90-day choice.
+    for (const ahead of [0, 60_000, 4 * 60_000])
+      await expect(
+        create(['mcp', 'admin:read'], at(ahead))
+      ).resolves.toMatchObject({ secretKind: 'token' })
+    for (const ahead of [5 * 60_000 + 5_000, 60 * 60_000])
+      expect(
+        (await refusal(create(['mcp', 'admin:read'], at(ahead)))).message,
+        `${ahead} ms past 90 days`
+      ).toBe(
+        'A token with administration permissions must expire within 90 days. Choose an earlier expiration date.'
+      )
+  })
+
+  it.each([
+    ['no expiry', null],
+    ['no expiry given', undefined],
+    ['an expiry 91 days away', inDays(91)],
+    ['an expiry a year away', inDays(365)],
+  ])('refuses one with %s', async (_what, expiresAt) => {
+    settings(true)
+    expect(
+      (await refusal(create(['mcp', 'admin:content'], expiresAt))).message
+    ).toBe(
+      'A token with administration permissions must expire within 90 days. Choose an earlier expiration date.'
+    )
+    expect(db.tx.apiToken.create).not.toHaveBeenCalled()
+    // Without one, the same expiry is fine.
+    await expect(
+      create(['mcp', 'files:read'], expiresAt)
+    ).resolves.toMatchObject({ secretKind: 'token' })
+  })
+
+  it("refuses one the account's role cannot use", async () => {
+    settings(true)
+    const member = { id: 'owner', permissions: ['tokens.manage', 'users.read'] }
+    expect(
+      (await refusal(create(['mcp', 'admin:settings'], inDays(7), member)))
+        .message
+    ).toBe(
+      'Your role does not allow "Change instance settings". Remove it and try again.'
+    )
+    await expect(
+      create(['mcp', 'admin:read'], inDays(7), member)
+    ).resolves.toMatchObject({ secretKind: 'token' })
+  })
+
+  it('never puts one on a token without Agent access, which REST would ignore', async () => {
+    settings(true)
+    expect(
+      (await refusal(create(['files:read', 'admin:read'], inDays(7)))).message
+    ).toBe(
+      'Agent access is needed for "View administration". Enable Agent access on the token, or remove it.'
+    )
+  })
+})
+
 describe('agents that signed in', () => {
   const mcp = (enabled: boolean) => {
     const config = structuredClone(DEFAULT_CONFIG)
@@ -485,7 +628,23 @@ describe('agents that signed in', () => {
         update(['urls:read', 'files:read', 'files:upload', 'files:read'])
       ).resolves.toEqual({ ok: true })
       expect(db.tx.agentConnection.updateMany).toHaveBeenCalledExactlyOnceWith({
-        where: { id: 'connection', userId: 'owner', revokedAt: null },
+        where: {
+          id: 'connection',
+          userId: 'owner',
+          revokedAt: null,
+          // Never one past the 30 days of an administration grant.
+          NOT: {
+            scopes: {
+              hasSome: [
+                'admin:read',
+                'admin:users',
+                'admin:content',
+                'admin:settings',
+              ],
+            },
+            createdAt: { lte: expect.any(Date) },
+          },
+        },
         data: { scopes: ['files:upload', 'files:read', 'urls:read'] },
       })
       // Its tokens are left alone: what they can do is read from the connection.
@@ -611,6 +770,110 @@ describe('agents that signed in', () => {
       )
       expect(db.tx.agentConnection.updateMany).not.toHaveBeenCalled()
     })
+
+    describe('with administration scopes', () => {
+      const administrator = { id: 'owner', permissions: ['administrator'] }
+      const administration = (on: boolean) => {
+        const config = structuredClone(DEFAULT_CONFIG)
+        config.settings.general.mcp.enabled = true
+        config.settings.general.mcp.administration = on
+        db.tx.config.findUnique.mockResolvedValue({ value: config })
+      }
+      const holding = (scopes: string[]) =>
+        db.tx.agentConnection.findFirst.mockResolvedValue({ scopes })
+
+      it('takes the settings lock first when the new set holds one, and none when it holds none', async () => {
+        administration(true)
+        holding(['files:read', 'admin:read'])
+        await update(['files:read', 'admin:read'], administrator)
+        const sql = db.tx.$executeRaw.mock.calls.map(([statement]) =>
+          (statement as string[]).join('?')
+        )
+        expect(sql[0]).toContain('pg_advisory_xact_lock(721150092)')
+        db.tx.$executeRaw.mockClear()
+        await update(['files:read'], administrator)
+        expect(
+          db.tx.$executeRaw.mock.calls.some(([statement]) =>
+            (statement as string[]).join('?').includes('721150092')
+          )
+        ).toBe(false)
+      })
+
+      it('keeps one the connection was granted at sign-in, and can take one away', async () => {
+        administration(true)
+        holding(['files:read', 'admin:read', 'admin:users'])
+        await expect(
+          update(['files:read', 'admin:read'], administrator)
+        ).resolves.toEqual({ ok: true })
+        expect(saved().data.scopes).toEqual(['files:read', 'admin:read'])
+        // Read under the row lock, as the connection stands now.
+        expect(db.tx.agentConnection.findFirst).toHaveBeenCalledWith({
+          where: {
+            id: 'connection',
+            userId: 'owner',
+            revokedAt: null,
+            // Never one past the 30 days of an administration grant.
+            NOT: {
+              scopes: {
+                hasSome: [
+                  'admin:read',
+                  'admin:users',
+                  'admin:content',
+                  'admin:settings',
+                ],
+              },
+              createdAt: { lte: expect.any(Date) },
+            },
+          },
+          select: { scopes: true },
+        })
+        expect(db.tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+          db.tx.agentConnection.findFirst.mock.invocationCallOrder[0]
+        )
+      })
+
+      it('never adds one, even for an administrator while administration is on', async () => {
+        administration(true)
+        holding(['files:read', 'admin:read'])
+        expect(
+          (
+            await refusal(
+              update(
+                ['files:read', 'admin:read', 'admin:settings'],
+                administrator
+              )
+            )
+          ).message
+        ).toBe(
+          '"Change instance settings" can only be granted when the agent signs in. Remove it, or disconnect the agent and connect it again.'
+        )
+        expect(db.tx.agentConnection.updateMany).not.toHaveBeenCalled()
+      })
+
+      it('refuses one while administration is off, and removing them all needs no switch', async () => {
+        administration(false)
+        holding(['files:read', 'admin:read'])
+        expect(
+          (await refusal(update(['files:read', 'admin:read'], administrator)))
+            .message
+        ).toBe(
+          'Administration through MCP is turned off on this instance, so agents cannot have "View administration". Remove it, or ask an administrator to turn it on in Settings.'
+        )
+        await expect(update(['files:read'], administrator)).resolves.toEqual({
+          ok: true,
+        })
+        // Nothing administrative is asked for, so nothing is read for it.
+        expect(db.tx.agentConnection.findFirst).not.toHaveBeenCalled()
+      })
+
+      it('refuses a connection that is gone before anything else', async () => {
+        administration(true)
+        db.tx.agentConnection.findFirst.mockResolvedValue(null)
+        expect(
+          (await refusal(update(['admin:read'], administrator))).message
+        ).toBe('Agent not found or already disconnected.')
+      })
+    })
   })
 })
 
@@ -651,6 +914,18 @@ describe('the integrations screen', () => {
           userId: 'owner',
           revokedAt: null,
           tokens: { some: { refreshExpiresAt: { gt: expect.any(Date) } } },
+          // Nor one past the 30 days of an administration grant.
+          NOT: {
+            scopes: {
+              hasSome: [
+                'admin:read',
+                'admin:users',
+                'admin:content',
+                'admin:settings',
+              ],
+            },
+            createdAt: { lte: expect.any(Date) },
+          },
         },
         select: {
           id: true,
@@ -698,32 +973,52 @@ describe('the integrations screen', () => {
 
   it('tells an account that manages tokens whether agents can connect, and where', async () => {
     db.mcpEnabled.mockResolvedValue(true)
+    db.administrationOn.mockResolvedValue(false)
     vi.stubEnv('NEXTAUTH_URL', 'https://files.example.com/')
     expect((await listIntegrations(owner)).mcp).toEqual({
       enabled: true,
       url: 'https://files.example.com/api/mcp',
+      administration: false,
     })
     // An address under a path keeps it, as every generated link does.
     vi.stubEnv('NEXTAUTH_URL', 'https://example.com/flare')
     expect((await listIntegrations(owner)).mcp).toEqual({
       enabled: true,
       url: 'https://example.com/flare/api/mcp',
+      administration: false,
     })
     // Without a configured address the page uses the one it was opened at.
     vi.stubEnv('NEXTAUTH_URL', '')
     expect((await listIntegrations(owner)).mcp).toEqual({
       enabled: true,
       url: null,
+      administration: false,
+    })
+  })
+
+  it('tells it whether administration through MCP is on, so the screens offer its scopes', async () => {
+    db.mcpEnabled.mockResolvedValue(true)
+    db.administrationOn.mockResolvedValue(true)
+    expect((await listIntegrations(owner)).mcp).toMatchObject({
+      enabled: true,
+      administration: true,
+    })
+    db.administrationOn.mockResolvedValue(false)
+    expect((await listIntegrations(owner)).mcp).toMatchObject({
+      administration: false,
     })
   })
 
   it('says nothing more than off while the MCP server is off', async () => {
     db.mcpEnabled.mockResolvedValue(false)
+    db.administrationOn.mockResolvedValue(true)
     vi.stubEnv('NEXTAUTH_URL', 'https://files.example.com')
     expect((await listIntegrations(owner)).mcp).toEqual({
       enabled: false,
       url: null,
+      administration: false,
     })
+    expect(db.administrationOn).not.toHaveBeenCalled()
   })
 
   it('leaves agents out for an account that cannot manage tokens', async () => {

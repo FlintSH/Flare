@@ -27,10 +27,9 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { NativeSelect } from '@/components/ui/native-select'
 
 import { apiRequest } from '@/lib/client/request'
-import { MCP_SCOPE } from '@/lib/integrations/bearer-routes'
+import { MCP_SCOPE, holdsAdminScope } from '@/lib/integrations/bearer-routes'
 import { CONNECTION_NAME_MAX_LENGTH } from '@/lib/integrations/limits'
 import {
   AGENT_CLIENTS,
@@ -50,7 +49,8 @@ import { usePermissions } from '@/hooks/use-permissions'
 
 import { CopyButton } from './copy-button'
 import { AgentScopes, offeredScopes, useAgentScopes } from './scope-picker'
-import { DEFAULT_TOKEN_LIFETIME, TOKEN_LIFETIMES, tokenExpiry } from './shared'
+import { DEFAULT_TOKEN_LIFETIME, allowedLifetime, tokenExpiry } from './shared'
+import { TokenLifetime } from './token-lifetime'
 
 const CREATE_FAILED = 'Could not create the token.'
 
@@ -73,11 +73,14 @@ const TOKEN_CLIENTS: readonly AgentClient[] = AGENT_CLIENTS.filter(
  */
 export function ConnectAgentDialog({
   url,
+  administration,
   onCreated,
   children,
 }: {
   /** The MCP endpoint clients connect to. */
   url: string
+  /** Whether administration through MCP is on. */
+  administration: boolean
   /** A token now exists; the token list should load again. */
   onCreated: () => void
   children: ReactNode
@@ -105,6 +108,7 @@ export function ConnectAgentDialog({
         {/* Mounted with the dialog, so every opening starts from the defaults. */}
         <ConnectAgent
           url={url}
+          administration={administration}
           busy={busy}
           onBusyChange={setBusy}
           onCreated={() => {
@@ -120,12 +124,14 @@ export function ConnectAgentDialog({
 
 function ConnectAgent({
   url,
+  administration,
   busy,
   onBusyChange,
   onCreated,
   onClose,
 }: {
   url: string
+  administration: boolean
   busy: boolean
   onBusyChange: (busy: boolean) => void
   onCreated: () => void
@@ -138,7 +144,7 @@ function ConnectAgent({
   // Only a client that takes a token is ever asked for one.
   const [withToken, setWithToken] = useState(false)
   const picker = useAgentScopes(
-    offeredScopes(can, true).map(({ scope }) => scope)
+    offeredScopes(can, true, administration).map(({ scope }) => scope)
   )
   // Null follows the client's name until the person types their own.
   const [typedName, setTypedName] = useState<string | null>(null)
@@ -163,7 +169,9 @@ function ConnectAgent({
             action: 'create-token',
             name,
             scopes: [MCP_SCOPE, ...picker.scopes],
-            expiresAt: tokenExpiry(Number(lifetime)),
+            expiresAt: tokenExpiry(
+              Number(allowedLifetime(lifetime, holdsAdminScope(picker.scopes)))
+            ),
           },
           fallback: CREATE_FAILED,
           whole: true,
@@ -256,7 +264,7 @@ function ConnectAgent({
           </div>
           {withToken ? (
             <>
-              <AgentScopes picker={picker} disabled={busy} />
+              <AgentScopes picker={picker} credential="token" disabled={busy} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor={`${id}-name`}>Connection name</Label>
@@ -271,18 +279,13 @@ function ConnectAgent({
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor={`${id}-lifetime`}>Expires after</Label>
-                  <NativeSelect
+                  <TokenLifetime
                     id={`${id}-lifetime`}
                     value={lifetime}
-                    onChange={(event) => setLifetime(event.target.value)}
+                    onChange={setLifetime}
+                    scopes={picker.scopes}
                     disabled={busy}
-                  >
-                    {TOKEN_LIFETIMES.map(([days, label]) => (
-                      <option key={days} value={days}>
-                        {label}
-                      </option>
-                    ))}
-                  </NativeSelect>
+                  />
                 </div>
               </div>
             </>

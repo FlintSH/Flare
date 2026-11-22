@@ -182,6 +182,25 @@ export async function listAccountFiles(
   accountId: string,
   query: AccountFileQuery
 ) {
+  const { files, pagination } = await accountFilesPage(accountId, query)
+  return {
+    files: files.map(({ hasPassword, ...file }) => ({
+      ...file,
+      visibility: hasPassword ? ('PROTECTED' as const) : file.visibility,
+    })),
+    pagination,
+  }
+}
+
+/**
+ * The page `listAccountFiles` sends, with each file's stored visibility and
+ * whether it has a password kept apart, for the MCP moderator mode, which
+ * reports both as the owner's list does. No hash is returned.
+ */
+export async function accountFilesPage(
+  accountId: string,
+  query: AccountFileQuery
+) {
   const visibility = visibilityFilter(query.visibility)
   const where: Prisma.FileWhereInput = {
     userId: accountId,
@@ -211,7 +230,7 @@ export async function listAccountFiles(
   return {
     files: files.map(({ password, ...file }) => ({
       ...file,
-      visibility: password ? 'PROTECTED' : file.visibility,
+      hasPassword: Boolean(password),
     })),
     pagination: { total, pages, page, limit },
   }

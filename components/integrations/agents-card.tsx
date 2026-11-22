@@ -26,6 +26,7 @@ import { cardHeaderRow, cardTitle } from './shared'
 export function AgentsCard({
   url,
   connections,
+  administration,
   disabled,
   onConnected,
   onDisconnect,
@@ -35,6 +36,8 @@ export function AgentsCard({
   url: string
   /** The agents that signed in through the browser. */
   connections: readonly AgentConnection[]
+  /** Whether administration through MCP is on. */
+  administration: boolean
   disabled?: boolean
   /** A token was created for an agent. */
   onConnected: () => void
@@ -43,7 +46,11 @@ export function AgentsCard({
   onSaved: () => void
 }) {
   return (
-    <ConnectAgentDialog url={url} onCreated={onConnected}>
+    <ConnectAgentDialog
+      url={url}
+      administration={administration}
+      onCreated={onConnected}
+    >
       <Card className="min-w-0">
         <CardHeader className={cardHeaderRow}>
           <div className="min-w-0 space-y-1.5">
@@ -88,6 +95,7 @@ export function AgentsCard({
           </div>
           <ConnectedAgents
             connections={connections}
+            administration={administration}
             disabled={disabled}
             onDisconnect={onDisconnect}
             onSaved={onSaved}

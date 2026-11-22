@@ -16,6 +16,7 @@ import { lockSettings } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { emailConfigSchema } from '@/lib/email/schema'
 import { HttpError } from '@/lib/http/errors'
+import { stripAdminScopes } from '@/lib/integrations/admin-scopes'
 import { loggers } from '@/lib/logger'
 import { storageSettingsSchema } from '@/lib/storage/settings'
 
@@ -89,9 +90,12 @@ export const configSchema = z.object({
       }),
       // The MCP server agents connect to. Off until an administrator turns it
       // on; while off, its routes answer as if they did not exist.
+      // `administration` lets agents hold the scopes that act on the instance
+      // itself; settings saved before it existed read as off.
       mcp: z
         .object({
           enabled: z.boolean().default(false),
+          administration: z.boolean().default(false),
         })
         .prefault({}),
       oidc: z
@@ -168,18 +172,42 @@ export async function readConfig(client: ConfigClient): Promise<FlareConfig> {
   return value === null ? DEFAULT_CONFIG : configSchema.parse(value)
 }
 
-/** Save `config` as the whole settings document, replacing whatever is saved. */
+/** Whether a stored settings document, read as it is, has administration through MCP on. */
+function administrationSaved(value: unknown): boolean {
+  const general = (value as { settings?: { general?: { mcp?: unknown } } })
+    ?.settings?.general
+  return (
+    (general?.mcp as { administration?: unknown } | undefined)
+      ?.administration === true
+  )
+}
+
+/**
+ * Save `config` as the whole settings document, replacing whatever is saved.
+ * Every write of the settings comes through here, so this is where turning
+ * administration through MCP off, or on, takes the administration scopes
+ * from every credential, in the same transaction.
+ */
 export async function replaceConfig(
   tx: Prisma.TransactionClient,
   config: FlareConfig
 ): Promise<FlareConfig> {
   await lockSettings(tx)
   const next = configSchema.parse(config)
+  const wasOn = administrationSaved(await readSavedConfigValue(tx))
   await tx.config.upsert({
     where: { key: CONFIG_KEY },
     create: { key: CONFIG_KEY, value: next as InputJsonValue },
     update: { value: next as InputJsonValue },
   })
+  // Off takes every administration scope away. On does too: nothing can
+  // rightly hold one while it was off, so whatever slipped in is not revived.
+  const isOn = next.settings.general.mcp.administration
+  if (wasOn !== isOn)
+    await stripAdminScopes(
+      tx,
+      isOn ? 'administration-on' : 'administration-off'
+    )
   return next
 }
 
