@@ -38,6 +38,43 @@ export type UploadOptions = {
 /** Bytes of the file sent so far. */
 type Progress = (uploaded: number) => void
 
+/** Why an upload stopped when someone cancelled it, rather than a failure. */
+export function uploadCancelled() {
+  return new DOMException('Upload cancelled', 'AbortError')
+}
+
+export const isUploadCancelled = (error: unknown) =>
+  error instanceof DOMException && error.name === 'AbortError'
+
+/** A refusal from the server, with its status, as opposed to a lost connection. */
+export class UploadFailure extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+    this.name = 'UploadFailure'
+  }
+}
+
+/**
+ * Whether a failure would happen to every file after it too: a lost
+ * connection, a sign-in or role problem, too many requests, a full quota, a
+ * server error. A
+ * refusal of one file, such as its name or type, doesn't stop the rest.
+ */
+export function stopsEveryUpload(error: unknown) {
+  if (!(error instanceof UploadFailure)) return true
+  const { status, message } = error
+  return (
+    status === 401 ||
+    status === 403 ||
+    status === 429 ||
+    status >= 500 ||
+    (status === 413 && /quota/i.test(message))
+  )
+}
+
 /** Splits files by the server's maximum file size, which it checks again. */
 export function partitionBySize(files: readonly File[], maxSize: number) {
   const fitting: File[] = []
@@ -69,23 +106,35 @@ function send(
   url: string,
   body: XMLHttpRequestBodyInit,
   headers: Record<string, string>,
-  onProgress?: Progress
+  onProgress?: Progress,
+  signal?: AbortSignal
 ) {
   return new Promise<Reply>((resolve, reject) => {
+    if (signal?.aborted) return reject(uploadCancelled())
     const request = new XMLHttpRequest()
+    const cancel = () => request.abort()
+    signal?.addEventListener('abort', cancel, { once: true })
+    const settle = () => signal?.removeEventListener('abort', cancel)
     if (onProgress)
       request.upload.addEventListener('progress', (event) => {
         if (event.lengthComputable) onProgress(event.loaded)
       })
-    request.addEventListener('load', () =>
+    request.addEventListener('load', () => {
+      settle()
       resolve({
         status: request.status,
         statusText: request.statusText,
         body: readJson(request.responseText),
       })
-    )
-    request.addEventListener('error', () => reject(new Error(NETWORK_ERROR)))
-    request.addEventListener('abort', () => reject(new Error(NETWORK_ERROR)))
+    })
+    request.addEventListener('error', () => {
+      settle()
+      reject(new Error(NETWORK_ERROR))
+    })
+    request.addEventListener('abort', () => {
+      settle()
+      reject(signal?.aborted ? uploadCancelled() : new Error(NETWORK_ERROR))
+    })
     request.open(method, url)
     for (const [name, value] of Object.entries(headers))
       request.setRequestHeader(name, value)
@@ -97,12 +146,13 @@ const succeeded = (reply: Reply) => reply.status >= 200 && reply.status < 300
 
 function failure(reply: Reply, fallback: string) {
   const message = field(reply.body, 'error')
-  return new Error(
+  return new UploadFailure(
     typeof message === 'string' && message
       ? message
       : reply.status === 413
         ? REQUEST_TOO_LARGE
-        : fallback
+        : fallback,
+    reply.status
   )
 }
 
@@ -132,14 +182,16 @@ function multipartBody(file: File, options: UploadOptions) {
 async function uploadWhole(
   file: File,
   options: UploadOptions,
-  onProgress?: Progress
+  onProgress?: Progress,
+  signal?: AbortSignal
 ) {
   const reply = await send(
     'POST',
     '/api/files',
     multipartBody(file, options),
     selectionHeaders(options),
-    onProgress
+    onProgress,
+    signal
   )
   if (!succeeded(reply))
     throw failure(reply, `Upload failed: ${reply.statusText}`)
@@ -148,7 +200,11 @@ async function uploadWhole(
   return uploaded
 }
 
-async function startChunkedUpload(file: File, options: UploadOptions) {
+async function startChunkedUpload(
+  file: File,
+  options: UploadOptions,
+  signal?: AbortSignal
+) {
   const reply = await send(
     'POST',
     '/api/files/chunks',
@@ -168,7 +224,9 @@ async function startChunkedUpload(file: File, options: UploadOptions) {
       expiryAction: options.expiryAction,
       tagIds: options.tagIds,
     }),
-    JSON_HEADERS
+    JSON_HEADERS,
+    undefined,
+    signal
   )
   if (!succeeded(reply)) throw failure(reply, 'Failed to initialize upload')
   const session = field(reply.body, 'data')
@@ -178,12 +236,36 @@ async function startChunkedUpload(file: File, options: UploadOptions) {
   return encodeURIComponent(uploadId)
 }
 
+/**
+ * A cancelled upload stops sending parts and asks the server to free the
+ * ones it has.
+ */
 async function uploadInParts(
   file: File,
   options: UploadOptions,
-  onProgress?: Progress
+  onProgress?: Progress,
+  signal?: AbortSignal
 ) {
-  const uploadId = await startChunkedUpload(file, options)
+  const uploadId = await startChunkedUpload(file, options, signal)
+  try {
+    return await sendParts(file, uploadId, onProgress, signal)
+  } catch (error) {
+    // Free the parts sent so far rather than leave them for the hourly sweep.
+    if (isUploadCancelled(error))
+      void fetch(`/api/files/chunks/${uploadId}`, {
+        method: 'DELETE',
+        keepalive: true,
+      }).catch(() => {})
+    throw error
+  }
+}
+
+async function sendParts(
+  file: File,
+  uploadId: string,
+  onProgress?: Progress,
+  signal?: AbortSignal
+) {
   const sent = new Map<number, number>()
   const report = (part: number, bytes: number) => {
     sent.set(part, bytes)
@@ -202,7 +284,8 @@ async function uploadInParts(
       `/api/files/chunks/${uploadId}/part/${part}`,
       chunk,
       {},
-      (bytes) => report(part, bytes)
+      (bytes) => report(part, bytes),
+      signal
     )
     if (!succeeded(reply))
       throw failure(reply, `Upload failed: ${reply.statusText}`)
@@ -219,7 +302,7 @@ async function uploadInParts(
     const failed = (await Promise.allSettled(batch)).find(
       (result) => result.status === 'rejected'
     )
-    if (failed) throw failed.reason
+    if (failed) throw signal?.aborted ? uploadCancelled() : failed.reason
   }
   const reply = await send(
     'POST',
@@ -227,7 +310,9 @@ async function uploadInParts(
     JSON.stringify({
       parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
     }),
-    JSON_HEADERS
+    JSON_HEADERS,
+    undefined,
+    signal
   )
   if (!succeeded(reply)) throw failure(reply, 'Failed to complete upload')
   return parseUploadResponse(reply.body)
@@ -236,11 +321,12 @@ async function uploadInParts(
 export function uploadFile(
   file: File,
   options: UploadOptions,
-  onProgress?: Progress
+  onProgress?: Progress,
+  signal?: AbortSignal
 ): Promise<UploadResponse> {
   return file.size > WHOLE_FILE_MAX_BYTES
-    ? uploadInParts(file, options, onProgress)
-    : uploadWhole(file, options, onProgress)
+    ? uploadInParts(file, options, onProgress, signal)
+    : uploadWhole(file, options, onProgress, signal)
 }
 
 /** Always one request, which the server checks for `pastes.create`. */

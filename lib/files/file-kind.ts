@@ -43,6 +43,10 @@ export const LANGUAGES = [
   'sass',
   'scss',
   'less',
+  'shell',
+  'diff',
+  'toml',
+  'ini',
   'text',
 ] as const
 export type Language = (typeof LANGUAGES)[number]
@@ -135,13 +139,19 @@ const CODE_TYPES = byLanguage({
   scss: ['text/x-scss', 'text/scss'],
   sass: ['text/x-sass', 'text/sass'],
   less: ['text/x-less', 'text/less'],
+  shell: ['text/x-sh', 'text/x-shellscript', 'application/x-sh'],
+  diff: ['text/x-diff', 'text/x-patch'],
+  toml: ['text/x-toml', 'application/toml'],
+  ini: [
+    'text/x-ini',
+    'text/ini',
+    'text/x-properties',
+    'text/x-java-properties',
+  ],
   text: [
     'text/x-ruby',
     'application/x-ruby',
     'text/ruby',
-    'text/x-sh',
-    'text/x-shellscript',
-    'application/x-sh',
     'text/x-kotlin',
     'text/kotlin',
     'text/x-swift',
@@ -152,12 +162,6 @@ const CODE_TYPES = byLanguage({
     'application/x-perl',
     'text/x-lua',
     'application/x-lua',
-    'text/x-toml',
-    'application/toml',
-    'text/x-ini',
-    'text/ini',
-    'text/x-properties',
-    'text/x-java-properties',
     'text/x-rst',
     'text/x-latex',
     'application/x-latex',
@@ -226,6 +230,13 @@ const EXTENSION_LANGUAGES = byLanguage({
   sass: ['sass'],
   scss: ['scss'],
   less: ['less'],
+  // The first extension is the one a paste in the language is saved with.
+  shell: ['sh', 'bash', 'zsh'],
+  diff: ['diff', 'patch'],
+  toml: ['toml'],
+  // `.env` too: extensionOf('.env') is `env`. Not `.conf`, which is as
+  // often nginx or Apache syntax as INI.
+  ini: ['ini', 'env', 'cfg', 'properties'],
 })
 
 /** The extension a paste in each language is saved with. */
@@ -261,13 +272,13 @@ export function languageFromFilename(name: string): Language {
  */
 const PLAIN_TEXT_EXTENSIONS = new Set([
   ...['txt', 'text', 'log', 'nfo', 'rst', 'adoc', 'org', 'tex', 'srt', 'vtt'],
-  ...['ini', 'cfg', 'conf', 'toml', 'env', 'properties', 'editorconfig'],
-  ...['gitignore', 'gitattributes', 'dockerignore', 'npmrc', 'lock'],
-  ...['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd'],
+  ...['conf', 'editorconfig', 'gitignore', 'gitattributes', 'dockerignore'],
+  ...['npmrc'],
+  ...['lock', 'fish', 'ps1', 'bat', 'cmd'],
   ...['rb', 'kt', 'kts', 'swift', 'scala', 'pl', 'lua', 'r', 'dart', 'ex'],
   ...['exs', 'erl', 'hs', 'clj', 'cs', 'fs', 'groovy', 'gradle', 'jl', 'zig'],
-  ...['tf', 'proto', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'diff'],
-  ...['patch', 'jsonl', 'ndjson', 'asm', 'cmake', 'mk'],
+  ...['tf', 'proto', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'jsonl'],
+  ...['ndjson', 'asm', 'cmake', 'mk'],
 ])
 
 /** Text files commonly shared without an extension. */
@@ -441,6 +452,10 @@ const LANGUAGE_NAMES: Record<Exclude<Language, 'text'>, string> = {
   sass: 'Sass',
   scss: 'SCSS',
   less: 'Less',
+  shell: 'Shell',
+  diff: 'Diff',
+  toml: 'TOML',
+  ini: 'INI',
 }
 
 /** Format names for stored media subtypes that don't read as one. */

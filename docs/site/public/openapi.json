@@ -278,6 +278,7 @@
                 "example": {
                   "success": true,
                   "data": {
+                    "id": "cm_example",
                     "url": "https://files.example.com/abc123/screenshot.png",
                     "pageUrl": "https://files.example.com/abc123/screenshot.png",
                     "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -696,6 +697,7 @@
                 },
                 "example": {
                   "data": {
+                    "id": "cm_example",
                     "url": "https://files.example.com/abc123/screenshot.png",
                     "pageUrl": "https://files.example.com/abc123/screenshot.png",
                     "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -970,7 +972,7 @@
         "operationId": "completeChunkUpload",
         "summary": "Complete a chunk upload (unwrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
+        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. Cancel an unfinished session with DELETE /api/files/chunks/{uploadId}. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
@@ -980,6 +982,7 @@
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/UploadLinks" },
                 "example": {
+                  "id": "cm_example",
                   "url": "https://files.example.com/abc123/screenshot.png",
                   "pageUrl": "https://files.example.com/abc123/screenshot.png",
                   "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -1056,6 +1059,90 @@
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/ChunkCompleteRequest" }
+            }
+          }
+        },
+        "x-flare-permissions": ["files.upload"]
+      }
+    },
+    "/api/files/chunks/{uploadId}": {
+      "parameters": [
+        {
+          "name": "uploadId",
+          "in": "path",
+          "required": true,
+          "description": "Upload session ID. Expires after one hour of inactivity.",
+          "schema": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" }
+        }
+      ],
+      "delete": {
+        "operationId": "cancelChunkUpload",
+        "summary": "Cancel a chunk upload",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Ends an unfinished chunk session the token owner started: Flare forgets the session and storage discards its parts (S3 aborts the multipart upload; local storage deletes temporary parts). Returns 409 when the file was already created; delete that file instead. Sessions nobody cancels expire after one hour of inactivity and are cleaned up the same way.",
+        "security": [{ "BearerAuth": [] }],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "cancelled": { "const": true, "type": "boolean" }
+                      },
+                      "required": ["cancelled"]
+                    }
+                  },
+                  "required": ["data"]
+                },
+                "example": { "data": { "cancelled": true } }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
+              }
+            }
+          },
+          "403": {
+            "description": "Required current role permission is missing, or the token is bound to another upload profile.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload session not found, expired, or started by another account.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": {
+            "description": "The upload already finished, or storage configuration changed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
             }
           }
         },
@@ -1673,6 +1760,10 @@
       "UploadLinks": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "The file ID other file routes use."
+          },
           "url": { "type": "string", "format": "uri" },
           "pageUrl": { "type": "string", "format": "uri" },
           "rawUrl": { "type": "string", "format": "uri" },
@@ -1683,6 +1774,7 @@
           "type": { "type": "string" }
         },
         "required": [
+          "id",
           "url",
           "pageUrl",
           "rawUrl",
@@ -1694,6 +1786,7 @@
         ],
         "description": "URLs follow sharing access rules; they are not private-file access grants. url and copyText alias pageUrl. name is the display name; type is the MIME type.",
         "example": {
+          "id": "cm_example",
           "url": "https://files.example.com/abc123/screenshot.png",
           "pageUrl": "https://files.example.com/abc123/screenshot.png",
           "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",

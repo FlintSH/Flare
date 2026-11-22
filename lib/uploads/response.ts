@@ -6,6 +6,8 @@ const uploadUrl = z
   .refine((value) => /^https?:\/\//i.test(value))
 
 const uploadResponseSchema = z.object({
+  /** Missing from servers before the Upload page could delete what it sent. */
+  id: z.string().min(1).optional(),
   url: uploadUrl,
   name: z.string().min(1),
   size: z.number().int().nonnegative().finite(),

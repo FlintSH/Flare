@@ -7,15 +7,11 @@ import { UploadIcon } from 'lucide-react'
 import { folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
-import { partitionBySize } from '@/lib/uploads/client'
+import { uploadTray } from '@/lib/uploads/tray'
 import { cn } from '@/lib/utils'
 
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
-import {
-  notifyUploadInProgress,
-  useUploadQueue,
-} from '@/hooks/use-upload-queue'
 
 interface GlobalDropZoneProps {
   maxSize: number
@@ -40,17 +36,13 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
   const [isDragging, setIsDragging] = useState(false)
   const [_dragCounter, setDragCounter] = useState(0)
   const [droppingInFolder, setDroppingInFolder] = useState(false)
-  // Each drop is its own batch: nothing waits in a queue for the next drop.
-  const { uploading, uploadFiles } = useUploadQueue()
 
   const handleDragEnter = useCallback(
     (e: DragEvent) => {
       e.preventDefault()
       e.stopPropagation()
 
-      if (window.location.pathname.includes('/upload') || uploading) {
-        return
-      }
+      if (window.location.pathname.includes('/upload')) return
 
       if (e.dataTransfer?.items && e.dataTransfer.items.length > 0) {
         const hasFiles = Array.from(e.dataTransfer.items).some(
@@ -63,7 +55,7 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
         }
       }
     },
-    [uploading, user]
+    [user]
   )
 
   const handleDragLeave = useCallback((e: DragEvent) => {
@@ -98,13 +90,12 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
 
       const droppedFiles = Array.from(e.dataTransfer?.files || [])
       if (droppedFiles.length === 0) return
-      if (uploading) {
-        notifyUploadInProgress()
-        return
-      }
 
-      const { fitting, tooLarge } = partitionBySize(droppedFiles, maxSize)
-
+      // Into the tab's one upload list, which Upload shows; files dropped
+      // while others are going wait their turn.
+      const tooLarge = uploadTray().add(droppedFiles, maxSize, {
+        options: { folderId: dropFolder(window.location, user) },
+      })
       if (tooLarge.length > 0) {
         toast({
           title: 'Files too large',
@@ -112,13 +103,8 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           variant: 'destructive',
         })
       }
-
-      if (fitting.length > 0)
-        await uploadFiles(fitting, {
-          folderId: dropFolder(window.location, user),
-        })
     },
-    [uploading, maxSize, uploadFiles, toast, user]
+    [maxSize, toast, user]
   )
 
   useEffect(() => {

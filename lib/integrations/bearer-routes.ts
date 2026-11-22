@@ -208,6 +208,12 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     scope: 'files:upload',
   },
   {
+    methods: ['DELETE'],
+    path: /^\/api\/files\/chunks\/[a-zA-Z0-9_-]+$/,
+    permissions: ['files.upload'],
+    scope: 'files:upload',
+  },
+  {
     methods: ['GET'],
     path: '/api/files/types',
     permissions: ['files.read'],

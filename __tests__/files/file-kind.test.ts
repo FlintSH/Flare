@@ -148,11 +148,21 @@ describe('fileKind', () => {
     expect(
       fileKind({ name: 'main.rs', mimeType: 'application/octet-stream' })
     ).toEqual({ kind: 'code', language: 'rust' })
-    for (const name of ['server.log', 'deploy.sh', '.env', 'Dockerfile'])
+    for (const name of ['server.log', 'Dockerfile', '.gitignore'])
       expect(
         fileKind({ name, mimeType: 'application/octet-stream' }),
         name
       ).toEqual({ kind: 'text', language: 'text' })
+    for (const [name, language] of [
+      ['deploy.sh', 'shell'],
+      ['.env', 'ini'],
+      ['fix.patch', 'diff'],
+      ['Cargo.toml', 'toml'],
+    ] as const)
+      expect(
+        fileKind({ name, mimeType: 'application/octet-stream' }),
+        name
+      ).toEqual({ kind: 'code', language })
     // A name alone never decides for a type that says what the bytes are.
     expect(
       fileKind({ name: 'notes.md', mimeType: 'application/zip' }).kind
@@ -220,7 +230,11 @@ describe('fileTypeDescription', () => {
     expect(describes('notes.txt', 'text/plain')).toBe('Plain text')
     expect(describes('README', 'text/plain')).toBe('Plain text')
     expect(describes('server.log', 'text/x-log')).toBe('Log file')
-    expect(describes('deploy.sh', 'text/x-sh')).toBe('SH file')
+    expect(describes('deploy.sh', 'text/x-sh')).toBe('Shell')
+    expect(describes('Cargo.toml', 'application/toml')).toBe('TOML')
+    expect(describes('fix.diff', 'text/x-diff')).toBe('Diff')
+    expect(describes('.env', 'text/plain')).toBe('INI')
+    expect(describes('notes.rb', 'text/x-ruby')).toBe('RB file')
     // A number is not a format: a rotated log is still plain text.
     expect(describes('app.log.1', 'text/plain')).toBe('Plain text')
     expect(describes('notes.2026', 'text/plain')).toBe('Plain text')
@@ -260,6 +274,27 @@ describe('languageFromFilename', () => {
     expect(languageFromFilename('notes.MD')).toBe('markdown')
     expect(languageFromFilename('component.tsx')).toBe('tsx')
     expect(languageFromFilename('config.yml')).toBe('yaml')
+  })
+
+  it('highlights shell scripts, diffs and config files', () => {
+    for (const [name, language] of [
+      ['install.sh', 'shell'],
+      ['setup.bash', 'shell'],
+      ['prompt.zsh', 'shell'],
+      ['fix.diff', 'diff'],
+      ['0001-fix.patch', 'diff'],
+      ['Cargo.toml', 'toml'],
+      ['php.ini', 'ini'],
+      ['.env', 'ini'],
+      ['setup.cfg', 'ini'],
+      ['app.properties', 'ini'],
+    ] as const)
+      expect(languageFromFilename(name), name).toBe(language)
+    // Only the extension counts: a bare name or a dotted suffix is plain.
+    expect(languageFromFilename('Dockerfile')).toBe('text')
+    expect(languageFromFilename('.env.local')).toBe('text')
+    // `.conf` is as often nginx or Apache syntax as INI.
+    expect(languageFromFilename('nginx.conf')).toBe('text')
   })
 
   it('leaves prose, logs and unknown extensions as plain text', () => {

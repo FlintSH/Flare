@@ -1,3 +1,5 @@
+import type { Language } from '@/lib/files/file-kind'
+
 /**
  * The paste being written, kept while someone moves between Flare's pages so
  * a trip to Files doesn't lose it. It lives in this tab's memory only and is
@@ -5,7 +7,12 @@
  * secrets. A reload or a closed tab ends it, so while a draft has text the
  * browser asks first, on whichever Flare page is open.
  */
-export type PasteDraft = { content: string; name: string }
+export type PasteDraft = {
+  content: string
+  name: string
+  /** A language chosen without a name; unset, Flare detects it. */
+  language?: Language
+}
 
 const EMPTY: PasteDraft = { content: '', name: '' }
 

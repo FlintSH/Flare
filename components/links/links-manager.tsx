@@ -4,6 +4,7 @@ import {
   type FormEvent,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -15,9 +16,11 @@ import {
   ArrowUpRight,
   Check,
   Copy,
+  Download,
   Loader2,
   MoreHorizontal,
   Pencil,
+  QrCode,
   RefreshCw,
   Search,
   Trash2,
@@ -55,7 +58,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 
+import { copyText, copyWhenReady } from '@/lib/client/clipboard'
+import { takeHandoff } from '@/lib/client/handoff'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import {
+  sameDestination,
+  suggestEnding,
+  trackingParameters,
+  withScheme,
+} from '@/lib/links/compose'
 import {
   SHORT_CODE_MAX_LENGTH,
   type ShortLink,
@@ -107,6 +118,7 @@ export function LinksManager() {
   const [copied, setCopied] = useState<string>()
   const [editing, setEditing] = useState<ShortLink | null>(null)
   const [deleting, setDeleting] = useState<ShortLink | null>(null)
+  const [coding, setCoding] = useState<ShortLink | null>(null)
   const [announcement, setAnnouncement] = useState('')
 
   const load = useCallback(
@@ -167,25 +179,24 @@ export function LinksManager() {
     )
   }, [links, query])
 
+  const showCopied = (link: ShortLink) => {
+    setCopied(link.id)
+    setTimeout(
+      () => setCopied((current) => (current === link.id ? undefined : current)),
+      2000
+    )
+  }
+
   const copy = async (link: ShortLink) => {
-    try {
-      await navigator.clipboard.writeText(
-        shortLinkUrl(link.shortCode, window.location.origin)
-      )
-      setCopied(link.id)
-      setTimeout(
-        () =>
-          setCopied((current) => (current === link.id ? undefined : current)),
-        2000
-      )
+    if (await copyText(shortLinkUrl(link.shortCode, window.location.origin))) {
+      showCopied(link)
       toast({ title: 'Link copied' })
-    } catch {
+    } else
       toast({
         title: 'Could not copy the link',
         description: 'Press and hold or right-click the link to copy it.',
         variant: 'destructive',
       })
-    }
   }
 
   const listError = (
@@ -238,17 +249,24 @@ export function LinksManager() {
         )}
         {canCreate && (
           <div className="order-2 w-full sm:order-3 sm:mt-2">
-            <CreateLinkForm
+            <LinkComposer
               origin={origin}
-              onCreated={(link) => {
+              links={links}
+              onCopyExisting={(link) => void copy(link)}
+              onCreated={(link, copying) => {
                 setLinks((current) => [link, ...current])
                 // The new link always shows, whatever was searched for.
                 setQuery('')
                 setFresh(link.id)
-                setAnnouncement(
-                  `Created ${shortLinkUrl(link.shortCode, origin)}`
-                )
                 reconcile()
+                const made = shortLinkUrl(link.shortCode, origin)
+                void copying.then((copiedNow) => {
+                  if (copiedNow) showCopied(link)
+                  setAnnouncement(
+                    copiedNow ? `Created and copied ${made}` : `Created ${made}`
+                  )
+                  toast({ title: copiedNow ? 'Link copied' : 'Link created' })
+                })
               }}
             />
           </div>
@@ -305,6 +323,7 @@ export function LinksManager() {
                   onCopy={() => void copy(link)}
                   onEdit={() => setEditing(link)}
                   onDelete={() => setDeleting(link)}
+                  onQrCode={() => setCoding(link)}
                 />
               ))}
             </ul>
@@ -312,6 +331,12 @@ export function LinksManager() {
         )}
       </div>
 
+      <QrCodeDialog
+        link={coding}
+        origin={origin}
+        onClose={() => setCoding(null)}
+        onCopy={(link) => void copy(link)}
+      />
       <EditLinkDialog
         link={editing}
         origin={origin}
@@ -340,97 +365,282 @@ export function LinksManager() {
   )
 }
 
-function CreateLinkForm({
+/**
+ * Where a link is made. It reads the long link as it arrives: adds a
+ * missing `https://`, offers to drop tracking parameters, names a link
+ * already made for it, and suggests an ending from its words. Enter makes the
+ * link and copies it in the same key press.
+ */
+function LinkComposer({
   origin,
+  links,
   onCreated,
+  onCopyExisting,
 }: {
   origin: string
-  onCreated: (link: ShortLink) => void
+  links: readonly ShortLink[]
+  onCreated: (link: ShortLink, copying: Promise<boolean>) => void
+  onCopyExisting: (link: ShortLink) => void
 }) {
   const [url, setUrl] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [removed, setRemoved] = useState<{
+    names: string[]
+    from: string
+  } | null>(null)
   const host = origin.replace(/^https?:\/\//, '')
+  const suggestionId = useId()
+  const field = useRef<HTMLInputElement>(null)
+  // People arrive with a link to paste, or one handed over by Paste; a
+  // phone's keyboard waits for a tap. Taken once the page is on screen, as a
+  // render can be thrown away and run again.
+  useEffect(() => {
+    const handed = takeHandoff('link')
+    if (handed) setUrl(handed.url)
+    if (window.matchMedia('(pointer: fine)').matches) field.current?.focus()
+  }, [])
 
-  const submit = async (event: FormEvent) => {
+  const address = withScheme(url)
+  const tracking = useMemo(() => trackingParameters(address), [address])
+  const suggestion = useMemo(
+    () => (code ? null : suggestEnding(address)),
+    [address, code]
+  )
+  const existing = useMemo(
+    () =>
+      address
+        ? links.find((link) => sameDestination(link.targetUrl, address))
+        : undefined,
+    [links, address]
+  )
+
+  const change = (next: string) => {
+    setUrl(next)
+    setRemoved(null)
+    if (error) setError('')
+  }
+
+  const submit = (event: FormEvent) => {
     event.preventDefault()
     if (busy) return
     setError('')
     let body: z.infer<typeof shortLinkInputSchema>
     try {
-      body = shortLinkInputSchema.parse({ url: url.trim(), code })
+      body = shortLinkInputSchema.parse({ url: address, code })
     } catch (failure) {
       setError(problem(failure, 'Check the link and try again.'))
       return
     }
+    setUrl(address)
     setBusy(true)
-    try {
-      const link = await apiRequest<ShortLink>('/api/urls', {
-        body,
-        fallback: 'Could not create the link. Try again.',
-      })
-      setUrl('')
-      setCode('')
-      onCreated(link)
-    } catch (failure) {
-      setError(problem(failure, 'Could not create the link. Try again.'))
-    } finally {
-      setBusy(false)
-    }
+    const creating = apiRequest<ShortLink>('/api/urls', {
+      body,
+      fallback: 'Could not create the link. Try again.',
+    })
+    // Asked for now, while the key press still allows it; written once the
+    // link exists.
+    const copying = copyWhenReady(
+      creating.then((link) =>
+        shortLinkUrl(link.shortCode, window.location.origin)
+      )
+    )
+    creating.then(
+      (link) => {
+        setUrl('')
+        setCode('')
+        setRemoved(null)
+        setBusy(false)
+        onCreated(link, copying)
+      },
+      (failure) => {
+        setError(problem(failure, 'Could not create the link. Try again.'))
+        setBusy(false)
+      }
+    )
   }
 
+  const notes = [
+    tracking && (
+      <span
+        key="tracking"
+        className="inline-flex flex-wrap items-center gap-x-1.5"
+      >
+        <span>
+          {tracking.names.length === 1
+            ? `It carries a tracking parameter, ${tracking.names[0]}.`
+            : `It carries ${tracking.names.length} tracking parameters.`}
+        </span>
+        <button
+          type="button"
+          className="font-medium text-foreground underline underline-offset-4"
+          onClick={() => {
+            setRemoved({ names: tracking.names, from: address })
+            setUrl(tracking.cleaned)
+          }}
+        >
+          Remove {tracking.names.length === 1 ? 'it' : 'them'}
+        </button>
+      </span>
+    ),
+    removed && !tracking && (
+      <span
+        key="removed"
+        className="inline-flex flex-wrap items-center gap-x-1.5"
+      >
+        <span>Removed {removed.names.join(', ')}.</span>
+        <button
+          type="button"
+          className="font-medium text-foreground underline underline-offset-4"
+          onClick={() => {
+            setUrl(removed.from)
+            setRemoved(null)
+          }}
+        >
+          Undo
+        </button>
+      </span>
+    ),
+    existing && (
+      <span
+        key="existing"
+        className="inline-flex flex-wrap items-center gap-x-1.5"
+      >
+        <span>
+          You already have{' '}
+          <span className="font-mono text-foreground">
+            /u/{existing.shortCode}
+          </span>{' '}
+          for this ({clicks(existing.clicks)}).
+        </span>
+        <button
+          type="button"
+          className="font-medium text-foreground underline underline-offset-4"
+          onClick={() => onCopyExisting(existing)}
+        >
+          Copy it
+        </button>
+      </span>
+    ),
+  ].filter(Boolean)
+
   return (
-    <form onSubmit={submit} noValidate className="space-y-2">
-      <div className="flex flex-col gap-2 lg:flex-row">
-        <Input
-          type="url"
-          inputMode="url"
-          aria-label="Link to shorten"
-          placeholder="Paste a long link"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          disabled={busy}
-          aria-invalid={Boolean(error)}
-          aria-describedby={error ? 'link-error' : undefined}
-          className="h-10 min-w-0 lg:flex-1"
-        />
-        <div className="flex gap-2">
-          {/* The link to be made: the instance, then an ending of their own. */}
-          <div className="flex h-10 min-w-0 flex-1 items-center overflow-hidden rounded-md border border-control bg-transparent text-sm shadow-sm focus-within:ring-1 focus-within:ring-ring lg:w-96 lg:flex-none">
-            {/* Only the host gives way on a narrow screen; /u/ always shows. */}
-            <span
-              className="flex min-w-0 max-w-[60%] shrink-0 pl-3 font-mono text-muted-foreground"
-              title={`${host}/u/`}
-            >
-              <span className="hidden truncate sm:inline">{host}</span>
-              <span className="shrink-0">/u/</span>
-            </span>
-            <input
-              aria-label="Custom ending (optional)"
-              placeholder="random"
-              value={code}
-              onChange={(event) => setCode(event.target.value)}
-              disabled={busy}
-              maxLength={SHORT_CODE_MAX_LENGTH}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoComplete="off"
-              className="h-full min-w-0 flex-1 bg-transparent pr-3 font-mono outline-none placeholder:text-muted-foreground/70"
-            />
-          </div>
-          <Button type="submit" disabled={busy || !url.trim()} className="h-10">
-            {busy && (
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+    <form
+      onSubmit={submit}
+      noValidate
+      className="rounded-xl border bg-background/40 p-3 transition-colors focus-within:border-ring/60 sm:p-4"
+    >
+      <Input
+        type="url"
+        inputMode="url"
+        aria-label="Link to shorten"
+        placeholder="Paste a long link"
+        value={url}
+        onChange={(event) => change(event.target.value)}
+        onBlur={() => {
+          if (address !== url.trim()) setUrl(address)
+        }}
+        onPaste={(event) => {
+          const pasted = event.clipboardData.getData('text/plain').trim()
+          if (!pasted || url.trim()) return
+          event.preventDefault()
+          change(withScheme(pasted))
+        }}
+        disabled={busy}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? 'link-error' : undefined}
+        ref={field}
+        className="h-11 border-0 bg-transparent px-1 text-base shadow-none focus-visible:ring-0 sm:text-[15px]"
+      />
+      <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3 sm:flex-row sm:items-center">
+        {/* The link being made: the instance, then the ending. */}
+        <div className="flex h-10 min-w-0 flex-1 items-center rounded-md bg-muted/30 font-mono text-sm focus-within:ring-1 focus-within:ring-ring">
+          <span
+            className="flex min-w-0 max-w-[60%] shrink-0 pl-3 text-muted-foreground"
+            title={`${host}/u/`}
+          >
+            <span className="hidden truncate sm:inline">{host}</span>
+            <span className="shrink-0">/u/</span>
+          </span>
+          <input
+            aria-label="Ending (optional)"
+            aria-describedby={suggestion ? suggestionId : undefined}
+            placeholder={suggestion ?? 'random'}
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            onKeyDown={(event) => {
+              // Tab takes the suggestion, as in a code editor; the next Tab
+              // moves on.
+              if (
+                event.key === 'Tab' &&
+                !event.shiftKey &&
+                suggestion &&
+                !code
+              ) {
+                event.preventDefault()
+                setCode(suggestion)
+              }
+            }}
+            disabled={busy}
+            maxLength={SHORT_CODE_MAX_LENGTH}
+            spellCheck={false}
+            autoCapitalize="off"
+            autoComplete="off"
+            className={cn(
+              'h-full min-w-0 flex-1 bg-transparent pr-2 outline-none',
+              suggestion
+                ? 'placeholder:text-muted-foreground/45'
+                : 'placeholder:text-muted-foreground/70'
             )}
-            Shorten
-          </Button>
+          />
+          {suggestion && (
+            <button
+              type="button"
+              onClick={() => setCode(suggestion)}
+              aria-label={`Use ${suggestion}`}
+              title={`Use ${suggestion}`}
+              className="mr-1.5 shrink-0 rounded border border-border/80 px-1.5 py-0.5 font-sans text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="[@media(pointer:coarse)]:hidden">Tab</span>
+              <span className="hidden [@media(pointer:coarse)]:inline">
+                Use
+              </span>
+            </button>
+          )}
+          <span id={suggestionId} className="sr-only">
+            {suggestion
+              ? `Suggested ending: ${suggestion}. Press Tab to use it; left empty, the ending is random.`
+              : ''}
+          </span>
         </div>
+        <Button
+          type="submit"
+          disabled={busy || !url.trim()}
+          className="h-10 sm:w-auto"
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          ) : null}
+          Shorten
+          {!busy && (
+            <kbd className="ml-1 hidden rounded border border-current/30 px-1 font-sans text-[11px] leading-4 opacity-70 [@media(pointer:fine)]:sm:inline">
+              ↵
+            </kbd>
+          )}
+        </Button>
       </div>
-      {error && (
-        <p id="link-error" role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+      {(notes.length > 0 || error) && (
+        <div className="mt-2.5 space-y-1 px-1 text-sm text-muted-foreground">
+          {notes.map((note, index) => (
+            <p key={index}>{note}</p>
+          ))}
+          {error && (
+            <p id="link-error" role="alert" className="text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
       )}
     </form>
   )
@@ -446,6 +656,7 @@ function LinkRow({
   onCopy,
   onEdit,
   onDelete,
+  onQrCode,
 }: {
   link: ShortLink
   origin: string
@@ -456,6 +667,7 @@ function LinkRow({
   onCopy: () => void
   onEdit: () => void
   onDelete: () => void
+  onQrCode: () => void
 }) {
   const created = new Date(link.createdAt)
   const host = origin.replace(/^https?:\/\//, '')
@@ -534,6 +746,10 @@ function LinkRow({
               <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
               Open destination
             </a>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onQrCode}>
+            <QrCode className="h-4 w-4" aria-hidden="true" />
+            QR code
           </DropdownMenuItem>
           {canEdit && (
             <DropdownMenuItem onSelect={onEdit}>
@@ -747,5 +963,105 @@ function DeleteLinkDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+/**
+ * The short link as a QR code, for a slide, a poster or a phone across the
+ * room. Made in the browser; nothing is sent anywhere.
+ */
+function QrCodeDialog({
+  link,
+  origin,
+  onClose,
+  onCopy,
+}: {
+  link: ShortLink | null
+  origin: string
+  onClose: () => void
+  onCopy: (link: ShortLink) => void
+}) {
+  const [image, setImage] = useState<{ for: string; url: string } | null>(null)
+  const [failed, setFailed] = useState(false)
+  const address = link ? shortLinkUrl(link.shortCode, origin) : ''
+
+  useEffect(() => {
+    if (!address) return
+    let current = true
+    setFailed(false)
+    import('qrcode')
+      .then((QRCode) =>
+        QRCode.toDataURL(address, {
+          width: 768,
+          margin: 2,
+          errorCorrectionLevel: 'M',
+          color: { dark: '#000000', light: '#ffffff' },
+        })
+      )
+      .then(
+        (url) => {
+          if (current) setImage({ for: address, url })
+        },
+        () => {
+          if (current) setFailed(true)
+        }
+      )
+    return () => {
+      current = false
+    }
+  }, [address])
+
+  const ready = image?.for === address ? image.url : null
+
+  return (
+    <Dialog open={!!link} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>QR code</DialogTitle>
+          <DialogDescription className="break-all font-mono text-xs">
+            {address.replace(/^https?:\/\//, '')}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="mx-auto flex aspect-square w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-white p-2">
+          {ready ? (
+            // A data URL made here; next/image would only add a wrapper.
+            <img
+              src={ready}
+              alt={`QR code for ${address}`}
+              className="h-full w-full [image-rendering:pixelated]"
+            />
+          ) : failed ? (
+            <p className="px-4 text-center text-sm text-neutral-600">
+              The QR code could not be made. Copy the link instead.
+            </p>
+          ) : (
+            <Loader2
+              className="h-6 w-6 animate-spin text-neutral-400"
+              aria-label="Making the QR code"
+            />
+          )}
+        </div>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            variant="outline"
+            onClick={() => link && onCopy(link)}
+            disabled={!link}
+          >
+            <Copy className="h-4 w-4" aria-hidden="true" />
+            Copy link
+          </Button>
+          <Button asChild disabled={!ready}>
+            <a
+              href={ready ?? undefined}
+              download={link ? `${link.shortCode}-qr.png` : undefined}
+              aria-disabled={!ready}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              Download PNG
+            </a>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

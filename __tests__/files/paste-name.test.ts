@@ -18,7 +18,8 @@ describe('a paste’s name', () => {
   it('takes its language from the extension, as the share page does', () => {
     expect(pasteLanguage('deploy.ts')).toBe('typescript')
     expect(pasteLanguage('NOTES.MD')).toBe('markdown')
-    expect(pasteLanguage('run.sh')).toBe('text')
+    expect(pasteLanguage('run.sh')).toBe('shell')
+    expect(pasteLanguage('run.rb')).toBe('text')
   })
 
   it.each([

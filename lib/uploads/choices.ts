@@ -105,6 +105,28 @@ export function uploadOptionsFor(choices: UploadChoices): UploadOptions {
   }
 }
 
+/**
+ * The request for a file that waits its turn: every setting it was added
+ * with spelled out, so a profile or default changed meanwhile can't change
+ * what it gets. A relative expiration stays relative, counted from when the
+ * file arrives. Visibility and tags are sent only where the role may choose
+ * them; without that the server decides them the same way either way.
+ */
+export function pinnedUploadOptions(
+  choices: UploadChoices,
+  effective: EffectiveUpload,
+  can: { share: boolean; tag: boolean }
+): UploadOptions {
+  return uploadOptionsFor({
+    ...choices,
+    visibility: can.share ? effective.visibility : undefined,
+    expiry: effective.expiry,
+    expiryAction:
+      effective.expiry.kind === 'never' ? undefined : effective.expiryAction,
+    tagIds: can.tag ? effective.tagIds : undefined,
+  })
+}
+
 /** "Never expires", "Deleted after 1 day", "Private on Nov 30, 3:00 PM". */
 export function expiryLabel(expiry: Expiry, action: ExpiryAction) {
   if (expiry.kind === 'never') return 'Never expires'

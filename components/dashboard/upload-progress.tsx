@@ -2,6 +2,8 @@
 
 import { useState, useSyncExternalStore } from 'react'
 
+import { usePathname } from 'next/navigation'
+
 import { Progress } from '@/components/ui/progress'
 import {
   Toast,
@@ -10,7 +12,7 @@ import {
   ToastTitle,
 } from '@/components/ui/toast'
 
-import { uploadActivity } from '@/lib/uploads/activity'
+import { isTrayActivity, uploadActivity } from '@/lib/uploads/activity'
 import { formatTransfer } from '@/lib/uploads/speed'
 
 /**
@@ -26,7 +28,10 @@ export function UploadProgress() {
     uploadActivity.get
   )
   const [closed, setClosed] = useState<number | null>(null)
+  const pathname = usePathname()
   if (!file) return null
+  // The Upload page shows its own files' progress in its list.
+  if (pathname === '/dashboard/upload' && isTrayActivity(file.id)) return null
   return (
     <Toast
       // A toast per file: closing it hides only that file's progress, and

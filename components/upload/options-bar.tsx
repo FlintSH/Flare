@@ -5,6 +5,7 @@ import {
   Fragment,
   type ReactNode,
   forwardRef,
+  useEffect,
   useRef,
   useState,
 } from 'react'
@@ -89,14 +90,17 @@ const Chip = forwardRef<
       variant="outline"
       aria-label={`${name}: ${value}${picked ? ', changed for this upload' : ''}`}
       className={cn(
-        'relative h-9 min-w-0 max-w-full gap-1.5 sm:gap-2 rounded-lg bg-background/70 px-2.5 font-normal data-[state=open]:bg-accent sm:px-3',
+        'relative h-8 min-w-0 max-w-full gap-1.5 rounded-lg bg-background/70 px-2 text-[13px] font-normal data-[state=open]:bg-accent sm:h-9 sm:gap-2 sm:px-3 sm:text-sm',
         picked && 'border-primary bg-primary/10',
         invalid && 'border-danger bg-danger/10 text-destructive',
         className
       )}
       {...props}
     >
-      <Icon className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+      <Icon
+        className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4"
+        aria-hidden="true"
+      />
       <span className="min-w-0 max-w-[10rem] truncate">{value}</span>
       <ChevronDown
         className="hidden h-3.5 w-3.5 text-muted-foreground sm:block"
@@ -149,14 +153,17 @@ export function UploadOptionsBar({
   state,
   disabled,
   passwordId,
+  passwordRequest = 0,
   children,
 }: {
   state: UploadOptionsState
   disabled?: boolean
   /** The password field's id, so a problem can point at it. */
   passwordId: string
+  /** Changes when the page asks for the password field to open, focused. */
+  passwordRequest?: number
   /** The main action, at the end of the row (its own row on phones). */
-  children: ReactNode
+  children?: ReactNode
 }) {
   const { choices, setChoices, effective, can, profiles, folders, tags } = state
   // What each chip goes back to: the profile's settings, nothing picked.
@@ -203,10 +210,13 @@ export function UploadOptionsBar({
   return (
     <div className="space-y-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        {/* One row that scrolls sideways on phones, where touch-sized chips
+            would otherwise stack three deep above the list; it wraps on
+            wider screens. The fade says there is more. */}
         <div
           role="group"
           aria-label="Upload options"
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
+          className="-mx-2.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 pl-2.5 pr-8 [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:gap-2 sm:overflow-visible sm:p-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0"
         >
           {showProfiles && (
             <DropdownMenu modal={false}>
@@ -277,6 +287,7 @@ export function UploadOptionsBar({
               disabled={disabled}
               onVisibility={(visibility) => set({ visibility })}
               onPassword={(password) => set({ password })}
+              openRequest={passwordRequest}
             />
           ) : (
             <span
@@ -407,9 +418,11 @@ export function UploadOptionsBar({
             </DropdownMenu>
           )}
         </div>
-        <div className="flex shrink-0 [&>*]:w-full sm:[&>*]:w-auto">
-          {children}
-        </div>
+        {children && (
+          <div className="flex shrink-0 [&>*]:w-full sm:[&>*]:w-auto">
+            {children}
+          </div>
+        )}
       </div>
       {folders.selected?.shareToken && effective.visibility === 'PUBLIC' && (
         <p className="text-xs text-muted-foreground">
@@ -466,6 +479,7 @@ function AccessChip({
   disabled,
   onVisibility,
   onPassword,
+  openRequest,
 }: {
   passwordId: string
   visibility: Visibility
@@ -476,8 +490,17 @@ function AccessChip({
   disabled?: boolean
   onVisibility: (visibility: Visibility | undefined) => void
   onPassword: (password: string) => void
+  openRequest: number
 }) {
   const hintId = `${passwordId}-hint`
+  const [open, setOpen] = useState(false)
+  const [focusPassword, setFocusPassword] = useState(false)
+  // The page can open this at the password, for a paste that holds a secret.
+  useEffect(() => {
+    if (!openRequest) return
+    setFocusPassword(true)
+    setOpen(true)
+  }, [openRequest])
   const protectedLink = visibility === 'PUBLIC' && !!password
   const value =
     visibility === 'PRIVATE'
@@ -488,7 +511,13 @@ function AccessChip({
           ? 'Public · password'
           : 'Public'
   return (
-    <Popover>
+    <Popover
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setFocusPassword(false)
+      }}
+    >
       <PopoverTrigger asChild disabled={disabled}>
         <Chip
           icon={
@@ -503,6 +532,12 @@ function AccessChip({
       <PopoverContent
         align="start"
         className="w-80 max-w-[calc(100vw-2rem)] space-y-4"
+        onOpenAutoFocus={(event) => {
+          const field = document.getElementById(passwordId)
+          if (!focusPassword || !field) return
+          event.preventDefault()
+          field.focus()
+        }}
       >
         <RadioGroup
           aria-label="Visibility"

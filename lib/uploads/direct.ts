@@ -117,8 +117,7 @@ export async function directUpload(
         adoptDetectedType: true,
       }),
     })
-    const links = uploadLinks(file, user)
-    return fixed ? { id: file.id, ...links } : links
+    return uploadLinks(file, user)
   } catch (error) {
     await cleanupUncommittedUpload(storage, filePath)
     throw error

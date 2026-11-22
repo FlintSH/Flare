@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { rm } from 'node:fs/promises'
+import { rm, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
   afterAll,
@@ -668,6 +668,115 @@ suite('customization contracts against disposable PostgreSQL', () => {
     expect(JSON.stringify(metadata)).not.toContain('upload-password')
     return { data, metadata: metadata! }
   }
+
+  it('cancels an unfinished chunk upload and frees its parts, but never a finished one', async () => {
+    const text = 'A chunked upload someone cancels.'
+    const { data, metadata } = await startChunk(text)
+    const partRoutes =
+      await import('@/app/api/files/chunks/[uploadId]/part/[partNumber]/route')
+    const sessionRoute = await import('@/app/api/files/chunks/[uploadId]/route')
+    const completion =
+      await import('@/app/api/files/chunks/[uploadId]/complete/route')
+    const { getUploadMetadata } = await import('@/lib/uploads/chunks')
+    const params = { params: Promise.resolve({ uploadId: data.uploadId }) }
+    const part = await partRoutes.PUT(
+      new Request(`http://localhost/api/files/chunks/${data.uploadId}/part/1`, {
+        method: 'PUT',
+        body: text,
+      }),
+      {
+        params: Promise.resolve({ uploadId: data.uploadId, partNumber: '1' }),
+      }
+    )
+    expect(part.status).toBe(200)
+    const etag = (await part.json()).data.etag
+    const partsDir = join(
+      process.cwd(),
+      'tmp/local-multipart',
+      metadata.s3UploadId
+    )
+    await expect(stat(partsDir)).resolves.toBeTruthy()
+
+    const cancelled = await sessionRoute.DELETE(
+      jsonRequest(`/api/files/chunks/${data.uploadId}`, undefined, 'DELETE'),
+      params
+    )
+    expect(cancelled.status).toBe(200)
+    expect(await cancelled.json()).toEqual({ data: { cancelled: true } })
+    expect(await getUploadMetadata(data.uploadId)).toBeNull()
+    await expect(stat(partsDir)).rejects.toMatchObject({ code: 'ENOENT' })
+    // Nothing can be completed or cancelled again afterwards.
+    const late = await completion.POST(
+      jsonRequest(`/api/files/chunks/${data.uploadId}/complete`, {
+        parts: [{ ETag: etag, PartNumber: 1 }],
+      }),
+      params
+    )
+    expect(late.status).toBe(404)
+    const again = await sessionRoute.DELETE(
+      jsonRequest(`/api/files/chunks/${data.uploadId}`, undefined, 'DELETE'),
+      params
+    )
+    expect(again.status).toBe(404)
+
+    const finished = await startChunk(text)
+    const finishedParams = {
+      params: Promise.resolve({ uploadId: finished.data.uploadId }),
+    }
+    const finishedPart = await partRoutes.PUT(
+      new Request(
+        `http://localhost/api/files/chunks/${finished.data.uploadId}/part/1`,
+        { method: 'PUT', body: text }
+      ),
+      {
+        params: Promise.resolve({
+          uploadId: finished.data.uploadId,
+          partNumber: '1',
+        }),
+      }
+    )
+    const done = await completion.POST(
+      jsonRequest(`/api/files/chunks/${finished.data.uploadId}/complete`, {
+        parts: [{ ETag: (await finishedPart.json()).data.etag, PartNumber: 1 }],
+      }),
+      finishedParams
+    )
+    expect(done.status).toBe(200)
+    const created = await done.json()
+    expect(created.id).toEqual(expect.any(String))
+    const refused = await sessionRoute.DELETE(
+      jsonRequest(
+        `/api/files/chunks/${finished.data.uploadId}`,
+        undefined,
+        'DELETE'
+      ),
+      finishedParams
+    )
+    expect(refused.status).toBe(409)
+    expect(await refused.json()).toEqual({
+      error: 'This upload has already finished.',
+    })
+    expect(
+      await prisma.file.findUnique({ where: { id: created.id } })
+    ).not.toBeNull()
+
+    // The session is kept a while for retries; when it goes stale, the
+    // sweep forgets it without aborting what became the file.
+    const { LocalStorageProvider } = await import('@/lib/storage')
+    const abort = vi.spyOn(
+      LocalStorageProvider.prototype,
+      'abortMultipartUpload'
+    )
+    const chunks = await import('@/lib/uploads/chunks')
+    const stale = await chunks.getUploadMetadata(finished.data.uploadId)
+    await chunks.saveUploadMetadata(finished.data.uploadId, {
+      ...stale!,
+      lastActivity: 0,
+    })
+    expect(await chunks.getUploadMetadata(finished.data.uploadId)).toBeNull()
+    expect(abort).not.toHaveBeenCalled()
+    abort.mockRestore()
+  })
 
   it('pins multipart sessions to their actual initializing backend and rejects unknown old sessions', async () => {
     const { metadata } = await startChunk('A provider-bound multipart upload')

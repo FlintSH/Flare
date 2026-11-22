@@ -40,6 +40,7 @@ export function PasteEditor({
   onSubmit,
   disabled,
   describedBy,
+  label = 'Paste content',
 }: {
   value: string
   onChange: (value: string) => void
@@ -48,6 +49,7 @@ export function PasteEditor({
   onSubmit: () => void
   disabled?: boolean
   describedBy: string
+  label?: string
 }) {
   const submit = useRef(onSubmit)
   useLayoutEffect(() => {
@@ -75,12 +77,12 @@ export function PasteEditor({
         ])
       ),
       EditorView.contentAttributes.of({
-        'aria-label': 'Paste content',
+        'aria-label': label,
         'aria-describedby': describedBy,
       }),
       ...(language === 'markdown' ? [EditorView.lineWrapping] : []),
     ],
-    [grammar, dark, describedBy, language]
+    [grammar, dark, describedBy, language, label]
   )
 
   return (
@@ -93,7 +95,7 @@ export function PasteEditor({
       theme="none"
       placeholder="Paste or type here"
       // People arrive to paste; a phone's keyboard waits for a tap.
-      autoFocus={window.matchMedia('(pointer: fine)').matches}
+      autoFocus={!disabled && window.matchMedia('(pointer: fine)').matches}
       basicSetup={{
         lineNumbers: true,
         foldGutter: false,

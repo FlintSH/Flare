@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react'
 
+import type { StreamParser } from '@codemirror/language'
 import type { Extension } from '@uiw/react-codemirror'
 
 import type { Language } from '@/lib/files/file-kind'
+
+/** A stream grammar, with the language package loaded alongside it. */
+async function legacy(parser: StreamParser<unknown>): Promise<Extension> {
+  const { StreamLanguage } = await import('@codemirror/language')
+  return StreamLanguage.define(parser)
+}
 
 /**
  * Each grammar is downloaded when a file in its language is shown, so a page
@@ -45,6 +52,29 @@ const GRAMMARS: Record<Exclude<Language, 'text'>, () => Promise<Extension>> = {
   sass: async () => (await import('@codemirror/lang-sass')).sass(),
   scss: async () => (await import('@codemirror/lang-sass')).sass(),
   less: async () => (await import('@codemirror/lang-less')).less(),
+  // CodeMirror has no Lezer grammars for these, so they use its ports of the
+  // CodeMirror 5 modes.
+  shell: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/shell')).shell),
+  diff: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/diff')).diff),
+  toml: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/toml')).toml),
+  // Keys and values read like YAML's: a property, then a string.
+  ini: async () => {
+    const [{ properties }, { tags }] = await Promise.all([
+      import('@codemirror/legacy-modes/mode/properties'),
+      import('@lezer/highlight'),
+    ])
+    return legacy({
+      ...properties,
+      tokenTable: {
+        def: tags.propertyName,
+        quote: tags.string,
+        header: tags.heading,
+      },
+    })
+  },
 }
 
 /** Plain text gets no grammar, so prose and logs aren't coloured as code. */

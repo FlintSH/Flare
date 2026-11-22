@@ -1,3 +1,5 @@
+import { syntaxHighlighting } from '@codemirror/language'
+import { tagHighlighter, tags } from '@lezer/highlight'
 import {
   EditorView,
   type Extension,
@@ -244,8 +246,40 @@ function syntax(dark: boolean) {
   return EditorView.theme(rules)
 }
 
-const LIGHT = [highlighter, frame(false), syntax(false), edgeFade]
-const DARK = [highlighter, frame(true), syntax(true), edgeFade]
+/**
+ * One Dark colours a diff's removed lines as names, which Flare keeps in the
+ * text colour, so they get a class of their own. Added lines already take the
+ * string green.
+ */
+const removedLines = syntaxHighlighting(
+  tagHighlighter([{ tag: tags.deleted, class: 'cm-deletedLine' }])
+)
+
+function diffColours(dark: boolean) {
+  return EditorView.theme({
+    // Outranks the class `syntax` gives names.
+    '.cm-content .cm-deletedLine': {
+      color: dark ? oneDarkColor.coral : 'hsl(var(--danger))',
+    },
+  })
+}
+
+const LIGHT = [
+  highlighter,
+  removedLines,
+  frame(false),
+  syntax(false),
+  diffColours(false),
+  edgeFade,
+]
+const DARK = [
+  highlighter,
+  removedLines,
+  frame(true),
+  syntax(true),
+  diffColours(true),
+  edgeFade,
+]
 
 /** Flare's look for the read-only text and code viewer. */
 export function codeViewerTheme(dark: boolean): Extension {

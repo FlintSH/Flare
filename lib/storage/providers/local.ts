@@ -55,6 +55,13 @@ export class LocalStorageProvider implements StorageProvider {
     return { ETag: `"${uploadId}-${partNumber}-${data.length}"` }
   }
 
+  async abortMultipartUpload(_path: string, uploadId: string): Promise<void> {
+    await rm(this.getMultipartPartsDir(uploadId), {
+      recursive: true,
+      force: true,
+    })
+  }
+
   async getPresignedPartUploadUrl(
     path: string,
     uploadId: string,

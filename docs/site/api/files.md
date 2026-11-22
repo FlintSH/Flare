@@ -33,6 +33,7 @@ Successful uploads return **200**, with this shape:
 {
   "success": true,
   "data": {
+    "id": "cm_example",
     "url": "https://files.example.com/alex/report.pdf",
     "pageUrl": "https://files.example.com/alex/report.pdf",
     "rawUrl": "https://files.example.com/api/files/abc123/report.pdf",
@@ -47,6 +48,7 @@ Successful uploads return **200**, with this shape:
 
 | Response field    | Meaning                                                                |
 | ----------------- | ---------------------------------------------------------------------- |
+| `id`              | The file's ID, as the file routes below name it.                       |
 | `pageUrl`         | The Flare share page. Uses a vanity ID when the account has one.       |
 | `url`, `copyText` | Compatibility aliases for `pageUrl`.                                   |
 | `rawUrl`          | Flare's raw-content route, using the underlying account URL ID.        |
@@ -605,6 +607,7 @@ This endpoint returns the **upload-link object directly**:
 
 ```json
 {
+  "id": "cm_example",
   "url": "https://files.example.com/abc123/archive.zip",
   "pageUrl": "https://files.example.com/abc123/archive.zip",
   "rawUrl": "https://files.example.com/api/files/abc123/archive.zip",
@@ -626,4 +629,15 @@ Upload metadata expires after **one hour of inactivity**. Requesting a part URL 
 
 Metadata is stored under `tmp/uploads` on the application filesystem. Multi-replica deployments must ensure all requests for a chunk session can reach its metadata and, for local storage, its temporary parts. An ephemeral restart can lose an in-progress upload even when finalized files are safely stored in S3.
 
-Changing storage provider/configuration during an upload causes `409`; start again against the current storage. Each new chunk session also records the actual provider identity that initialized its parts. Part-URL, part-write, and completion requests return `409` when that provider differs or the session lacks recorded provenance, including sessions started before the storage-provenance upgrade. Restart the entire affected upload with a new initialization request; repeatedly resending completion or old part numbers cannot repair it. Successfully completed files and successful request/response formats are unchanged. Flare currently has no API for cancelling a chunk session or querying which parts were uploaded. Preserve your own part state, let stale sessions expire, and configure storage cleanup for abandoned multipart objects as part of server operations.
+Changing storage provider/configuration during an upload causes `409`; start again against the current storage. Each new chunk session also records the actual provider identity that initialized its parts. Part-URL, part-write, and completion requests return `409` when that provider differs or the session lacks recorded provenance, including sessions started before the storage-provenance upgrade. Restart the entire affected upload with a new initialization request; repeatedly resending completion or old part numbers cannot repair it. Successfully completed files and successful request/response formats are unchanged. Flare has no API for querying which parts were uploaded; preserve your own part state.
+
+### Cancel an upload
+
+**`DELETE /api/files/chunks/{uploadId}`** ends a session you won't complete. Flare forgets the session and tells storage to discard the parts it holds: S3 aborts the multipart upload, and local storage deletes its temporary parts. It answers `{ "data": { "cancelled": true } }`, `404` for a session that doesn't exist, has expired or isn't yours, and `409` with `This upload has already finished.` when the file was already created; delete that file instead. The browser's **×** on [Upload](/guide/uploading#upload-from-your-browser) uses it.
+
+```bash
+curl -X DELETE -H "Authorization: Bearer $FLARE_TOKEN" \
+  "$FLARE_URL/api/files/chunks/$UPLOAD_ID"
+```
+
+Sessions nobody cancels expire after an hour of inactivity, and the hourly cleanup now discards their storage parts the same way. Earlier builds only deleted the session's metadata, leaving S3 multipart parts and local temporary parts behind until a storage lifecycle rule or an administrator removed them.

@@ -40,7 +40,8 @@ export function notifyUploadInProgress() {
 
 const link = (file: UploadResponse) => file.pageUrl || file.url
 
-function notifyUploaded(files: readonly UploadResponse[]) {
+/** Says how a batch went, with its links, to someone not watching it. */
+export function notifyUploaded(files: readonly UploadResponse[]) {
   if (files.length === 1) {
     const [file] = files
     toast({

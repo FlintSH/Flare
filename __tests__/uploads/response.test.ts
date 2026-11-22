@@ -12,9 +12,15 @@ const response = {
 describe('upload completion responses', () => {
   it('accepts both wrapped API responses and legacy raw responses', () => {
     expect(parseUploadResponse({ data: response })).toEqual(response)
-    expect(parseUploadResponse({ ...response, id: 'legacy-file' })).toEqual(
+    expect(parseUploadResponse({ ...response, extra: 'ignored' })).toEqual(
       response
     )
+  })
+
+  it('keeps the file ID, which the Upload page deletes by', () => {
+    expect(
+      parseUploadResponse({ data: { ...response, id: 'cm_file' } })
+    ).toEqual({ ...response, id: 'cm_file' })
   })
 
   it('preserves zero-byte files, separate open URLs, and formatted copy text', () => {

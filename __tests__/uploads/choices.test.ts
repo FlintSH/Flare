@@ -6,6 +6,7 @@ import {
   expiryLabel,
   expiryProblem,
   permittedAction,
+  pinnedUploadOptions,
   profileSummary,
   uploadOptionsFor,
 } from '@/lib/uploads/choices'
@@ -105,6 +106,48 @@ describe('what an upload sends', () => {
 
   it('sends picked tags, including none', () => {
     expect(uploadOptionsFor({ ...NO_CHOICES, tagIds: [] }).tagIds).toEqual([])
+  })
+})
+
+describe('what a waiting file sends', () => {
+  const effective = effectiveUpload(saved, NO_CHOICES, true)
+
+  it('spells out what the profile gave it, so a later change can’t', () => {
+    expect(
+      pinnedUploadOptions({ ...NO_CHOICES, profileId: 'p1' }, effective, {
+        share: true,
+        tag: true,
+      })
+    ).toEqual({
+      profileId: 'p1',
+      folderId: null,
+      visibility: 'PUBLIC',
+      password: undefined,
+      expiration: 'WEEK',
+      expiryAction: 'DELETE',
+      tagIds: ['tag-a'],
+    })
+  })
+
+  it('keeps Never explicit and leaves out its action', () => {
+    const never = effectiveUpload(
+      { ...saved, expiration: 'DISABLED' },
+      NO_CHOICES,
+      true
+    )
+    expect(
+      pinnedUploadOptions(NO_CHOICES, never, { share: true, tag: true })
+    ).toMatchObject({ expiresAt: null, expiryAction: undefined })
+  })
+
+  it('leaves visibility and tags to the server for roles that can’t choose them', () => {
+    const options = pinnedUploadOptions(NO_CHOICES, effective, {
+      share: false,
+      tag: false,
+    })
+    expect(options.visibility).toBeUndefined()
+    expect(options.tagIds).toBeUndefined()
+    expect(options.expiration).toBe('WEEK')
   })
 })
 

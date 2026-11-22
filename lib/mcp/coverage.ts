@@ -92,6 +92,10 @@ export const API_COVERAGE: Record<
     POST: chunked,
     OPTIONS: preflight,
   },
+  '/api/files/chunks/{uploadId}': {
+    DELETE: chunked,
+    OPTIONS: preflight,
+  },
   '/api/files/{id}': {
     PATCH: tools('set_file_sharing'),
     DELETE: tools('delete_files'),

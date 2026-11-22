@@ -7,22 +7,27 @@ description: Shorten a link under your Flare domain, choose its ending, change w
 
 **Links** turns a long web address into a short redirect under your instance's domain, such as `https://files.example.com/u/launch`. A short link sends visitors to its destination; it does not copy or host that destination's content.
 
-<Screenshot src="/screenshots/workspace/urls.png" alt="Links page with a search field, a bar to paste a long link with a custom ending field and Shorten, and a list of short links with destinations, clicks, dates and Copy buttons" caption="Shorten a link, then find, copy or change it in the list." />
+<Screenshot src="/screenshots/workspace/urls.png" alt="Links page: a pasted GitHub release address with two tracking parameters, the link being made with the suggested ending flare-releases-v3-2-0 and Shorten, and a note offering to remove the tracking parameters, and the list of short links below" caption="Paste a long link; Flare suggests an ending and spots tracking parameters." />
 
 ## Shorten a link
 
-1. Open **Links** in the navigation.
-2. Paste a complete web address, starting with `https://` or `http://`, into **Paste a long link**.
-3. Optionally type an ending of your own after `/u/`, such as `launch`. Leave it empty for a random six-character ending.
-4. Choose **Shorten**.
+1. Open **Links** in the navigation. On a computer, the link field is ready to paste into.
+2. Paste a web address into **Paste a long link**. An address without `https://`, such as `example.com/launch`, gets it added.
+3. Check the ending after `/u/`. Flare suggests one from the address's words when it can: `https://github.com/FlintSH/Flare/releases/tag/v3.1.0` suggests `flare-releases-v3-1-0`. Press <kbd>Tab</kbd> in the ending field, or choose **Tab** (**Use** on a touch screen) at its end, to take it. Type your own instead, or leave it empty for a random six-character ending.
+4. Press <kbd>Enter</kbd> or choose **Shorten**.
 
-The new link appears at the top of the list, briefly highlighted. Choose **Copy** to copy it with your instance's domain. If a search is active, creating a link clears it so the new one shows.
+Shortening also copies the new link, so it's ready to paste. The link appears at the top of the list, briefly highlighted, with **Copied** on its button. If the browser didn't allow the copy, **Link created** appears instead and the row's **Copy** works as usual. If a search is active, creating a link clears it so the new one shows.
+
+While you compose, Flare reads the address in your browser, without visiting it:
+
+- **Tracking parameters** such as `utm_source`, `fbclid` or `gclid`, and `si` on YouTube and Spotify links, are named under the field with **Remove them**. Only those parameters are removed; the rest of the address stays exactly as you pasted it. **Undo** puts them back. Flare never removes them without asking.
+- **A link you already have** for the same address is named, with its clicks and **Copy it**, so you can reuse it instead of making a second one. Flare compares the address as pasted and without its tracking parameters.
 
 An ending can be up to 64 letters, numbers, `-` and `_`. Endings are case-sensitive, but Flare refuses an ending you choose while another link on the instance uses it in any letter case, so a chosen `/u/Launch` can't sit beside `/u/launch` and pass for it. A taken ending shows **That ending is already taken. Choose another.** Your account's vanity URL setting affects uploaded-file URLs, not the `/u/…` path.
 
 If two links created at the same moment draw the same random ending, Flare gives the second one another instead of failing. Earlier versions showed **Internal server error** in that case; choosing **Shorten** again worked. Earlier versions also had no custom endings and no way to change a destination.
 
-<Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created link at the top of the list, highlighted, with its custom ending launch" caption="A new link appears first, ready to copy." />
+<Screenshot src="/screenshots/workspace/urls-complete.png" alt="A newly created link with the ending launch at the top of the list, highlighted, its button reading Copied" caption="A new link appears first, already copied." />
 
 ## Find and manage your links
 
@@ -30,6 +35,7 @@ Each row shows the short link, then where it leads without `https://`. The full 
 
 - **Copy** copies the complete short link. If the browser refuses clipboard access, press and hold or right-click the short link and copy its address.
 - **⋯ → Open destination** opens where the link leads, without counting a click.
+- **⋯ → QR code** shows the short link as a QR code, for a slide, a poster or a phone across the room, with **Download PNG** and **Copy link**. The code is made in your browser.
 - **⋯ → Change destination** sends the link somewhere else. Everyone who opens it, including people you already sent it to, goes to the new address from then on. The ending and clicks stay. To use a different ending, create a new link (and delete the old one if it should stop working).
 - **⋯ → Delete** stops the redirect after you confirm. The ending then becomes free, and anyone on this instance can create a link with it, so a deleted link you shared could later lead somewhere else. Deleting a short link does not remove the destination page or prevent someone using its full address. If deleting fails, **Could not delete the link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link still works.
 
@@ -57,7 +63,7 @@ For a custom integration, use a [named API token](../api/authentication) with `u
 
 | Problem                              | Next step                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Address rejected                     | Include the full `https://` or `http://` address and check for spaces or malformed characters. Other schemes, such as `ftp://`, show **Only HTTP and HTTPS URLs are allowed**.                                                                                                                                         |
+| Address rejected                     | Flare adds `https://` to a plain site address such as `example.com/page`; anything else needs its `https://` or `http://`. Check for spaces or malformed characters. Other schemes, such as `ftp://`, show **Only HTTP and HTTPS URLs are allowed**.                                                                   |
 | Link goes to the wrong page          | Choose **⋯ → Change destination** and correct the address. The short link people already have keeps working.                                                                                                                                                                                                           |
 | Short link no longer opens           | Check that it still exists and that the instance's domain is reachable.                                                                                                                                                                                                                                                |
 | Short link opens a destination error | The redirect may be working while the target page is unavailable or requires sign-in. Test the original URL.                                                                                                                                                                                                           |
