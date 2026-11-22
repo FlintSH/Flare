@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react'
+
 import type { Extension } from '@uiw/react-codemirror'
 
 import type { Language } from '@/lib/files/file-kind'
@@ -51,4 +53,32 @@ export const NO_GRAMMAR: Extension = []
 /** CodeMirror's grammar for a language. */
 export async function loadCodeGrammar(language: Language): Promise<Extension> {
   return language === 'text' ? NO_GRAMMAR : GRAMMARS[language]()
+}
+
+/**
+ * A language's grammar, or nothing while it downloads. It is asked for with
+ * the file's text, and the text waits for it, so code never appears plain and
+ * then takes on its colours.
+ */
+export function useCodeGrammar(language: Language): Extension | undefined {
+  const [loaded, setLoaded] = useState<{
+    language: Language
+    grammar: Extension
+  }>()
+
+  useEffect(() => {
+    if (language === 'text') return
+    let current = true
+    const settle = (grammar: Extension) => {
+      if (current) setLoaded({ language, grammar })
+    }
+    // A file whose grammar can't be fetched still reads, without colours.
+    loadCodeGrammar(language).then(settle, () => settle(NO_GRAMMAR))
+    return () => {
+      current = false
+    }
+  }, [language])
+
+  if (language === 'text') return NO_GRAMMAR
+  return loaded?.language === language ? loaded.grammar : undefined
 }

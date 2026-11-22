@@ -15,8 +15,8 @@ const api = routes('/api/urls', {
 
 export const POST = api(async (request) => {
   const user = await requireAccount(request)
-  const { url } = await readJson(request, shortLinkInputSchema)
-  return apiResponse(await createShortLink(user.id, url))
+  const { url, code } = await readJson(request, shortLinkInputSchema)
+  return apiResponse(await createShortLink(user.id, url, code))
 })
 
 export const GET = api(async (request) => {

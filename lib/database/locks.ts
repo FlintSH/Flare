@@ -44,6 +44,11 @@ export async function lockEmailAddress(tx: Tx, email: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${email.trim()}), 71041))`
 }
 
+/** One short-link ending in every letter case, while a link claims it. */
+export async function lockShortCode(tx: Tx, code: string) {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(lower(${code}), 71042))`
+}
+
 /** One account's API token and webhook management changes. */
 export async function lockIntegrationChanges(tx: Tx, userId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(712347212, hashtext(${userId}))`

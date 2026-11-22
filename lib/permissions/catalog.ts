@@ -67,12 +67,14 @@ export const PERMISSION_GROUPS = [
       {
         key: 'links.create',
         label: 'Create links',
-        description: 'Create shortened URLs.',
+        description:
+          'Create shortened URLs. Changing where a link leads also requires Delete links.',
       },
       {
         key: 'links.delete',
         label: 'Delete links',
-        description: 'Permanently delete your shortened URLs.',
+        description:
+          'Permanently delete your shortened URLs. Changing where a link leads also requires Create links.',
       },
     ],
   },

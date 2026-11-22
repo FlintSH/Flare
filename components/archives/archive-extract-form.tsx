@@ -227,10 +227,9 @@ export function ArchiveExtractForm({
             </p>
           </div>
           <ProfilePicker
-            mode="archive"
             value={profileId}
             onChange={(value) => {
-              setProfileId(value ?? null)
+              setProfileId(value)
               setProfileSnapshot(null)
             }}
             refreshKey={profileRefreshKey}

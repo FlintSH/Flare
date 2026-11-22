@@ -29,6 +29,7 @@ describe('bearer route permissions', () => {
     ['GET', '/api/urls', ['links.read']],
     ['POST', '/api/urls', ['links.create']],
     ['DELETE', '/api/urls/short', ['links.delete']],
+    ['PATCH', '/api/urls/short', ['links.create', 'links.delete']],
     ['GET', '/api/profile/upload-token', ['tokens.manage']],
     [
       'GET',
@@ -54,6 +55,12 @@ describe('bearer route permissions', () => {
     ['PUT', '/api/files/chunks/abc/part/1', 'files:upload', ['files.upload']],
     ['POST', '/api/urls', 'urls:write', ['links.create']],
     ['DELETE', '/api/urls/cm_link', 'urls:write', ['links.delete']],
+    [
+      'PATCH',
+      '/api/urls/cm_link',
+      'urls:write',
+      ['links.create', 'links.delete'],
+    ],
   ])(
     '%s %s takes its token scope and role grants from one entry',
     (method, path, scope, permissions) => {
@@ -70,6 +77,7 @@ describe('bearer route permissions', () => {
     ['PUT', '/api/files/chunks/a%2Fb/part/1'],
     ['POST', '/api/files/chunks/a%2fb/complete'],
     ['DELETE', '/api/urls/a.b'],
+    ['PATCH', '/api/urls/a.b'],
   ])(
     'refuses %s %s for every credential: named-token routes accept only plain IDs',
     (method, path) => {

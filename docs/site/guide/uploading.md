@@ -1,67 +1,60 @@
 ---
 title: Uploading files
-description: Upload from your browser, manage a queue, choose access and expiration, and recover from upload failures.
+description: Upload from your browser or clipboard, choose who can open the files and how long they last, and copy their links.
 ---
 
 # Uploading files
 
-Uploading requires `files.upload`, including drag-and-drop, screenshot tools, and chunked uploads. Role changes apply on the next request; an existing upload credential cannot bypass them. Revoking a [named API token](/api/authentication#rotate-or-revoke-a-token), or reaching its expiry, also stops an upload it is still sending: when the file has arrived, Flare refuses it and keeps none of it. Sharing changes use `files.share`. Without that permission, new uploads are private even if a profile or request selected public visibility; you can still upload when `files.upload` is granted. Existing public links stay public until explicitly changed. If Upload is unavailable, ask the instance administrator to review your [roles](/admin/roles).
+**Upload** is where you send files with the settings you choose and leave with their links. For quick uploads with your saved settings, drop files onto any other dashboard page or use a [screenshot tool](./screenshot-tools).
 
-Use **Upload** when you want to review settings before sending files. Its form uses the full dashboard content width, matching the file library. For quick uploads with your saved defaults, drop files onto another dashboard page or use a [screenshot tool](./screenshot-tools).
-
-<Screenshot src="/screenshots/workspace/upload.png" alt="Flare upload page with a file drop area, effective upload settings, and collapsed Upload options" caption="The upload page brings file selection and sharing choices into one flow." />
+<Screenshot src="/screenshots/workspace/upload.png" alt="Upload page with a large drop area and a row of option buttons: profile, Public, Never expires, Unfiled and No tags, with the Upload button at the end" caption="Drop or paste files, check the options row, and upload." />
 
 ## Upload from your browser
 
 1. Open **Upload**.
-2. Click the file-selection area or drag files into it. You can select several files and add more to the queue before starting.
-3. Review filenames and sizes. Remove an individual file, or clear the queue if you want to start again.
-4. If your role has `uploadProfiles.manage`, choose an **Upload profile**. The line under it shows the effective visibility, password protection, expiration action, and filename behavior for this batch. Without that permission, your saved defaults apply automatically.
-5. If you have folders and your role can organize them (`folders.manage`), choose **Save to**. **Unfiled** leaves the upload outside a folder. Open **Upload options** for one-time visibility, password, or expiration overrides. You can leave it closed to use your saved defaults.
-6. Start the upload. Wait for the completion links before closing the tab.
+2. Add files: drop them on the dashed area, click it to choose files, or copy files or a screenshot and press <kbd>Ctrl</kbd>+<kbd>V</kbd> (<kbd>⌘</kbd>+<kbd>V</kbd> on a Mac) anywhere on the page. On a phone or tablet, tap **Choose files**. Add more at any time before uploading. Remove one with **×**, or choose **Clear** to start again.
+3. Check the [options row](#choose-the-options) under the drop area. Each button shows what this upload will get. Change any of them for this batch.
+4. Choose **Upload 3 files** (the count follows your list).
 
-While files upload, each queued file shows the bytes sent, the current upload speed, and its percentage. The speed is measured over the last few seconds, appears about half a second after a file starts, and disappears once every byte has been sent, while the server stores the file. A progress card shows the same details for the file being sent, and drag-and-drop uploads use the same card. It appears in the notifications corner (bottom right, or the top on a phone-sized screen), just above the latest notification, so a notification such as **Copied to clipboard** doesn't replace it and the upload's result appears where its progress was. Close it with **×** if it's in the way; the upload continues, and the card returns for the next file. Earlier builds didn't show a speed and placed the card in the top left below the navigation bar, so on wider screens it jumped to the other corner when the upload finished.
+Every file stays in one list. While a file uploads, its row shows the bytes sent, the speed and the percentage; files waiting their turn say **waiting**. When a file arrives, its row shows its link with **Copy link** and an open button, and a check on its thumbnail. With two or more uploaded, **Copy all links** copies one link per line, and **Open** with the folder's name appears when the batch went into a folder. The list stays until you choose **Clear** or leave the page.
 
-The same selected options apply to the queued files. To give different files different passwords or destinations, upload them in separate batches. The open form keeps its chosen settings after a successful batch, including the password and visibility override. Review or reset them before uploading something different.
+A screenshot copied to the clipboard usually reaches the browser as `image.png`, so Flare names it by when you pasted it, for example `Pasted image 2026-11-22 09.05.07.png`. A copied file keeps its own name. Pressing <kbd>Ctrl</kbd>+<kbd>V</kbd> in a text field, an open menu or a dialog pastes there instead.
+
+The speed is measured over the last few seconds, appears about half a second after a file starts, and disappears once every byte has been sent, while the server stores the file. The progress card in the notifications corner (bottom right, or the top on a phone-sized screen) shows the same details. If you leave **Upload** while files are still sending, the upload carries on and a notification with the links appears when it finishes.
+
+<Screenshot src="/screenshots/workspace/upload-queue.png" alt="Four files in the upload list with thumbnails and sizes, the expiration button changed to Deleted after 1 week and highlighted, and Upload 4 files at the end of the options row" caption="Files wait in the list until you upload them. A changed option is highlighted." />
 
 Uploading a ZIP, TAR, TAR.GZ/TGZ, or GZIP stores it as one file. It does not automatically extract or publish its members. Open **Browse archive** from its library menu to inspect it, or [extract into a new folder](./archives#extract-into-your-library). Archive browsing supports archives of any size, but an upload succeeding does not mean every entry can be previewed or the archive extracted; extraction has its own limits.
 
 Anyone who can access a supported archive's [share page](./archives#browse-an-archive-shared-with-you) can browse and download its entries under the file's visibility/password rules. This does not create separate library files. Review the archive's contents before making it public.
 
-<Screenshot src="/screenshots/workspace/upload-queue.png" alt="Several selected files in the upload queue" caption="Review your queue before uploading. Each file displays its size, and its transfer progress and speed while it uploads." />
+## Choose the options
 
-**Upload options** (or **Expiration options** when your role cannot share) starts closed so file selection and the upload action stay easy to reach. Its status changes to **Customized** after an override. Closing it keeps your choices; when profile selection is available, its effective summary stays visible and updates as you change them. **Save to** stays outside the disclosure so you can always review the destination. Password protection and expiration controls are still available to the same roles as before this layout change.
+The row under the drop area starts with your saved settings: your account defaults with your default [upload profile](./upload-profiles) on top. Change a button and it is highlighted with a dot, and its menu offers **Use saved setting** to go back. Choices apply to every file in the batch and stay for the next batch until you leave the page. To give files different settings, upload them in separate batches.
 
-## Choose your upload settings
+| Button                                             | What it sets                                                                                                                                                                                                                                                   | Shown to                                                                     |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Profile, such as **Screenshots** or **No profile** | Which profile supplies the starting values. Each profile in the menu lists what it does: visibility, expiration, original or random names, tags and share page style. **No profile** uses your account settings only. **Manage profiles** opens your profiles. | `uploadProfiles.manage`, once you have a profile                             |
+| **Public** or **Private**                          | Who can open the files: anyone with the link, or only you. A public upload can also have a password; the button then reads **Public · password**.                                                                                                              | `files.share`. Without it the row shows **Private** and uploads are private. |
+| Expiration, such as **Never expires**              | **Never**, **After 1 hour**, **1 day**, **1 week** or **1 month** (counted from when each file arrives), or **Pick a date…** for a set date and time. Then choose **Delete it** or **Make it private**. The button names both, as in **Deleted after 1 day**.  | Everyone                                                                     |
+| Folder, such as **Unfiled** or **Screenshots**     | Which of your folders the files go into.                                                                                                                                                                                                                       | `folders.manage`, once you have a folder                                     |
+| Tags, such as **No tags** or **2 tags**            | Tags for the files. Your profile's tags start checked; changing the selection replaces them for this batch.                                                                                                                                                    | `tags.manage`, once you have a tag                                           |
 
-| Setting                 | What it does                                                                                                                                  |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Upload profile**      | Applies a saved collection of upload choices (`uploadProfiles.manage`). Use account settings directly to bypass the default profile.          |
-| **Save to**             | Puts the file in one of your folders (`folders.manage`). A public file directly in a shared folder also appears on that folder's share page.  |
-| **Visibility**          | Inherit from the selected/default profile, or explicitly choose public or private.                                                            |
-| **Password protection** | Requires recipients of a public file to enter the password before opening it. Eligible owners and accounts with `content.read` retain access. |
-| **File expiration**     | Inherit the profile's expiration, choose a time and action, or explicitly select no expiration.                                               |
+A link to **Upload** can preselect a folder (`/dashboard/upload?folder=<id>`), as **Upload here** in **Files** does. Without `folders.manage`, the folder is ignored and uploads are unfiled. If the folder has since been deleted, the folder button reads **Folder unavailable** and Flare won't upload until you choose another; it never moves the upload somewhere else on its own. Choosing a shared folder adds a line under the row: public files there also appear on the folder's shared link.
 
-Without `folders.manage`, the upload page doesn't show **Save to** and uploads are unfiled, including when a link opens **Upload** with a folder selected. Earlier builds showed **Save to** to these roles anyway, and the server refused the upload with "Your role cannot organize uploads into folders."
+Passwords apply to this batch only. They are never saved in upload profiles or exported recipes, and a private upload ignores one. Flare accepts file passwords with at least 8 characters and at most 72 bytes; accented characters and emoji can use more than one byte each. A password that breaks the rule turns the button into **Check password**, and the reason appears under the row.
 
-<Screenshot src="/screenshots/workspace/restricted-upload.webp" alt="Restricted upload page showing private uploads, automatic saved defaults, and expanded Expiration options, without profile selection, sharing, password, or folder controls" caption="Restricted roles can still upload privately. Saved defaults apply automatically, and the page offers only permitted choices." />
+If your default profile adds tags but your role can't apply tags (`tags.manage`), the page says so and won't upload until you choose another profile.
 
-Choosing **From upload profile** also includes the account defaults that the profile inherits. If you have not configured a default profile, account and instance settings supply the starting values. See [upload profiles](./upload-profiles) for the exact order.
-
-Passwords are specific to these uploads. They are never saved in upload profiles or exported profile recipes. Flare accepts file passwords with at least 8 characters and at most 72 bytes; accented characters and emoji can use more than one byte each.
+Earlier versions showed the profile as a select with a summary sentence under it, **Save to** as a second select, and visibility, password and expiration inside a closed **Upload options** section. Tags could only come from a profile, and finished uploads appeared in a separate list under the form.
 
 ## Set an expiration
 
-An upload with a **Delete file** expiration requires `files.delete`; **Set to private** requires `files.share`. This also applies when expiration comes from a saved profile or account default. If the upload is rejected after a role change, choose no expiration (or a permitted action), update the profile/default, or ask the administrator for the required permission.
+An upload with a **Delete it** expiration requires `files.delete`; **Make it private** requires `files.share`. The menu disables an action your role can't use. This also applies when the expiration comes from a saved profile or account default. If an upload is rejected after a role change, choose **Never** (or a permitted action), update the profile or default, or ask the administrator for the permission.
 
-Open **File expiration** and choose what should happen:
+The 1 hour to 1 month choices count from when each file arrives, so a file uploaded a minute after another expires a minute later. **Pick a date…** opens a dialog with shortcuts, a calendar and a time, and sets one moment for the whole batch.
 
-- **Delete file:** remove the file and its stored contents.
-- **Set to private:** keep the file in your account and stop public access. The file still uses storage.
-
-Use the one-hour, one-day, one-week, or one-month shortcuts, or choose a custom date and time. Confirm the choice before starting the upload. **No expiration** explicitly turns an inherited expiration off for this upload; **Use profile expiration** returns to the saved behavior.
-
-<Screenshot src="/screenshots/workspace/upload-expiration-custom.png" alt="Custom file expiration date and time controls" caption="Choose an expiration date together with the action Flare should take." />
+<Screenshot src="/screenshots/workspace/upload-expiration-custom.png" alt="Expiration menu open on the Upload page, with Never, After 1 hour to After 1 month and Pick a date, and Delete it or Make it private below" caption="Choose when the files expire and what happens to them then." />
 
 The server checks for due expirations every 5 seconds, so access changes a few seconds after the time you chose, not at that exact second. If an expiration can't be applied, for example while storage is unreachable, Flare tries again 1, 5 and 30 minutes later. If the last attempt also fails, the file stays as it is and **Files** stops showing its expiration; set it again from **Files → file menu → Manage expiration**, where you can also change or remove an existing schedule.
 
@@ -77,17 +70,17 @@ Each drop is its own batch, sent one file at a time. If a file fails, the files 
 
 ## Use the finished links
 
-The completion section gives each successful upload an open action and **Copy link**. With multiple results, **Copy all links** copies one share-page URL per line. You can also find every completed file in **Files**.
+Each uploaded file's row shows its link with **Copy link** and an open button, and **Copy all links** copies every link in the list, one per line. You can also find every uploaded file in **Files**.
 
-These controls always copy the plain share-page URL. They do not include a password or grant access to a private file. If the browser refuses clipboard access, select the displayed link and copy it manually.
+These buttons copy the plain share-page link. They don't include a password or grant access to a private file. If the browser refuses clipboard access, open the file and copy the address from there.
 
 The link ends in a URL-friendly version of the filename: `My Report.PDF` is shared as `my-report.pdf`, and the file keeps its original name everywhere else in Flare. Uploading another file with a name you've already used gives the new file its own link with a short random suffix, such as `my-report-3f9c2a71-b04.pdf`; the earlier link doesn't change. A filename with no A to Z letters or digits, such as `日本語.png`, gets a short random link name instead. Choose random names in an [upload profile](./upload-profiles) if you'd rather not show filenames in links at all. The [file API guide](/api/files#upload-one-file) lists the exact rules.
 
-<Screenshot src="/screenshots/workspace/upload-complete.png" alt="Successful uploads with share links and copy actions" caption="Successful upload results stay available so you can open or copy each link." />
+<Screenshot src="/screenshots/workspace/upload-complete.png" alt="Four uploaded files, each row with its link, Copy link and an open button, and Copy all links and Clear above the list" caption="Uploaded files keep their links in the list until you clear it." />
 
 ## Size limits and larger files
 
-The selection area shows the maximum allowed file size. Your account may also have a total storage quota, visible under **Profile → Your data**. A file can fit the per-file limit and still exceed your remaining quota. A file over either limit is refused as a whole: Flare shows **A file exceeds the upload size limit.** or **This would exceed your storage quota.**, and none of the file is saved or counted against your quota. Uploads that finish at the same time are checked one after another against your remaining quota, so together they can't go over it. Extracting or creating an [archive](./archives) applies the same limits with the same messages. Earlier versions worded these refusals six ways, for example **You have reached your storage quota.** or **The output files would exceed your storage quota.**
+The drop area shows the maximum allowed file size. A larger file isn't added to the list, and the page says how many weren't. Your account may also have a total storage quota, visible under **Profile → Your data**. A file can fit the per-file limit and still exceed your remaining quota. A file over either limit is refused as a whole: Flare shows **A file exceeds the upload size limit.** or **This would exceed your storage quota.**, and none of the file is saved or counted against your quota. Uploads that finish at the same time are checked one after another against your remaining quota, so together they can't go over it. Extracting or creating an [archive](./archives) applies the same limits with the same messages. Earlier versions worded these refusals six ways, for example **You have reached your storage quota.** or **The output files would exceed your storage quota.**
 
 The browser automatically uses chunked transfers for files larger than 10 MiB. You do not need to split files yourself. Keep the tab open: this uploader does not offer a resume-after-browser-restart interface.
 
@@ -99,8 +92,8 @@ File types may be restricted by the administrator, and the server checks file co
 | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | File rejected before upload                                                         | Compare its size with the displayed maximum. Remove the oversized file and upload the others.                                                                                                                                                                                                                            |
 | This would exceed your storage quota                                                | Check **Profile → Your data**, delete files you no longer need, or ask your administrator about the quota. Making files private does not free space.                                                                                                                                                                     |
-| A batch stops partway through                                                       | Keep the successful links. On **Upload**, completed files leave the queue; start the upload again for the files still waiting. After a drag-and-drop, choose **Retry** in the failure message or drop the remaining files again.                                                                                         |
-| Folder unavailable                                                                  | Choose another destination. Flare will not silently move the upload somewhere else if its destination was deleted.                                                                                                                                                                                                       |
+| A batch stops partway through                                                       | Files sent before the failure keep their links. On **Upload**, the file that failed shows why, and it and the files after it stay in the list: choose **Retry**. After a drag-and-drop, choose **Retry** in the failure message or drop the remaining files again.                                                       |
+| Folder unavailable                                                                  | The folder was deleted. Choose another folder. Flare will not silently move the upload somewhere else.                                                                                                                                                                                                                   |
 | Storage changed during this upload (`409`)                                          | Start the affected file again. A backend change or an upgrade from older chunk-session metadata prevents reusing that upload session; completed files remain available. Earlier builds showed "Upload failed: Conflict" for files over 10 MiB instead.                                                                   |
 | Network error                                                                       | Check your connection and sign-in session, then retry the remaining files. If the outcome is uncertain, check Files before submitting again.                                                                                                                                                                             |
 | Progress reaches 100% but no link appears                                           | File transfer has finished, but finalization may still be running. Wait for the completion result.                                                                                                                                                                                                                       |
@@ -111,6 +104,10 @@ File types may be restricted by the administrator, and the server checks file co
 
 An administrator with `audit.read` can investigate [Audit log](/admin/audit) using the filename, account, time, and available request context. Upload/finalization records retain the file ID and name when the server can identify them, including useful context for some failures; they do not contain file bytes or submitted passwords. An early proxy rejection or interrupted request may not reach Flare at all, so provide the visible error and approximate time rather than assuming every failed transfer has an audit event. OCR and later background work have separate outcomes after upload acceptance. An image OCR can't read is marked as read with no text, and an `ocr.failed` event records it. Earlier versions also left a text-recognition worker running for each such image until Flare restarted, so many unreadable images could slowly use up the server's memory.
 
-For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).
+## If Upload is missing or refuses
 
-If a password is invalid, one explanation appears beside its field while **Upload options** is open. Closing the options moves that explanation beside **Review password**. Choose **Review password** to reopen the options and focus the field. Correct or remove the password to enable creation.
+Uploading requires `files.upload`, including drag-and-drop, screenshot tools, and chunked uploads. Role changes apply on the next request; an existing upload credential cannot bypass them. Revoking a [named API token](/api/authentication#rotate-or-revoke-a-token), or reaching its expiry, also stops an upload it is still sending: when the file has arrived, Flare refuses it and keeps none of it. Sharing changes use `files.share`. Without that permission, new uploads are private even if a profile or request selected public visibility; you can still upload when `files.upload` is granted. Existing public links stay public until explicitly changed. If Upload is unavailable, ask the instance administrator to review your [roles](/admin/roles).
+
+<Screenshot src="/screenshots/workspace/restricted-upload.webp" alt="Upload page for a restricted role: the options row shows a plain Private label and the expiration button only, without profile, folder or tag buttons" caption="Restricted roles can still upload privately. The row offers only what the role can choose." />
+
+For repeatable upload choices, continue with [upload profiles](./upload-profiles). For what recipients can see, read [sharing and privacy](./sharing).

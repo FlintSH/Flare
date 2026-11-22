@@ -36,7 +36,8 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/files/chunks/{uploadId}/part/{partNumber}` | PUT    | `files:upload` | Upload raw part bytes through Flare.                                                  |
 | `/api/files/chunks/{uploadId}/complete`          | POST   | `files:upload` | Complete an upload, returning links without a wrapper.                                |
 | `/api/urls`                                      | GET    | `urls:read`    | List the account's short links.                                                       |
-| `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
+| `/api/urls`                                      | POST   | `urls:write`   | Create a short link, with a random or chosen ending.                                  |
+| `/api/urls/{id}`                                 | PATCH  | `urls:write`   | Change where an owned short link leads.                                               |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
 These routes also answer `OPTIONS` preflight requests. When the instance sets [`FLARE_CORS_ORIGINS`](./authentication#call-flare-from-a-web-app), an allowed origin gets CORS headers for the methods above, and only those; without the setting, preflights get a plain `204` that browsers treat as a refusal.

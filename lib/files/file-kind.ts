@@ -228,8 +228,24 @@ const EXTENSION_LANGUAGES = byLanguage({
   less: ['less'],
 })
 
+/** The extension a paste in each language is saved with. */
+const LANGUAGE_EXTENSIONS = new Map<Language, string>([['text', 'txt']])
+for (const [extension, language] of EXTENSION_LANGUAGES)
+  if (!LANGUAGE_EXTENSIONS.has(language))
+    LANGUAGE_EXTENSIONS.set(language, extension)
+
+/** `py` for Python, `txt` for plain text: what names a file in `language`. */
+export function languageExtension(language: Language): string {
+  return LANGUAGE_EXTENSIONS.get(language) ?? 'txt'
+}
+
+/** Whether an extension already names a language, plain text included. */
+export function namesLanguage(extension: string) {
+  return extension === 'txt' || EXTENSION_LANGUAGES.has(extension)
+}
+
 /** A name's last extension in lower case, or '' without one. */
-function extensionOf(name: string) {
+export function extensionOf(name: string) {
   return name.includes('.') ? (name.split('.').pop()?.toLowerCase() ?? '') : ''
 }
 
@@ -395,6 +411,11 @@ export function fileTypeLabel(mimeType: string) {
     TYPE_LABELS.get(mimeType) ||
     (mimeType.split('/')[1] || mimeType).toUpperCase()
   )
+}
+
+/** A language's name, as the share page shows it. */
+export function languageName(language: Language) {
+  return language === 'text' ? 'Plain text' : LANGUAGE_NAMES[language]
 }
 
 const LANGUAGE_NAMES: Record<Exclude<Language, 'text'>, string> = {

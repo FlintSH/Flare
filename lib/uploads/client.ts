@@ -1,4 +1,5 @@
 import { type UploadResponse, parseUploadResponse } from './response'
+import type { UploadProfileOptions } from './schema'
 
 export type { UploadResponse }
 
@@ -22,9 +23,16 @@ export type UploadOptions = {
   folderId?: string | null
   visibility?: 'PUBLIC' | 'PRIVATE'
   password?: string
+  /**
+   * A time after the upload, which the server counts from when the file
+   * arrives. Omitted: the profile's. `expiresAt` takes precedence.
+   */
+  expiration?: Exclude<UploadProfileOptions['expiration'], undefined>
   /** Omitted: the profile's expiration. Null: no expiration. */
   expiresAt?: Date | null
   expiryAction?: 'DELETE' | 'SET_PRIVATE'
+  /** Omitted: the profile's tags. Empty: none. */
+  tagIds?: readonly string[]
 }
 
 /** Bytes of the file sent so far. */
@@ -113,9 +121,11 @@ function multipartBody(file: File, options: UploadOptions) {
   body.append('file', file)
   if (options.visibility) body.append('visibility', options.visibility)
   if (options.password) body.append('password', options.password)
+  if (options.expiration) body.append('expiration', options.expiration)
   if (options.expiresAt !== undefined)
     body.append('expiresAt', options.expiresAt?.toISOString() ?? '')
   if (options.expiryAction) body.append('expiryAction', options.expiryAction)
+  if (options.tagIds) body.append('tagIds', JSON.stringify(options.tagIds))
   return body
 }
 
@@ -150,11 +160,13 @@ async function startChunkedUpload(file: File, options: UploadOptions) {
       folderId: options.folderId ?? null,
       visibility: options.visibility,
       password: options.password || undefined,
+      expiration: options.expiration,
       expiresAt:
         options.expiresAt === undefined
           ? undefined
           : (options.expiresAt?.toISOString() ?? null),
       expiryAction: options.expiryAction,
+      tagIds: options.tagIds,
     }),
     JSON_HEADERS
   )
@@ -234,7 +246,7 @@ export function uploadFile(
 /** Always one request, which the server checks for `pastes.create`. */
 export async function uploadPaste(
   file: File,
-  options: Pick<UploadOptions, 'profileId' | 'visibility' | 'password'>
+  options: UploadOptions
 ): Promise<UploadResponse> {
   const reply = await send('POST', '/api/files', multipartBody(file, options), {
     'X-Flare-Paste': 'true',

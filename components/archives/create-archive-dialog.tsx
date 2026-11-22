@@ -298,10 +298,9 @@ export function CreateArchiveDialog({
                   allowFolders={canUseFolders}
                 />
                 <ProfilePicker
-                  mode="archive"
                   value={profileId}
                   onChange={(value) => {
-                    setProfileId(value ?? null)
+                    setProfileId(value)
                     setProfileSnapshot(null)
                   }}
                   refreshKey={profileRefreshKey}

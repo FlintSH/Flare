@@ -278,6 +278,14 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     scope: 'urls:write',
   },
   {
+    // A new destination retires the old redirect, as a delete would, and
+    // makes a new one, so it needs both.
+    methods: ['PATCH'],
+    path: /^\/api\/urls\/[a-zA-Z0-9_-]+$/,
+    permissions: ['links.create', 'links.delete'],
+    scope: 'urls:write',
+  },
+  {
     methods: ['PUT', 'DELETE'],
     path: '/api/profile',
     permissions: ['profile.update'],

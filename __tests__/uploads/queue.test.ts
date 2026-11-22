@@ -118,6 +118,7 @@ describe('an upload queue', () => {
     expect(result?.failure).toEqual({
       message:
         '1 file uploaded. Network error occurred. Retry the remaining files.',
+      reason: 'Network error occurred',
       remaining: [failed.file, queue.getState().files[1].file],
     })
     expect(names(queue.getState().files)).toEqual(['b.txt', 'c.txt'])

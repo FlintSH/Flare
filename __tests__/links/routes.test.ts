@@ -1,5 +1,8 @@
 import { GET as follow } from '@/app/(shorturl)/u/[shortCode]/route'
-import { DELETE as deleteOwn } from '@/app/api/urls/[id]/route'
+import {
+  DELETE as deleteOwn,
+  PATCH as updateOwn,
+} from '@/app/api/urls/[id]/route'
 import { POST as create, GET as listOwn } from '@/app/api/urls/route'
 import { DELETE as moderate } from '@/app/api/users/[id]/urls/[urlId]/route'
 import { GET as listAccount } from '@/app/api/users/[id]/urls/route'
@@ -16,8 +19,11 @@ import { loggers } from '@/lib/logger'
 const mocks = vi.hoisted(() => ({
   account: vi.fn(),
   session: vi.fn(),
+  transaction: vi.fn(),
+  executeRaw: vi.fn(),
   shortenedUrl: {
     create: vi.fn(),
+    findFirst: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
     count: vi.fn(),
@@ -34,7 +40,11 @@ vi.mock('@/lib/auth', () => ({
   getAccessSession: mocks.session,
 }))
 vi.mock('@/lib/database/prisma', () => ({
-  prisma: { shortenedUrl: mocks.shortenedUrl },
+  prisma: {
+    shortenedUrl: mocks.shortenedUrl,
+    $executeRaw: mocks.executeRaw,
+    $transaction: mocks.transaction,
+  },
 }))
 
 const links = mocks.shortenedUrl
@@ -49,9 +59,9 @@ const stored = {
 const sent = { ...stored, createdAt: '2026-09-20T12:00:00.000Z' }
 const events: Partial<AuditInput>[] = []
 
-const json = (url: string, body: unknown) =>
+const json = (url: string, body: unknown, method = 'POST') =>
   new Request(url, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
@@ -59,6 +69,12 @@ const params = <T>(value: T) => ({ params: Promise.resolve(value) })
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.transaction.mockImplementation((work) =>
+    work({
+      shortenedUrl: mocks.shortenedUrl,
+      $executeRaw: mocks.executeRaw,
+    })
+  )
   events.length = 0
   configureAuditWriter(async (event) => {
     events.push(event as Partial<AuditInput>)
@@ -113,6 +129,114 @@ describe('owner short-link API', () => {
     })
     expect(links.create).not.toHaveBeenCalled()
   })
+
+  it('creates a link under a chosen ending', async () => {
+    links.findFirst.mockResolvedValue(null)
+    links.create.mockResolvedValue({ ...stored, shortCode: 'launch' })
+    const response = await create(
+      json('https://flare.test/api/urls', {
+        url: stored.targetUrl,
+        code: ' launch ',
+      })
+    )
+    expect(response.status).toBe(200)
+    expect((await response.json()).data.shortCode).toBe('launch')
+    expect(links.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ shortCode: 'launch' }),
+      })
+    )
+  })
+
+  it.each([
+    ['an empty ending', '', 200],
+    ['a null ending', null, 200],
+    ['a slash', 'a/b', 400],
+    ['a space inside', 'a b', 400],
+    ['65 characters', 'a'.repeat(65), 400],
+  ])('treats %s as asked', async (_name, code, status) => {
+    links.create.mockResolvedValue(stored)
+    const response = await create(
+      json('https://flare.test/api/urls', { url: stored.targetUrl, code })
+    )
+    expect(response.status).toBe(status)
+    if (status === 400) {
+      expect((await response.json()).success).toBe(false)
+      expect(links.create).not.toHaveBeenCalled()
+    } else
+      expect(links.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            shortCode: expect.stringMatching(/^[A-Za-z0-9_-]{6}$/),
+          }),
+        })
+      )
+  })
+
+  it('answers a taken ending with 409', async () => {
+    links.findFirst.mockResolvedValue({ id: 'cm_other' })
+    const response = await create(
+      json('https://flare.test/api/urls', {
+        url: stored.targetUrl,
+        code: 'Launch',
+      })
+    )
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      success: false,
+      error: 'That ending is already taken. Choose another.',
+    })
+  })
+
+  it('changes where an owned link leads and keeps its code', async () => {
+    const moved = 'https://example.com/moved'
+    links.findUnique.mockResolvedValue({ userId: 'owner' })
+    links.update.mockResolvedValue({ ...stored, targetUrl: moved })
+    const response = await updateOwn(
+      json('https://flare.test/api/urls/cm_link', { url: moved }, 'PATCH'),
+      params({ id: 'cm_link' })
+    )
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      data: { ...sent, targetUrl: moved },
+      success: true,
+    })
+  })
+
+  it.each([
+    ['a new ending', { url: 'https://example.com/x', code: 'other' }],
+    ['no destination', {}],
+    ['a non-web destination', { url: 'javascript:alert(1)' }],
+  ])('refuses an edit with %s', async (_name, body) => {
+    links.findUnique.mockResolvedValue({ userId: 'owner' })
+    const response = await updateOwn(
+      json('https://flare.test/api/urls/cm_link', body, 'PATCH'),
+      params({ id: 'cm_link' })
+    )
+    expect(response.status).toBe(400)
+    expect(links.update).not.toHaveBeenCalled()
+  })
+
+  it.each([['links.create'], ['links.delete']])(
+    'refuses an edit to a role with only %s',
+    async (permission) => {
+      mocks.account.mockResolvedValue({
+        id: 'owner',
+        permissions: ['links.read', permission],
+        credential: 'session',
+      })
+      const response = await updateOwn(
+        json(
+          'https://flare.test/api/urls/cm_link',
+          { url: 'https://example.com/x' },
+          'PATCH'
+        ),
+        params({ id: 'cm_link' })
+      )
+      expect(response.status).toBe(403)
+      expect(links.update).not.toHaveBeenCalled()
+    }
+  )
 
   it("lists the caller's links", async () => {
     links.findMany.mockResolvedValue([stored])

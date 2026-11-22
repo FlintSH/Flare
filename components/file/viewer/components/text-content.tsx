@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
-import CodeMirror, { EditorView, type Extension } from '@uiw/react-codemirror'
+import CodeMirror, { EditorView } from '@uiw/react-codemirror'
 import { FileText } from 'lucide-react'
 import { useTheme } from 'next-themes'
 
@@ -8,7 +8,7 @@ import type { Language } from '@/lib/files/file-kind'
 import { cn } from '@/lib/utils'
 
 import { looksBinary, usePreviewText } from '../preview-text'
-import { NO_GRAMMAR, loadCodeGrammar } from './code-grammar'
+import { NO_GRAMMAR, useCodeGrammar } from './code-grammar'
 import { CODE_EDGE, CODE_LINE_HEIGHT, codeViewerTheme } from './code-theme'
 import { ErrorState } from './error-state'
 import { stageMaxHeightClassName } from './loading-state'
@@ -77,34 +77,6 @@ function TextSkeleton({ bytes }: { bytes?: number }) {
       </div>
     </div>
   )
-}
-
-/**
- * A language's grammar, or nothing while it downloads. It is asked for with
- * the file's text, and the text waits for it, so code never appears plain and
- * then takes on its colours.
- */
-function useCodeGrammar(language: Language): Extension | undefined {
-  const [loaded, setLoaded] = useState<{
-    language: Language
-    grammar: Extension
-  }>()
-
-  useEffect(() => {
-    if (language === 'text') return
-    let current = true
-    const settle = (grammar: Extension) => {
-      if (current) setLoaded({ language, grammar })
-    }
-    // A file whose grammar can't be fetched still reads, without colours.
-    loadCodeGrammar(language).then(settle, () => settle(NO_GRAMMAR))
-    return () => {
-      current = false
-    }
-  }, [language])
-
-  if (language === 'text') return NO_GRAMMAR
-  return loaded?.language === language ? loaded.grammar : undefined
 }
 
 export function TextContent({

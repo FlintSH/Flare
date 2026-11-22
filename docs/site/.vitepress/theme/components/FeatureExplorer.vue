@@ -15,7 +15,7 @@ const features = [
   [
     'Share',
     'File uploads',
-    'Drag and drop, queue multiple files, choose a destination, and transfer large files in chunks.',
+    'Drop, choose or paste files, set visibility, expiration, folder and tags in one row, and copy every link when they arrive. Large files go in chunks.',
     '/guide/uploading',
   ],
   [
@@ -39,13 +39,13 @@ const features = [
   [
     'Share',
     'Pastes & code',
-    'Turn a note or code snippet into a hosted text file with a read-only preview.',
+    'Write or paste text in an editor that highlights it like the share page, then share it as a file with the same options as an upload.',
     '/guide/pastes',
   ],
   [
     'Share',
     'Short links',
-    'Create a compact URL on your domain and follow its click count.',
+    'Create a short URL on your domain with an ending of your choice, change where it leads later, and follow its click count.',
     '/guide/short-links',
   ],
   [
