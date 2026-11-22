@@ -293,6 +293,14 @@ export const TOOL_CATALOG = {
     permissions: route('POST', '/api/urls'),
     annotations: { ...add, openWorld: true },
   },
+  // Everyone who has the short URL goes somewhere new, which the same
+  // connection can't undo without knowing where it led.
+  update_short_link: {
+    title: 'Change where a short link leads',
+    scopes: ['urls:write'],
+    permissions: route('PATCH', '/api/urls/example'),
+    annotations: { ...destroy, openWorld: true },
+  },
   delete_short_link: {
     title: 'Delete a short link',
     scopes: ['urls:write'],

@@ -35,8 +35,10 @@ All of these routes also use Flare's shared account authentication helper. A nam
 | `/api/files/chunks/{uploadId}/part/{partNumber}` | GET    | `files:upload` | Obtain a part upload URL.                                                             |
 | `/api/files/chunks/{uploadId}/part/{partNumber}` | PUT    | `files:upload` | Upload raw part bytes through Flare.                                                  |
 | `/api/files/chunks/{uploadId}/complete`          | POST   | `files:upload` | Complete an upload, returning links without a wrapper.                                |
+| `/api/files/chunks/{uploadId}`                   | DELETE | `files:upload` | Cancel an unfinished chunk upload and discard its stored parts.                       |
 | `/api/urls`                                      | GET    | `urls:read`    | List the account's short links.                                                       |
-| `/api/urls`                                      | POST   | `urls:write`   | Create a short link.                                                                  |
+| `/api/urls`                                      | POST   | `urls:write`   | Create a short link, with a random or chosen ending.                                  |
+| `/api/urls/{id}`                                 | PATCH  | `urls:write`   | Change where an owned short link leads.                                               |
 | `/api/urls/{id}`                                 | DELETE | `urls:write`   | Delete an owned short link.                                                           |
 
 These routes also answer `OPTIONS` preflight requests. When the instance sets [`FLARE_CORS_ORIGINS`](./authentication#call-flare-from-a-web-app), an allowed origin gets CORS headers for the methods above, and only those; without the setting, preflights get a plain `204` that browsers treat as a refusal.
@@ -101,6 +103,7 @@ These routes explicitly read an interactive session. Neither a named API token n
 | `/api/customization`               | GET           | Read published appearance; sessions with `appearance.manage` also receive draft/history state.                                                                                 |
 | `/api/customization/preferences`   | GET, PATCH    | Read/save personal appearance preference.                                                                                                                                      |
 | `/api/profile/embed`               | GET, PATCH    | Read the account's [embed](/guide/embeds) choice and whether the instance allows one; save it with `files.share` (`403` when personal embeds are off).                         |
+| `/api/profile/tips`                | POST          | Browser session, no permission; hide a page tip for good on every device. `{"hide":"upload"}` hides the empty Upload page's tips; answers every hidden tip.                    |
 | `/api/profile/avatar`              | POST          | Upload a PNG, JPEG, GIF, or WebP avatar up to 2 MB (`413` if larger, `415` for other types); success yields `{success:true,url}`.                                              |
 | `/api/profile/sharex`              | GET           | Download a ShareX configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).                                                            |
 | `/api/profile/itake`               | GET           | Download an iTake configuration. `?profileId=` selects an owned upload profile; never cached (`private, no-store`).                                                            |

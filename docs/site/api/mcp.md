@@ -5,7 +5,7 @@ description: The endpoint, browser sign-in (OAuth 2.1) and token authentication,
 
 # MCP server reference
 
-Flare has a built-in [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/mcp`. An agent that connects to it acts as one Flare account through 45 tools: for that account's files, folders, tags, short links, archives, upload profiles, settings, and invites, and, where an administrator allows it, for administering the instance. Every call is limited by the scopes of its connection and the account's role. To connect a client, follow [Connect an agent](/guide/agents); this page is the contract behind it.
+Flare has a built-in [Model Context Protocol](https://modelcontextprotocol.io) server at `POST /api/mcp`. An agent that connects to it acts as one Flare account through 46 tools: for that account's files, folders, tags, short links, archives, upload profiles, settings, and invites, and, where an administrator allows it, for administering the instance. Every call is limited by the scopes of its connection and the account's role. To connect a client, follow [Connect an agent](/guide/agents); this page is the contract behind it.
 
 The server is off until an administrator [turns it on](/admin/agents). While it is off, `/api/mcp`, every transfer URL, and every [sign-in endpoint](#sign-in-with-oauth) answer `404` with `{ "error": "Not found" }`, to every method, and nothing about agents appears in Profile.
 
@@ -413,6 +413,7 @@ Tool names are stable. The title is what clients show in place of the name.
 | `save_tag`                   | Create or change a tag             | Writes                              | Create or rename a tag, set or clear its rule, and optionally apply the rule to existing files.                                                         |
 | `delete_tag`                 | Delete a tag                       | Destructive, idempotent             | Delete a tag. Its files are kept and lose only the tag.                                                                                                 |
 | `create_short_link`          | Shorten a URL                      | Writes, open world                  | Create a short URL on the instance that redirects to an `http` or `https` address.                                                                      |
+| `update_short_link`          | Change where a short link leads    | Destructive, idempotent, open world | Send a short link to a new target. Everyone who has its short URL goes there from now on; its code and click count stay.                                |
 | `delete_short_link`          | Delete a short link                | Destructive, idempotent             | Delete a short link. Its short URL stops working and its click count is lost.                                                                           |
 | `extract_archive`            | Extract an archive                 | Writes                              | Unpack an archive in the library into a new folder.                                                                                                     |
 | `create_archive`             | Create an archive                  | Writes                              | Pack up to 100 files into one new ZIP or TAR.GZ file in the library.                                                                                    |
@@ -469,6 +470,7 @@ What each tool needs. The role permissions are the ones the matching dashboard a
 | `save_tag`                   | `files:organize`                           | `tags.manage`                                                                           |
 | `delete_tag`                 | `files:organize`                           | `tags.manage`                                                                           |
 | `create_short_link`          | `urls:write`                               | `links.create`                                                                          |
+| `update_short_link`          | `urls:write`                               | `links.create`, `links.delete`                                                          |
 | `delete_short_link`          | `urls:write`                               | `links.delete`                                                                          |
 | `extract_archive`            | `files:content`, `files:upload`            | `files.read`, `files.upload`, `folders.manage`                                          |
 | `create_archive`             | `files:content`, `files:upload`            | `files.read`, `files.upload`                                                            |
@@ -567,9 +569,9 @@ The consent screen and **Connect an agent** offer three presets over these scope
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
 | **Read only**                | `files:read`, `files:content`, `urls:read`                                                                                                 | 8     |
 | **Read and upload**          | `files:read`, `files:content`, `urls:read`, `files:upload`                                                                                 | 13    |
-| **Everything in my account** | `files:upload`, `files:read`, `files:content`, `files:organize`, `files:share`, `files:delete`, `urls:read`, `urls:write`, `account:write` | 28    |
+| **Everything in my account** | `files:upload`, `files:read`, `files:content`, `files:organize`, `files:share`, `files:delete`, `urls:read`, `urls:write`, `account:write` | 29    |
 
-**Read only** lists the seven reading tools and `export_account`. **Read and upload** adds `upload_file`, `create_paste`, `create_upload_url`, `extract_archive`, and `create_archive`. **Everything in my account** lists every tool for the account itself, 28 of the 45. No preset includes `invites:write` or an administration scope, so the other 17 tools appear only for a connection given those scopes under **Custom**. A role that lacks a permission sees fewer. The consent screen and the dialog leave out scopes the role cannot use at all.
+**Read only** lists the seven reading tools and `export_account`. **Read and upload** adds `upload_file`, `create_paste`, `create_upload_url`, `extract_archive`, and `create_archive`. **Everything in my account** lists every tool for the account itself, 29 of the 46. No preset includes `invites:write` or an administration scope, so the other 17 tools appear only for a connection given those scopes under **Custom**. A role that lacks a permission sees fewer. The consent screen and the dialog leave out scopes the role cannot use at all.
 
 ### Reading
 
@@ -675,7 +677,8 @@ Tools that take `files` accept 1 to 50 file IDs from `search_files`. Wherever a 
 | `set_folder_sharing` | `folder`, and `shared`: `true` creates the public link or keeps the one it has, `false` revokes it.                                                                                                              | `folder`, with `share_url` while it is shared.                                                                          |
 | `save_tag`           | `name` (up to 40 characters) creates a tag. With `tag`, changes that tag. `rule_source` (`filename` or `ocr`, or `null` to remove the rule), `rule_text` (up to 200 characters), `apply_rule_to_existing_files`. | `tag`, and `files_tagged` when the rule was applied to existing files.                                                  |
 | `delete_tag`         | `tag`.                                                                                                                                                                                                           | `id`, `name`, `files_untagged`.                                                                                         |
-| `create_short_link`  | `url`: an `http` or `https` address.                                                                                                                                                                             | `link`: `id`, `code`, `short_url`, `target_url`, `clicks`, `created_at`.                                                |
+| `create_short_link`  | `url`: an `http` or `https` address. Optional `code`: the ending after `/u/` (letters, numbers, `-` and `_`, up to 64), refused while any link uses it in another letter case; random without it.                | `link`: `id`, `code`, `short_url`, `target_url`, `clicks`, `created_at`.                                                |
+| `update_short_link`  | `link`: the link's ID, its code, or its short URL. `url`: the new `http` or `https` target.                                                                                                                      | `link`, and `previous_target_url`: where it led.                                                                        |
 | `delete_short_link`  | `link`: the link's ID, its code, or its short URL.                                                                                                                                                               | `id`, `code`, `target_url`.                                                                                             |
 
 What cannot be undone:
@@ -685,7 +688,8 @@ What cannot be undone:
 - **`set_file_sharing`** can expose a file to everyone who has its link, or cut those people off.
 - **`delete_folder`** keeps the files but not the folder or its public link. It is refused while one of its subfolders has the same name as a folder one level up.
 - **`set_folder_sharing`** with `false` ends the link at once, and sharing again makes a different link.
-- **`delete_tag`** takes the tag off its files for good, and **`delete_short_link`** loses the click count. A new link to the same target gets a different code.
+- **`delete_tag`** takes the tag off its files for good, and **`delete_short_link`** loses the click count for good. Its code becomes free for any account to choose; a new link without a chosen code gets a random one.
+- **`update_short_link`** sends everyone who already has the short URL to the new target. The answer's `previous_target_url` is the only record of where it led.
 
 A public folder link shows the public files directly in the folder, not its subfolders or private files. A tag rule matches text as written, ignoring case; it is not a pattern. Taking a tag off a file by hand also keeps the tag's rule from putting it back.
 
@@ -1292,6 +1296,7 @@ The third column is either tool names or one of these:
 | `/api/files/chunks`                              | GET, POST, PUT | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
 | `/api/files/chunks/{uploadId}/part/{partNumber}` | GET, PUT       | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
 | `/api/files/chunks/{uploadId}/complete`          | POST           | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
+| `/api/files/chunks/{uploadId}`                   | DELETE         | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
 | `/api/files/{id}`                                | PATCH          | `set_file_sharing`                                 |                                                                                                |
 | `/api/files/{id}`                                | DELETE         | `delete_files`                                     |                                                                                                |
 | `/api/files/{path}`                              | GET            | `read_file`                                        |                                                                                                |
@@ -1319,6 +1324,7 @@ The third column is either tool names or one of these:
 | `/api/tags/{id}/apply` | POST    | `save_tag`                          |
 | `/api/urls`            | GET     | `list_short_links`                  |
 | `/api/urls`            | POST    | `create_short_link`                 |
+| `/api/urls/{id}`       | PATCH   | `update_short_link`                 |
 | `/api/urls/{id}`       | DELETE  | `delete_short_link`                 |
 
 ### Archives
@@ -1355,11 +1361,12 @@ The third column is either tool names or one of these:
 | `/api/upload-profiles/{id}`        | PUT         | `save_upload_profile`             |                                                                                                                                        |
 | `/api/upload-profiles/{id}`        | DELETE      | `delete_upload_profile`           |                                                                                                                                        |
 | `/api/upload-profiles/{id}/export` | GET         | `get_account`                     | get_account lists each profile's settings; no tool makes the recipe file.                                                              |
+| `/api/profile/tips`                | POST        | Not applicable: Flare's own pages |                                                                                                                                        |
 | `/api/profile/sessions`            | GET, DELETE | Never: sign-in                    |                                                                                                                                        |
 | `/api/profile/sessions/{id}`       | DELETE      | Never: sign-in                    |                                                                                                                                        |
 | `/api/profile/login-history`       | GET         | Never: sign-in                    |                                                                                                                                        |
 
-Deleting the account an agent acts as is listed under sign-in because it is how the account's owner would lose it. `/api/profile/export/progress` is the stream the export page follows its own download through; an export an agent downloads reports no progress there.
+Deleting the account an agent acts as is listed under sign-in because it is how the account's owner would lose it. `/api/profile/export/progress` is the stream the export page follows its own download through; an export an agent downloads reports no progress there. `/api/profile/tips` hides a tip on Flare's pages, such as the one on an empty Upload page.
 
 ### Credentials
 

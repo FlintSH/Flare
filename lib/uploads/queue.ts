@@ -30,7 +30,10 @@ export type UploadBatch = {
   readonly uploaded: readonly UploadResponse[]
   /** Set when a file failed. It and the files after it were not sent. */
   readonly failure?: {
+    /** The whole batch's outcome, for a notification. */
     readonly message: string
+    /** Why the first remaining file failed. */
+    readonly reason: string
     readonly remaining: readonly File[]
   }
 }
@@ -115,11 +118,10 @@ export function createUploadQueue(send = uploadFile) {
         )
       }
     } catch (error) {
+      const reason = error instanceof Error ? error.message : 'Upload failed'
       failure = {
-        message: batchFailure(
-          uploaded.length,
-          error instanceof Error ? error.message : 'Upload failed'
-        ),
+        message: batchFailure(uploaded.length, reason),
+        reason,
         remaining: files.slice(uploaded.length),
       }
     }

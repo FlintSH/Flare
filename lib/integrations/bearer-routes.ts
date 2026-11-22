@@ -63,7 +63,7 @@ export const API_SCOPE_CATALOG = [
   {
     scope: 'urls:write',
     label: 'Manage short links',
-    description: 'Create and delete your short links',
+    description: 'Create, redirect and delete your short links',
     group: 'links',
     surfaces: ['api', 'mcp'],
   },
@@ -208,6 +208,12 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     scope: 'files:upload',
   },
   {
+    methods: ['DELETE'],
+    path: /^\/api\/files\/chunks\/[a-zA-Z0-9_-]+$/,
+    permissions: ['files.upload'],
+    scope: 'files:upload',
+  },
+  {
     methods: ['GET'],
     path: '/api/files/types',
     permissions: ['files.read'],
@@ -275,6 +281,14 @@ const BEARER_ROUTES: readonly BearerRoute[] = [
     methods: ['DELETE'],
     path: /^\/api\/urls\/[a-zA-Z0-9_-]+$/,
     permissions: ['links.delete'],
+    scope: 'urls:write',
+  },
+  {
+    // A new destination retires the old redirect, as a delete would, and
+    // makes a new one, so it needs both.
+    methods: ['PATCH'],
+    path: /^\/api\/urls\/[a-zA-Z0-9_-]+$/,
+    permissions: ['links.create', 'links.delete'],
     scope: 'urls:write',
   },
   {

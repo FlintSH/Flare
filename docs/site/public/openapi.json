@@ -278,6 +278,7 @@
                 "example": {
                   "success": true,
                   "data": {
+                    "id": "cm_example",
                     "url": "https://files.example.com/abc123/screenshot.png",
                     "pageUrl": "https://files.example.com/abc123/screenshot.png",
                     "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -696,6 +697,7 @@
                 },
                 "example": {
                   "data": {
+                    "id": "cm_example",
                     "url": "https://files.example.com/abc123/screenshot.png",
                     "pageUrl": "https://files.example.com/abc123/screenshot.png",
                     "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -970,7 +972,7 @@
         "operationId": "completeChunkUpload",
         "summary": "Complete a chunk upload (unwrapped response)",
         "tags": ["Files"],
-        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. No chunk cancellation endpoint is implemented. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
+        "description": "Requires the files:upload scope. Returns upload links directly without a data/success wrapper. Unique parts are sorted by PartNumber. Actual size must equal declared size. Profile, folder, and naming cannot change; allowed sharing overrides apply. Repeated completion returns the existing file while metadata remains valid. Cancel an unfinished session with DELETE /api/files/chunks/{uploadId}. The token owner must currently have files.upload; role revocation applies on the next request. Without files.share, new uploads are private. Expiration requires files.delete for DELETE or files.share for SET_PRIVATE, including inherited defaults; missing action permission returns 403. Uploads applying tags/folders need tags.manage/folders.manage. Returns 409 if the actual storage target changed or upload metadata lacks provenance (including sessions started before the provenance upgrade). Initialize a new upload and resend its parts; do not reuse the old uploadId.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "files:upload",
         "responses": {
@@ -980,6 +982,7 @@
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/UploadLinks" },
                 "example": {
+                  "id": "cm_example",
                   "url": "https://files.example.com/abc123/screenshot.png",
                   "pageUrl": "https://files.example.com/abc123/screenshot.png",
                   "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -1062,6 +1065,90 @@
         "x-flare-permissions": ["files.upload"]
       }
     },
+    "/api/files/chunks/{uploadId}": {
+      "parameters": [
+        {
+          "name": "uploadId",
+          "in": "path",
+          "required": true,
+          "description": "Upload session ID. Expires after one hour of inactivity.",
+          "schema": { "type": "string", "pattern": "^[a-z0-9]{1,100}$" }
+        }
+      ],
+      "delete": {
+        "operationId": "cancelChunkUpload",
+        "summary": "Cancel a chunk upload",
+        "tags": ["Files"],
+        "description": "Requires the files:upload scope. Ends an unfinished chunk session the token owner started: Flare forgets the session and storage discards its parts (S3 aborts the multipart upload; local storage deletes temporary parts). Returns 409 when the file was already created; delete that file instead. Sessions nobody cancels expire after one hour of inactivity and are cleaned up the same way.",
+        "security": [{ "BearerAuth": [] }],
+        "x-flare-scope": "files:upload",
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "cancelled": { "const": true, "type": "boolean" }
+                      },
+                      "required": ["cancelled"]
+                    }
+                  },
+                  "required": ["data"]
+                },
+                "example": { "data": { "cancelled": true } }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
+              }
+            }
+          },
+          "403": {
+            "description": "Required current role permission is missing, or the token is bound to another upload profile.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "404": {
+            "description": "Upload session not found, expired, or started by another account.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": {
+            "description": "The upload already finished, or storage configuration changed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": {
+            "description": "The operation could not be completed.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        },
+        "x-flare-permissions": ["files.upload"]
+      }
+    },
     "/api/urls": {
       "get": {
         "operationId": "listShortLinks",
@@ -1137,7 +1224,7 @@
         "operationId": "createShortLink",
         "summary": "Create a short link",
         "tags": ["Short links"],
-        "description": "Requires the urls:write scope. Generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. No custom code, expiration, password, or destination editing parameter. Repeated creation can produce another link. Malformed JSON returns 400. The token owner must currently have links.create; role revocation applies on the next request.",
+        "description": "Requires the urls:write scope. Uses the chosen code, or generates a unique six-character code. Build the public link as instance origin + /u/ + shortCode. A code any link already uses, in any letter case, returns 409. No expiration or password parameter. Repeated creation can produce another link. Malformed JSON returns 400. The token owner must currently have links.create; role revocation applies on the next request.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:write",
         "responses": {
@@ -1202,6 +1289,18 @@
                 }
               }
             }
+          },
+          "409": {
+            "description": "The chosen code is already used by a link, in some letter case.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" },
+                "example": {
+                  "success": false,
+                  "error": "That ending is already taken. Choose another."
+                }
+              }
+            }
           }
         },
         "requestBody": {
@@ -1211,6 +1310,10 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateShortLinkRequest"
+              },
+              "example": {
+                "url": "https://example.com/a/long/path",
+                "code": "launch"
               }
             }
           }
@@ -1219,6 +1322,107 @@
       }
     },
     "/api/urls/{id}": {
+      "patch": {
+        "operationId": "updateShortLink",
+        "summary": "Change where your short link leads",
+        "tags": ["Short links"],
+        "description": "Requires urls:write. Use the link record ID, not its shortCode. Only the destination changes: the code, and so every copy already shared, stays, and the click count is kept. Any field other than url returns 400. The token owner must currently have both links.create and links.delete, because a new destination retires the old redirect; role revocation applies on the next request.",
+        "security": [{ "BearerAuth": [] }],
+        "x-flare-scope": "urls:write",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Short-link record ID.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "JSON request.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateShortLinkRequest"
+              },
+              "example": { "url": "https://example.com/the/new/path" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/ShortLink" },
+                    "success": { "const": true, "type": "boolean" }
+                  },
+                  "required": ["data", "success"]
+                },
+                "example": {
+                  "success": true,
+                  "data": {
+                    "id": "cm_link",
+                    "shortCode": "aB3_dE",
+                    "targetUrl": "https://example.com/the/new/path",
+                    "clicks": 12,
+                    "createdAt": "2026-09-20T12:00:00.000Z",
+                    "userId": "cm_account"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid destination, a field other than url, or malformed JSON.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized: missing/invalid token, expired/revoked token, missing scope, or required email verification.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unauthorized" }
+              }
+            }
+          },
+          "403": {
+            "description": "Required current role permissions are missing: both links.create and links.delete. Link belongs to another account.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" },
+                "example": { "success": false, "error": "Unauthorized" }
+              }
+            }
+          },
+          "404": {
+            "description": "Link does not exist.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" },
+                "example": { "success": false, "error": "URL not found" }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ApiError" }
+              }
+            }
+          }
+        },
+        "x-flare-permissions": ["links.create", "links.delete"]
+      },
       "delete": {
         "operationId": "deleteShortLink",
         "summary": "Delete your short link",
@@ -1556,6 +1760,10 @@
       "UploadLinks": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "The file ID other file routes use."
+          },
           "url": { "type": "string", "format": "uri" },
           "pageUrl": { "type": "string", "format": "uri" },
           "rawUrl": { "type": "string", "format": "uri" },
@@ -1566,6 +1774,7 @@
           "type": { "type": "string" }
         },
         "required": [
+          "id",
           "url",
           "pageUrl",
           "rawUrl",
@@ -1577,6 +1786,7 @@
         ],
         "description": "URLs follow sharing access rules; they are not private-file access grants. url and copyText alias pageUrl. name is the display name; type is the MIME type.",
         "example": {
+          "id": "cm_example",
           "url": "https://files.example.com/abc123/screenshot.png",
           "pageUrl": "https://files.example.com/abc123/screenshot.png",
           "rawUrl": "https://files.example.com/api/files/abc123/screenshot.png",
@@ -2183,6 +2393,24 @@
       },
       "CreateShortLinkRequest": {
         "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "description": "Absolute HTTP or HTTPS destination."
+          },
+          "code": {
+            "type": ["string", "null"],
+            "pattern": "^\\s*[A-Za-z0-9_-]{0,64}\\s*$",
+            "description": "Optional ending after /u/: 1 to 64 letters, digits, - and _, trimmed. Omitted, null or empty: a random six-character code. Case-sensitive, but refused with 409 while any link uses it in another letter case."
+          }
+        },
+        "required": ["url"]
+      },
+      "UpdateShortLinkRequest": {
+        "type": "object",
+        "additionalProperties": false,
         "properties": {
           "url": {
             "type": "string",

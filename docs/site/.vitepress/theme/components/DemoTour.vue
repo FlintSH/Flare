@@ -15,7 +15,7 @@ const steps = [
     title: 'Upload options',
     label: 'Upload',
     src: '/screenshots/workspace/upload.png',
-    text: 'Choose files and a saved upload profile. Visibility, passwords, and expiration let you decide how this upload is shared.',
+    text: 'Drop, choose or paste files. The row under them shows who can open them, when they expire, and where they go, and each setting is one click to change.',
     link: '/guide/uploading',
   },
   {

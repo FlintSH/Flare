@@ -28,10 +28,10 @@ If registration is closed, ask the administrator for access, or open an [invite 
 ## Upload and share your first file
 
 1. Open **Upload** in the navigation.
-2. Drop a file into the selection area, or click it to browse your device.
-3. Open **Upload options** to change visibility. Choose **Public (anyone with the link)** to share it with another person, or **Private (only me)** to keep it in your account; accounts with `content.read` also retain access. Roles without sharing permission upload privately and see **Expiration options** instead.
-4. Optionally add a password or expiration.
-5. Start the upload and wait for the completion result.
+2. Drop a file onto the dashed area, click it to browse your device, or paste a copied file or screenshot with <kbd>Ctrl</kbd>+<kbd>V</kbd>.
+3. Check the visibility button under it. **Public** shares the file with anyone who has the link; **Private** keeps it in your account, where accounts with `content.read` also retain access. Roles without sharing permission upload privately and see **Private** without a menu.
+4. Optionally add a password from the same button, or an expiration from the button next to it.
+5. Choose **Upload 1 file** and wait for the link to appear in the file's row.
 6. Choose **Copy link**, then send that link to your recipient.
 
 The copied link opens a Flare share page. A password or private setting still applies after copying. For a useful access check, open a public link in a signed-out browser window: your own signed-in session can access files that other people cannot.

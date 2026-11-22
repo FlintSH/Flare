@@ -1,6 +1,15 @@
+import { useEffect, useState } from 'react'
+
+import type { StreamParser } from '@codemirror/language'
 import type { Extension } from '@uiw/react-codemirror'
 
 import type { Language } from '@/lib/files/file-kind'
+
+/** A stream grammar, with the language package loaded alongside it. */
+async function legacy(parser: StreamParser<unknown>): Promise<Extension> {
+  const { StreamLanguage } = await import('@codemirror/language')
+  return StreamLanguage.define(parser)
+}
 
 /**
  * Each grammar is downloaded when a file in its language is shown, so a page
@@ -43,6 +52,29 @@ const GRAMMARS: Record<Exclude<Language, 'text'>, () => Promise<Extension>> = {
   sass: async () => (await import('@codemirror/lang-sass')).sass(),
   scss: async () => (await import('@codemirror/lang-sass')).sass(),
   less: async () => (await import('@codemirror/lang-less')).less(),
+  // CodeMirror has no Lezer grammars for these, so they use its ports of the
+  // CodeMirror 5 modes.
+  shell: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/shell')).shell),
+  diff: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/diff')).diff),
+  toml: async () =>
+    legacy((await import('@codemirror/legacy-modes/mode/toml')).toml),
+  // Keys and values read like YAML's: a property, then a string.
+  ini: async () => {
+    const [{ properties }, { tags }] = await Promise.all([
+      import('@codemirror/legacy-modes/mode/properties'),
+      import('@lezer/highlight'),
+    ])
+    return legacy({
+      ...properties,
+      tokenTable: {
+        def: tags.propertyName,
+        quote: tags.string,
+        header: tags.heading,
+      },
+    })
+  },
 }
 
 /** Plain text gets no grammar, so prose and logs aren't coloured as code. */
@@ -51,4 +83,32 @@ export const NO_GRAMMAR: Extension = []
 /** CodeMirror's grammar for a language. */
 export async function loadCodeGrammar(language: Language): Promise<Extension> {
   return language === 'text' ? NO_GRAMMAR : GRAMMARS[language]()
+}
+
+/**
+ * A language's grammar, or nothing while it downloads. It is asked for with
+ * the file's text, and the text waits for it, so code never appears plain and
+ * then takes on its colours.
+ */
+export function useCodeGrammar(language: Language): Extension | undefined {
+  const [loaded, setLoaded] = useState<{
+    language: Language
+    grammar: Extension
+  }>()
+
+  useEffect(() => {
+    if (language === 'text') return
+    let current = true
+    const settle = (grammar: Extension) => {
+      if (current) setLoaded({ language, grammar })
+    }
+    // A file whose grammar can't be fetched still reads, without colours.
+    loadCodeGrammar(language).then(settle, () => settle(NO_GRAMMAR))
+    return () => {
+      current = false
+    }
+  }, [language])
+
+  if (language === 'text') return NO_GRAMMAR
+  return loaded?.language === language ? loaded.grammar : undefined
 }

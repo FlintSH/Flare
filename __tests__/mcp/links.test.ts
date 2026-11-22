@@ -20,11 +20,13 @@ import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
+  update: vi.fn(),
   remove: vi.fn(),
 }))
 vi.mock('@/lib/links/service', () => ({
   listOwnShortLinks: mocks.list,
   createShortLink: mocks.create,
+  updateOwnShortLink: mocks.update,
   deleteOwnShortLink: mocks.remove,
 }))
 
@@ -191,7 +193,8 @@ describe('create_short_link', () => {
     })
     expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
       'owner',
-      'https://example.com/a?b=c'
+      'https://example.com/a?b=c',
+      undefined
     )
     expect(structured.link).toMatchObject({
       id: 'link-7',
@@ -217,6 +220,114 @@ describe('create_short_link', () => {
       call('create_short_link', { url: 'not a url' })
     ).rejects.toThrow()
     expect(mocks.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('create_short_link with a chosen code', () => {
+  it('passes the trimmed code to the service', async () => {
+    mocks.create.mockResolvedValue(link(8, { shortCode: 'launch' }))
+    const { structured } = await call('create_short_link', {
+      url: 'https://example.com/launch',
+      code: ' launch ',
+    })
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'https://example.com/launch',
+      'launch'
+    )
+    expect(structured.link).toMatchObject({
+      code: 'launch',
+      short_url: 'https://flare.test/u/launch',
+    })
+  })
+
+  it('takes a 64-character code with spaces around it, as the route does', async () => {
+    const code = 'a'.repeat(64)
+    mocks.create.mockResolvedValue(link(9, { shortCode: code }))
+    await call('create_short_link', {
+      url: 'https://example.com',
+      code: `  ${code}  `,
+    })
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith(
+      'owner',
+      'https://example.com',
+      code
+    )
+  })
+
+  it('refuses a code the route refuses, before a link is made', async () => {
+    await expect(
+      call('create_short_link', { url: 'https://example.com', code: 'a/b' })
+    ).rejects.toMatchObject({
+      name: 'ZodError',
+      issues: [{ message: 'Endings can use letters, numbers, - and _ only.' }],
+    })
+    expect(mocks.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('update_short_link', () => {
+  const own = [
+    link(1, { id: 'cm_first', shortCode: 'aB3_dE' }),
+    link(2, { id: 'cm_second', shortCode: 'Zz9-_q' }),
+  ]
+
+  it.each([
+    ['its ID', 'cm_second'],
+    ['its code', 'Zz9-_q'],
+    ['its short URL', 'https://flare.test/u/Zz9-_q'],
+  ])(
+    'finds the link by %s and changes only where it leads',
+    async (_how, value) => {
+      mocks.list.mockResolvedValue(own)
+      mocks.update.mockResolvedValue({
+        ...own[1],
+        targetUrl: 'https://example.com/moved',
+      })
+      const { structured, audit } = await call('update_short_link', {
+        link: value,
+        url: 'https://example.com/moved',
+      })
+      expect(mocks.update).toHaveBeenCalledExactlyOnceWith(
+        'owner',
+        'cm_second',
+        'https://example.com/moved'
+      )
+      expect(structured).toEqual({
+        link: expect.objectContaining({
+          id: 'cm_second',
+          code: 'Zz9-_q',
+          target_url: 'https://example.com/moved',
+        }),
+        previous_target_url: 'https://example.com/page/2',
+      })
+      expect(audit).toMatchObject({ targetType: 'link', targetId: 'cm_second' })
+    }
+  )
+
+  it('refuses a target the route refuses, before looking anything up', async () => {
+    await expect(
+      call('update_short_link', {
+        link: 'cm_first',
+        url: 'javascript:alert(1)',
+      })
+    ).rejects.toMatchObject({ name: 'ZodError' })
+    expect(mocks.list).not.toHaveBeenCalled()
+    expect(mocks.update).not.toHaveBeenCalled()
+  })
+
+  it("answers a link that isn't this account's like one that doesn't exist", async () => {
+    mocks.list.mockResolvedValue(own)
+    await expect(
+      call('update_short_link', {
+        link: 'someone-elses',
+        url: 'https://example.com',
+      })
+    ).rejects.toMatchObject({
+      name: 'ToolError',
+      message: expect.stringContaining('list_short_links'),
+    })
+    expect(mocks.update).not.toHaveBeenCalled()
   })
 })
 

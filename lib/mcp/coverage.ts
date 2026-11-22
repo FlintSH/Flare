@@ -92,6 +92,10 @@ export const API_COVERAGE: Record<
     POST: chunked,
     OPTIONS: preflight,
   },
+  '/api/files/chunks/{uploadId}': {
+    DELETE: chunked,
+    OPTIONS: preflight,
+  },
   '/api/files/{id}': {
     PATCH: tools('set_file_sharing'),
     DELETE: tools('delete_files'),
@@ -138,6 +142,7 @@ export const API_COVERAGE: Record<
     OPTIONS: preflight,
   },
   '/api/urls/{id}': {
+    PATCH: tools('update_short_link'),
     DELETE: tools('delete_short_link'),
     OPTIONS: preflight,
   },
@@ -197,6 +202,8 @@ export const API_COVERAGE: Record<
       'get_account'
     ),
   },
+  // Which page tips an account hid is how Flare's own pages look to it.
+  '/api/profile/tips': { POST: browser },
   '/api/profile/sessions': { GET: signIn, DELETE: signIn },
   '/api/profile/sessions/{id}': { DELETE: signIn },
   '/api/profile/login-history': { GET: signIn },

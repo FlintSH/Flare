@@ -40,7 +40,8 @@ export function notifyUploadInProgress() {
 
 const link = (file: UploadResponse) => file.pageUrl || file.url
 
-function notifyUploaded(files: readonly UploadResponse[]) {
+/** Says how a batch went, with its links, to someone not watching it. */
+export function notifyUploaded(files: readonly UploadResponse[]) {
   if (files.length === 1) {
     const [file] = files
     toast({
@@ -88,7 +89,16 @@ function notifyUploaded(files: readonly UploadResponse[]) {
  * or the failure, and a library refresh when anything arrived. Progress shows
  * in `UploadProgress`.
  */
-export function useUploadQueue() {
+export function useUploadQueue({
+  quiet,
+}: {
+  /**
+   * True while the page shows each batch's outcome itself, so no
+   * notification repeats it. Checked when a batch ends: someone who left the
+   * page meanwhile still hears how it went.
+   */
+  quiet?: () => boolean
+} = {}) {
   const [queue] = useState(() => createUploadQueue())
   const { files, uploading } = useSyncExternalStore(
     queue.subscribe,
@@ -108,6 +118,7 @@ export function useUploadQueue() {
       void libraryChanged(client)
       router.refresh()
     }
+    if (quiet?.()) return batch
     if (!batch.failure) notifyUploaded(batch.uploaded)
     else {
       const { message, remaining } = batch.failure

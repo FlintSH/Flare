@@ -395,7 +395,7 @@ describe('compatibility with the REST API', () => {
       const [method, path] = operation.split(' ')
       return requiredApiScope(method, example(path)) !== null
     })
-    expect(operations).toHaveLength(13)
+    expect(operations).toHaveLength(15)
   })
 })
 

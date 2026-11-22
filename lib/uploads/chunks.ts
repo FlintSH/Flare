@@ -17,6 +17,7 @@ import { lockUploadSession } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { hashFilePassword } from '@/lib/files/password-hash'
 import { parseInput, readJson } from '@/lib/http/request'
+import { loggers } from '@/lib/logger'
 import { safeJoin, validatePathSegment } from '@/lib/security/paths'
 import { getStorageProvider } from '@/lib/storage'
 import {
@@ -57,7 +58,8 @@ const cleanupTimer = setInterval(async () => {
         const metadata = JSON.parse(
           await readFile(path, 'utf8')
         ) as UploadMetadata
-        if (Date.now() - metadata.lastActivity > 3_600_000) await unlink(path)
+        if (Date.now() - metadata.lastActivity > 3_600_000)
+          await forgetSession(path, metadata)
       } catch {
         /* Another process may have removed the expired session. */
       }
@@ -67,6 +69,32 @@ const cleanupTimer = setInterval(async () => {
   }
 }, 3_600_000)
 cleanupTimer.unref()
+
+/**
+ * Ends a session that won't be completed: its storage parts first, so an
+ * abandoned upload doesn't keep costing space, then its metadata.
+ */
+async function forgetSession(path: string, metadata: UploadMetadata) {
+  try {
+    // A completed upload keeps its session a while for retries; its parts
+    // became the file, so there is nothing to abort. This check runs outside
+    // the completion lock on purpose: if that file was deleted since, the
+    // abort below finds nothing (S3 answers NoSuchUpload, which is caught;
+    // local storage removes only this upload's parts folder).
+    const finished = await prisma.file.findFirst({
+      where: { userId: metadata.userId, path: metadata.fileKey },
+      select: { id: true },
+    })
+    const storage = finished ? null : await getUploadStorage(metadata)
+    await storage?.abortMultipartUpload(metadata.fileKey, metadata.s3UploadId)
+  } catch (error) {
+    // Storage that changed or already forgot the upload has nothing to free.
+    loggers.files.warn('Could not abort an abandoned chunked upload', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+  await unlink(path).catch(() => {})
+}
 export interface UploadMetadata {
   fileKey: string
   filename: string
@@ -112,7 +140,7 @@ export async function getUploadMetadata(
   try {
     const value = JSON.parse(await readFile(path, 'utf8')) as UploadMetadata
     if (Date.now() - value.lastActivity > 3_600_000) {
-      await unlink(path)
+      await forgetSession(path, value)
       return null
     }
     return value
@@ -236,6 +264,36 @@ const completeSchema = requestFields({
     .min(1)
     .max(10000),
 })
+
+/**
+ * Stops an upload someone cancelled: Flare forgets the session, then the
+ * storage forgets the parts. An upload whose file already exists is
+ * finished, and stays.
+ */
+export async function abandonChunkUpload(user: AuthenticatedUser, id: string) {
+  const metadata = await requireUploadMetadata(user, id)
+  const path = safeJoin(TEMP_DIR, `meta-${validatePathSegment(id)}`)
+  // Under the completion lock, so a completion can't run alongside.
+  await withUploadLock(id, async (transaction) => {
+    const committed = await transaction.file.findFirst({
+      where: { userId: user.id, path: metadata.fileKey },
+      select: { id: true },
+    })
+    if (committed)
+      throw new UploadError('This upload has already finished.', 409)
+    await unlink(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+  })
+  try {
+    const storage = await getUploadStorage(metadata)
+    await storage.abortMultipartUpload(metadata.fileKey, metadata.s3UploadId)
+  } catch (error) {
+    loggers.files.warn('Could not abort a cancelled chunked upload', {
+      error: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
 
 /** Serialize assembly across both completion routes and all application processes. */
 export async function withUploadLock<T>(

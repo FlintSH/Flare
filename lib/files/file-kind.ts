@@ -43,6 +43,10 @@ export const LANGUAGES = [
   'sass',
   'scss',
   'less',
+  'shell',
+  'diff',
+  'toml',
+  'ini',
   'text',
 ] as const
 export type Language = (typeof LANGUAGES)[number]
@@ -135,13 +139,19 @@ const CODE_TYPES = byLanguage({
   scss: ['text/x-scss', 'text/scss'],
   sass: ['text/x-sass', 'text/sass'],
   less: ['text/x-less', 'text/less'],
+  shell: ['text/x-sh', 'text/x-shellscript', 'application/x-sh'],
+  diff: ['text/x-diff', 'text/x-patch'],
+  toml: ['text/x-toml', 'application/toml'],
+  ini: [
+    'text/x-ini',
+    'text/ini',
+    'text/x-properties',
+    'text/x-java-properties',
+  ],
   text: [
     'text/x-ruby',
     'application/x-ruby',
     'text/ruby',
-    'text/x-sh',
-    'text/x-shellscript',
-    'application/x-sh',
     'text/x-kotlin',
     'text/kotlin',
     'text/x-swift',
@@ -152,12 +162,6 @@ const CODE_TYPES = byLanguage({
     'application/x-perl',
     'text/x-lua',
     'application/x-lua',
-    'text/x-toml',
-    'application/toml',
-    'text/x-ini',
-    'text/ini',
-    'text/x-properties',
-    'text/x-java-properties',
     'text/x-rst',
     'text/x-latex',
     'application/x-latex',
@@ -226,10 +230,33 @@ const EXTENSION_LANGUAGES = byLanguage({
   sass: ['sass'],
   scss: ['scss'],
   less: ['less'],
+  // The first extension is the one a paste in the language is saved with.
+  shell: ['sh', 'bash', 'zsh'],
+  diff: ['diff', 'patch'],
+  toml: ['toml'],
+  // `.env` too: extensionOf('.env') is `env`. Not `.conf`, which is as
+  // often nginx or Apache syntax as INI.
+  ini: ['ini', 'env', 'cfg', 'properties'],
 })
 
+/** The extension a paste in each language is saved with. */
+const LANGUAGE_EXTENSIONS = new Map<Language, string>([['text', 'txt']])
+for (const [extension, language] of EXTENSION_LANGUAGES)
+  if (!LANGUAGE_EXTENSIONS.has(language))
+    LANGUAGE_EXTENSIONS.set(language, extension)
+
+/** `py` for Python, `txt` for plain text: what names a file in `language`. */
+export function languageExtension(language: Language): string {
+  return LANGUAGE_EXTENSIONS.get(language) ?? 'txt'
+}
+
+/** Whether an extension already names a language, plain text included. */
+export function namesLanguage(extension: string) {
+  return extension === 'txt' || EXTENSION_LANGUAGES.has(extension)
+}
+
 /** A name's last extension in lower case, or '' without one. */
-function extensionOf(name: string) {
+export function extensionOf(name: string) {
   return name.includes('.') ? (name.split('.').pop()?.toLowerCase() ?? '') : ''
 }
 
@@ -245,13 +272,13 @@ export function languageFromFilename(name: string): Language {
  */
 const PLAIN_TEXT_EXTENSIONS = new Set([
   ...['txt', 'text', 'log', 'nfo', 'rst', 'adoc', 'org', 'tex', 'srt', 'vtt'],
-  ...['ini', 'cfg', 'conf', 'toml', 'env', 'properties', 'editorconfig'],
-  ...['gitignore', 'gitattributes', 'dockerignore', 'npmrc', 'lock'],
-  ...['sh', 'bash', 'zsh', 'fish', 'ps1', 'bat', 'cmd'],
+  ...['conf', 'editorconfig', 'gitignore', 'gitattributes', 'dockerignore'],
+  ...['npmrc'],
+  ...['lock', 'fish', 'ps1', 'bat', 'cmd'],
   ...['rb', 'kt', 'kts', 'swift', 'scala', 'pl', 'lua', 'r', 'dart', 'ex'],
   ...['exs', 'erl', 'hs', 'clj', 'cs', 'fs', 'groovy', 'gradle', 'jl', 'zig'],
-  ...['tf', 'proto', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'diff'],
-  ...['patch', 'jsonl', 'ndjson', 'asm', 'cmake', 'mk'],
+  ...['tf', 'proto', 'graphql', 'gql', 'vue', 'svelte', 'astro', 'jsonl'],
+  ...['ndjson', 'asm', 'cmake', 'mk'],
 ])
 
 /** Text files commonly shared without an extension. */
@@ -397,6 +424,11 @@ export function fileTypeLabel(mimeType: string) {
   )
 }
 
+/** A language's name, as the share page shows it. */
+export function languageName(language: Language) {
+  return language === 'text' ? 'Plain text' : LANGUAGE_NAMES[language]
+}
+
 const LANGUAGE_NAMES: Record<Exclude<Language, 'text'>, string> = {
   html: 'HTML',
   css: 'CSS',
@@ -420,6 +452,10 @@ const LANGUAGE_NAMES: Record<Exclude<Language, 'text'>, string> = {
   sass: 'Sass',
   scss: 'SCSS',
   less: 'Less',
+  shell: 'Shell',
+  diff: 'Diff',
+  toml: 'TOML',
+  ini: 'INI',
 }
 
 /** Format names for stored media subtypes that don't read as one. */

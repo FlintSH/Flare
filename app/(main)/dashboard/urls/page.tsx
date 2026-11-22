@@ -1,21 +1,14 @@
-import { URLsClient } from '@/components/dashboard/urls-client'
-import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
+import { pagePanelClassName } from '@/components/layout/page-header'
+import { LinksManager } from '@/components/links/links-manager'
 
 import { requireDashboardPage } from '../page-access'
 
-export default async function URLsPage() {
+export default async function LinksPage() {
   await requireDashboardPage('/dashboard/urls')
 
   return (
-    <div className="container space-y-7">
-      <PageHeader
-        eyebrow="Sharing"
-        title="Short links"
-        description="Shorten long URLs and see how often they're opened."
-      />
-      <div className={pagePanelClassName}>
-        <URLsClient />
-      </div>
-    </div>
+    <section aria-labelledby="links-heading" className={pagePanelClassName}>
+      <LinksManager />
+    </section>
   )
 }

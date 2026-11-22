@@ -55,18 +55,18 @@ Flare resolves an upload's choices in this order:
 2. **The selected profile**, or your default profile, overrides the fields it explicitly sets.
 3. **Allowed per-upload choices** override the result for that upload.
 
-The browser's profile picker offers three approaches:
+On **Upload** and **Paste**, the first button in the options row picks the profile:
 
-- **Account default:** use your saved default profile, if one is set.
-- **Account settings only:** bypass the saved default profile.
-- **A named profile:** use that profile for this upload.
+- Your default profile, marked **(default)**, applies until you choose another.
+- **No profile** bypasses the saved default and uses your account settings only.
+- **A named profile** uses that profile for this upload.
 
-The summary beneath the picker shows effective visibility, expiration, and filename behavior. The upload or paste form's visibility control can then override that upload's visibility.
+Each profile in the menu lists what it does: visibility, expiration, original or random names, tags and share page style. The other buttons in the row show the effective visibility, expiration, folder and tags, and can override each for that upload.
 
 [Creating or extracting an archive](./archives#choose-an-upload-profile-deliberately) has a separate default: **Private (no profile)** creates private files without expiration and bypasses your account's saved default profile. You can explicitly select an owned profile in either archive dialog. Its normal settings and permissions then apply to the new outputs, while **Save to** independently chooses the destination. Review a public profile carefully: it can expose extracted files or the contents of a newly packaged archive even when the source files were private.
 
 ::: details Example: make one upload public without changing your default
-Suppose your default profile is Private work. Choose it on Upload, then explicitly set the form's visibility to Public. This upload is public, but the profile still provides its one-day deletion rule and Delivery layout. Your saved default stays private. The open upload form retains your one-time choices after completion, so reset visibility to From upload profile or reopen Upload before the next private upload. To bypass all profile settings, choose Account settings only instead.
+Suppose your default profile is Private work. On Upload, open the button that reads **Private** and choose **Public**. This upload is public, but the profile still provides its one-day deletion rule and Delivery layout. Your saved default stays private. The page keeps your one-time choices after the upload, so choose **Use saved setting** under the visibility button, or reopen Upload, before the next private upload. To bypass all profile settings, choose **No profile** instead.
 :::
 
 ::: details Example: turn off an inherited expiration
@@ -133,4 +133,4 @@ Recipes can be up to 64 KiB (65,536 bytes). **Import recipe** refuses a larger f
 
 Recipes are configuration, not an export of uploaded files. Use [account data export](./account#export-your-data) to download your content.
 
-On **Upload** and **Paste**, the summary under **Upload profile** describes the effective settings, including one-time overrides and the action taken at expiry. **Upload options** on Upload and **Sharing options** on Paste start closed; open the relevant disclosure to change the batch, then review the summary. Closing the disclosure does not reset an override or change profile precedence.
+On **Upload** and **Paste**, each button in the options row shows the effective setting, including one-time overrides and the action taken at expiry, such as **Deleted after 1 day**. A changed button is highlighted with a dot; **Use saved setting** in its menu returns it to the profile's value. Earlier versions showed one summary sentence under an **Upload profile** select and kept the overrides in a closed **Upload options** or **Sharing options** section.

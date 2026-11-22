@@ -9,11 +9,15 @@ import {
   followShortLink,
   listAccountShortLinks,
   listOwnShortLinks,
+  updateOwnShortLink,
 } from '@/lib/links/service'
 
 const mocks = vi.hoisted(() => ({
+  $transaction: vi.fn(),
+  $executeRaw: vi.fn(),
   shortenedUrl: {
     create: vi.fn(),
+    findFirst: vi.fn(),
     findMany: vi.fn(),
     findUnique: vi.fn(),
     count: vi.fn(),
@@ -45,6 +49,7 @@ const prismaError = (code: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.$transaction.mockImplementation((work) => work(mocks))
 })
 
 describe('creating a short link', () => {
@@ -100,6 +105,94 @@ describe('creating a short link', () => {
       'connection lost'
     )
     expect(links.create).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('choosing an ending', () => {
+  it('stores the chosen ending after locking it in every letter case', async () => {
+    links.findFirst.mockResolvedValue(null)
+    links.create.mockResolvedValue({ ...stored, shortCode: 'launch' })
+    const link = await createShortLink('owner', stored.targetUrl, 'launch')
+    expect(link.shortCode).toBe('launch')
+    // The lock names the ending in lower case, so `Launch` waits for `launch`.
+    const [lock] = mocks.$executeRaw.mock.calls
+    expect(lock.slice(1)).toEqual(['launch'])
+    expect(lock[0].join('?')).toContain('lower(?)')
+    expect(links.findFirst).toHaveBeenCalledWith({
+      where: { shortCode: { equals: 'launch', mode: 'insensitive' } },
+      select: { id: true },
+    })
+    expect(links.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          shortCode: 'launch',
+          targetUrl: stored.targetUrl,
+          userId: 'owner',
+        },
+      })
+    )
+  })
+
+  it('refuses an ending another link uses in any letter case', async () => {
+    links.findFirst.mockResolvedValue({ id: 'cm_other' })
+    await expect(
+      createShortLink('owner', stored.targetUrl, 'Launch')
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'That ending is already taken. Choose another.',
+    })
+    expect(links.create).not.toHaveBeenCalled()
+  })
+
+  it('reports an exact match that won a race as taken, without retrying', async () => {
+    links.findFirst.mockResolvedValue(null)
+    links.create.mockRejectedValue(prismaError('P2002'))
+    await expect(
+      createShortLink('owner', stored.targetUrl, 'launch')
+    ).rejects.toMatchObject({ status: 409 })
+    expect(links.create).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('changing where a link leads', () => {
+  const moved = 'https://example.com/moved'
+
+  it('keeps the code and clicks and changes only the destination', async () => {
+    links.findUnique.mockResolvedValue({ userId: 'owner' })
+    links.update.mockResolvedValue({ ...stored, targetUrl: moved, clicks: 9 })
+    expect(await updateOwnShortLink('owner', 'cm_link', moved)).toEqual({
+      ...sent,
+      targetUrl: moved,
+      clicks: 9,
+    })
+    expect(links.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cm_link' },
+        data: { targetUrl: moved },
+      })
+    )
+  })
+
+  it.each([
+    [null, 404, 'URL not found'],
+    [{ userId: 'someone-else' }, 403, 'Unauthorized'],
+  ])(
+    'answers an owner lookup of %j with %i',
+    async (found, status, message) => {
+      links.findUnique.mockResolvedValue(found)
+      await expect(
+        updateOwnShortLink('owner', 'cm_link', moved)
+      ).rejects.toMatchObject({ status, message })
+      expect(links.update).not.toHaveBeenCalled()
+    }
+  )
+
+  it('reports a link deleted mid-change as missing', async () => {
+    links.findUnique.mockResolvedValue({ userId: 'owner' })
+    links.update.mockRejectedValue(prismaError('P2025'))
+    await expect(
+      updateOwnShortLink('owner', 'cm_link', moved)
+    ).rejects.toMatchObject({ status: 404 })
   })
 })
 

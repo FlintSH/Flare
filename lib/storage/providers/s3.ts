@@ -1,4 +1,5 @@
 import {
+  AbortMultipartUploadCommand,
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
@@ -295,6 +296,17 @@ export class S3StorageProvider implements StorageProvider {
         MultipartUpload: {
           Parts: parts.sort((a, b) => a.PartNumber - b.PartNumber),
         },
+      })
+    )
+  }
+
+  async abortMultipartUpload(path: string, uploadId: string): Promise<void> {
+    const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
+    await this.client.send(
+      new AbortMultipartUploadCommand({
+        Bucket: this.bucket,
+        Key: key,
+        UploadId: uploadId,
       })
     )
   }

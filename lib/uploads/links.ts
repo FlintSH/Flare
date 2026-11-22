@@ -20,6 +20,7 @@ export function uploadLinks(
     owner: user,
   })
   return {
+    id: file.id,
     url: urls.page,
     pageUrl: urls.page,
     rawUrl: urls.content,

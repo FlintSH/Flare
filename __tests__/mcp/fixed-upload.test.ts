@@ -1063,10 +1063,11 @@ describe('an upload without fixed options', () => {
       uploadOptions: expect.objectContaining({ profileId: 'profile-header' }),
     })
     expect(created().password).toMatch(/^\$2[aby]\$10\$/)
-    // The REST answer is what it was: links, and no file ID.
+    // The REST answer: links, and the file's ID, as fixed uploads give it.
     expect(Object.keys(answer).sort()).toEqual([
       'copyText',
       'downloadUrl',
+      'id',
       'name',
       'pageUrl',
       'rawUrl',

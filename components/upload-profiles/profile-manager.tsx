@@ -247,7 +247,10 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
     sameOptions(options, editing.options)
 
   return (
-    <div className="space-y-6">
+    <div
+      id={embedded ? 'upload-profiles' : undefined}
+      className="scroll-mt-28 space-y-6"
+    >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           {!embedded && (
@@ -381,7 +384,7 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
               ))}
               {data?.profiles.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  Start with a recipe below, or create a profile with your own
+                  Start with a recipe, or create a profile with your own
                   defaults.
                 </p>
               )}

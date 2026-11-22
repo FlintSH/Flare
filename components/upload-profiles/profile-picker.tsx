@@ -15,16 +15,11 @@ import {
 } from '@/components/ui/select'
 
 import { RefusedRequest } from '@/lib/client/request'
-import { allows } from '@/lib/permissions/actions'
 import {
   UPLOAD_DEFAULTS,
   type UploadProfileOptions,
   type UploadProfileView,
 } from '@/lib/uploads/schema'
-import {
-  type UploadSummaryOverrides,
-  uploadSettingsSummary,
-} from '@/lib/uploads/summary'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
@@ -60,21 +55,22 @@ export function useUploadProfiles(refreshKey = 0) {
   }
 }
 
+/**
+ * The upload profile for an archive's output. Archives start private with no
+ * profile, so the account's default profile only applies when chosen.
+ * (Upload and Paste choose a profile from their options row instead.)
+ */
 export function ProfilePicker({
   value,
   onChange,
   disabled = false,
-  mode = 'upload',
   refreshKey = 0,
   onSnapshotChange,
-  overrides,
 }: {
-  value?: string | null
-  onChange: (value: string | null | undefined) => void
+  value: string | null
+  onChange: (value: string | null) => void
   disabled?: boolean
-  mode?: 'upload' | 'archive'
   refreshKey?: number
-  overrides?: UploadSummaryOverrides
   onSnapshotChange?: (
     snapshot: {
       id: string
@@ -86,20 +82,12 @@ export function ProfilePicker({
   const { user, can } = usePermissions()
   const canManageProfiles = can('uploadProfiles.manage')
   const { data, error } = useUploadProfiles(refreshKey)
-  const archiveMode = mode === 'archive'
   useEffect(() => {
-    const fallback = archiveMode ? null : undefined
-    if (user && !canManageProfiles && value !== fallback) onChange(fallback)
-  }, [user, canManageProfiles, value, onChange, archiveMode])
-  // Archive summaries and their revision must use the same authority snapshot.
-  const canShare = archiveMode
-    ? data?.canShare === true
-    : allows(user, 'shareFiles')
-  const selectedId = archiveMode
-    ? (value ?? null)
-    : value === undefined
-      ? data?.defaultProfileId
-      : value
+    if (user && !canManageProfiles && value !== null) onChange(null)
+  }, [user, canManageProfiles, value, onChange])
+  // Summaries and their revision must use the same authority snapshot.
+  const canShare = data?.canShare === true
+  const selectedId = value
   const profile = data?.profiles.find((entry) => entry.id === selectedId)
   useEffect(() => {
     onSnapshotChange?.(
@@ -112,39 +100,23 @@ export function ProfilePicker({
         : null
     )
   }, [profile, data?.canShare, onSnapshotChange])
-  const effective =
-    archiveMode && !selectedId
-      ? { ...UPLOAD_DEFAULTS, visibility: 'PRIVATE' as const }
-      : value === undefined
-        ? data?.effective
-        : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
+  const effective = !selectedId
+    ? { ...UPLOAD_DEFAULTS, visibility: 'PRIVATE' as const }
+    : { ...UPLOAD_DEFAULTS, ...data?.accountOptions, ...profile?.options }
   const expiry =
-    effective?.expiration === 'DISABLED'
+    effective.expiration === 'DISABLED'
       ? 'no expiry'
-      : { HOUR: '1 hour', DAY: '1 day', WEEK: '1 week', MONTH: '1 month' }[
-          effective?.expiration as 'HOUR'
-        ]
-  const archiveExpiry =
-    effective?.expiration === 'DISABLED'
-      ? expiry
-      : `${expiry}, then ${effective?.expiryAction === 'SET_PRIVATE' ? 'private' : 'deleted'}`
+      : `${{ HOUR: '1 hour', DAY: '1 day', WEEK: '1 week', MONTH: '1 month' }[effective.expiration]}, then ${effective.expiryAction === 'SET_PRIVATE' ? 'private' : 'deleted'}`
+  const fixedPrivate =
+    'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
   if (!canManageProfiles)
     return (
-      <div className="space-y-2">
-        {!archiveMode && !canShare && (
-          <p className="text-xs text-muted-foreground">
-            Your uploads are private because your roles do not allow sharing.
-          </p>
-        )}
-        <p
-          aria-live="polite"
-          className="text-pretty text-xs leading-relaxed text-muted-foreground"
-        >
-          {archiveMode
-            ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
-            : 'Your saved upload defaults apply automatically.'}
-        </p>
-      </div>
+      <p
+        aria-live="polite"
+        className="text-pretty text-xs leading-relaxed text-muted-foreground"
+      >
+        {fixedPrivate}
+      </p>
     )
   return (
     <div className="space-y-2">
@@ -162,41 +134,15 @@ export function ProfilePicker({
         </PermissionGate>
       </div>
       <Select
-        value={
-          archiveMode
-            ? value || 'none'
-            : value === undefined
-              ? 'default'
-              : value === null
-                ? 'none'
-                : value
-        }
-        onValueChange={(next) =>
-          onChange(
-            next === 'default' ? undefined : next === 'none' ? null : next
-          )
-        }
+        value={value || 'none'}
+        onValueChange={(next) => onChange(next === 'none' ? null : next)}
         disabled={disabled}
       >
         <SelectTrigger id="upload-profile">
-          <SelectValue
-            placeholder={
-              archiveMode ? 'Private (no profile)' : 'Account default'
-            }
-          />
+          <SelectValue placeholder="Private (no profile)" />
         </SelectTrigger>
         <SelectContent>
-          {!archiveMode && (
-            <SelectItem value="default">
-              Account default
-              {data?.defaultProfileId && profile
-                ? ` (${data.profiles.find((p) => p.id === data.defaultProfileId)?.name})`
-                : ''}
-            </SelectItem>
-          )}
-          <SelectItem value="none">
-            {archiveMode ? 'Private (no profile)' : 'Account settings only'}
-          </SelectItem>
+          <SelectItem value="none">Private (no profile)</SelectItem>
           {data?.profiles.map((entry) => (
             <SelectItem key={entry.id} value={entry.id}>
               {entry.name}
@@ -204,7 +150,7 @@ export function ProfilePicker({
           ))}
         </SelectContent>
       </Select>
-      {(archiveMode ? data && !canShare : !canShare) && (
+      {data && !canShare && (
         <p className="text-xs text-muted-foreground">
           Your uploads are private because your roles do not allow sharing.
         </p>
@@ -213,32 +159,27 @@ export function ProfilePicker({
         aria-live="polite"
         className="text-pretty text-xs leading-relaxed text-muted-foreground"
       >
-        {archiveMode && !selectedId
-          ? 'Private · no expiry · original filenames. No upload profile or account defaults are applied.'
-          : archiveMode && selectedId && !profile
+        {!selectedId
+          ? fixedPrivate
+          : !profile
             ? error ||
               (data
                 ? 'This profile is no longer available. Choose another profile or private output.'
                 : 'Loading the selected upload profile…')
             : error ||
-              (effective
-                ? archiveMode
-                  ? `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${archiveExpiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.`
-                  : uploadSettingsSummary(effective, canShare, overrides)
-                : 'Your saved default is applied by the server.')}
+              `${!canShare || effective.visibility === 'PRIVATE' ? 'Private' : 'Public'} · ${expiry} · ${effective.randomizeFileUrls ? 'Random filenames' : 'Original filenames'}. ${effective.tagIds?.length || 0} ${effective.tagIds?.length === 1 ? 'tag' : 'tags'} · ${effective.shareStyle} share page.`}
       </p>
-      {archiveMode &&
-        selectedId &&
+      {selectedId &&
         profile &&
         canShare &&
-        effective?.visibility === 'PUBLIC' && (
+        effective.visibility === 'PUBLIC' && (
           <p className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs leading-relaxed text-foreground">
             This profile makes the output public. Anyone with its link can
             access content from your selected files, including content that was
             private.
           </p>
         )}
-      {archiveMode && error && !selectedId && (
+      {error && !selectedId && (
         <p className="text-xs text-muted-foreground">
           {error} You can still continue with private output.
         </p>

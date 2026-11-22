@@ -88,15 +88,13 @@ describe('loading upload profiles', () => {
       createElement(
         QueryClientProvider,
         { client },
-        createElement(ProfilePicker, { onChange: vi.fn() })
+        createElement(ProfilePicker, { value: null, onChange: vi.fn() })
       )
     )
     expect(fetchMock).not.toHaveBeenCalled()
     expect(html).not.toContain('Upload profile')
     expect(html).not.toContain('combobox')
     expect(html).not.toContain('Could not load')
-    expect(html).toContain('Your uploads are private')
-    expect(html).toContain('Your saved upload defaults apply automatically.')
   })
 
   it('keeps the explicit private archive fallback without profile access', () => {
@@ -106,7 +104,6 @@ describe('loading upload profiles', () => {
         QueryClientProvider,
         { client },
         createElement(ProfilePicker, {
-          mode: 'archive',
           value: null,
           onChange: vi.fn(),
         })

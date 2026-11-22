@@ -37,7 +37,7 @@ Recorded in a real Flare instance with a disposable account and demonstration fi
 
 #### Organize and upload
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 18-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 21-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 <details class="demo-transcript">
 <summary>Transcript</summary>
@@ -45,8 +45,8 @@ Recorded in a real Flare instance with a disposable account and demonstration fi
 1. In **Files**, choose **New folder** and create a folder named Project launch. The new folder opens.
 2. Go back to **Folders**, open **Unfiled**, select two files, and move them into Project launch.
 3. Open Project launch and create a Week 39 subfolder, which opens in turn.
-4. Use **Upload here** to upload a project checklist into the subfolder. **Save to** already shows Project launch / Week 39.
-5. Choose **Open folder** in **Upload complete** to see the checklist in its folder.
+4. Use **Upload here**. The Upload page opens with the folder button already on **Week 39**. Choose a project checklist and **Upload 1 file**; its row turns into its link.
+5. Choose **Open Week 39** above the list to see the checklist in its folder.
 
 Moving a file preserves its individual share link. [Read the folders guide](./guide/folders).
 

@@ -128,7 +128,11 @@ test('search and screenshot dialogs keep keyboard focus and readable controls', 
     .click()
   await expect(page.locator('#localsearch-input')).toBeFocused()
   await page.locator('#localsearch-input').fill('webhook')
-  await expect(page.locator('.VPLocalSearchBox')).toContainText(/webhook/i)
+  // The first search downloads and builds the whole index (about 1 MB),
+  // which can take a shared CI runner longer than the default 5 seconds.
+  await expect(page.locator('.VPLocalSearchBox')).toContainText(/webhook/i, {
+    timeout: 20_000,
+  })
   await expect(
     page.locator('.VPLocalSearchBox .result:not(.selected) .excerpt').first()
   ).toHaveCSS('opacity', '1')

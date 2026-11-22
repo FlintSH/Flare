@@ -140,7 +140,9 @@ describe('preflight', () => {
       preflightRequest('/api/urls/abc123', 'DELETE', 'https://any.example')
     )
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
-    expect(response.headers.get('Access-Control-Allow-Methods')).toBe('DELETE')
+    expect(response.headers.get('Access-Control-Allow-Methods')).toBe(
+      'PATCH, DELETE'
+    )
     expect(response.headers.has('Vary')).toBe(false)
   })
 

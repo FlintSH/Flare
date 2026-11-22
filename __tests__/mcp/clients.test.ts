@@ -797,7 +797,7 @@ describe('permission presets', () => {
     expect(upload).not.toContain('account:write')
   })
 
-  it('opens 8, 13 and 28 tools to a role that allows everything', () => {
+  it('opens 8, 13 and 29 tools to a role that allows everything', () => {
     const tools = (id: string, can: () => boolean = () => true) => {
       const { scopes } = AGENT_PRESETS.find((preset) => preset.id === id)!
       return TOOL_NAMES.filter((name) => toolAllowed(name, { scopes, can }))
@@ -829,7 +829,7 @@ describe('permission presets', () => {
     expect(tools('all')).toEqual(
       TOOL_NAMES.slice(0, TOOL_NAMES.indexOf('list_invites'))
     )
-    expect(tools('all')).toHaveLength(28)
+    expect(tools('all')).toHaveLength(29)
     // The account tools are what Everything adds over the file scopes.
     const withoutAccount = TOOL_NAMES.filter((name) =>
       toolAllowed(name, {

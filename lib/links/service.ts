@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { nanoid } from 'nanoid'
 
 import { setAuditTarget } from '@/lib/audit'
+import { lockShortCode } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { pageWindow } from '@/lib/http/pagination'
@@ -36,11 +37,19 @@ function linkView<Link extends { createdAt: Date }>(
   return { ...link, createdAt: link.createdAt.toISOString() }
 }
 
-/** A new link under a free six-character code. */
+/** A custom ending someone else's link already uses, in any letter case. */
+const ENDING_TAKEN = 'That ending is already taken. Choose another.'
+
+/**
+ * A new link: under `code` when one is chosen, else under a free random
+ * six-character code.
+ */
 export async function createShortLink(
   userId: string,
-  targetUrl: string
+  targetUrl: string,
+  code?: string
 ): Promise<ShortLink> {
+  if (code) return createCustomLink(userId, targetUrl, code)
   for (let attempt = 1; ; attempt++) {
     try {
       return linkView(
@@ -51,12 +60,85 @@ export async function createShortLink(
       )
     } catch (error) {
       // A fresh id can't collide, so a unique conflict means the code is taken.
-      const codeTaken =
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      if (!codeTaken || attempt === CODE_ATTEMPTS) throw error
+      if (!uniqueConflict(error) || attempt === CODE_ATTEMPTS) throw error
     }
   }
+}
+
+const uniqueConflict = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  error.code === 'P2002'
+
+/**
+ * Codes are case-sensitive, so `Docs` and `docs` could both exist and pass
+ * for each other. A chosen ending is refused when any letter case of it is
+ * in use. The lock makes the check and the write one step for that ending,
+ * so two people choosing `Docs` and `docs` at once can't both get theirs.
+ */
+async function createCustomLink(
+  userId: string,
+  targetUrl: string,
+  code: string
+): Promise<ShortLink> {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await lockShortCode(tx, code)
+      const taken = await tx.shortenedUrl.findFirst({
+        where: { shortCode: { equals: code, mode: 'insensitive' } },
+        select: { id: true },
+      })
+      if (taken) throw new ShortLinkError(ENDING_TAKEN, 409)
+      return linkView(
+        await tx.shortenedUrl.create({
+          data: { shortCode: code, targetUrl, userId },
+          select: shortLinkSelect,
+        })
+      )
+    })
+  } catch (error) {
+    // A generated code can still match exactly.
+    if (uniqueConflict(error)) throw new ShortLinkError(ENDING_TAKEN, 409)
+    throw error
+  }
+}
+
+/**
+ * Sends the owner's link somewhere else. The code, and so every copy of the
+ * link already shared, stays; its clicks are kept.
+ */
+export async function updateOwnShortLink(
+  userId: string,
+  id: string,
+  targetUrl: string
+): Promise<ShortLink> {
+  await assertOwnLink(userId, id)
+  try {
+    return linkView(
+      await prisma.shortenedUrl.update({
+        where: { id },
+        data: { targetUrl },
+        select: shortLinkSelect,
+      })
+    )
+  } catch (error) {
+    // Deleted between the check and the write.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2025'
+    )
+      throw new ShortLinkError('URL not found', 404)
+    throw error
+  }
+}
+
+/** Another account's link is refused rather than reported missing. */
+async function assertOwnLink(userId: string, id: string) {
+  const link = await prisma.shortenedUrl.findUnique({
+    where: { id },
+    select: { userId: true },
+  })
+  if (!link) throw new ShortLinkError('URL not found', 404)
+  if (link.userId !== userId) throw new ShortLinkError('Unauthorized', 403)
 }
 
 /** The owner's links, newest first. */
@@ -71,12 +153,7 @@ export async function listOwnShortLinks(userId: string): Promise<ShortLink[]> {
 
 /** Another account's link is refused rather than reported missing. */
 export async function deleteOwnShortLink(userId: string, id: string) {
-  const link = await prisma.shortenedUrl.findUnique({
-    where: { id },
-    select: { userId: true },
-  })
-  if (!link) throw new ShortLinkError('URL not found', 404)
-  if (link.userId !== userId) throw new ShortLinkError('Unauthorized', 403)
+  await assertOwnLink(userId, id)
   await prisma.shortenedUrl.delete({ where: { id } })
 }
 

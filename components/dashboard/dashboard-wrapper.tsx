@@ -4,6 +4,7 @@ import { UserNav } from '@/components/dashboard/user-nav'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { PermissionGate } from '@/components/roles/permission-gate'
+import { UploadTraySync } from '@/components/upload/upload-tray-sync'
 
 interface DashboardWrapperProps {
   children: React.ReactNode
@@ -21,6 +22,7 @@ export function DashboardWrapper({
       <DynamicBackground />
       <PermissionGate permission="files.upload">
         <GlobalDropZone maxSize={maxUploadSize} />
+        <UploadTraySync />
       </PermissionGate>
 
       <a
