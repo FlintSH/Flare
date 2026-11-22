@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 import {
   AlertCircle,
@@ -110,6 +110,7 @@ export function UploadForm({
   const [ending, setEnding] = useState<readonly QueuedFile[] | null>(null)
   const rows = queued.length || !ending ? queued : ending
   const { toast } = useToast()
+  const router = useRouter()
   const [tips, setTips] = useState(initialTips)
 
   // Previews of finished files are this page's, so release them with it.
@@ -209,6 +210,8 @@ export function UploadForm({
         body: { hide: 'upload' },
         fallback: 'Your choice could not be saved.',
       })
+      // Going back to this page reuses what the server sent before.
+      router.refresh()
     } catch (failure) {
       if (!mounted.current) return
       setTips(shown)

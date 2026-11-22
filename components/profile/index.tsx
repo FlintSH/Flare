@@ -249,7 +249,7 @@ export function ProfileClient({
       <PreferencesPanel active={displayedSection === 'uploads'}>
         <div className="space-y-8">
           {allows(sessionUser, 'uploaderTools') && (
-            <Card id="upload-tools" className="scroll-mt-6">
+            <Card id="upload-tools" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Screenshot tools and scripts</CardTitle>
                 <CardDescription className="text-pretty">
@@ -271,7 +271,7 @@ export function ProfileClient({
             <ProfileManager embedded />
           </PermissionGate>
           <PermissionGate permission="profile.update">
-            <Card id="upload-defaults" className="scroll-mt-6">
+            <Card id="upload-defaults" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Account upload defaults</CardTitle>
                 <CardDescription>

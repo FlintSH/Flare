@@ -33,11 +33,12 @@ export default async function UploadPage({
   if (!saved) redirect(SIGN_IN_PATH)
   // Until hidden, the empty page points at what makes uploads automatic: a
   // profile, unless the account has one, and the screenshot tools.
-  const profiles = hasPermission(session.user, 'uploadProfiles.manage')
   const tips = {
-    profiles,
-    createProfile: profiles && !saved.has.profiles,
+    createProfile:
+      hasPermission(session.user, 'uploadProfiles.manage') &&
+      !saved.has.profiles,
     tools: allows(session.user, 'uploaderTools'),
+    defaultProfile: !!saved.profile,
   }
 
   return (

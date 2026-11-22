@@ -10,12 +10,12 @@ import { cn } from '@/lib/utils'
 
 /** Which tips the Upload page shows, before the account hides them. */
 export type UploadTipsShown = {
-  /** The role can choose upload profiles. */
-  profiles: boolean
-  /** It can, and the account has none yet. */
+  /** The role can choose upload profiles and the account has none yet. */
   createProfile: boolean
   /** The role can download the screenshot tools. */
   tools: boolean
+  /** The account has a default profile, which tool uploads follow. */
+  defaultProfile: boolean
 }
 
 /**
@@ -66,7 +66,8 @@ export function UploadTips({
           >
             Upload straight from ShareX, iTake, Flameshot, Spectacle or a
             terminal, with your{' '}
-            {shown.profiles ? 'default profile' : 'upload settings'} applied.
+            {shown.defaultProfile ? 'default profile' : 'upload settings'}{' '}
+            applied.
           </UploadTip>
         )}
       </ul>

@@ -83,7 +83,7 @@ The link ends in a URL-friendly version of the filename: `My Report.PDF` is shar
 Until you hide them, an empty Upload page shows up to two tips under the options row:
 
 - **Upload profiles** explains [profiles](./upload-profiles), and **Create a profile** opens **Profile → Uploads** at your profiles. It shows while your role has `uploadProfiles.manage` and you haven't saved a profile yet.
-- **Screenshot tools** explains that [ShareX, iTake, Flameshot, Spectacle and the Bash script](./screenshot-tools) upload with your default profile, and **Set up a tool** opens their downloads. It shows while your role has `files.upload` and `tokens.manage`.
+- **Screenshot tools** explains that [ShareX, iTake, Flameshot, Spectacle and the Bash script](./screenshot-tools) upload with your saved settings, including your default profile once you choose one, and **Set up a tool** opens their downloads. It shows while your role has `files.upload` and `tokens.manage`.
 
 <Screenshot src="/screenshots/workspace/upload-tips.png" alt="Upload page for a new account: under the drop area and the options row, a box with two tips, Upload profiles with a Create a profile link and Screenshot tools with a Set up a tool link, and a close button" caption="A new account's Upload page. The tips step aside while files are listed." />
 
