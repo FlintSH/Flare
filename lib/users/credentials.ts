@@ -29,11 +29,12 @@ interface CredentialChange {
 
 /**
  * What gives an account a new password or sign-in address. The email links
- * already sent are voided and pending security challenges deleted here. The
- * returned changes to its row also cancel a pending email change and sign
- * the account out everywhere, as revoking its sessions does; save them in
- * the caller's one update of the row, so the change is one write and one
- * audit event. Call with the row locked.
+ * already sent are voided, pending security challenges deleted and every
+ * agent the account signed in disconnected here, in the caller's
+ * transaction. The returned changes to its row also cancel a pending email
+ * change and sign the account out everywhere, as revoking its sessions does;
+ * save them in the caller's one update of the row, so the change is one
+ * write and one audit event. Call with the row locked.
  */
 export async function changeCredentials(
   tx: Prisma.TransactionClient,

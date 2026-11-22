@@ -1,15 +1,16 @@
 /**
  * The handbook's MCP pages state what the code decides: which tools exist,
- * what each needs, where each scope works, how each client is set up, and
- * what MCP covers of the HTTP API. These tests read the pages and compare
- * them to the tables the server itself reads, so the handbook cannot drift.
+ * what each needs, where each scope works, how each client is set up, how an
+ * agent signs in, and what MCP covers of the HTTP API. These tests read the
+ * pages and compare them to the tables the server itself reads, so the
+ * handbook cannot drift.
  *
  * A failure lists every row that is missing or wrong, written as the page
  * should have it, ready to paste.
  */
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { API_SCOPE_CATALOG } from '@/lib/integrations/bearer-routes'
 import {
@@ -27,6 +28,33 @@ import {
   LATER_AREAS,
   UNEXPOSED_REASONS,
 } from '@/lib/mcp/coverage'
+import { UPLOAD_HOLD_HOURS } from '@/lib/mcp/transfer'
+import {
+  ACCESS_TOKEN_PREFIX,
+  ACCESS_TOKEN_SECONDS,
+  CLIENT_ID_PREFIX,
+  CODE_SECONDS,
+  MAX_AUTHORIZE_QUERY,
+  MAX_CLIENT_NAME_LENGTH,
+  MAX_CONNECTIONS,
+  MAX_REDIRECT_URIS,
+  MAX_REDIRECT_URI_LENGTH,
+  MAX_STATE_LENGTH,
+  MAX_SUCCESSORS,
+  MAX_UNUSED_CLIENTS,
+  PENDING_SECONDS,
+  REFRESH_TOKEN_DAYS,
+  REFRESH_TOKEN_PREFIX,
+  REGISTRATIONS_PER_HOUR,
+  REGISTRATION_BODY_BYTES,
+  ROTATION_LEEWAY_SECONDS,
+  UNUSED_CLIENT_HOURS,
+} from '@/lib/oauth/constants'
+import {
+  authorizationServerMetadata,
+  bearerChallenge,
+  protectedResourceMetadata,
+} from '@/lib/oauth/urls'
 
 const page = (path: string) =>
   readFileSync(resolve(process.cwd(), 'docs/site', path), 'utf8')
@@ -34,10 +62,18 @@ const page = (path: string) =>
 const reference = page('api/mcp.md')
 const guide = page('guide/agents.md')
 const scopes = page('api/authentication.md')
+const administration = page('admin/agents.md')
 
 /** The address and token the handbook's examples use. */
-const EXAMPLE_URL = 'https://files.example.com/api/mcp'
+const EXAMPLE_ORIGIN = 'https://files.example.com'
+const EXAMPLE_URL = `${EXAMPLE_ORIGIN}/api/mcp`
 const EXAMPLE_TOKEN = 'flr_YOUR_TOKEN'
+/** What stands for a sign-in's access token, refresh token and client ID. */
+const EXAMPLE_SIGN_IN_SECRETS = [
+  `${ACCESS_TOKEN_PREFIX}YOUR_ACCESS_TOKEN`,
+  `${REFRESH_TOKEN_PREFIX}YOUR_REFRESH_TOKEN`,
+  `${CLIENT_ID_PREFIX}YOUR_CLIENT_ID`,
+]
 
 /** How the coverage table names each reason; the page explains each once. */
 const REASON_LABELS = {
@@ -299,6 +335,137 @@ describe('the MCP reference (docs/site/api/mcp.md)', () => {
   })
 })
 
+describe('agent sign-in in the reference (docs/site/api/mcp.md)', () => {
+  // Every address Flare publishes is built from NEXTAUTH_URL; the handbook
+  // writes them for the example instance.
+  const request = new Request(EXAMPLE_URL)
+  beforeAll(() => {
+    vi.stubEnv('NEXTAUTH_URL', EXAMPLE_ORIGIN)
+  })
+  afterAll(() => {
+    vi.unstubAllEnvs()
+  })
+
+  /** A metadata value as its table cell writes it: each string as code. */
+  const cell = (value: unknown) =>
+    (Array.isArray(value) ? value : [value])
+      .map((entry) => code(String(entry)))
+      .join(', ')
+
+  /**
+   * What a section's field table should hold for a metadata document, as
+   * rows that are missing or wrong, and the fields it lists that the
+   * document does not have.
+   */
+  function fieldProblems(heading: string, metadata: Record<string, unknown>) {
+    const rows = tableRows(reference, heading)
+    const problems = Object.entries(metadata)
+      .filter(
+        ([field, value]) =>
+          rows.find(([name]) => name === code(field))?.[1] !== cell(value)
+      )
+      .map(([field, value]) => markdownRow([code(field), cell(value)]))
+    for (const [name] of rows)
+      if (!named(name).some((field) => field in metadata))
+        problems.push(`${name} is listed but is not in the document.`)
+    return problems
+  }
+
+  it('documents every field of the protected resource metadata, with the value Flare answers', () => {
+    expect(
+      fieldProblems(
+        'Protected resource metadata',
+        protectedResourceMetadata(request)
+      )
+    ).toEqual([])
+  })
+
+  it('documents every field of the authorization server metadata, with the value Flare answers', () => {
+    expect(
+      fieldProblems(
+        'Authorization server metadata',
+        authorizationServerMetadata(request)
+      )
+    ).toEqual([])
+  })
+
+  it('shows the challenge a 401 carries, which is what starts a sign-in', () => {
+    expect(reference).toContain(`WWW-Authenticate: ${bearerChallenge(request)}`)
+    // The one sent when a token was presented and refused.
+    expect(reference).toContain(
+      `WWW-Authenticate: ${bearerChallenge(request, true)}`
+    )
+  })
+
+  it('states how long a started upload holds its URL', () => {
+    // Prettier pads table cells, so the row is matched by its words.
+    expect(reference).toMatch(
+      new RegExp(
+        `\\| Upload URL held once its upload starts +\\| ${UPLOAD_HOLD_HOURS} hours, or until the upload publishes a file or fails`
+      )
+    )
+    expect(reference).toContain(
+      `Flare holds its URL for up to ${UPLOAD_HOLD_HOURS} hours`
+    )
+  })
+
+  it('states every lifetime and limit of sign-in as the code holds it', () => {
+    const rows = tableRows(reference, 'Sign-in lifetimes and limits')
+    const expected: [what: string, value: string][] = [
+      ['Authorization code', `${CODE_SECONDS} seconds, single use`],
+      ['Access token', `${ACCESS_TOKEN_SECONDS / 3600} hour`],
+      [
+        'Refresh token',
+        `${REFRESH_TOKEN_DAYS} days from when it was issued, replaced on every use`,
+      ],
+      [
+        'Reuse of a rotated refresh token',
+        `Within ${ROTATION_LEEWAY_SECONDS} seconds, for at most ${MAX_SUCCESSORS} pairs`,
+      ],
+      [
+        'A request waiting for the person',
+        `${PENDING_SECONDS / 60} minutes, across the login page and on the consent screen`,
+      ],
+      ['Connected agents for each account', String(MAX_CONNECTIONS)],
+      [
+        'Client registrations',
+        // The wider limit for one address alone is ten times the first.
+        `${REGISTRATIONS_PER_HOUR} an hour for each client address and redirect host, ${REGISTRATIONS_PER_HOUR * 10} an hour for each address`,
+      ],
+      ['Registration body', `${REGISTRATION_BODY_BYTES / 1024} KB`],
+      [
+        'Redirect URIs in a registration',
+        `${MAX_REDIRECT_URIS}, of at most ${MAX_REDIRECT_URI_LENGTH} characters each`,
+      ],
+      ['Client name', `${MAX_CLIENT_NAME_LENGTH} characters`],
+      [
+        'A registration nobody approved',
+        `Removed after ${UNUSED_CLIENT_HOURS} hours, and the oldest beyond ${MAX_UNUSED_CLIENTS}`,
+      ],
+      [
+        'Authorize query',
+        `${MAX_AUTHORIZE_QUERY.toLocaleString('en-US')} characters, with ${code('state')} at most ${MAX_STATE_LENGTH}`,
+      ],
+    ]
+    expect(
+      expected
+        .filter(
+          ([what, value]) => rows.find(([name]) => name === what)?.[1] !== value
+        )
+        .map(markdownRow)
+    ).toEqual([])
+  })
+
+  it('names the token and client ID prefixes the code uses', () => {
+    for (const prefix of [
+      ACCESS_TOKEN_PREFIX,
+      REFRESH_TOKEN_PREFIX,
+      CLIENT_ID_PREFIX,
+    ])
+      expect(reference).toContain(code(prefix))
+  })
+})
+
 describe('the scope reference (docs/site/api/authentication.md)', () => {
   const WORKS_WITH = {
     'api,mcp': 'REST API and MCP',
@@ -329,44 +496,91 @@ describe('the scope reference (docs/site/api/authentication.md)', () => {
 })
 
 describe('the agents guide (docs/site/guide/agents.md)', () => {
-  it('names every client that cannot connect yet, in the section that says so', () => {
-    const waiting = AGENT_CLIENTS.filter(({ method }) => method === 'sign-in')
+  /** A client's own section: from its heading to the next heading. */
+  function section(label: string): string | undefined {
     const lines = guide.split('\n')
-    const start = lines.findIndex(
-      (line) =>
-        /^#{2,4} /.test(line) &&
-        waiting.every(({ label }) => line.includes(label))
+    const start = lines.findIndex((line) =>
+      new RegExp(`^### ${label}( clients)?$`).test(line)
     )
-    expect(start, 'a heading that names every such client').toBeGreaterThan(-1)
+    if (start < 0) return undefined
     const end = lines.findIndex(
       (line, index) => index > start && /^#{1,4} /.test(line)
     )
-    expect(lines.slice(start, end).join('\n')).toContain('cannot connect yet')
-  })
+    return lines.slice(start, end < 0 ? undefined : end).join('\n')
+  }
 
-  it('shows, for every client that connects with a token, exactly what Connect an agent shows', () => {
+  it('has a section for every client the dialog offers, with the snippets its sign-in steps show', () => {
     const missing: string[] = []
     for (const client of AGENT_CLIENTS) {
-      if (client.method !== 'token') continue
-      // Each client has its own section.
-      if (!new RegExp(`^### ${client.label}\\b`, 'm').test(guide))
+      const text = section(client.label)
+      if (text === undefined) {
         missing.push(`A "### ${client.label}" section`)
-      for (const snippet of client.setup(EXAMPLE_URL, EXAMPLE_TOKEN).snippets)
-        if (!guide.includes(snippet.code))
-          missing.push(`${client.label}, ${snippet.title}:\n${snippet.code}`)
+        continue
+      }
+      for (const snippet of client.signIn(EXAMPLE_URL).snippets)
+        if (!text.includes(snippet.code))
+          missing.push(
+            `${client.label}, signing in, ${snippet.title}:\n${snippet.code}`
+          )
     }
     expect(missing).toEqual([])
   })
 
-  it('never shows a one-click install link, which would carry a token', () => {
+  it('shows, for every client that can take a token, exactly what Use a token instead shows', () => {
+    const missing: string[] = []
     for (const client of AGENT_CLIENTS) {
       if (client.method !== 'token') continue
-      for (const link of client.setup(EXAMPLE_URL, EXAMPLE_TOKEN).links) {
+      const text = section(client.label) ?? ''
+      for (const snippet of client.setup(EXAMPLE_URL, EXAMPLE_TOKEN).snippets)
+        if (!text.includes(snippet.code))
+          missing.push(
+            `${client.label}, with a token, ${snippet.title}:\n${snippet.code}`
+          )
+    }
+    expect(missing).toEqual([])
+  })
+
+  it('says of every client that only signs in that it needs a public HTTPS address', () => {
+    const waiting = AGENT_CLIENTS.filter(({ method }) => method === 'sign-in')
+    expect(waiting.length).toBeGreaterThan(0)
+    for (const client of waiting)
+      expect(section(client.label), client.label).toContain(
+        'public HTTPS address'
+      )
+    // Sign-in shipped: no client is waiting for it any more.
+    expect(guide).not.toContain('cannot connect yet')
+  })
+
+  it('names every one-click install button and prints none of the links', () => {
+    for (const client of AGENT_CLIENTS) {
+      const links = [
+        ...client.signIn(EXAMPLE_URL).links,
+        // The link of a token setup carries the token.
+        ...(client.method === 'token'
+          ? client.setup(EXAMPLE_URL, EXAMPLE_TOKEN).links
+          : []),
+      ]
+      for (const link of links) {
         expect(guide).not.toContain(link.href)
         // The button is named, so readers know what to look for.
         expect(guide).toContain(link.label)
       }
     }
+  })
+
+  it('states the waits and limits of sign-in as the code holds them', () => {
+    for (const sentence of [
+      `A request waits ${PENDING_SECONDS / 60} minutes for you.`,
+      `open for more than ${PENDING_SECONDS / 60} minutes`,
+      `already has ${MAX_CONNECTIONS} connected agents`,
+      `not been used for ${REFRESH_TOKEN_DAYS} days`,
+      `within ${UNUSED_CLIENT_HOURS} hours`,
+      `register ${REGISTRATIONS_PER_HOUR} times an hour`,
+    ])
+      expect(guide).toContain(sentence)
+    expect(administration).toContain(
+      `${MAX_CONNECTIONS} agents signed in at once`
+    )
   })
 
   it('describes every preset as the dialog does, with the actions it includes', () => {
@@ -398,10 +612,18 @@ describe('the agents guide (docs/site/guide/agents.md)', () => {
 
 describe('placeholders', () => {
   it('uses the example address and token, never a real credential', () => {
-    for (const [name, text] of Object.entries({ reference, guide, scopes })) {
-      const tokens = text.match(/flr_[A-Za-z0-9_-]+/g) ?? []
+    const allowed = [EXAMPLE_TOKEN, ...EXAMPLE_SIGN_IN_SECRETS]
+    for (const [name, text] of Object.entries({
+      reference,
+      guide,
+      scopes,
+      administration,
+    })) {
+      // Named tokens, and the access tokens, refresh tokens and client IDs
+      // of a sign-in.
+      const secrets = text.match(/fl[racf]_[A-Za-z0-9_-]+/g) ?? []
       expect(
-        tokens.filter((token) => token !== EXAMPLE_TOKEN),
+        secrets.filter((secret) => !allowed.includes(secret)),
         name
       ).toEqual([])
     }

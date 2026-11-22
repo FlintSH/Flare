@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   token: vi.fn(),
   tokenUpdate: vi.fn(),
+  pair: vi.fn(),
+  connectionUpdate: vi.fn(),
   user: vi.fn(),
   everyone: vi.fn(),
   file: vi.fn(),
@@ -55,6 +57,8 @@ vi.mock('@/lib/auth', () => ({
 vi.mock('@/lib/database/prisma', () => ({
   prisma: {
     apiToken: { findUnique: mocks.token, update: mocks.tokenUpdate },
+    agentToken: { findUnique: mocks.pair },
+    agentConnection: { update: mocks.connectionUpdate },
     user: { findUnique: mocks.user },
     role: { findUnique: mocks.everyone },
     file: { findUnique: mocks.file },
@@ -82,6 +86,10 @@ vi.mock('@/lib/tags/manage', async (importOriginal) => ({
 
 const APP = 'https://flare.test'
 const ENDPOINT = `${APP}/api/mcp`
+/** What a 401 says: where a client signs in. It names no scope. */
+const CHALLENGE = `Bearer resource_metadata="${APP}/.well-known/oauth-protected-resource/api/mcp"`
+/** The same for a request whose bearer token was refused (RFC 6750). */
+const REFUSED_TOKEN = `Bearer error="invalid_token", resource_metadata="${APP}/.well-known/oauth-protected-resource/api/mcp"`
 const SITE = 'https://agent.example.com'
 
 const account = {
@@ -129,6 +137,63 @@ const TOKENS = new Map([
   ],
 ])
 
+/** A token pair from a browser sign-in, with the connection it belongs to. */
+const signedInPair = (
+  id: string,
+  scopes: string[],
+  pair: {
+    narrowed?: boolean
+    ceiling?: string[]
+    expiresAt?: Date
+    revokedAt?: Date | null
+  } = {}
+) => ({
+  id: `pair-${id}`,
+  connectionId: id,
+  accessExpiresAt: pair.expiresAt ?? new Date(Date.now() + 3_600_000),
+  narrowed: pair.narrowed ?? false,
+  scopes: pair.ceiling ?? [],
+  connection: {
+    id,
+    userId: account.id,
+    clientName: 'Claude Code (flare)',
+    scopes,
+    revokedAt: pair.revokedAt ?? null,
+    user: account,
+  },
+})
+const PAIRS = new Map([
+  [
+    hashApiToken('fla_SignedIn'),
+    signedInPair('connection-read', [
+      'files:read',
+      'files:content',
+      'urls:read',
+    ]),
+  ],
+  [
+    hashApiToken('fla_Narrowed'),
+    signedInPair(
+      'connection-read',
+      ['files:read', 'files:content', 'urls:read'],
+      {
+        narrowed: true,
+        ceiling: ['urls:read'],
+      }
+    ),
+  ],
+  [
+    hashApiToken('fla_Expired'),
+    signedInPair('connection-read', ['files:read'], {
+      expiresAt: new Date(Date.now() - 1000),
+    }),
+  ],
+  [
+    hashApiToken('fla_Disconnected'),
+    signedInPair('connection-gone', ['files:read'], { revokedAt: new Date() }),
+  ],
+])
+
 const events: Partial<AuditInput>[] = []
 let enabled = true
 
@@ -154,6 +219,11 @@ beforeEach(() => {
       TOKENS.get(where.hash) ?? null
   )
   mocks.tokenUpdate.mockResolvedValue({})
+  mocks.pair.mockImplementation(
+    async ({ where }: { where: { accessHash: string } }) =>
+      PAIRS.get(where.accessHash) ?? null
+  )
+  mocks.connectionUpdate.mockResolvedValue({})
   mocks.everyone.mockResolvedValue({
     id: 'everyone',
     name: 'Everyone',
@@ -687,39 +757,77 @@ describe('request size', () => {
 })
 
 describe('authentication', () => {
-  it.each<[string, Init]>([
-    ['no credential', { token: null }],
-    ['a token nobody issued', { token: 'flr_Unknown' }],
-    ['a named token without Agent access', { token: 'flr_Script' }],
-    ['the legacy upload token', { token: 'legacy-upload-token' }],
+  it.each<[string, Init, string]>([
+    ['no credential', { token: null }, CHALLENGE],
+    ['a token nobody issued', { token: 'flr_Unknown' }, REFUSED_TOKEN],
+    [
+      'a named token without Agent access',
+      { token: 'flr_Script' },
+      REFUSED_TOKEN,
+    ],
+    [
+      'the legacy upload token',
+      { token: 'legacy-upload-token' },
+      REFUSED_TOKEN,
+    ],
     [
       'only a browser session cookie',
       {
         token: null,
         headers: { cookie: 'next-auth.session-token=an-administrator' },
       },
+      CHALLENGE,
     ],
     [
+      // Not a bearer token, so there is none to call invalid.
       'another scheme',
       { token: null, headers: { authorization: 'Basic flr_ReadOnly' } },
+      CHALLENGE,
     ],
-  ])('answers %s with 401 and a Bearer challenge', async (_what, init) => {
-    // The legacy upload token would find the account if anything looked.
-    mocks.user.mockResolvedValue(account)
-    const response = await POST(request(toolCall('search_files'), init))
-    expect(response.status).toBe(401)
-    expect(response.headers.get('www-authenticate')).toBe(
-      'Bearer realm="Flare MCP"'
-    )
-    expect(response.headers.get('cache-control')).toBe('no-store')
-    expect(await response.json()).toEqual({
-      error: 'unauthorized',
-      error_description:
-        'Send an API token that has Agent access as "Authorization: Bearer <token>". Create one in Flare under Profile, Integrations.',
-    })
-    expect(mocks.fileListPage).not.toHaveBeenCalled()
-    expect(mocks.session).not.toHaveBeenCalled()
-    expect(mocks.user).not.toHaveBeenCalled()
+    [
+      'the Bearer scheme with nothing after it',
+      { token: null, headers: { authorization: 'Bearer ' } },
+      CHALLENGE,
+    ],
+  ])(
+    'answers %s with 401 and a Bearer challenge',
+    async (_what, init, challenge) => {
+      // The legacy upload token would find the account if anything looked.
+      mocks.user.mockResolvedValue(account)
+      const response = await POST(request(toolCall('search_files'), init))
+      expect(response.status).toBe(401)
+      expect(response.headers.get('www-authenticate')).toBe(challenge)
+      expect(response.headers.get('cache-control')).toBe('no-store')
+      expect(await response.json()).toEqual({
+        error: 'unauthorized',
+        error_description:
+          'Sign in from your client, or send an API token that has Agent access as "Authorization: Bearer <token>". Connect an agent in Flare under Profile, Integrations.',
+      })
+      expect(mocks.fileListPage).not.toHaveBeenCalled()
+      expect(mocks.session).not.toHaveBeenCalled()
+      expect(mocks.user).not.toHaveBeenCalled()
+    }
+  )
+
+  it('says invalid_token only when a bearer token came with the request', async () => {
+    const challengeOf = async (authorization?: string) =>
+      (
+        await POST(
+          request(rpc('tools/list'), {
+            token: null,
+            headers: authorization ? { authorization } : {},
+          })
+        )
+      ).headers.get('www-authenticate')
+    expect(await challengeOf()).toBe(CHALLENGE)
+    for (const header of [
+      'Bearer flr_Unknown',
+      'bearer fla_Unknown',
+      'BEARER x',
+    ])
+      expect(await challengeOf(header)).toBe(REFUSED_TOKEN)
+    for (const header of ['Basic x', 'Bearer', 'Bearerx', 'Token x'])
+      expect(await challengeOf(header)).toBe(CHALLENGE)
   })
 
   it('serves the tools of the token, not of a session on the same request', async () => {
@@ -1058,9 +1166,7 @@ describe('audit', () => {
       async (name) => {
         const response = await POST(request(toolCall(name), { token: null }))
         expect(response.status).toBe(401)
-        expect(response.headers.get('www-authenticate')).toBe(
-          'Bearer realm="Flare MCP"'
-        )
+        expect(response.headers.get('www-authenticate')).toBe(CHALLENGE)
         expect(await recorded()).toEqual([
           expect.objectContaining({
             action: 'mcp.request',
@@ -1539,9 +1645,7 @@ describe('answers to an allowed origin', () => {
     expect(response.headers.get('access-control-expose-headers')).toContain(
       'WWW-Authenticate'
     )
-    expect(response.headers.get('www-authenticate')).toBe(
-      'Bearer realm="Flare MCP"'
-    )
+    expect(response.headers.get('www-authenticate')).toBe(CHALLENGE)
   })
 
   it('answers * when every origin is allowed', async () => {
@@ -1563,5 +1667,104 @@ describe('answers to an allowed origin', () => {
     const response = await POST(request(rpc('tools/list'), { origin: APP }))
     expect(response.status).toBe(200)
     expect(response.headers.has('access-control-allow-origin')).toBe(false)
+  })
+})
+
+describe('an agent that signed in through the browser', () => {
+  const toolNames = async (token: string) => {
+    const { result } = await message(
+      await POST(request(rpc('tools/list'), { token }))
+    )
+    return result.tools.map((tool: { name: string }) => tool.name)
+  }
+
+  it('lists the tools its connection was granted', async () => {
+    expect(await toolNames('fla_SignedIn')).toEqual([
+      'get_account',
+      'search_files',
+      'get_file',
+      'read_file',
+      'list_folders',
+      'list_tags',
+      'list_short_links',
+    ])
+    expect(mocks.pair).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { accessHash: hashApiToken('fla_SignedIn') },
+      })
+    )
+    // Not a named token, and never a session.
+    expect(mocks.token).not.toHaveBeenCalled()
+    expect(mocks.session).not.toHaveBeenCalled()
+  })
+
+  it('lists only what a pair narrowed at refresh still holds', async () => {
+    expect(await toolNames('fla_Narrowed')).toEqual([
+      'get_account',
+      'list_short_links',
+    ])
+  })
+
+  it.each(ERAS)('calls a tool as a %s client', async (era) => {
+    const answer = await message(
+      await POST(callAs(era, 'search_files', {}, { token: 'fla_SignedIn' }))
+    )
+    expect(answer.result.structuredContent).toEqual({ files: [], total: 0 })
+    expect(mocks.fileListPage).toHaveBeenCalledTimes(1)
+  })
+
+  it('is told what a call lacks when its pair was narrowed below it', async () => {
+    const answer = await message(
+      await POST(request(toolCall('search_files'), { token: 'fla_Narrowed' }))
+    )
+    expect(answer.result.isError).toBe(true)
+    expect(answer.result.content[0].text).toMatch(
+      /was not granted "Read files" \(files:read\)/
+    )
+    expect(mocks.fileListPage).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['an expired access token', 'fla_Expired'],
+    ['the token of a disconnected agent', 'fla_Disconnected'],
+    ['an access token nobody issued', 'fla_Unknown'],
+    ['a refresh token', 'flf_SignedIn'],
+    ['a client_id', 'flc_SignedIn'],
+  ])('answers %s with 401 and where to sign in', async (_what, token) => {
+    const response = await POST(request(toolCall('search_files'), { token }))
+    expect(response.status).toBe(401)
+    // A token came and was refused: its client should refresh or sign in.
+    expect(response.headers.get('www-authenticate')).toBe(REFUSED_TOKEN)
+    expect(mocks.fileListPage).not.toHaveBeenCalled()
+    expect(mocks.session).not.toHaveBeenCalled()
+    expect(mocks.connectionUpdate).not.toHaveBeenCalled()
+  })
+
+  it('records a call under the account and the connection', async () => {
+    await (
+      await POST(request(toolCall('search_files'), { token: 'fla_SignedIn' }))
+    ).text()
+    expect(await recorded()).toEqual([
+      expect.objectContaining({
+        action: 'mcp.search_files',
+        category: 'mcp',
+        outcome: 'success',
+        actorId: 'user-1',
+        actorName: 'Alex',
+        details: expect.objectContaining({
+          tokenId: 'connection:connection-read',
+        }),
+      }),
+    ])
+    expect(JSON.stringify(events)).not.toContain('fla_SignedIn')
+  })
+
+  it('answers 404 while the MCP server is off, whatever the token', async () => {
+    enabled = false
+    const response = await POST(
+      request(rpc('tools/list'), { token: 'fla_SignedIn' })
+    )
+    expect(response.status).toBe(404)
+    expect(mocks.pair).not.toHaveBeenCalled()
   })
 })

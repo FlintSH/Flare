@@ -43,4 +43,6 @@ export const PUBLIC_PATHS = [
   '/auth/reset-password',
   '/auth/verify-email',
   '/s/folders/',
+  // The metadata documents an MCP client reads before anyone has signed in.
+  '/.well-known/',
 ]

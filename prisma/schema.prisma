@@ -56,6 +56,8 @@ model User {
   uploadProfiles              UploadProfile[]
   apiTokens                   ApiToken[]
   agentTransfers              AgentTransfer[]
+  oauthCodes                  OAuthCode[]
+  agentConnections            AgentConnection[]
   webhooks                    Webhook[]
 
   @@index([inviteId])
@@ -366,7 +368,7 @@ model AgentTransfer {
   secretHash String    @unique
   userId     String
   user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  // The credential it was made for, such as `token:<id>`.
+  // The credential it was made for: `token:<id>` or `connection:<id>`.
   credential String
   // `download` or `upload`.
   kind       String
@@ -380,6 +382,98 @@ model AgentTransfer {
 
   @@index([userId, credential])
   @@index([expiresAt])
+}
+
+// An app that registered itself to sign people in (OAuth dynamic client
+// registration). Its name and redirect addresses are what it claimed, not a
+// verified identity. Every client is public: there is no client secret.
+model OAuthClient {
+  // The `client_id` it was given.
+  id           String            @id
+  name         String
+  redirectUris String[]
+  createdAt    DateTime          @default(now())
+  // Set the first time someone approves it. Registrations nobody used are
+  // removed after a day.
+  usedAt       DateTime?
+  codes        OAuthCode[]
+  connections  AgentConnection[]
+
+  @@index([usedAt, createdAt])
+}
+
+// An authorization code: what a person approved, waiting 60 seconds for the
+// client to redeem it once. Only a digest of the code is stored.
+model OAuthCode {
+  hash           String      @id
+  clientId       String
+  client         OAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // The redirect address as the client sent it, which redeeming must repeat.
+  redirectUri    String
+  codeChallenge  String
+  resource       String
+  scopes         String[]
+  // The account's session version when the person approved. A code is good
+  // only while the account is still on it: signing out everywhere moves on.
+  sessionVersion Int
+  expiresAt      DateTime
+  usedAt         DateTime?
+  // The connection redeeming it made, revoked if the code is presented again.
+  connectionId   String?
+  createdAt      DateTime    @default(now())
+
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// An agent a person signed in through the browser: the family every token
+// pair of that sign-in belongs to. `scopes` is what the person granted and
+// can edit; revoking the row ends every pair at once.
+model AgentConnection {
+  id            String       @id @default(cuid())
+  userId        String
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId      String
+  client        OAuthClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // The client's name when the person approved it.
+  clientName    String
+  // Where the sign-in sent the browser back to.
+  redirectUri   String
+  scopes        String[]
+  createdAt     DateTime     @default(now())
+  lastUsedAt    DateTime?
+  revokedAt     DateTime?
+  revokedReason String?
+  tokens        AgentToken[]
+
+  @@index([userId])
+  @@index([clientId])
+}
+
+// One access token and the refresh token issued with it, as digests. A
+// refresh token is used once: `rotatedAt` marks it, and its successors name
+// it as `parentId`. `narrowed` means `scopes` is this pair's own ceiling;
+// otherwise the connection's scopes apply as they are.
+model AgentToken {
+  id               String          @id @default(cuid())
+  connectionId     String
+  connection       AgentConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  accessHash       String          @unique
+  accessExpiresAt  DateTime
+  refreshHash      String          @unique
+  refreshExpiresAt DateTime
+  narrowed         Boolean         @default(false)
+  scopes           String[]
+  rotatedAt        DateTime?
+  parentId         String?
+  createdAt        DateTime        @default(now())
+
+  @@index([connectionId])
+  @@index([parentId])
+  @@index([refreshExpiresAt])
 }
 
 model Webhook {

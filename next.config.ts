@@ -51,6 +51,24 @@ const nextConfig: NextConfig = {
           { key: 'Cache-Control', value: 'no-store' },
         ],
       },
+      // The sign-in endpoint answers refusals as pages of its own; no other
+      // page, Flare's included, may frame them or the consent screen.
+      {
+        source: '/api/oauth/authorize/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
+      {
+        source: '/api/oauth/authorize',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Referrer-Policy', value: 'no-referrer' },
+          { key: 'Cache-Control', value: 'no-store' },
+        ],
+      },
       // A transfer URL is a short-lived bearer link: it must never travel in
       // a Referer header.
       {

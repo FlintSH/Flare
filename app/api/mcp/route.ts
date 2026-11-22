@@ -5,6 +5,7 @@ import { authenticateAgent } from '@/lib/mcp/auth'
 import { TOOL_CATALOG, type ToolName } from '@/lib/mcp/catalog'
 import { type McpRequestExtra, mcpHandler } from '@/lib/mcp/server'
 import { mcpEnabled, mcpNotFound } from '@/lib/mcp/settings'
+import { bearerChallenge } from '@/lib/oauth/urls'
 import { publicOrigin } from '@/lib/security/public-origin'
 
 export const runtime = 'nodejs'
@@ -144,9 +145,17 @@ async function serve(request: Request): Promise<Response> {
           {
             error: 'unauthorized',
             error_description:
-              'Send an API token that has Agent access as "Authorization: Bearer <token>". Create one in Flare under Profile, Integrations.',
+              'Sign in from your client, or send an API token that has Agent access as "Authorization: Bearer <token>". Connect an agent in Flare under Profile, Integrations.',
           },
-          { 'WWW-Authenticate': 'Bearer realm="Flare MCP"' }
+          // Where to sign in, and whether a token came with the request:
+          // one that was refused is named as such, so its client refreshes
+          // or signs in again.
+          {
+            'WWW-Authenticate': bearerChallenge(
+              request,
+              /^Bearer +\S/i.test(request.headers.get('authorization') ?? '')
+            ),
+          }
         )
       }
       const answer = await mcpHandler().fetch(

@@ -184,6 +184,11 @@ export async function publishPreparedUpload(input: PreparedUpload) {
       tx
     )
     if (user.apiToken) {
+      // The token's row is held to the commit, so revoking it either
+      // finished before this read, and is seen by it, or waits until the
+      // file is published. Reading alone would let a revocation commit in
+      // between, and the file after it.
+      await tx.$queryRaw`SELECT "id" FROM "ApiToken" WHERE "id" = ${user.apiToken.id} FOR SHARE`
       const token = await tx.apiToken.findUnique({
         where: { id: user.apiToken.id },
       })

@@ -61,6 +61,7 @@ import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
 
 import { AgentsCard } from './agents-card'
+import type { AgentConnection } from './connected-agents'
 import { ScopePicker } from './scope-picker'
 import {
   DEFAULT_TOKEN_LIFETIME,
@@ -100,6 +101,8 @@ type Snapshot = {
    * address this page was opened at. Sent to accounts that manage tokens.
    */
   mcp?: { enabled: boolean; url: string | null }
+  /** The agents that signed in through the browser. Sent with `mcp`. */
+  connections?: AgentConnection[]
 }
 const deliveryTone = (status: string) =>
   status === 'failed'
@@ -347,14 +350,25 @@ export function IntegrationsPanel({
           </Button>
         </div>
       )}
-      {/* A connected agent is a token, so the card sits above the token list
-          its connections appear in. */}
+      {/* An agent connected with a token is a token, so the card sits above
+          the token list those appear in. */}
       {mcpOn && data?.mcp && (
         <PermissionGate permission="tokens.manage">
           <AgentsCard
             url={data.mcp.url ?? `${window.location.origin}/api/mcp`}
+            connections={data.connections ?? []}
             disabled={busy}
             onConnected={() => void refresh()}
+            onDisconnect={(connection) =>
+              void run(
+                { action: 'disconnect-agent', id: connection.id },
+                'Agent disconnected.'
+              )
+            }
+            onSaved={() => {
+              setNotice('Permissions saved.')
+              void refresh()
+            }}
           />
         </PermissionGate>
       )}

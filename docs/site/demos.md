@@ -378,20 +378,21 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 #### Connect an agent
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Connect an agent: silent Flare recording with the token blurred" :poster="withBase('/screenshots/agents/connect-agent-poster.webp')" :src="withBase('/demos/connect-agent.webm')">Your browser does not support this video. Follow the transcript below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Connect an agent by signing in: 39-second silent Flare recording" :poster="withBase('/screenshots/agents/connect-agent-poster.webp')" :src="withBase('/demos/connect-agent.webm')">Your browser does not support this video. Follow the transcript below.</video>
 
 <details class="demo-transcript">
 <summary>Transcript</summary>
 
-1. As the demonstration account **Alex**, open **Profile → Integrations**. The **Agents** card shows the **Server URL** of this local instance. Choose **Connect an agent**.
-2. **Claude Code** is selected under **Client**. Under **Allowed actions**, choose **Read only** in place of **Read and upload**.
-3. Change **Connection name** to **Claude Code on my laptop** and **Expires after** to **30 days**.
-4. Choose **Create token**. **Connect Claude Code** shows two steps: the `claude mcp add` command, whose token is blurred in this recording, and `claude mcp list`. Copy the first command; its button shows a check mark.
-5. Open **Other ways to set it up**. It offers a `.mcp.json` file that reads the token from `FLARE_TOKEN`, the command that sets that variable, and the token on its own. Both copies of the token are blurred.
-6. Choose **Done**. Under **API tokens**, **Claude Code on my laptop** is listed as **Not used yet** with its expiry date and the chips **Agent access**, **Read files**, **Read file contents**, and **Read short links**.
-7. Choose **Revoke** on that token. It now reads **Revoked** and has no button: an agent using it would be refused on its next call.
+1. As the demonstration account **Alex**, open **Profile → Integrations**. The **Agents** card shows the **Server URL** of this local instance and, under **Connected agents**, one agent that signed in earlier: **Claude Code (flare)**. Choose **Connect an agent**.
+2. The dialog opens on the steps for **Claude Code**. Choose **Codex** under **Client**. Its two steps appear: the command `codex mcp add flare --url http://localhost:3198/api/mcp`, and `codex mcp login flare` in case Codex does not start the sign-in itself. Copy the first command; its button shows a check mark. Choose **Done**.
+3. Off screen, the Codex CLI runs the copied command in a terminal and opens the browser at Flare. The recording continues in the browser, which is already signed in as Alex.
+4. Flare's **Connect an agent** screen says **Only allow a connection you started yourself.** and shows **Agent** Codex, **Returns to** this device, and **Account** Alex. **Read and upload** is selected under **Allowed actions**. Choose **Read only**, then **Allow**.
+5. The browser returns to Codex, whose own page reads `Authentication complete. You may close this window.` In its terminal, Codex prints `Successfully logged in.`
+6. Open **Profile → Integrations** again. **Codex** is now listed under **Connected agents** as a local app that is **Not used yet**, with the chips **Read files**, **Read file contents**, and **Read short links**, beside **Claude Code (flare)**.
+7. Choose **Edit permissions** on Codex. The dialog shows **Read only** selected and the note that a removed permission applies on the agent's next call and an added one once the client reloads its tools. Choose **Read and upload**, then **Save**. **Permissions saved.** appears, and Codex gains the **Upload files** chip.
+8. Choose **Disconnect** on Codex. **Agent disconnected.** appears and Codex is gone from the list; **Claude Code (flare)** stays.
 
-This recording creates and revokes a real token on a disposable instance. It shows Flare's side only, not a client running the command. [Follow the agents guide](./guide/agents).
+This recording is a real sign-in of Codex CLI 0.169.0 on a disposable instance: the registration, the consent, the tokens, the edit, and the disconnect all happened as shown. The terminal that ran Codex is not in the picture, and no token appears at any point, because signing in puts none on screen. [Follow the agents guide](./guide/agents).
 
 </details>
 

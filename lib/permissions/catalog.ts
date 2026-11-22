@@ -101,7 +101,7 @@ export const PERMISSION_GROUPS = [
         key: 'tokens.manage',
         label: 'Manage API tokens',
         description:
-          'Create and revoke named API tokens, including the ones agents connect with, and rotate your legacy upload token. Tokens never exceed your current role permissions.',
+          'Create and revoke named API tokens, sign agents in to your account, and rotate your legacy upload token. Tokens and agents never exceed your current role permissions.',
       },
       {
         key: 'webhooks.manage',

@@ -720,10 +720,15 @@ test('agent guide, reference, administrator page, captures, and recording are di
       './guide/agents.html',
       [
         'connect-dialog',
+        'signin-login',
+        'consent',
+        'connect-token',
         'connect-steps',
+        'connect-claude',
         'connect-unavailable',
         'connect-custom',
         'profile-agents-card',
+        'edit-permissions',
         'token-agent-access',
       ],
     ],
@@ -742,16 +747,21 @@ test('agent guide, reference, administrator page, captures, and recording are di
         .toBeGreaterThan(0)
     }
   }
-  // The phone capture sits in a section that starts closed.
+  // The phone captures sit in sections that start closed.
   await page.goto('./guide/agents.html')
-  await page.getByText('The same dialog on a phone').click()
-  const phone = page.locator(
-    '.screenshot-button img[src$="agents/connect-dialog-mobile.webp"]'
-  )
-  await expect(phone).toBeVisible()
-  await expect
-    .poll(() => phone.evaluate((image) => image.naturalWidth))
-    .toBeGreaterThan(0)
+  for (const [summary, name] of [
+    ['The same dialog on a phone', 'connect-dialog-mobile'],
+    ['The same screen on a phone', 'consent-mobile'],
+  ]) {
+    await page.getByText(summary).click()
+    const phone = page.locator(
+      `.screenshot-button img[src$="agents/${name}.webp"]`
+    )
+    await expect(phone).toBeVisible()
+    await expect
+      .poll(() => phone.evaluate((image) => image.naturalWidth))
+      .toBeGreaterThan(0)
+  }
   await page.goto('./demos.html')
   const video = page.locator('video[src$="connect-agent.webm"]')
   await expect(video).toHaveAttribute('preload', 'none')

@@ -1118,7 +1118,7 @@ describe('create_upload_url', () => {
   it('stops at the number of URLs one connection may have waiting', async () => {
     mocks.countTransfers.mockResolvedValue(MAX_OUTSTANDING_TRANSFERS)
     await expect(call('create_upload_url', {})).rejects.toThrow(
-      `This connection already has ${MAX_OUTSTANDING_TRANSFERS} upload URLs waiting. Use them, or wait a few minutes for them to expire.`
+      `This connection already has ${MAX_OUTSTANDING_TRANSFERS} upload URLs waiting. Use them, or wait: one that was never used expires 15 minutes after it was made, and one whose upload never finished after 24 hours.`
     )
     expect(mocks.createTransfer).not.toHaveBeenCalled()
     // Upload URLs are counted on their own, apart from download links.

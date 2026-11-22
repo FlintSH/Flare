@@ -26,9 +26,15 @@ export type AuthenticatedUser = {
   permissions: string[]
   roles: RoleSummary[]
   randomizeFileUrls: boolean
-  /** The browser session cookie, a named token or the legacy upload token. */
-  credential: 'session' | 'token' | 'upload-token'
+  /**
+   * The browser session cookie, a named token, the legacy upload token, or
+   * an agent that signed in through the browser. The last one exists only on
+   * the MCP endpoint: nothing here ever answers it.
+   */
+  credential: 'session' | 'token' | 'upload-token' | 'agent'
   apiToken?: { id: string; scopes: string[]; profileId: string | null }
+  /** The connection an agent credential belongs to, and what this request may do with it. */
+  agentConnection?: { id: string; scopes: string[] }
 }
 
 export async function getAuthenticatedUser(

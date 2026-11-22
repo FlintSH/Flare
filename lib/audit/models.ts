@@ -190,6 +190,22 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
     target: 'passkey',
     fields: ['id', 'name', 'userId'],
   },
+  // An agent signed in through the browser: connected, permissions edited,
+  // disconnected or revoked. Its tokens never enter the log.
+  AgentConnection: {
+    category: 'authentication',
+    target: 'agent_connection',
+    fields: [
+      'id',
+      'clientName',
+      'clientId',
+      'userId',
+      'scopes',
+      'revokedAt',
+      'revokedReason',
+    ],
+    name: (row) => row.clientName,
+  },
   // Not audited. Credentials and sign-in challenges stay out of the log, and
   // rate limits are counters. Sign-ins, sessions, storage cleanup and file
   // expiry jobs record their own events. Nothing writes event handlers any
@@ -210,4 +226,10 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
   VideoFrame: null,
   // Short-lived transfer URLs; the request that makes or uses one is audited.
   AgentTransfer: null,
+  // Agent sign-in. A registration is recorded by the request that made it,
+  // and codes and token pairs are credentials: only their connection is
+  // audited, above.
+  OAuthClient: null,
+  OAuthCode: null,
+  AgentToken: null,
 }

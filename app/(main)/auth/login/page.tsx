@@ -1,13 +1,18 @@
+import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
+
+import { Bot } from 'lucide-react'
 
 import { AuthShell } from '@/components/auth/auth-shell'
 import { LoginForm } from '@/components/auth/login-form'
 import { OidcAutoRedirect } from '@/components/auth/oidc-auto-redirect'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 
 import { isLocalSignIn } from '@/lib/auth/sign-in'
 import { getConfig } from '@/lib/config'
 import { isOidcProviderConfigured } from '@/lib/config/oidc'
 import { getEmailCapabilities } from '@/lib/email/config'
+import { PENDING_COOKIE } from '@/lib/oauth/constants'
 import { SETUP_PATH } from '@/lib/setup/navigation'
 import { pageSetupStatus } from '@/lib/setup/status'
 
@@ -31,6 +36,8 @@ export default async function LoginPage({
     pageSetupStatus(),
   ])
   if (setupComplete === false) redirect(SETUP_PATH)
+  // An agent's sign-in sent the browser here and carries on after this one.
+  const agentWaiting = (await cookies()).get(PENDING_COOKIE)?.value === '1'
   const registrationsEnabled = config.settings.general.registrations.enabled
   const oidc = config.settings.general.oidc
   const oidcConfigured = isOidcProviderConfigured(oidc)
@@ -52,6 +59,14 @@ export default async function LoginPage({
           : 'Sign in to your account.'
       }
     >
+      {agentWaiting && (
+        <Alert variant="info" role="status" className="mb-4">
+          <Bot aria-hidden="true" />
+          <AlertDescription>
+            Sign in to connect an agent to this account.
+          </AlertDescription>
+        </Alert>
+      )}
       {oidcAutoRedirect ? (
         <OidcAutoRedirect
           buttonText={oidc.buttonText}

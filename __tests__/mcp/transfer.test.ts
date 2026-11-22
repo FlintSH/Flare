@@ -113,6 +113,27 @@ vi.mock('@/lib/database/prisma', () => {
   return {
     prisma: {
       agentTransfer,
+      // The periodic sweep, answered from memory: expired rows in id order,
+      // up to the batch it asks for. Nobody holds a row here, so it passes
+      // over none; PostgreSQL answers for that in the database suite.
+      $executeRaw: async (
+        statement: TemplateStringsArray,
+        now: Date,
+        batch: number
+      ) => {
+        // Only transfer URLs are kept here; the sign-in sweep that runs
+        // after this one finds no tables of its own, as before.
+        if (!statement.join('?').includes('DELETE FROM "AgentTransfer"'))
+          throw new Error('No such table here')
+        table.calls.push('sweep')
+        if (table.failing) throw new Error('Database unavailable')
+        const gone = table.rows
+          .filter((row) => row.expiresAt <= now)
+          .sort((left, right) => left.id.localeCompare(right.id))
+          .slice(0, batch)
+        table.rows = table.rows.filter((row) => !gone.includes(row))
+        return gone.length
+      },
       $transaction: async (run: (tx: unknown) => Promise<unknown>) => {
         let release = () => {}
         const tx = {
@@ -272,7 +293,7 @@ describe('making a transfer URL', () => {
     await expect(
       createUploadUrl(principal(), ORIGIN, { options: {} })
     ).rejects.toThrow(
-      `This connection already has ${MAX_OUTSTANDING_TRANSFERS} upload URLs waiting. Use them, or wait a few minutes for them to expire.`
+      `This connection already has ${MAX_OUTSTANDING_TRANSFERS} upload URLs waiting. Use them, or wait: one that was never used expires 15 minutes after it was made, and one whose upload never finished after 24 hours.`
     )
     expect(table.rows).toHaveLength(MAX_OUTSTANDING_TRANSFERS)
     expect(table.calls).not.toContain('create')
@@ -550,11 +571,11 @@ describe('the cleanup worker', () => {
     await vi.advanceTimersByTimeAsync(15 * 60_000 - 1)
     expect(table.calls).toEqual([])
     await vi.advanceTimersByTimeAsync(1)
-    expect(table.calls).toEqual(['deleteMany'])
+    expect(table.calls).toEqual(['sweep'])
     expect(table.rows).toEqual([live, soon])
     await vi.advanceTimersByTimeAsync(15 * 60_000)
     // One sweep per interval: starting it twice did not double it.
-    expect(table.calls).toEqual(['deleteMany', 'deleteMany'])
+    expect(table.calls).toEqual(['sweep', 'sweep'])
     expect(table.rows).toEqual([live])
   })
 

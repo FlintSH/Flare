@@ -18,6 +18,7 @@ import {
   releaseUpload,
   uploadOf,
 } from '@/lib/mcp/transfer'
+import { connectionHolds } from '@/lib/oauth/connections'
 import { uploadLimiter } from '@/lib/security/rate-limit'
 import { directUpload } from '@/lib/uploads/direct'
 import { uploadRoutes } from '@/lib/uploads/http'
@@ -118,28 +119,47 @@ export const GET = whileOn(
 
 /**
  * The last check on an upload, in the transaction that publishes it: the
- * server is still on, and the token is still usable and still holds what the
- * URL needs. The upload reads the account's role again itself. The URL is
- * removed in the same transaction, so it publishes one file and no more.
+ * server is still on, the credential the URL was made for is still usable
+ * and still holds what the URL needs, and the URL itself is still there.
+ *
+ * The credential is read under a lock that lasts to the commit. For an agent
+ * that signed in, `connectionHolds` takes its connection's row; for a named
+ * token, the upload has already taken the token's row. Disconnecting,
+ * revoking or editing either waits for this file or is seen here: a file is
+ * never published after its credential's end has committed. The upload reads
+ * the account's role again itself.
+ *
+ * The URL is removed in the same transaction, so it publishes one file and
+ * no more. One that is already gone, taken with its connection or used by
+ * another publication, publishes nothing.
  */
 function publishCheck(transfer: Transfer, principal: AgentPrincipal) {
-  const needed = [MCP_SCOPE, ...TOOL_CATALOG.create_upload_url.scopes]
-  return async (tx: Prisma.TransactionClient) => {
+  const scopes = TOOL_CATALOG.create_upload_url.scopes
+  const needed = [MCP_SCOPE, ...scopes]
+  const connectionId = principal.user.agentConnection?.id
+  /** Whether the credential, as the transaction holds it, may still upload. */
+  const stillAllowed = async (tx: Prisma.TransactionClient) => {
+    if (connectionId) return connectionHolds(tx, connectionId, scopes)
     const tokenId = principal.user.apiToken?.id
     const token = tokenId
       ? await tx.apiToken.findUnique({ where: { id: tokenId } })
       : null
+    return Boolean(
+      token &&
+      tokenUsable(token) &&
+      needed.every((scope) => token.scopes.includes(scope))
+    )
+  }
+  return async (tx: Prisma.TransactionClient) => {
     if (
-      !token ||
-      !tokenUsable(token) ||
-      !needed.every((scope) => token.scopes.includes(scope)) ||
-      !(await readConfig(tx)).settings.general.mcp.enabled
+      !(await stillAllowed(tx)) ||
+      !(await readConfig(tx)).settings.general.mcp.enabled ||
+      !(await consumeUpload(tx, transfer.id))
     )
       throw new HttpError(
         403,
         'This upload URL may no longer be used: its connection lost upload access, or the MCP server was turned off.'
       )
-    await consumeUpload(tx, transfer.id)
   }
 }
 
