@@ -208,4 +208,6 @@ export const auditedModels: Record<Prisma.ModelName, AuditedModel | null> = {
   EventHandler: null,
   AuditEvent: null,
   VideoFrame: null,
+  // Short-lived transfer URLs; the request that makes or uses one is audited.
+  AgentTransfer: null,
 }

@@ -95,6 +95,7 @@ jobs:
           FLARE_ARCHIVE_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_archive_test_ci
           FLARE_INVITES_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_invites_test_ci
           FLARE_EXPIRY_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_expiry_test
+          FLARE_MCP_DATABASE_URL: postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_mcp_test
         run: |
           ready=false
           for attempt in $(seq 1 90); do
@@ -113,7 +114,7 @@ jobs:
           # two seconds.
           createdb -h 127.0.0.1 -U flare_test flare_migrated
           DATABASE_URL="postgresql://flare_test:public-ci-test-password@127.0.0.1:5432/flare_migrated" pnpm prisma migrate deploy
-          for database in flare_email_test flare_email_delivery flare_email_config_test flare_customization_test flare_setup_test flare_tags_test_ci flare_folders_test_ci flare_roles_test_ci flare_avatar_test_ci flare_security_test_ci flare_timeline_test_ci flare_audit_test flare_archive_test_ci flare_invites_test_ci flare_expiry_test; do
+          for database in flare_email_test flare_email_delivery flare_email_config_test flare_customization_test flare_setup_test flare_tags_test_ci flare_folders_test_ci flare_roles_test_ci flare_avatar_test_ci flare_security_test_ci flare_timeline_test_ci flare_audit_test flare_archive_test_ci flare_invites_test_ci flare_expiry_test flare_mcp_test; do
             createdb -h 127.0.0.1 -U flare_test -T flare_migrated "$database"
           done
           pnpm test

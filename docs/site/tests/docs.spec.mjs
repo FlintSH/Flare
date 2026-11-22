@@ -54,7 +54,7 @@ test('feature filters and search direct readers to a relevant guide', async ({
 }) => {
   await page.goto('./features.html')
   await page.getByRole('button', { name: 'Automate', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('3 of 33')
+  await expect(page.getByRole('status')).toContainText('4 of 34')
   await page.getByLabel('Search features').fill('webhook')
   await expect(page.locator('.feature-card')).toHaveCount(1)
   await page.locator('.feature-card').click()
@@ -687,4 +687,100 @@ test('invite guides, walkthrough, and recordings are discoverable', async ({
     )
     expect(duration).toBeGreaterThan(1)
   }
+})
+
+test('agent guide, reference, administrator page, captures, and recording are discoverable', async ({
+  page,
+}) => {
+  await page.goto('./features.html')
+  await page.getByLabel('Search features').fill('agents')
+  await expect(page.locator('.feature-card')).toHaveCount(1)
+  await page.locator('.feature-card').click()
+  await expect(page).toHaveURL(/guide\/agents\.html$/)
+  await expect(page.locator('h1')).toHaveText('Connect an agent')
+  // Each of the three pages leads to the other two.
+  for (const [path, targets] of [
+    ['./guide/agents.html', [/api\/mcp\.html/, /admin\/agents\.html/]],
+    ['./api/mcp.html', [/guide\/agents\.html/, /admin\/agents\.html/]],
+    ['./admin/agents.html', [/guide\/agents\.html/, /api\/mcp\.html/]],
+  ]) {
+    await page.goto(path)
+    const links = await page
+      .locator('.vp-doc a[href]')
+      .evaluateAll((anchors) => anchors.map((anchor) => anchor.href))
+    for (const target of targets)
+      expect(
+        links.some((link) => target.test(link)),
+        `${path} links to ${target}`
+      ).toBe(true)
+  }
+  // Every capture loads where the pages show it.
+  for (const [path, names] of [
+    [
+      './guide/agents.html',
+      [
+        'connect-dialog',
+        'connect-steps',
+        'connect-unavailable',
+        'connect-custom',
+        'profile-agents-card',
+        'token-agent-access',
+      ],
+    ],
+    ['./admin/agents.html', ['settings-mcp-server', 'audit-mcp']],
+    ['./api/authentication.html', ['new-token-agent-access']],
+  ]) {
+    await page.goto(path)
+    for (const name of names) {
+      const screenshot = page.locator(
+        `.screenshot-button img[src$="agents/${name}.webp"]`
+      )
+      await screenshot.scrollIntoViewIfNeeded()
+      await expect(screenshot).toBeVisible()
+      await expect
+        .poll(() => screenshot.evaluate((image) => image.naturalWidth))
+        .toBeGreaterThan(0)
+    }
+  }
+  // The phone capture sits in a section that starts closed.
+  await page.goto('./guide/agents.html')
+  await page.getByText('The same dialog on a phone').click()
+  const phone = page.locator(
+    '.screenshot-button img[src$="agents/connect-dialog-mobile.webp"]'
+  )
+  await expect(phone).toBeVisible()
+  await expect
+    .poll(() => phone.evaluate((image) => image.naturalWidth))
+    .toBeGreaterThan(0)
+  await page.goto('./demos.html')
+  const video = page.locator('video[src$="connect-agent.webm"]')
+  await expect(video).toHaveAttribute('preload', 'none')
+  expect(await video.getAttribute('autoplay')).toBeNull()
+  const duration = await video.evaluate(
+    (element) =>
+      new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(new Error('Recording metadata timed out')),
+          10000
+        )
+        element.addEventListener(
+          'loadedmetadata',
+          () => {
+            clearTimeout(timeout)
+            resolve(element.duration)
+          },
+          { once: true }
+        )
+        element.addEventListener(
+          'error',
+          () => {
+            clearTimeout(timeout)
+            reject(new Error('Agent recording failed to load'))
+          },
+          { once: true }
+        )
+        element.load()
+      })
+  )
+  expect(duration).toBeGreaterThan(1)
 })

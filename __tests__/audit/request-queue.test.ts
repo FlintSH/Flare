@@ -45,12 +45,19 @@ function send(
     method = 'GET',
     skipSuccess = false,
     route = '/api/test',
-  }: { method?: string; skipSuccess?: boolean; route?: string } = {}
+    read,
+  }: {
+    method?: string
+    skipSuccess?: boolean
+    route?: string
+    /** Whether the request only reads, when its method does not say. */
+    read?: boolean
+  } = {}
 ) {
   const request = new Request('http://localhost/api/test?secret=never-record', {
     method,
   })
-  return auditRequest(request, { route, skipSuccess }, async () =>
+  return auditRequest(request, { route, skipSuccess, read }, async () =>
     handle(request)
   )
 }
@@ -84,6 +91,22 @@ describe('successful reads recorded after the response', () => {
       expect(JSON.stringify(events)).not.toContain('never-record')
     }
   )
+
+  it('answers a successful POST that says it only reads before its event is written', async () => {
+    // An MCP tool call is a POST whatever the tool does.
+    const response = await send(ok, { method: 'POST', read: true })
+    expect(response.status).toBe(200)
+    expect(events).toEqual([])
+
+    await auditSettled()
+    expect(events).toEqual([
+      expect.objectContaining({
+        action: 'http.post',
+        outcome: 'success',
+        method: 'POST',
+      }),
+    ])
+  })
 
   it('writes reads that finish together with one batch', async () => {
     const responses = await Promise.all(
@@ -279,6 +302,38 @@ describe('what is still recorded before the response', () => {
       // Nothing was left for later.
       await auditSettled()
       expect(events).toHaveLength(1)
+    }
+  )
+
+  it.each(['GET', 'HEAD', 'POST'])(
+    'writes a successful %s that says it does not only read first',
+    async (method) => {
+      const response = await send(ok, { method, read: false })
+      expect(response.status).toBe(200)
+      expect(events).toEqual([
+        expect.objectContaining({ outcome: 'success', method }),
+      ])
+      await auditSettled()
+      expect(events).toHaveLength(1)
+    }
+  )
+
+  it.each([
+    ['refused', 'denied'],
+    ['failed', 'failure'],
+  ] as const)(
+    'writes a POST that only reads and was %s first, though it answered 200',
+    async (_what, outcome) => {
+      await send(
+        () => {
+          setAuditOutcome(outcome)
+          return ok()
+        },
+        { method: 'POST', read: true }
+      )
+      expect(events).toEqual([
+        expect.objectContaining({ outcome, status: 200, method: 'POST' }),
+      ])
     }
   )
 

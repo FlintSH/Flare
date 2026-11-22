@@ -7,6 +7,7 @@ import Link from 'next/link'
 import {
   AlertCircle,
   ArrowUpRight,
+  Bot,
   Check,
   Copy,
   Info,
@@ -48,18 +49,26 @@ import {
 } from '@/components/ui/table'
 
 import { apiRequest } from '@/lib/client/request'
-import {
-  API_SCOPE_CATALOG,
-  scopeUsable,
-} from '@/lib/integrations/bearer-routes'
+import { API_SCOPE_CATALOG, MCP_SCOPE } from '@/lib/integrations/bearer-routes'
 import {
   CONNECTION_NAME_MAX_LENGTH,
   WEBHOOK_URL_MAX_LENGTH,
 } from '@/lib/integrations/limits'
+import { scopeAvailable } from '@/lib/mcp/catalog'
 import { allows } from '@/lib/permissions/actions'
 
 import { useAccountQuery } from '@/hooks/use-account-query'
 import { usePermissions } from '@/hooks/use-permissions'
+
+import { AgentsCard } from './agents-card'
+import { ScopePicker } from './scope-picker'
+import {
+  DEFAULT_TOKEN_LIFETIME,
+  TOKEN_LIFETIMES,
+  cardHeaderRow,
+  cardTitle,
+  tokenExpiry,
+} from './shared'
 
 type Token = {
   id: string
@@ -86,14 +95,12 @@ type Snapshot = {
   webhooks: Hook[]
   deliveries: Delivery[]
   profiles: { id: string; name: string }[]
+  /**
+   * Whether the MCP server is on and where agents connect: null for the
+   * address this page was opened at. Sent to accounts that manage tokens.
+   */
+  mcp?: { enabled: boolean; url: string | null }
 }
-// Card titles that are also headings, so each card is reachable by heading.
-const cardTitle = 'font-semibold leading-none tracking-tight'
-// One header layout for cards with actions, as on the other profile tabs:
-// title and description on the left, actions at the top right. On phones the
-// actions follow the description.
-const cardHeaderRow =
-  'flex flex-col gap-3 space-y-0 sm:flex-row sm:items-start sm:justify-between'
 const deliveryTone = (status: string) =>
   status === 'failed'
     ? 'danger'
@@ -166,6 +173,7 @@ export function IntegrationsPanel({
   )
   const data = snapshot.data
   const refresh = snapshot.refetch
+  const mcpOn = data?.mcp?.enabled ?? false
   const [actionError, setError] = useState('')
   const error = actionError || snapshot.error?.message
   const [notice, setNotice] = useState('')
@@ -209,16 +217,13 @@ export function IntegrationsPanel({
   function createToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const values = new FormData(event.currentTarget)
-    const days = Number(values.get('days'))
     void run(
       {
         action: 'create-token',
         name: values.get('name'),
         scopes: selectedScopes,
         profileId: values.get('profileId') || null,
-        expiresAt: days
-          ? new Date(Date.now() + days * 86_400_000).toISOString()
-          : null,
+        expiresAt: tokenExpiry(Number(values.get('days'))),
       },
       'Token created.'
     )
@@ -342,6 +347,17 @@ export function IntegrationsPanel({
           </Button>
         </div>
       )}
+      {/* A connected agent is a token, so the card sits above the token list
+          its connections appear in. */}
+      {mcpOn && data?.mcp && (
+        <PermissionGate permission="tokens.manage">
+          <AgentsCard
+            url={data.mcp.url ?? `${window.location.origin}/api/mcp`}
+            disabled={busy}
+            onConnected={() => void refresh()}
+          />
+        </PermissionGate>
+      )}
       <div className="grid gap-6 xl:grid-cols-2">
         <PermissionGate permission="tokens.manage">
           <Dialog
@@ -404,37 +420,12 @@ export function IntegrationsPanel({
                       <legend className="mb-2 text-sm font-medium">
                         Allowed actions
                       </legend>
-                      {API_SCOPE_CATALOG.filter(({ scope }) =>
-                        scopeUsable(scope, can)
-                      ).map(({ scope: value, label, description }) => (
-                        <label
-                          key={value}
-                          className="flex cursor-pointer items-start gap-3 rounded-lg border p-3"
-                        >
-                          <input
-                            type="checkbox"
-                            className="mt-0.5"
-                            checked={selectedScopes.includes(value)}
-                            onChange={(event) =>
-                              setSelectedScopes(
-                                event.target.checked
-                                  ? [...selectedScopes, value]
-                                  : selectedScopes.filter(
-                                      (scope) => scope !== value
-                                    )
-                              )
-                            }
-                          />
-                          <span>
-                            <span className="block text-sm font-medium">
-                              {label}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {description}
-                            </span>
-                          </span>
-                        </label>
-                      ))}
+                      <ScopePicker
+                        selected={selectedScopes}
+                        onChange={setSelectedScopes}
+                        can={can}
+                        mcp={mcpOn}
+                      />
                     </fieldset>
                     <div className="space-y-2">
                       <Label htmlFor="token-profile">Upload profile</Label>
@@ -460,12 +451,13 @@ export function IntegrationsPanel({
                       <NativeSelect
                         id="token-expiry"
                         name="days"
-                        defaultValue="90"
+                        defaultValue={DEFAULT_TOKEN_LIFETIME}
                       >
-                        <option value="30">30 days</option>
-                        <option value="90">90 days</option>
-                        <option value="365">1 year</option>
-                        <option value="0">Never</option>
+                        {TOKEN_LIFETIMES.map(([days, label]) => (
+                          <option key={days} value={days}>
+                            {label}
+                          </option>
+                        ))}
                       </NativeSelect>
                     </div>
                     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -504,8 +496,14 @@ export function IntegrationsPanel({
                     </p>
                   )}
                   {data?.tokens.map((token) => {
-                    const tokenScopes = token.scopes.filter((scope) =>
-                      scopeUsable(scope, can)
+                    // Agent access says what kind of token it is, so it
+                    // is not listed among the permissions.
+                    const agent =
+                      token.scopes.includes(MCP_SCOPE) &&
+                      scopeAvailable(MCP_SCOPE, can, mcpOn)
+                    const tokenScopes = token.scopes.filter(
+                      (scope) =>
+                        scope !== MCP_SCOPE && scopeAvailable(scope, can, mcpOn)
                     )
                     return (
                       <div
@@ -559,8 +557,19 @@ export function IntegrationsPanel({
                             </Button>
                           )}
                         </div>
-                        {(tokenScopes.length > 0 || token.profileId) && (
+                        {(agent ||
+                          tokenScopes.length > 0 ||
+                          token.profileId) && (
                           <div className="mt-3 flex flex-wrap gap-1.5">
+                            {/* What the token is for and the profile it is
+                              bound to are a different kind of chip from the
+                              permissions: outlined, with an icon. */}
+                            {agent && (
+                              <Badge variant="outline">
+                                <Bot aria-hidden="true" />
+                                Agent access
+                              </Badge>
+                            )}
                             {tokenScopes.map((scope) => (
                               <Badge key={scope}>
                                 {API_SCOPE_CATALOG.find(
@@ -568,8 +577,6 @@ export function IntegrationsPanel({
                                 )?.label || scope}
                               </Badge>
                             ))}
-                            {/* The bound profile is a different kind of chip
-                              from the permissions: outlined, with an icon. */}
                             {token.profileId && (
                               <Badge variant="outline">
                                 <SlidersHorizontal aria-hidden="true" />

@@ -330,7 +330,7 @@ export async function serveFile(
   const name = sanitizeDisplayName(file.name)
   try {
     if (delivery.signedRedirect) {
-      const url = await storage.getDownloadUrl(file.path, name)
+      const url = await storage.getDownloadUrl(file.path, name, file.mimeType)
       if (url)
         return new Response(null, {
           status: 302,

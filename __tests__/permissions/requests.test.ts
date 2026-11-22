@@ -88,11 +88,12 @@ describe('bearer route permissions', () => {
 
 describe('delegated settings', () => {
   const general = { permissions: ['settings.general'] }
-  it('does not let a general-settings editor change storage, SSO, registration, email, appearance or setup', () => {
+  it('does not let a general-settings editor change storage, SSO, registration, the MCP server, email, appearance or setup', () => {
     for (const settings of [
       { general: { storage: { provider: 's3' } } },
       { general: { oidc: { enabled: true } } },
       { general: { registrations: { enabled: true } } },
+      { general: { mcp: { enabled: true } } },
       { general: { setup: { completed: false } } },
       { email: { enabled: false } },
       { appearance: { theme: 'dark' } },
@@ -105,6 +106,61 @@ describe('delegated settings', () => {
         general: { ocr: { enabled: false }, credits: { showFooter: true } },
       })
     ).toBe(true)
+  })
+  it('lets Security settings, and nothing less, turn the MCP server on or off', () => {
+    const security = { permissions: ['settings.security'] }
+    for (const enabled of [true, false]) {
+      const settings = { general: { mcp: { enabled } } }
+      expect(settingsPatchAllowed(security, settings)).toBe(true)
+      expect(
+        settingsPatchAllowed({ permissions: ['administrator'] }, settings)
+      ).toBe(true)
+      // Every other settings permission together is not enough.
+      expect(
+        settingsPatchAllowed(
+          {
+            permissions: [
+              'settings.read',
+              'settings.general',
+              'settings.storage',
+              'settings.email',
+              'appearance.manage',
+            ],
+          },
+          settings
+        )
+      ).toBe(false)
+      expect(settingsPatchAllowed({ permissions: [] }, settings)).toBe(false)
+    }
+    // Beside a field that needs another permission, both are needed.
+    const mixed = {
+      general: { mcp: { enabled: true }, ocr: { enabled: true } },
+    }
+    expect(settingsPatchAllowed(security, mixed)).toBe(false)
+    expect(settingsPatchAllowed(general, mixed)).toBe(false)
+    expect(
+      settingsPatchAllowed(
+        { permissions: ['settings.security', 'settings.general'] },
+        mixed
+      )
+    ).toBe(true)
+  })
+  it('refuses an MCP change that names no field, a field it does not know, or no object', () => {
+    const security = { permissions: ['settings.security'] }
+    for (const mcp of [
+      {},
+      null,
+      true,
+      'on',
+      [{ enabled: true }],
+      { administration: true },
+      { enabled: true, administration: true },
+      { unknown: 1 },
+    ])
+      expect(
+        settingsPatchAllowed(security, { general: { mcp } }),
+        JSON.stringify(mcp)
+      ).toBe(false)
   })
   it('reserves executable legacy HTML and CSS for administrators, even when appearance management is delegated', () => {
     expect(

@@ -187,7 +187,10 @@ export class S3StorageProvider implements StorageProvider {
     return signal ? addAbortSignal(signal, stream) : stream
   }
 
-  async getPublicUrl(path: string): Promise<string | null> {
+  async getPublicUrl(
+    path: string,
+    contentType?: string
+  ): Promise<string | null> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     if (key.startsWith('avatars/')) {
@@ -200,12 +203,19 @@ export class S3StorageProvider implements StorageProvider {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
+      // The type Flare recorded wins over the one the object was stored
+      // with, which an upload that named no type leaves generic.
+      ResponseContentType: contentType,
     })
 
     return await getSignedUrl(this.client, command, { expiresIn: 21600 })
   }
 
-  async getDownloadUrl(path: string, filename?: string): Promise<string> {
+  async getDownloadUrl(
+    path: string,
+    filename?: string,
+    contentType?: string
+  ): Promise<string> {
     const key = path.replace(/^\/+/, '').replace(/^uploads\//, '')
 
     const command = new GetObjectCommand({
@@ -214,6 +224,7 @@ export class S3StorageProvider implements StorageProvider {
       ResponseContentDisposition: filename
         ? contentDisposition(filename, 'attachment')
         : undefined,
+      ResponseContentType: contentType,
     })
 
     return await getSignedUrl(this.client, command, { expiresIn: 21600 })

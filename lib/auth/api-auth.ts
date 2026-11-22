@@ -76,7 +76,8 @@ export async function getAuthenticatedUser(
   return null
 }
 
-function authenticated(
+/** An account as a request's authenticated user, under the credential that proved it. */
+export function authenticated(
   { id, storageUsed, urlId, vanityId, randomizeFileUrls, access }: Account,
   credential: AuthenticatedUser['credential']
 ): AuthenticatedUser {

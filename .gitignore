@@ -57,6 +57,10 @@ next-env.d.ts
 CLAUDE.md
 AGENTS.md
 !/AGENTS.md
+# Handbook pages about agents; tools that match names without regard to case
+# would otherwise skip them.
+!/docs/site/guide/agents.md
+!/docs/site/admin/agents.md
 *.swp
 *.swo
 

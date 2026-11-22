@@ -99,6 +99,7 @@ export default defineConfig({
         ['Short links', '/guide/short-links'],
         ['Upload profiles', '/guide/upload-profiles'],
         ['Screenshot tools', '/guide/screenshot-tools'],
+        ['Connect an agent', '/guide/agents'],
         ['Your account', '/guide/account'],
         ['Invite people', '/guide/invites'],
         ['Two-factor authentication & passkeys', '/guide/security'],
@@ -123,6 +124,7 @@ export default defineConfig({
         ['Appearance studio', '/admin/appearance'],
         ['Account email', '/admin/email'],
         ['Single sign-on', '/admin/sso'],
+        ['Agent access (MCP)', '/admin/agents'],
       ]),
       group('Build integrations', [
         ['API overview', '/api/'],
@@ -131,6 +133,7 @@ export default defineConfig({
         ['Archive API contracts', '/api/archives'],
         ['Short-link API', '/api/short-links'],
         ['Webhooks', '/api/webhooks'],
+        ['MCP server', '/api/mcp'],
         ['Recipes & examples', '/api/recipes'],
         ['Roles & session contracts', '/api/roles'],
         ['Sign-in security contracts', '/api/security'],

@@ -30,7 +30,7 @@ Account defaults are overlaid by a selected upload profile, then permitted reque
 
 ## Can one API token administer the entire instance?
 
-Named tokens support file upload/listing and short-link operations through four scopes. They do not grant account, user, integration, or instance administration. Administrator ownership does not expand a named token’s scope. Each request also needs the owner’s current role permission. [API authentication](./api/authentication).
+Over the REST API, named tokens support file upload/listing and short-link operations through four scopes. A token with **Agent access** can also let an [AI agent](./guide/agents) read, organize, share, and delete its owner's own files through the MCP server, where an administrator has turned that on. Neither grants account, user, integration, or instance administration. Administrator ownership does not expand a named token’s scope. Each request also needs the owner’s current role permission. [API authentication](./api/authentication).
 
 ## Does file.ready mean OCR is finished?
 

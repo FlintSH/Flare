@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   API_SCOPE_CATALOG,
   scopeUsable,
+  scopeWorksOverApi,
 } from '@/lib/integrations/bearer-routes'
 import {
   WebhookTargetError,
@@ -53,7 +54,7 @@ describe('scoped API tokens', () => {
     expect(secret).toMatch(/^whsec_[\w-]{43}$/)
     expect(createWebhookSecret()).not.toBe(secret)
   })
-  it('offers a scope while the owner can use at least one of its routes', () => {
+  it('offers a scope over REST while the owner can use at least one of its REST routes', () => {
     const usable = (granted: Permission[]) =>
       API_SCOPE_CATALOG.map(({ scope }) => scope).filter((scope) =>
         scopeUsable(scope, (permission) => granted.includes(permission))
@@ -66,7 +67,52 @@ describe('scoped API tokens', () => {
     expect(usable(['links.create'])).toEqual(['urls:write'])
     expect(usable(['links.delete'])).toEqual(['urls:write'])
     expect(usable(['tokens.manage', 'files.update', 'tags.manage'])).toEqual([])
-    expect(scopeUsable('files:delete', () => true)).toBe(false)
+  })
+  it('never offers over REST a scope only the MCP server honors, whatever the role allows', () => {
+    // `scopeAvailable` in lib/mcp/catalog.ts decides whether MCP makes them usable.
+    const mcpOnly = API_SCOPE_CATALOG.filter(
+      ({ surfaces }) => !(surfaces as readonly string[]).includes('api')
+    ).map(({ scope }) => scope)
+    expect(mcpOnly).toEqual([
+      'files:content',
+      'files:organize',
+      'files:share',
+      'files:delete',
+      'mcp',
+    ])
+    for (const scope of mcpOnly) {
+      expect(
+        scopeUsable(scope, () => true),
+        scope
+      ).toBe(false)
+      expect(scopeWorksOverApi(scope), scope).toBe(false)
+    }
+    // The four scopes named tokens had before MCP still work over REST.
+    expect(
+      API_SCOPE_CATALOG.filter(({ scope }) => scopeWorksOverApi(scope)).map(
+        ({ scope }) => scope
+      )
+    ).toEqual(['files:upload', 'files:read', 'urls:read', 'urls:write'])
+  })
+  it('gives no REST route to a token that holds only MCP scopes', () => {
+    const scopes = [
+      'files:content',
+      'files:organize',
+      'files:share',
+      'files:delete',
+      'mcp',
+    ]
+    for (const [method, path] of [
+      ['GET', '/api/files'],
+      ['POST', '/api/files'],
+      ['DELETE', '/api/files/abc'],
+      ['PATCH', '/api/files/abc'],
+      ['GET', '/api/urls'],
+      ['POST', '/api/mcp'],
+    ])
+      expect(
+        tokenAllowsRequest(scopes, { method, url: `https://flare.test${path}` })
+      ).toBe(false)
   })
   it('allows only exact route/method combinations and never account or token management', () => {
     const allowed = (method: string, path: string, scopes = ['files:upload']) =>

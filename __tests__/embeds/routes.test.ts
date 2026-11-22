@@ -318,7 +318,11 @@ describe('the media address', () => {
       )
       expect(response.headers.get('cache-control')).toBe('private, no-store')
     }
-    expect(mocks.publicUrl).toHaveBeenCalledWith('owner/key/clip.mp4')
+    // Signed under the type Flare recorded for the file.
+    expect(mocks.publicUrl).toHaveBeenCalledWith(
+      'owner/key/clip.mp4',
+      'video/mp4'
+    )
   })
 
   it("leads to the file's raw content when storage has no URL of its own", async () => {

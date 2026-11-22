@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,6 +12,7 @@ import CodeMirror from '@uiw/react-codemirror'
 import DOMPurify from 'dompurify'
 import { deepEqual } from 'fast-equals'
 import {
+  ArrowUpRight,
   BookOpen,
   Circle,
   Code,
@@ -34,6 +35,7 @@ import { createPortal } from 'react-dom'
 import { CustomizationStudio } from '@/components/customization/customization-studio'
 import { RecoveryLink } from '@/components/customization/recovery-link'
 import { EmailSettings } from '@/components/email/email-settings'
+import { CopyButton } from '@/components/integrations/copy-button'
 import {
   PreferencesPanel,
   PreferencesShell,
@@ -74,6 +76,7 @@ import {
 import { CLASSIC_PALETTE } from '@/lib/customization/legacy-appearance'
 import type { CustomizationState } from '@/lib/customization/schema'
 import { getDocumentationUrl } from '@/lib/documentation'
+import { reachableFromCloud } from '@/lib/mcp/clients'
 import { CUSTOM_STYLES_PERMISSION } from '@/lib/permissions/settings'
 import {
   SETTINGS_SECTIONS,
@@ -116,6 +119,15 @@ const isSafeUrl = (url: string | null): url is string => {
   return url.startsWith('blob:') && /^blob:https?:\/\//.test(url)
 }
 
+/** The handbook page on connecting agents, in this build's version of the docs. */
+function agentsGuideUrl(build: BuildInfo) {
+  const handbook = getDocumentationUrl(build)
+  // A build without a handbook of its own gets the version list instead.
+  return handbook.endsWith('/') ? `${handbook}guide/agents.html` : handbook
+}
+
+const noSubscription = () => () => {}
+
 function ChangeIndicator() {
   return (
     <div className="flex items-center">
@@ -130,14 +142,24 @@ export function InstanceSettings({
   buildInfo,
   recovery = false,
   initialEveryoneCanInvite = false,
+  publicAddress = null,
 }: {
   initialConfig: FlareConfig
   initialSection: (typeof SETTINGS_SECTIONS)[number]
   buildInfo: BuildInfo
   recovery?: boolean
   initialEveryoneCanInvite?: boolean
+  /** NEXTAUTH_URL without a trailing slash, or null when it is not set. */
+  publicAddress?: string | null
 }) {
   const { can } = usePermissions()
+  // Without a configured address, agents can only be told the one in use.
+  const browserAddress = useSyncExternalStore(
+    noSubscription,
+    () => window.location.origin,
+    () => ''
+  )
+  const mcpUrl = `${publicAddress ?? browserAddress}/api/mcp`
   const [activeSection, setSection] = usePreferenceSection(
     SETTINGS_SECTIONS,
     initialSection,
@@ -473,6 +495,10 @@ export function InstanceSettings({
         !deepEqual(
           savedConfig.settings.general.oidc,
           workingConfig.settings.general.oidc
+        ) ||
+        !deepEqual(
+          savedConfig.settings.general.mcp,
+          workingConfig.settings.general.mcp
         ),
     },
     {
@@ -1180,6 +1206,82 @@ export function InstanceSettings({
                     </div>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+            <Card id="mcp-server" className="scroll-mt-28">
+              <CardHeader>
+                <CardTitle>MCP server</CardTitle>
+                <CardDescription className="text-pretty">
+                  Let AI agents such as Claude Code, Cursor and Codex work with
+                  the files on this instance.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <Label>Enable the MCP server</Label>
+                    <p className="text-pretty text-sm text-muted-foreground">
+                      Agents can connect and act for an account, using a token
+                      that account creates in its profile. They can do only what
+                      the token and the account&apos;s role allow.
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    {isFieldChanged('general', ['mcp', 'enabled']) && (
+                      <ChangeIndicator />
+                    )}
+                    <Switch
+                      aria-label="Enable the MCP server"
+                      checked={workingConfig.settings.general.mcp.enabled}
+                      onCheckedChange={(checked) =>
+                        handleSettingChange('general', {
+                          mcp: {
+                            ...workingConfig.settings.general.mcp,
+                            enabled: checked,
+                          },
+                        })
+                      }
+                      className={getFieldClasses('general', ['mcp', 'enabled'])}
+                    />
+                  </div>
+                </div>
+                {workingConfig.settings.general.mcp.enabled && (
+                  <div className="space-y-2">
+                    <Label htmlFor="mcp-server-url">Server URL</Label>
+                    <div className="flex max-w-xl flex-col gap-2 sm:flex-row">
+                      <Input
+                        id="mcp-server-url"
+                        readOnly
+                        value={mcpUrl}
+                        onFocus={(event) => event.currentTarget.select()}
+                        className="font-mono text-xs"
+                      />
+                      <CopyButton
+                        value={mcpUrl}
+                        name="server URL"
+                        label="Copy URL"
+                        className="shrink-0"
+                      />
+                    </div>
+                    {!reachableFromCloud(mcpUrl) && (
+                      <p className="text-pretty text-sm text-muted-foreground">
+                        Local clients such as Claude Code, Cursor and VS Code
+                        work with this address. Links and upload URLs that Flare
+                        gives agents use it, so agents must be able to reach it.
+                      </p>
+                    )}
+                  </div>
+                )}
+                <a
+                  href={agentsGuideUrl(buildInfo)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-sm text-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  Read the agents guide
+                  <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
               </CardContent>
             </Card>
           </div>

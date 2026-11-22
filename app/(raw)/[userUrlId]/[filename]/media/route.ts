@@ -28,7 +28,9 @@ export const GET = api(
     const { kind } = fileKind(file)
     const stored =
       kind === 'video' || kind === 'audio'
-        ? await (await getStorageProvider()).getPublicUrl(file.path)
+        ? await (
+            await getStorageProvider()
+          ).getPublicUrl(file.path, file.mimeType)
         : null
     return new Response(null, {
       status: 302,

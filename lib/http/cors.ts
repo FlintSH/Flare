@@ -14,7 +14,7 @@ import { requiredApiScope } from '@/lib/integrations/bearer-routes'
  * won't let the page read the answer, and a write the cookie authorizes fails
  * the same-origin check. Only a credential the page itself sends works.
  */
-export type CorsKind = 'token' | 'file'
+export type CorsKind = 'token' | 'file' | 'mcp'
 
 export const CORS_ENV = 'FLARE_CORS_ORIGINS'
 
@@ -29,9 +29,22 @@ const ALLOWED_HEADERS = [
   'X-Flare-Paste',
 ].join(', ')
 
+/** What a browser-based MCP client sends: its credential, a JSON body and the protocol's own headers. */
+const MCP_ALLOWED_HEADERS = [
+  'Authorization',
+  'Content-Type',
+  'Accept',
+  'MCP-Protocol-Version',
+  'Mcp-Method',
+  'Mcp-Name',
+  'Mcp-Session-Id',
+].join(', ')
+
 /** Response headers clients need beyond the CORS-safelisted ones. */
 const EXPOSED_HEADERS = {
   token: ['Retry-After'],
+  // The challenge tells an MCP client where to sign in.
+  mcp: ['WWW-Authenticate', 'Retry-After'],
   file: [
     'Accept-Ranges',
     'Content-Disposition',
@@ -119,7 +132,21 @@ function eligibleMethod(
 ): boolean {
   if (kind === 'file')
     return (FILE_METHODS as readonly string[]).includes(method)
+  if (kind === 'mcp') return method === 'POST'
   return requiredApiScope(method, pathname) !== null
+}
+
+/**
+ * Whether a request's `Origin` may use an endpoint that only non-browser
+ * clients and allowed sites call: no origin at all, Flare's own, or one
+ * FLARE_CORS_ORIGINS allows.
+ */
+export function originAllowed(request: Request, own: string | null): boolean {
+  const origin = request.headers.get('origin')
+  if (!origin || origin === own || origin === new URL(request.url).origin)
+    return true
+  const policy = currentPolicy()
+  return Boolean(policy && (policy.any || policy.origins.has(origin)))
 }
 
 /**
@@ -183,6 +210,7 @@ export function applyCors(
 /** The methods this path accepts from other sites. */
 function allowedMethods(kind: CorsKind, pathname: string): string[] {
   if (kind === 'file') return [...FILE_METHODS]
+  if (kind === 'mcp') return ['POST']
   return TOKEN_METHODS.filter(
     (method) => requiredApiScope(method, pathname) !== null
   )
@@ -209,7 +237,11 @@ export function preflight(kind: CorsKind) {
       )
       headers.set(
         'Access-Control-Allow-Headers',
-        kind === 'token' ? ALLOWED_HEADERS : 'Range'
+        kind === 'token'
+          ? ALLOWED_HEADERS
+          : kind === 'mcp'
+            ? MCP_ALLOWED_HEADERS
+            : 'Range'
       )
       headers.set('Access-Control-Max-Age', PREFLIGHT_MAX_AGE)
     }

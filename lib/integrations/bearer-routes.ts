@@ -3,31 +3,95 @@
 // imports it as a data: URL, where no other module can be resolved.
 import type { Permission } from '@/lib/permissions/catalog'
 
-/** Named-token scopes, in the order the token form lists them. */
+/**
+ * Named-token scopes, in the order the token form lists them. `surfaces` says
+ * where a scope is honored: the REST routes below, the MCP tools in
+ * `lib/mcp/catalog.ts`, or both. `mcp` is a marker: a named token works on the
+ * MCP endpoint only while it carries it, so a token made for a script never
+ * drives an agent.
+ */
 export const API_SCOPE_CATALOG = [
   {
     scope: 'files:upload',
     label: 'Upload files',
     description: 'Send screenshots and files',
+    group: 'files',
+    surfaces: ['api', 'mcp'],
   },
   {
     scope: 'files:read',
     label: 'Read files',
     description: 'List your files and metadata',
+    group: 'files',
+    surfaces: ['api', 'mcp'],
+  },
+  {
+    scope: 'files:content',
+    label: 'Read file contents',
+    description: 'Read text, view images and download, private files included',
+    group: 'files',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'files:organize',
+    label: 'Organize files',
+    description: 'Folders, tags, moving files and expiry',
+    group: 'files',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'files:share',
+    label: 'Change sharing',
+    description: 'Visibility, passwords and folder links',
+    group: 'files',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'files:delete',
+    label: 'Delete files',
+    description: 'Delete files permanently',
+    group: 'files',
+    surfaces: ['mcp'],
   },
   {
     scope: 'urls:read',
     label: 'Read short links',
     description: 'List your shortened URLs',
+    group: 'links',
+    surfaces: ['api', 'mcp'],
   },
   {
     scope: 'urls:write',
     label: 'Manage short links',
     description: 'Create and delete your short links',
+    group: 'links',
+    surfaces: ['api', 'mcp'],
+  },
+  {
+    scope: 'mcp',
+    label: 'Agent access',
+    description: 'Use this token with the MCP server',
+    group: 'agents',
+    surfaces: ['mcp'],
   },
 ] as const
 export type ApiScope = (typeof API_SCOPE_CATALOG)[number]['scope']
 export const API_SCOPES = API_SCOPE_CATALOG.map(({ scope }) => scope)
+/** The marker a named token needs before the MCP endpoint accepts it. */
+export const MCP_SCOPE = 'mcp' satisfies ApiScope
+
+/** Where a scope is honored. */
+export type ScopeSurface =
+  (typeof API_SCOPE_CATALOG)[number]['surfaces'][number]
+
+/** Whether the REST API honors a scope on at least one route. */
+export function scopeWorksOverApi(scope: string): boolean {
+  return API_SCOPE_CATALOG.some(
+    (entry) =>
+      entry.scope === scope &&
+      (entry.surfaces as readonly ScopeSurface[]).includes('api')
+  )
+}
 
 type BearerRoute = {
   methods: readonly ('GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE')[]
@@ -189,7 +253,11 @@ export function requiredApiScope(
   return bearerRoute(method, pathname)?.scope ?? null
 }
 
-/** Whether a token with this scope could call at least one of its routes for an owner who `can` hold these permissions. */
+/**
+ * Whether a token with this scope could call at least one of its REST routes
+ * for an owner who `can` hold these permissions. `scopeAvailable` in
+ * `lib/mcp/catalog.ts` also counts what the scope allows through MCP.
+ */
 export function scopeUsable(
   scope: string,
   can: (permission: Permission) => boolean

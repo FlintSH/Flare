@@ -52,7 +52,7 @@ The bar at the top of the dashboard holds your own places: **Files**, **Upload**
 | **Links**                  | Create short redirects under your instance's domain and see their click counts.                                      |
 | **Profile → Account**      | Update identity, password, email, appearance, login history, and active sessions.                                    |
 | **Profile → Uploads**      | Configure screenshot tools, reusable upload profiles, and account upload defaults.                                   |
-| **Profile → Integrations** | Create scoped API tokens and outgoing webhooks.                                                                      |
+| **Profile → Integrations** | Create scoped API tokens and outgoing webhooks, and [connect an AI agent](./agents) where your instance allows it.   |
 | **Profile → Your data**    | Check storage use, export data, or delete your account.                                                              |
 | **Admin → Users**          | Manage accounts and their roles. Needs `users.read`; the **Invites** tab needs `invites.create` or `invites.manage`. |
 | **Admin → Roles**          | Create and combine permission groups. Needs `roles.manage`.                                                          |

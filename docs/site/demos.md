@@ -374,6 +374,27 @@ The audit guide also includes a [separate real-server archive investigation capt
 
 </details>
 
+### AI agents
+
+#### Connect an agent
+
+<video class="demo-video" controls playsinline preload="none" aria-label="Connect an agent: silent Flare recording with the token blurred" :poster="withBase('/screenshots/agents/connect-agent-poster.webp')" :src="withBase('/demos/connect-agent.webm')">Your browser does not support this video. Follow the transcript below.</video>
+
+<details class="demo-transcript">
+<summary>Transcript</summary>
+
+1. As the demonstration account **Alex**, open **Profile → Integrations**. The **Agents** card shows the **Server URL** of this local instance. Choose **Connect an agent**.
+2. **Claude Code** is selected under **Client**. Under **Allowed actions**, choose **Read only** in place of **Read and upload**.
+3. Change **Connection name** to **Claude Code on my laptop** and **Expires after** to **30 days**.
+4. Choose **Create token**. **Connect Claude Code** shows two steps: the `claude mcp add` command, whose token is blurred in this recording, and `claude mcp list`. Copy the first command; its button shows a check mark.
+5. Open **Other ways to set it up**. It offers a `.mcp.json` file that reads the token from `FLARE_TOKEN`, the command that sets that variable, and the token on its own. Both copies of the token are blurred.
+6. Choose **Done**. Under **API tokens**, **Claude Code on my laptop** is listed as **Not used yet** with its expiry date and the chips **Agent access**, **Read files**, **Read file contents**, and **Read short links**.
+7. Choose **Revoke** on that token. It now reads **Revoked** and has no button: an agent using it would be refused on its next call.
+
+This recording creates and revokes a real token on a disposable instance. It shows Flare's side only, not a client running the command. [Follow the agents guide](./guide/agents).
+
+</details>
+
 ## Roles and permissions lab
 
 Removing a permission from one role does not deny a grant from another, and a named token needs both its scope and its owner's current permission. [Follow the real role workflow](./admin/roles#create-and-assign-a-role).
