@@ -50,7 +50,6 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 import { folderPath } from '@/lib/folders/navigation'
-import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import {
   type Expiry,
   type ExpiryAction,
@@ -58,12 +57,10 @@ import {
   type RelativeExpiration,
   type Visibility,
   expiryLabel,
+  permittedAction,
   profileSummary,
 } from '@/lib/uploads/choices'
-import { UPLOAD_DEFAULTS } from '@/lib/uploads/schema'
 import { cn } from '@/lib/utils'
-
-import { usePermissions } from '@/hooks/use-permissions'
 
 import type { UploadOptionsState } from './use-upload-options'
 
@@ -162,7 +159,6 @@ export function UploadOptionsBar({
   children: ReactNode
 }) {
   const { choices, setChoices, effective, can, profiles, folders, tags } = state
-  const { user } = usePermissions()
   // What each chip goes back to: the profile's settings, nothing picked.
   const saved = state.unpicked
   const set = (change: Partial<typeof choices>) =>
@@ -195,7 +191,7 @@ export function UploadOptionsBar({
       defaultProfile?.name ??
       'Profile')
     : 'No profile'
-  const accountOnly = { ...UPLOAD_DEFAULTS, ...profiles.data?.accountOptions }
+  const accountOnly = state.account
 
   return (
     <div className="space-y-2">
@@ -294,9 +290,7 @@ export function UploadOptionsBar({
             picked={effective.picked.expiry}
             saved={expiryLabel(saved.expiry, saved.expiryAction)}
             disabled={disabled}
-            canAct={(action) =>
-              allows(user, EXPIRY_EFFECTS[action as ExpiryActionEnum])
-            }
+            canAct={can.act}
             onChange={(expiry, expiryAction) => set({ expiry, expiryAction })}
             onReset={() => set({ expiry: undefined, expiryAction: undefined })}
           />
@@ -311,9 +305,10 @@ export function UploadOptionsBar({
                     folders.missing
                       ? 'Folder unavailable'
                       : choices.folderId
-                        ? folders.selected
-                          ? folders.selected.name
-                          : 'Loading folder…'
+                        ? (folders.selected?.name ??
+                          (state.initialFolder?.id === choices.folderId
+                            ? state.initialFolder.name
+                            : 'Loading folder…'))
                         : 'Unfiled'
                   }
                   picked={!!choices.folderId && !folders.missing}
@@ -588,6 +583,8 @@ function ExpiryChip({
 }) {
   const trigger = useRef<HTMLButtonElement>(null)
   const [custom, setCustom] = useState(false)
+  // A role that can neither delete nor make private can only pick Never.
+  const schedulable = permittedAction(action, canAct) !== null
   const value =
     expiry.kind === 'never'
       ? 'never'
@@ -612,22 +609,30 @@ function ExpiryChip({
             value={value}
             onValueChange={(next) => {
               if (next === 'custom') return
-              onChange(
-                next === 'never'
-                  ? { kind: 'never' }
-                  : { kind: 'after', after: next as RelativeExpiration },
-                action
-              )
+              if (next === 'never') return onChange({ kind: 'never' }, action)
+              // Keep an action the role may use, so the upload can't fail
+              // on it after every byte is sent.
+              const allowed = permittedAction(action, canAct)
+              if (allowed)
+                onChange(
+                  { kind: 'after', after: next as RelativeExpiration },
+                  allowed
+                )
             }}
           >
             <DropdownMenuRadioItem value="never">Never</DropdownMenuRadioItem>
             {RELATIVE_EXPIRATIONS.map((option) => (
-              <DropdownMenuRadioItem key={option.value} value={option.value}>
+              <DropdownMenuRadioItem
+                key={option.value}
+                value={option.value}
+                disabled={!schedulable}
+              >
                 After {option.label}
               </DropdownMenuRadioItem>
             ))}
             <DropdownMenuRadioItem
               value="custom"
+              disabled={!schedulable}
               onSelect={() => setCustom(true)}
             >
               {expiry.kind === 'at'
@@ -669,9 +674,10 @@ function ExpiryChip({
           if (!open) requestAnimationFrame(() => trigger.current?.focus())
         }}
         onConfirm={async (date, chosen) => {
+          const picked = (chosen as ExpiryAction | undefined) ?? action
           onChange(
             date ? { kind: 'at', at: date } : { kind: 'never' },
-            (chosen as ExpiryAction | undefined) ?? action
+            permittedAction(picked, canAct) ?? picked
           )
         }}
         initialDate={expiry.kind === 'at' ? expiry.at : null}

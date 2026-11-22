@@ -135,6 +135,11 @@ export function LinksManager() {
     return () => controller.abort()
   }, [load])
 
+  // After a change, read the list again. A read already under way started
+  // before the change and would put the old list back, so its answer is
+  // dropped (see `requestVersion`) in favour of this one.
+  const reconcile = () => void load()
+
   // A new link is marked for a moment, then looks like the rest.
   useEffect(() => {
     if (!fresh) return
@@ -175,15 +180,17 @@ export function LinksManager() {
 
   return (
     <>
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
+      {/* Title and search share a row; on phones the create bar comes
+          before the search, since making a link is why most people come. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-3">
         <h1
           id="links-heading"
-          className="text-2xl font-semibold tracking-tight"
+          className="order-1 text-2xl font-semibold tracking-tight"
         >
           Links
         </h1>
         {links.length > 0 && (
-          <div className="relative w-full sm:w-64">
+          <div className="relative order-3 w-full sm:order-2 sm:-my-0.5 sm:w-64">
             <Search
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden="true"
@@ -198,26 +205,30 @@ export function LinksManager() {
             />
           </div>
         )}
+        {canCreate && (
+          <div className="order-2 w-full sm:order-3 sm:mt-2">
+            <CreateLinkForm
+              origin={origin}
+              onCreated={(link) => {
+                setLinks((current) => [link, ...current])
+                // The new link always shows, whatever was searched for.
+                setQuery('')
+                setFresh(link.id)
+                setAnnouncement(
+                  `Created ${shortLinkUrl(link.shortCode, origin)}`
+                )
+                reconcile()
+              }}
+            />
+          </div>
+        )}
       </div>
-
-      {canCreate && (
-        <CreateLinkForm
-          origin={origin}
-          onCreated={(link) => {
-            setLinks((current) => [link, ...current])
-            // The new link always shows, whatever was searched for.
-            setQuery('')
-            setFresh(link.id)
-            setAnnouncement(`Created ${shortLinkUrl(link.shortCode, origin)}`)
-          }}
-        />
-      )}
 
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
 
-      <div className={cn(canCreate && 'mt-6')}>
+      <div className="mt-6">
         {loading ? (
           <div
             role="status"
@@ -289,6 +300,7 @@ export function LinksManager() {
             current.map((link) => (link.id === saved.id ? saved : link))
           )
           setEditing(null)
+          reconcile()
           toast({ title: 'Link updated' })
         }}
       />
@@ -299,6 +311,7 @@ export function LinksManager() {
         onDeleted={(gone) => {
           setLinks((current) => current.filter((link) => link.id !== gone.id))
           setDeleting(null)
+          reconcile()
           toast({ title: 'Link deleted' })
         }}
       />

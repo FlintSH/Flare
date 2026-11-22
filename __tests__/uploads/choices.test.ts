@@ -4,6 +4,8 @@ import {
   NO_CHOICES,
   effectiveUpload,
   expiryLabel,
+  expiryProblem,
+  permittedAction,
   profileSummary,
   uploadOptionsFor,
 } from '@/lib/uploads/choices'
@@ -134,5 +136,43 @@ describe('expiration and profile wording', () => {
       ['Public', 'deleted after 1 week', 'random names', '1 tag', 'Framed page']
     )
     expect(profileSummary(saved, false)[0]).toBe('Private')
+  })
+})
+
+describe('an expiration the role can carry out', () => {
+  const only =
+    (...allowed: string[]) =>
+    (action: string) =>
+      allowed.includes(action)
+
+  it('keeps a permitted action and swaps a forbidden one for the other', () => {
+    expect(permittedAction('DELETE', only('DELETE', 'SET_PRIVATE'))).toBe(
+      'DELETE'
+    )
+    expect(permittedAction('DELETE', only('SET_PRIVATE'))).toBe('SET_PRIVATE')
+    expect(permittedAction('SET_PRIVATE', only('DELETE'))).toBe('DELETE')
+    expect(permittedAction('DELETE', only())).toBeNull()
+  })
+
+  it('flags a saved expiration the role cannot carry out, before uploading', () => {
+    const after = { kind: 'after', after: 'DAY' } as const
+    expect(
+      expiryProblem({ expiry: after, expiryAction: 'DELETE' }, only('DELETE'))
+    ).toBeNull()
+    expect(
+      expiryProblem(
+        { expiry: { kind: 'never' }, expiryAction: 'DELETE' },
+        only()
+      )
+    ).toBeNull()
+    expect(
+      expiryProblem(
+        { expiry: after, expiryAction: 'DELETE' },
+        only('SET_PRIVATE')
+      )
+    ).toMatch(/can’t delete files.*Make it private or Never/)
+    expect(
+      expiryProblem({ expiry: after, expiryAction: 'SET_PRIVATE' }, only())
+    ).toMatch(/can’t schedule expirations.*Never/)
   })
 })

@@ -3,11 +3,13 @@
 import { useEffect, useMemo, useState } from 'react'
 
 import { filePasswordHint } from '@/lib/files/password-policy'
-import { allows } from '@/lib/permissions/actions'
+import { EXPIRY_EFFECTS, allows } from '@/lib/permissions/actions'
 import {
+  type ExpiryAction,
   NO_CHOICES,
   type UploadChoices,
   effectiveUpload,
+  expiryProblem,
   uploadOptionsFor,
 } from '@/lib/uploads/choices'
 import type { SavedUploadSettings } from '@/lib/uploads/saved-settings'
@@ -28,7 +30,8 @@ import { useUploadProfiles } from '../upload-profiles/profile-picker'
  */
 export function useUploadOptions(
   saved: SavedUploadSettings,
-  initialFolder: string | null = null
+  /** A folder a link to Upload names, with its name when the page knows it. */
+  initialFolder: { id: string; name?: string } | null = null
 ) {
   const { user, can } = usePermissions()
   const canShare = allows(user, 'shareFiles')
@@ -37,35 +40,43 @@ export function useUploadOptions(
   const canChooseFolder = !user || allows(user, 'fileIntoFolder')
   const canTag = can('tags.manage')
   const canChooseProfile = can('uploadProfiles.manage')
+  const canAct = (action: ExpiryAction) =>
+    allows(user, EXPIRY_EFFECTS[action as keyof typeof EXPIRY_EFFECTS])
+  const initialFolderId = initialFolder?.id ?? null
   const [choices, setChoices] = useState<UploadChoices>(() => ({
     ...NO_CHOICES,
-    folderId: canChooseFolder ? initialFolder : null,
+    folderId: canChooseFolder ? initialFolderId : null,
   }))
   // A link to Upload can name a folder; follow it when it changes.
   useEffect(() => {
     setChoices((current) => ({
       ...current,
-      folderId: canChooseFolder ? initialFolder : null,
+      folderId: canChooseFolder ? initialFolderId : null,
     }))
-  }, [initialFolder, canChooseFolder])
+  }, [initialFolderId, canChooseFolder])
 
   const profiles = useUploadProfiles()
   const folders = useFolders()
   const tags = useTags()
 
+  // The account's own settings come with the page, so "No profile" is
+  // right before the profile list loads, and if it never does.
+  const account = useMemo(
+    (): Required<UploadProfileOptions> =>
+      profiles.data
+        ? { ...UPLOAD_DEFAULTS, ...profiles.data.accountOptions }
+        : saved.account,
+    [profiles.data, saved.account]
+  )
   const base = useMemo((): Required<UploadProfileOptions> => {
     const data = profiles.data
     if (choices.profileId === undefined)
       return data?.effective ?? saved.effective
-    // A chosen profile without the list loaded can't happen: the list is how
-    // it was chosen.
+    if (choices.profileId === null) return account
+    // A named profile can only be picked from the loaded list.
     const profile = data?.profiles.find(({ id }) => id === choices.profileId)
-    return {
-      ...UPLOAD_DEFAULTS,
-      ...data?.accountOptions,
-      ...profile?.options,
-    }
-  }, [choices.profileId, profiles.data, saved.effective])
+    return { ...account, ...profile?.options }
+  }, [choices.profileId, profiles.data, saved.effective, account])
 
   const effective = effectiveUpload(base, choices, canShare)
   const unpicked = effectiveUpload(base, NO_CHOICES, canShare)
@@ -83,8 +94,10 @@ export function useUploadOptions(
         ? 'Folders could not be loaded. Refresh the page and try again.'
         : 'That folder is no longer available. Choose another.'
       : effective.tagIds.length && !canTag
-        ? 'Your upload profile adds tags, which your role can’t apply. Choose another profile.'
-        : null
+        ? canChooseProfile
+          ? 'Your upload profile adds tags, which your role can’t apply. Choose another profile.'
+          : 'Your default upload profile adds tags, which your role can’t apply. Ask an administrator to change your role or default profile.'
+        : expiryProblem(effective, canAct)
 
   return {
     choices,
@@ -95,18 +108,26 @@ export function useUploadOptions(
     effective,
     /** The same settings with nothing picked here. */
     unpicked,
+    /** The account's settings without a profile. */
+    account,
+    /** Whether the upload will need a password: only public links do. */
+    passwordSet: !!password,
     options: uploadOptionsFor({ ...choices, password }),
     problem,
     passwordProblem,
     /** Still finding out whether the chosen folder exists. */
     pending: !!choices.folderId && folders.loading,
     can: {
+      act: canAct,
       share: canShare,
       chooseFolder: canChooseFolder,
       tag: canTag,
       chooseProfile: canChooseProfile,
     },
     saved,
+    initialFolder: initialFolder?.name
+      ? { id: initialFolder.id, name: initialFolder.name }
+      : null,
     profiles,
     folders: { ...folders, selected: folder, missing: folderMissing },
     tags,

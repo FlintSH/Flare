@@ -136,3 +136,34 @@ export function profileSummary(
     `${saved.shareStyle[0].toUpperCase()}${saved.shareStyle.slice(1)} page`,
   ]
 }
+
+/**
+ * The action to keep when an expiration is picked: the current one if the
+ * role may use it, else the one it may, else none (only Never is possible).
+ */
+export function permittedAction(
+  action: ExpiryAction,
+  canAct: (action: ExpiryAction) => boolean
+): ExpiryAction | null {
+  if (canAct(action)) return action
+  const other = action === 'DELETE' ? 'SET_PRIVATE' : 'DELETE'
+  return canAct(other) ? other : null
+}
+
+/**
+ * Why an expiration the role can't carry out would fail, before any byte is
+ * sent: the server refuses it after the upload otherwise.
+ */
+export function expiryProblem(
+  effective: Pick<EffectiveUpload, 'expiry' | 'expiryAction'>,
+  canAct: (action: ExpiryAction) => boolean
+): string | null {
+  if (effective.expiry.kind === 'never' || canAct(effective.expiryAction))
+    return null
+  const other = effective.expiryAction === 'DELETE' ? 'SET_PRIVATE' : 'DELETE'
+  if (!canAct(other))
+    return 'Your role can’t schedule expirations. Choose Never on the expiration button.'
+  return effective.expiryAction === 'DELETE'
+    ? 'Your role can’t delete files when they expire. Choose Make it private or Never on the expiration button.'
+    : 'Your role can’t make files private when they expire. Choose Delete it or Never on the expiration button.'
+}

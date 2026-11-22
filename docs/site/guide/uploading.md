@@ -44,17 +44,17 @@ A link to **Upload** can preselect a folder (`/dashboard/upload?folder=<id>`), a
 
 Passwords apply to this batch only. They are never saved in upload profiles or exported recipes, and a private upload ignores one. Flare accepts file passwords with at least 8 characters and at most 72 bytes; accented characters and emoji can use more than one byte each. A password that breaks the rule turns the button into **Check password**, and the reason appears under the row.
 
-If your default profile adds tags but your role can't apply tags (`tags.manage`), the page says so and won't upload until you choose another profile.
+If your default profile adds tags but your role can't apply tags (`tags.manage`), the page says so and won't upload. Choose another profile, or, if you can't choose profiles, ask your administrator to change your role or default profile.
 
-Earlier versions showed the profile as a select with a summary sentence under it, **Save to** as a second select, and visibility, password and expiration inside a closed **Upload options** section. Tags could only come from a profile, and finished uploads appeared in a separate list under the form.
+Earlier versions kept these settings in selects and a closed **Upload options** section, and had no tag choice.
 
 ## Set an expiration
 
-An upload with a **Delete it** expiration requires `files.delete`; **Make it private** requires `files.share`. The menu disables an action your role can't use. This also applies when the expiration comes from a saved profile or account default. If an upload is rejected after a role change, choose **Never** (or a permitted action), update the profile or default, or ask the administrator for the permission.
+An upload with a **Delete it** expiration requires `files.delete`; **Make it private** requires `files.share`. The menu disables an action your role can't use, and picking a time keeps an action it can. A role with neither can only choose **Never**. If your saved profile or account default expires files with an action your role can't use, the page says so under the options row and won't upload until you choose **Never** or the other action. To change it for good, update the profile or default, or ask the administrator for the permission.
 
 The 1 hour to 1 month choices count from when each file arrives, so a file uploaded a minute after another expires a minute later. **Pick a date…** opens a dialog with shortcuts, a calendar and a time, and sets one moment for the whole batch.
 
-<Screenshot src="/screenshots/workspace/upload-expiration-custom.png" alt="Expiration menu open on the Upload page, with Never, After 1 hour to After 1 month and Pick a date, and Delete it or Make it private below" caption="Choose when the files expire and what happens to them then." />
+<Screenshot src="/screenshots/workspace/upload-expiration.png" alt="Expiration menu open on the Upload page, with Never, After 1 hour to After 1 month and Pick a date, and Delete it or Make it private below" caption="Choose when the files expire and what happens to them then." />
 
 The server checks for due expirations every 5 seconds, so access changes a few seconds after the time you chose, not at that exact second. If an expiration can't be applied, for example while storage is unreachable, Flare tries again 1, 5 and 30 minutes later. If the last attempt also fails, the file stays as it is and **Files** stops showing its expiration; set it again from **Files → file menu → Manage expiration**, where you can also change or remove an existing schedule.
 

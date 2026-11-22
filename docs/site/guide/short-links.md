@@ -18,7 +18,7 @@ description: Shorten a link under your Flare domain, choose its ending, change w
 
 The new link appears at the top of the list, briefly highlighted. Choose **Copy** to copy it with your instance's domain. If a search is active, creating a link clears it so the new one shows.
 
-An ending can be up to 64 letters, numbers, `-` and `_`. Endings are case-sensitive, but Flare refuses one that another link on the instance already uses in any letter case, so `/u/Launch` can't sit beside `/u/launch` and pass for it. A taken ending shows **That ending is already taken. Choose another.** Your account's vanity URL setting affects uploaded-file URLs, not the `/u/…` path.
+An ending can be up to 64 letters, numbers, `-` and `_`. Endings are case-sensitive, but Flare refuses an ending you choose while another link on the instance uses it in any letter case, so a chosen `/u/Launch` can't sit beside `/u/launch` and pass for it. A taken ending shows **That ending is already taken. Choose another.** Your account's vanity URL setting affects uploaded-file URLs, not the `/u/…` path.
 
 If two links created at the same moment draw the same random ending, Flare gives the second one another instead of failing. Earlier versions showed **Internal server error** in that case; choosing **Shorten** again worked. Earlier versions also had no custom endings and no way to change a destination.
 

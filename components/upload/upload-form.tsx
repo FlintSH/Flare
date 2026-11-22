@@ -48,8 +48,8 @@ type Finished = {
 
 const link = (file: UploadResponse) => file.pageUrl || file.url
 
-/** The link without its scheme, as people read and paste it. */
-const readable = (url: string) => url.replace(/^https:\/\//, '')
+/** The link without its scheme, as people read it. */
+const readable = (url: string) => url.replace(/^https?:\/\//, '')
 
 const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`
 
@@ -61,9 +61,12 @@ const files = (count: number) => `${count} ${count === 1 ? 'file' : 'files'}`
 export function UploadForm({
   maxSize,
   saved,
+  folder,
 }: {
   maxSize: number
   saved: SavedUploadSettings
+  /** The folder a link to Upload names, when it is the account's. */
+  folder?: { id: string; name: string } | null
 }) {
   const hydrated = useHydrated()
   const mounted = useRef(true)
@@ -74,9 +77,15 @@ export function UploadForm({
     }
   }, [])
   const searchParams = useSearchParams()
+  const requested = folderDestination(searchParams.get('folder'))
   const options = useUploadOptions(
     saved,
-    folderDestination(searchParams.get('folder'))
+    requested
+      ? {
+          id: requested,
+          name: folder?.id === requested ? folder.name : undefined,
+        }
+      : null
   )
   // This page shows each outcome in its list; a notification is only for
   // someone who left before the batch ended.
@@ -148,9 +157,11 @@ export function UploadForm({
     if (!result) return
     const done = result.uploaded.map((file, index): Finished => {
       const source = batch[index]
-      const preview = source?.file.type.startsWith('image/')
-        ? URL.createObjectURL(source.file)
-        : undefined
+      // Someone who left meanwhile gets a notification, not this list.
+      const preview =
+        mounted.current && source?.file.type.startsWith('image/')
+          ? URL.createObjectURL(source.file)
+          : undefined
       if (preview) previews.current.add(preview)
       return {
         key: `${source?.key ?? index}-${link(file)}`,

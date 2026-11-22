@@ -56,7 +56,12 @@ const renderForm = () =>
       { client: new QueryClient() },
       React.createElement(UploadForm, {
         maxSize: 100,
-        saved: { effective: UPLOAD_DEFAULTS, profile: null },
+        saved: {
+          effective: UPLOAD_DEFAULTS,
+          account: UPLOAD_DEFAULTS,
+          profile: null,
+          has: { profiles: false, folders: true, tags: false },
+        },
       })
     )
   )

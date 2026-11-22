@@ -20,7 +20,7 @@ export default async function PastePage() {
         actionsBesideTitle
         title={<span id="paste-heading">Paste</span>}
       />
-      <PasteForm saved={saved} />
+      <PasteForm saved={saved} owner={session.user.id} />
     </section>
   )
 }

@@ -37,7 +37,7 @@ Recorded in a real Flare instance with a disposable account and demonstration fi
 
 #### Organize and upload
 
-<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 20-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
+<video class="demo-video" controls playsinline preload="none" aria-label="Organize and upload: 21-second silent Flare recording" :src="withBase('/demos/organizing-demo.mp4')">Your browser does not support this video. Follow the steps below.</video>
 
 <details class="demo-transcript">
 <summary>Transcript</summary>

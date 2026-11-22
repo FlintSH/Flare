@@ -31,7 +31,7 @@ recorded resolution.
 
 | Demo                                | Recording                                                       | Shows                                                                                                                  |
 | ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Organize and upload (20 seconds)    | [GIF](organizing-demo.gif) · [MP4](organizing-demo.mp4)         | Create a folder, move two files, create a subfolder, upload directly into it, and open the uploaded file's folder.     |
+| Organize and upload (21 seconds)    | [GIF](organizing-demo.gif) · [MP4](organizing-demo.mp4)         | Create a folder, move two files, create a subfolder, upload directly into it, and open the uploaded file's folder.     |
 | Share and revoke (12 seconds)       | [GIF](sharing-demo.gif) · [MP4](sharing-demo.mp4)               | Folder sharing controls, the public collection, protected-file presentation, disabling the link, and the revoked page. |
 | Protected-file handoff (10 seconds) | [GIF](protected-file-demo.gif) · [MP4](protected-file-demo.mp4) | Open a protected tile, retry an incorrect password, then reveal the filename and existing viewer after verification.   |
 

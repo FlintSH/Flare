@@ -8,11 +8,27 @@ import {
   uploadProfileOptionsSchema,
 } from './schema'
 
+/** A folder a link to Upload names, if it is the account's. */
+export async function ownFolder(userId: string, id: string | null) {
+  if (!id) return null
+  return prisma.vaultFolder.findFirst({
+    where: { id, userId },
+    select: { id: true, name: true },
+  })
+}
+
 export type SavedUploadSettings = {
   /** The account's settings with its default profile's over them. */
   effective: Required<UploadProfileOptions>
+  /** The account's settings alone, as an upload with no profile gets. */
+  account: Required<UploadProfileOptions>
   /** The default profile, or null when the account's own settings apply. */
   profile: { id: string; name: string } | null
+  /**
+   * Whether the account has profiles, folders and tags to choose from, so
+   * the options row has its final shape before those lists load.
+   */
+  has: { profiles: boolean; folders: boolean; tags: boolean }
 }
 
 /**
@@ -32,18 +48,28 @@ export async function savedUploadSettings(
     },
   })
   if (!account) return null
-  const profile = account.defaultUploadProfileId
-    ? await prisma.uploadProfile.findFirst({
-        where: { id: account.defaultUploadProfileId, userId },
-        select: { id: true, name: true, options: true },
-      })
-    : null
+  const own = {
+    ...UPLOAD_DEFAULTS,
+    ...accountUploadOptions(account, await getConfig()),
+  }
+  const [profile, profiles, folders, tags] = await Promise.all([
+    account.defaultUploadProfileId
+      ? prisma.uploadProfile.findFirst({
+          where: { id: account.defaultUploadProfileId, userId },
+          select: { id: true, name: true, options: true },
+        })
+      : null,
+    prisma.uploadProfile.count({ where: { userId } }),
+    prisma.vaultFolder.count({ where: { userId } }),
+    prisma.vaultTag.count({ where: { userId } }),
+  ])
   return {
     effective: {
-      ...UPLOAD_DEFAULTS,
-      ...accountUploadOptions(account, await getConfig()),
+      ...own,
       ...(profile ? uploadProfileOptionsSchema.parse(profile.options) : {}),
     },
+    account: own,
     profile: profile && { id: profile.id, name: profile.name },
+    has: { profiles: profiles > 0, folders: folders > 0, tags: tags > 0 },
   }
 }

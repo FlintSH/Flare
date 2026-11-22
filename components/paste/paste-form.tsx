@@ -38,7 +38,6 @@ import { uploadPaste } from '@/lib/uploads/client'
 import type { SavedUploadSettings } from '@/lib/uploads/saved-settings'
 
 import { useHydrated } from '@/hooks/use-hydrated'
-import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 import { UploadOptionsBar } from '../upload/options-bar'
@@ -73,9 +72,14 @@ type Created = { name: string; url: string; summary: string }
  * The Paste page: text or code in the share page's own code view, saved as
  * a file in the library with the same options as an upload.
  */
-export function PasteForm({ saved }: { saved: SavedUploadSettings }) {
-  const { user } = usePermissions()
-  const owner = user?.id ?? ''
+export function PasteForm({
+  saved,
+  owner,
+}: {
+  saved: SavedUploadSettings
+  /** The signed-in account, whose draft this page keeps. */
+  owner: string
+}) {
   const hydrated = useHydrated()
   const options = useUploadOptions(saved)
   const [draft, setDraft] = useState<PasteDraft>(() => readDraft(owner))
@@ -126,7 +130,7 @@ export function PasteForm({ saved }: { saved: SavedUploadSettings }) {
         summary: [
           languageName(language),
           effective.visibility === 'PUBLIC' ? 'Public' : 'Private',
-          ...(options.choices.password ? ['Password'] : []),
+          ...(options.passwordSet ? ['Password'] : []),
           expiryLabel(effective.expiry, effective.expiryAction),
         ].join(' · '),
       })
