@@ -75,7 +75,7 @@ Dropped files join the same list as **Upload**, so they appear there with their 
 
 **Copy** above the list copies the links of the newest batch, one per line, and so does <kbd>Ctrl</kbd>+<kbd>C</kbd> (<kbd>⌘</kbd>+<kbd>C</kbd>) or **Edit → Copy** while nothing on the page is selected and no field, menu or dialog has focus. While some files in the batch are still uploading, the button says how many links are ready, as in **Copy 2 of 3 links**. Each row's **Copy** copies that file's link. On phones and tablets with a share sheet, **Share** sends the links to another app.
 
-The menu beside **Copy** chooses what it copies. Flare remembers the choice in this browser.
+The menu beside **Copy** chooses what it copies. Flare remembers the choice in this browser; where the browser won't store it, as in some private windows, the choice holds until you leave the page.
 
 | Choice          | What is copied                                                                                                                                                            |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

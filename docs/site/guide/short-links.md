@@ -21,7 +21,7 @@ Shortening also copies the new link, so it's ready to paste. The link appears at
 While you compose, Flare reads the address in your browser, without visiting it:
 
 - **Tracking parameters** such as `utm_source`, `fbclid` or `gclid`, and `si` on YouTube and Spotify links, are named under the field with **Remove them**. Only those parameters are removed; the rest of the address stays exactly as you pasted it. **Undo** puts them back. Flare never removes them without asking.
-- **A link you already have** for the same address is named, with its clicks and **Copy it**, so you can reuse it instead of making a second one. Flare compares the address as pasted and without its tracking parameters.
+- **A link you already have** for the same address is named, with its clicks and **Copy it**, so you can reuse it instead of making a second one. Flare compares the address as pasted and without its tracking parameters, ignoring letter case only in the scheme and host, so a user name or password in the address must match exactly.
 
 An ending can be up to 64 letters, numbers, `-` and `_`. Endings are case-sensitive, but Flare refuses an ending you choose while another link on the instance uses it in any letter case, so a chosen `/u/Launch` can't sit beside `/u/launch` and pass for it. A taken ending shows **That ending is already taken. Choose another.** Your account's vanity URL setting affects uploaded-file URLs, not the `/u/…` path.
 

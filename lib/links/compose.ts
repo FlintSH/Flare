@@ -246,11 +246,14 @@ export function suggestEnding(address: string): string | null {
  */
 export function sameDestination(existing: string, address: string) {
   const key = (value: string) => {
-    const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/?#]*)([\s\S]*)$/i.exec(
-      value.trim()
-    )
+    // A user name and password before `@` keep their case; only the
+    // scheme and host ignore it.
+    const match =
+      /^([a-z][a-z0-9+.-]*:\/\/)([^/?#@]*@)?([^/?#]*)([\s\S]*)$/i.exec(
+        value.trim()
+      )
     return match
-      ? `${match[1]!.toLowerCase()}${match[2]!.toLowerCase()}${match[3]}`
+      ? `${match[1]!.toLowerCase()}${match[2] ?? ''}${match[3]!.toLowerCase()}${match[4]}`
       : value.trim()
   }
   const target = key(existing)

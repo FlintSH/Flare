@@ -238,15 +238,17 @@ export function UploadForm({
       setDragging(false)
       add(Array.from(event.dataTransfer?.files ?? []))
     }
-    window.addEventListener('dragenter', enter)
-    window.addEventListener('dragleave', leave)
-    window.addEventListener('dragover', over)
-    window.addEventListener('drop', drop)
+    // On `document`, beside the drop zone every dashboard page carries: it
+    // stops these events there, so they never reach `window`.
+    document.addEventListener('dragenter', enter)
+    document.addEventListener('dragleave', leave)
+    document.addEventListener('dragover', over)
+    document.addEventListener('drop', drop)
     return () => {
-      window.removeEventListener('dragenter', enter)
-      window.removeEventListener('dragleave', leave)
-      window.removeEventListener('dragover', over)
-      window.removeEventListener('drop', drop)
+      document.removeEventListener('dragenter', enter)
+      document.removeEventListener('dragleave', leave)
+      document.removeEventListener('dragover', over)
+      document.removeEventListener('drop', drop)
     }
   }, [add])
 

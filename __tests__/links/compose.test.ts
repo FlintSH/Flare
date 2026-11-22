@@ -158,6 +158,21 @@ describe('sameDestination', () => {
     ).toBe(true)
   })
 
+  it('keeps a user name and password exactly as written', () => {
+    expect(
+      sameDestination(
+        'https://Alice:Secret@example.com/x',
+        'https://alice:secret@example.com/x'
+      )
+    ).toBe(false)
+    expect(
+      sameDestination(
+        'https://Alice:Secret@Example.com/x',
+        'HTTPS://Alice:Secret@example.COM/x'
+      )
+    ).toBe(true)
+  })
+
   it('keeps paths, queries and schemes apart', () => {
     expect(
       sameDestination('https://example.com/a', 'https://example.com/A')

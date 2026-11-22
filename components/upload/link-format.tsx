@@ -21,8 +21,11 @@ import {
 
 const KEY = 'flare:upload-link-format'
 const watchers = new Set<() => void>()
+/** The choice made on this page, which holds even when storage refuses it. */
+let chosen: LinkFormat | null = null
 
 function read(): LinkFormat {
+  if (chosen) return chosen
   try {
     const saved = window.localStorage.getItem(KEY)
     return isLinkFormat(saved) ? saved : 'link'
@@ -47,6 +50,7 @@ export function useLinkFormat() {
     () => 'link' as const
   )
   const choose = useCallback((next: LinkFormat) => {
+    chosen = next
     try {
       window.localStorage.setItem(KEY, next)
     } catch {
