@@ -75,6 +75,45 @@ export const API_SCOPE_CATALOG = [
     surfaces: ['mcp'],
   },
   {
+    scope: 'invites:write',
+    label: 'Manage invites',
+    description: 'List, create and revoke invite links',
+    group: 'account',
+    surfaces: ['mcp'],
+  },
+  // What an agent may do to the instance itself. These exist only while
+  // administration through MCP is on, and are never part of a preset.
+  {
+    scope: 'admin:read',
+    label: 'View administration',
+    description:
+      'Users, roles, instance settings with secrets hidden, and the audit log',
+    group: 'administration',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'admin:users',
+    label: 'Manage users and roles',
+    description: 'Create, edit and delete users and roles, and sign users out',
+    group: 'administration',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'admin:content',
+    label: 'Moderate content',
+    description:
+      "View, change the sharing of, and delete other accounts' files and links",
+    group: 'administration',
+    surfaces: ['mcp'],
+  },
+  {
+    scope: 'admin:settings',
+    label: 'Change instance settings',
+    description: 'Registration, storage, quotas, email policy and appearance',
+    group: 'administration',
+    surfaces: ['mcp'],
+  },
+  {
     scope: 'mcp',
     label: 'Agent access',
     description: 'Use this token with the MCP server',
@@ -86,6 +125,25 @@ export type ApiScope = (typeof API_SCOPE_CATALOG)[number]['scope']
 export const API_SCOPES = API_SCOPE_CATALOG.map(({ scope }) => scope)
 /** The marker a named token needs before the MCP endpoint accepts it. */
 export const MCP_SCOPE = 'mcp' satisfies ApiScope
+
+/**
+ * The scopes that act on the instance rather than on one account. No
+ * credential holds or uses one while administration through MCP is off.
+ */
+export const ADMIN_SCOPES = [
+  'admin:read',
+  'admin:users',
+  'admin:content',
+  'admin:settings',
+] as const satisfies readonly ApiScope[]
+
+export function isAdminScope(scope: string): boolean {
+  return (ADMIN_SCOPES as readonly string[]).includes(scope)
+}
+
+/** Whether any of `scopes` acts on the instance. */
+export const holdsAdminScope = (scopes: readonly string[]): boolean =>
+  scopes.some(isAdminScope)
 
 /** Where a scope is honored. */
 export type ScopeSurface =

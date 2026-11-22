@@ -1,6 +1,7 @@
 import { requireSession } from '@/lib/http/access'
 import { routes } from '@/lib/http/route'
 import { loggers } from '@/lib/logger'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 import { checkForUpdates, getBuildInfo } from '@/lib/releases'
 
 const api = routes('/api/updates/check', {
@@ -9,6 +10,6 @@ const api = routes('/api/updates/check', {
 })
 
 export const GET = api(async (request) => {
-  await requireSession(request, 'settings.read')
+  await requireSession(request, ADMIN_PERMISSIONS.readSettings)
   return checkForUpdates(getBuildInfo())
 })

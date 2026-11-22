@@ -60,12 +60,28 @@ export async function listRoles() {
   }))
 }
 
-export async function createRole(actorId: string, body: unknown) {
+/**
+ * A caller's own last check on a role change, run under the role lock once
+ * the service's own checks have passed, with the role's permissions as
+ * committed (none for a new role) and as the change leaves them. Throw to
+ * refuse.
+ */
+export type RoleChangeCheck = (
+  tx: Prisma.TransactionClient,
+  permissions: { before: readonly string[]; after: readonly string[] }
+) => Promise<void>
+
+export async function createRole(
+  actorId: string,
+  body: unknown,
+  check?: RoleChangeCheck
+) {
   const role = parseRole(roleCreateSchema, body)
   return prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
     const actor = await requireActorPermission(tx, actorId, 'roles.manage')
     assertMayChange(actor, role)
+    await check?.(tx, { before: [], after: role.permissions })
     if ((await tx.role.count()) >= MAX_ROLES)
       throw new PermissionError(
         `This instance has reached the limit of ${MAX_ROLES} roles`,
@@ -75,7 +91,12 @@ export async function createRole(actorId: string, body: unknown) {
   })
 }
 
-export async function updateRole(actorId: string, id: string, body: unknown) {
+export async function updateRole(
+  actorId: string,
+  id: string,
+  body: unknown,
+  check?: RoleChangeCheck
+) {
   const changes = parseRole(roleUpdateSchema, body)
   return prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
@@ -98,6 +119,7 @@ export async function updateRole(actorId: string, id: string, body: unknown) {
     } else if (next.position === EVERYONE_POSITION)
       throw new PermissionError('Only Everyone may use position zero', 400)
     assertMayChange(actor, next)
+    await check?.(tx, { before: current.permissions, after: next.permissions })
     const updated = await tx.role.update({
       where: { id },
       data: changes,

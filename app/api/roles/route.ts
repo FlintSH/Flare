@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { requireSession } from '@/lib/http/access'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 import { PERMISSION_GROUPS } from '@/lib/permissions/catalog'
 import { createRole, listRoles } from '@/lib/permissions/roles'
 
@@ -11,13 +12,16 @@ const api = routes('/api/roles', {
 })
 
 export const GET = api(async (request) => {
-  await requireSession(request, ['roles.manage', 'users.roles', 'users.read'])
+  await requireSession(request, ADMIN_PERMISSIONS.listRoles)
   return { roles: await listRoles(), permissionGroups: PERMISSION_GROUPS }
 })
 
 export const POST = api(
   async (request) => {
-    const { user } = await requireSession(request, 'roles.manage')
+    const { user } = await requireSession(
+      request,
+      ADMIN_PERMISSIONS.manageRoles
+    )
     const role = await createRole(
       user.id,
       await readJson(request, { limit: 32 * 1024 })

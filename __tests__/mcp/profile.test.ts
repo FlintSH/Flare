@@ -156,6 +156,9 @@ function contextFor(name: ToolName, grant: Grant): ToolContext {
     principal,
     request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: ORIGIN,
+    moderating: null,
+    mayModerate: false,
+    requireModeration: () => {},
     allows: (effectName) => needsMet(effect(effectName), principal),
     // The server asks the credential and the role again; here a fake answers.
     recheck: (transaction) => mocks.recheck(transaction),

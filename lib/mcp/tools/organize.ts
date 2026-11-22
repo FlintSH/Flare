@@ -7,6 +7,7 @@ import {
   scheduleFileExpiration,
 } from '@/lib/files/expiry'
 import {
+  type FileAuthority,
   deleteFile,
   fileSettingsSchema,
   updateFileSettings,
@@ -23,12 +24,14 @@ import { changeFileTags } from '@/lib/tags/service'
 
 import type { AgentPrincipal } from '../auth'
 import { compact } from '../results'
-import { ToolError, defineTool } from '../tool'
+import { type ToolContext, ToolError, defineTool } from '../tool'
 import { folderChange } from './folders'
 import {
   NONE,
   accountFolders,
   fileIds,
+  filesById,
+  moderatedAccount,
   ownFilesById,
   pickFolder,
   pickTags,
@@ -50,6 +53,30 @@ type NamedFile = { id: string; name: string }
 
 const NOT_OWN =
   'No file of this account has this ID. Use search_files to find it.'
+const NOT_THEIRS =
+  'No file of that account has this ID. Use search_files with the same `account` to find it.'
+
+/**
+ * Whose files a batch acts on, and under whose authority: the caller's own,
+ * or, in moderator mode, the named account's as a moderator. A moderator
+ * never acts as that account, and the services find only its files.
+ */
+async function batchAuthority(
+  context: Pick<ToolContext, 'principal' | 'moderating' | 'requireModeration'>
+): Promise<{ userId: string; authority: FileAuthority; missing: string }> {
+  const account = await moderatedAccount(context)
+  return account
+    ? {
+        userId: account.id,
+        authority: { as: 'moderator', accountId: account.id },
+        missing: NOT_THEIRS,
+      }
+    : {
+        userId: context.principal.user.id,
+        authority: { as: 'owner', userId: context.principal.user.id },
+        missing: NOT_OWN,
+      }
+}
 
 /** The audit event names the file a call is about, or says how many. */
 function auditFiles(files: readonly NamedFile[]) {
@@ -91,21 +118,24 @@ function settled<Row extends FileResult>(results: Row[], nothing: string) {
 /**
  * Runs `change` for each file a batch names, one after another because every
  * change locks the same account. A file that fails is reported and the rest
- * still run. IDs that are not this account's files never reach the service.
+ * still run. IDs that are not files of the account acted on (the caller's,
+ * or the moderated one's) never reach the service.
  */
 async function eachFile<Extra extends object = object>(
-  principal: AgentPrincipal,
+  owner: AgentPrincipal | { userId: string; missing: string },
   ids: readonly string[],
   nothing: string,
   change: (file: NamedFile) => Promise<Extra | void>
 ) {
   type Row = FileResult & Partial<Extra>
-  const { unique, found } = await ownFilesById(principal, ids)
+  const { userId, missing } =
+    'user' in owner ? { userId: owner.user.id, missing: NOT_OWN } : owner
+  const { unique, found } = await filesById(userId, ids)
   const results: Row[] = []
   for (const id of unique) {
     const file = found.get(id)
     if (!file) {
-      results.push({ id, ok: false, error: NOT_OWN } as Row)
+      results.push({ id, ok: false, error: missing } as Row)
       continue
     }
     try {
@@ -371,8 +401,9 @@ const visibility = z.enum(['public', 'private'])
 
 const setFileSharing = defineTool({
   name: 'set_file_sharing',
+  moderation: true,
   description:
-    'Change who can open up to 50 files. `visibility` "public" lets anyone with the link open a file; "private" lets only the signed-in owner. `password` makes visitors enter one, and `password: null` removes it. Give either or both. Making a file public or removing its password exposes it to everyone who has the link, and making it private cuts off everyone using the link. Answers per file with the new state and the share URL; a password is never returned.',
+    'Change who can open up to 50 files. `visibility` "public" lets anyone with the link open a file; "private" lets only the signed-in owner. `password` makes visitors enter one, and `password: null` removes it. Give either or both. Making a file public or removing its password exposes it to everyone who has the link, and making it private cuts off everyone using the link. Answers per file with the new state and the share URL; a password is never returned. With `account`, the files are that account\'s, changed as a moderator.',
   input: z.object({
     files: fileIds,
     visibility: visibility.optional(),
@@ -397,7 +428,8 @@ const setFileSharing = defineTool({
       })
     ),
   }),
-  async run(args, { principal, origin }) {
+  async run(args, context) {
+    const { origin } = context
     if (args.visibility === undefined && args.password === undefined)
       throw new ToolError(
         'Give `visibility`, `password` or both: what to change about the files.'
@@ -408,9 +440,9 @@ const setFileSharing = defineTool({
       ...(args.visibility && { visibility: VISIBILITY[args.visibility] }),
       ...(args.password !== undefined && { password: args.password }),
     })
-    const authority = { as: 'owner', userId: principal.user.id } as const
+    const { authority, ...owner } = await batchAuthority(context)
     const results = await eachFile(
-      principal,
+      owner,
       args.files,
       'No file was changed.',
       async ({ id }) => {
@@ -431,14 +463,15 @@ const setFileSharing = defineTool({
 
 const deleteFiles = defineTool({
   name: 'delete_files',
+  moderation: true,
   description:
-    'Permanently delete up to 50 files. Flare has no trash: a deleted file, its contents and its link cannot be recovered, so check the IDs with get_file or search_files first. To remove files later instead, use set_file_expiry. Answers per file.',
+    "Permanently delete up to 50 files. Flare has no trash: a deleted file, its contents and its link cannot be recovered, so check the IDs with get_file or search_files first. To remove files later instead, use set_file_expiry. Answers per file. With `account`, the files are that account's, deleted as a moderator.",
   input: z.object({ files: fileIds }),
   output: z.object({ results: z.array(fileResult) }),
-  async run(args, { principal }) {
-    const authority = { as: 'owner', userId: principal.user.id } as const
+  async run(args, context) {
+    const { authority, ...owner } = await batchAuthority(context)
     const results = await eachFile(
-      principal,
+      owner,
       args.files,
       'No file was deleted.',
       async ({ id }) => deleteFile(authority, id)

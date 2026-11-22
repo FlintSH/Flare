@@ -1,7 +1,9 @@
 import type { Prisma } from '@prisma/client'
 import * as z from 'zod'
 
+import { setAuditTarget } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { type FileAccessInfo, checkFileAccess } from '@/lib/files/access'
 import { findFile } from '@/lib/files/delivery'
 import type { fileListItem } from '@/lib/files/gallery-navigation'
 import { fileUrls } from '@/lib/files/urls'
@@ -11,8 +13,9 @@ import { listTags } from '@/lib/tags/manage'
 import { mbToBytes } from '@/lib/utils/size'
 
 import type { AgentPrincipal } from '../auth'
+import { type AccountSummary, resolveAccount } from '../moderation'
 import { compact } from '../results'
-import { ToolError } from '../tool'
+import { type ToolContext, ToolError } from '../tool'
 
 /** The word tools take in place of a folder or tag to mean "has none". */
 export const NONE = 'none'
@@ -31,8 +34,9 @@ export const fileRowSchema = z.object({
     .describe('The share page; private files need the owner signed in'),
   folder: z.string().optional().describe('Folder path, such as Work/Reports'),
   tags: z.array(z.string()).optional(),
-  views: z.number(),
-  downloads: z.number(),
+  // A moderator's listing has no counts, as the REST moderation route has none.
+  views: z.number().optional(),
+  downloads: z.number().optional(),
   expires_at: z.string().optional(),
   expiry_action: z.enum(['delete', 'make_private']).optional(),
 })
@@ -171,14 +175,17 @@ export const fileReference = z
   )
 
 /**
- * The account's own file an argument names: an ID, a share URL, or a
- * `/user/name` path. Anyone else's file answers exactly like a missing one.
- * `select` must include `userId`.
+ * The file of `accountId` an argument names: an ID, a share URL, or a
+ * `/user/name` path. Anyone else's file answers exactly like a missing one,
+ * with `missing`. `select` must include `userId`.
  */
-export async function ownFile<S extends Prisma.FileSelect & { userId: true }>(
-  principal: AgentPrincipal,
+export async function accountFile<
+  S extends Prisma.FileSelect & { userId: true },
+>(
+  accountId: string,
   reference: string,
-  select: S
+  select: S,
+  missing: string
 ): Promise<Prisma.FileGetPayload<{ select: S }>> {
   const value = reference.trim()
   let path: string | null = null
@@ -202,25 +209,99 @@ export async function ownFile<S extends Prisma.FileSelect & { userId: true }>(
       file = await findFile({ userUrlId, filename }, select)
     }
   } else file = await findFile({ id: value }, select)
-  if (!file || (file as { userId: string }).userId !== principal.user.id)
-    throw new ToolError(
-      `No file of this account matches "${reference}". Use search_files to find it.`
-    )
+  if (!file || (file as { userId: string }).userId !== accountId)
+    throw new ToolError(missing)
   return file
 }
 
-/** The files a batch tool names, by ID. Missing and foreign IDs are reported together. */
-export async function ownFilesById(
+/**
+ * The account's own file an argument names: an ID, a share URL, or a
+ * `/user/name` path. Anyone else's file answers exactly like a missing one.
+ * `select` must include `userId`.
+ */
+export function ownFile<S extends Prisma.FileSelect & { userId: true }>(
   principal: AgentPrincipal,
-  ids: readonly string[]
-) {
+  reference: string,
+  select: S
+): Promise<Prisma.FileGetPayload<{ select: S }>> {
+  return accountFile(
+    principal.user.id,
+    reference,
+    select,
+    `No file of this account matches "${reference}". Use search_files to find it.`
+  )
+}
+
+/** The files of `userId` a batch tool names, by ID. Missing and foreign IDs are reported together. */
+export async function filesById(userId: string, ids: readonly string[]) {
   const unique = [...new Set(ids)]
   const files = await prisma.file.findMany({
-    where: { id: { in: unique }, userId: principal.user.id },
+    where: { id: { in: unique }, userId },
     select: { id: true, name: true },
   })
   const found = new Map(files.map((file) => [file.id, file]))
   return { unique, found }
+}
+
+/** The files a batch tool names, by ID. Missing and foreign IDs are reported together. */
+export function ownFilesById(
+  principal: AgentPrincipal,
+  ids: readonly string[]
+) {
+  return filesById(principal.user.id, ids)
+}
+
+/**
+ * The account a call in moderator mode acts on, or null in owner mode. The
+ * server checked the moderation needs before the tool ran; asking again here
+ * keeps a tool from ever acting on another account without them.
+ */
+export async function moderatedAccount(
+  context: Pick<ToolContext, 'moderating' | 'requireModeration'>
+): Promise<AccountSummary | null> {
+  if (context.moderating === null) return null
+  context.requireModeration()
+  return resolveAccount(context.moderating)
+}
+
+/** What a tool says about a file of the moderated account that is not there. */
+export const NOT_THEIRS =
+  'No file of that account matches. Use search_files with the same `account` to find it.'
+
+/**
+ * A file of the account a moderator names, found as `accountFile` finds it,
+ * and only if the app's delivery rules let this moderator open it
+ * (`checkFileAccess`, which lets `content.read` past visibility and
+ * passwords). Any other file answers exactly like a missing one.
+ */
+export async function moderatedFile<
+  S extends Prisma.FileSelect & { userId: true },
+>(
+  principal: AgentPrincipal,
+  accountId: string,
+  reference: string,
+  select: S
+): Promise<Prisma.FileGetPayload<{ select: S }>> {
+  const file = await accountFile(
+    accountId,
+    reference,
+    { ...select, id: true, visibility: true, password: true },
+    NOT_THEIRS
+  )
+  const access = await checkFileAccess(file as unknown as FileAccessInfo, {
+    user: { id: principal.user.id, permissions: principal.user.permissions },
+  })
+  if (!access.allowed || !access.canModerate) throw new ToolError(NOT_THEIRS)
+  return file as unknown as Prisma.FileGetPayload<{ select: S }>
+}
+
+/** The audit event of a moderator's call names the account it looked at. */
+export function auditAccount(account: AccountSummary) {
+  setAuditTarget({
+    type: 'user',
+    id: account.id,
+    name: account.name ?? undefined,
+  })
 }
 
 /** Up to 50 file IDs, the size every batch tool accepts. */

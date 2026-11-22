@@ -115,6 +115,9 @@ function context(
     request:
       overrides.request ?? new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
     origin: overrides.origin ?? ORIGIN,
+    moderating: null,
+    mayModerate: false,
+    requireModeration: () => {},
     allows: () => true,
     recheck: async () => {},
     requireEffect: () => {},
@@ -1364,7 +1367,7 @@ describe('the last check on an archive call', () => {
         expect(raw.$queryRaw).toHaveBeenCalledOnce()
         expect(raw.agentConnection.findUnique).toHaveBeenCalledExactlyOnceWith({
           where: { id: 'connection-1' },
-          select: { revokedAt: true, scopes: true },
+          select: { revokedAt: true, scopes: true, createdAt: true },
         })
         expect(order(raw.$queryRaw)).toBeLessThan(
           order(raw.agentConnection.findUnique)

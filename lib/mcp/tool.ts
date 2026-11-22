@@ -34,7 +34,24 @@ export type ToolContext = {
   request: Request
   /** Flare's public address, without a trailing slash. */
   origin: string
-  /** Whether the credential and role allow an effect the tool's row names. */
+  /**
+   * In moderator mode, the account the call names, exactly as the agent gave
+   * its `account` argument (a user ID, name or email: resolve it with
+   * `resolveAccount` in `lib/mcp/moderation.ts`); null in owner mode. The
+   * server chose the mode from the arguments and checked the row's
+   * `moderation` needs before `run`, so a tool only acts on it: run the
+   * services as `{ as: 'moderator', accountId }`, never as that account.
+   * `account` itself is not among `run`'s arguments.
+   */
+  moderating: string | null
+  /** Whether this connection may use the tool on other accounts' content. */
+  mayModerate: boolean
+  /** Refuse the call, saying what is missing, unless `mayModerate`. */
+  requireModeration(): void
+  /**
+   * Whether the credential and role allow an effect the tool's row names.
+   * Effects are needs of owner mode: asking in moderator mode is a bug.
+   */
   allows(effect: string): boolean
   /** Refuse the call, saying what is missing, unless the effect is allowed. */
   requireEffect(effect: string): void
@@ -69,6 +86,16 @@ export type ToolDefinition<
    * text block only, and declares no output schema.
    */
   blocksOnly?: boolean
+  /**
+   * The tool acts on another account's content when the call names one in
+   * an `account` argument. Its catalog row must have `moderation` needs. The
+   * server adds that argument to the input schema of connections that may
+   * moderate (and parses it on every call, so one that may not is refused in
+   * words rather than run as the owner), selects the mode from it, checks
+   * it, and hands the account to `run` as `context.moderating`. `input`
+   * itself never declares `account`.
+   */
+  moderation?: true
   run(
     args: z.infer<Input>,
     context: ToolContext

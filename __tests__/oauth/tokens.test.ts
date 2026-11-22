@@ -758,7 +758,76 @@ describe('redeeming an authorization code', () => {
   })
 })
 
+/** Saved settings with administration through MCP on or off, as a transaction reads them. */
+function administration(on: boolean) {
+  const config = structuredClone(DEFAULT_CONFIG)
+  config.settings.general.mcp.enabled = true
+  config.settings.general.mcp.administration = on
+  db.state.settings = config
+}
+
+describe('redeeming a code that grants an administration scope', () => {
+  it('takes the settings lock before the account row, and grants the scope while it is on', async () => {
+    administration(true)
+    db.calls.length = 0
+    const pair = await connect(['files:read', 'admin:read'])
+    expect(pair.scope).toBe('files:read admin:read')
+    expect(onlyConnection().scopes).toEqual(['files:read', 'admin:read'])
+    const inside = db.calls.slice(db.calls.indexOf('transaction') + 1)
+    expect(inside.slice(0, 3)).toEqual([
+      'settingsLock',
+      'config.findUnique',
+      'lock',
+    ])
+  })
+
+  it('makes the connection without it once administration was turned off, and says so in scope', async () => {
+    administration(false)
+    const pair = await connect(['files:read', 'admin:read', 'admin:users'])
+    expect(pair.scope).toBe('files:read')
+    expect(onlyConnection().scopes).toEqual(['files:read'])
+  })
+
+  it('refuses a code that granted nothing else, and uses it up', async () => {
+    administration(false)
+    issueCode({ scopes: ['admin:read'] })
+    await expectError(await tokenRequest(codeGrant()), 'invalid_grant')
+    expect(db.tables.connections).toEqual([])
+    expect(db.tables.codes[0].usedAt).toBeInstanceOf(Date)
+  })
+
+  it('takes no settings lock for a code without one', async () => {
+    db.calls.length = 0
+    await connect()
+    expect(db.calls).not.toContain('settingsLock')
+    expect(db.calls).not.toContain('config.findUnique')
+  })
+})
+
 describe('refreshing', () => {
+  it('ends a connection with an administration scope 30 days after it was authorized, however recently used', async () => {
+    const DAY = 86_400_000
+    administration(true)
+    let pair = await connect(['files:read', 'admin:read'])
+    onlyConnection().createdAt = new Date(Date.now() - 30 * DAY + 60_000)
+    pair = await refreshed(pair)
+    expect(pair.scope).toBe('files:read admin:read')
+    onlyConnection().createdAt = new Date(Date.now() - 30 * DAY - 1000)
+    onlyConnection().lastUsedAt = new Date()
+    await expectError(
+      await tokenRequest(refreshGrant(pair.refresh_token)),
+      'invalid_grant'
+    )
+    // The refresh token was not used up by the refusal, and still never works.
+    expect(rowOf(pair).rotatedAt).toBeNull()
+  })
+
+  it('keeps a connection without one working past 30 days', async () => {
+    const pair = await connect(['files:read', 'invites:write'])
+    onlyConnection().createdAt = new Date(Date.now() - 400 * 86_400_000)
+    await refreshed(pair)
+  })
+
   it('rotates: a new pair, and the old refresh token marked used', async () => {
     const first = await connect()
     const response = await tokenRequest(refreshGrant(first.refresh_token))

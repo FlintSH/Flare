@@ -138,17 +138,36 @@ describe('cleaning up after agent sign-in', () => {
       [
         'connections.take',
         {
-          sql: `SELECT c."id" FROM "AgentConnection" AS c WHERE c."revokedAt" IS NOT NULL OR NOT EXISTS ( SELECT 1 FROM "AgentToken" AS t WHERE t."connectionId" = c."id" ) ORDER BY c."id" LIMIT ? FOR UPDATE OF c SKIP LOCKED`,
-          values: [1000],
+          // Ended, pairless, or holding an administration scope 30 days on.
+          sql: `SELECT c."id" FROM "AgentConnection" AS c WHERE c."revokedAt" IS NOT NULL OR NOT EXISTS ( SELECT 1 FROM "AgentToken" AS t WHERE t."connectionId" = c."id" ) OR ( c."scopes" && ?::text[] AND c."createdAt" <= (?::timestamptz AT TIME ZONE 'UTC') ) ORDER BY c."id" LIMIT ? FOR UPDATE OF c SKIP LOCKED`,
+          values: [
+            ['admin:read', 'admin:users', 'admin:content', 'admin:settings'],
+            new Date('2026-10-22T12:00:00.000Z'),
+            1000,
+          ],
         },
       ],
       [
         'connections.delete',
         {
           where: {
-            // The rows it took, and still only ended or pairless ones.
+            // The rows it took, and still only ones that are over.
             id: { in: ['c1'] },
-            OR: [{ revokedAt: { not: null } }, { tokens: { none: {} } }],
+            OR: [
+              { revokedAt: { not: null } },
+              { tokens: { none: {} } },
+              {
+                scopes: {
+                  hasSome: [
+                    'admin:read',
+                    'admin:users',
+                    'admin:content',
+                    'admin:settings',
+                  ],
+                },
+                createdAt: { lte: new Date('2026-10-22T12:00:00.000Z') },
+              },
+            ],
           },
         },
       ],
@@ -179,7 +198,7 @@ describe('cleaning up after agent sign-in', () => {
 
   it('compares times as UTC without a zone, whatever zone the session is in', async () => {
     await cleanUpSignIn(NOW)
-    for (const name of ['codes', 'stale', 'pairs'])
+    for (const name of ['codes', 'stale', 'pairs', 'connections.take'])
       expect(statements(name)[0].sql).toContain(
         `<= (?::timestamptz AT TIME ZONE 'UTC')`
       )

@@ -2,13 +2,16 @@ import type { Prisma } from '@prisma/client'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { setAuditActor, setAuditOutcome, setAuditTarget } from '@/lib/audit'
-import { lockUserRow } from '@/lib/database/locks'
+import { lockSettings, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
+import { holdsAdminScope, isAdminScope } from '@/lib/integrations/bearer-routes'
 import { hashApiToken } from '@/lib/integrations/tokens'
+import { administrationOn } from '@/lib/mcp/settings'
 
 import { findClient } from './clients'
 import {
   type RevokedReason,
+  connectionExpired,
   connectionKey,
   countLiveConnections,
   effectiveScopes,
@@ -168,11 +171,21 @@ export async function exchangeCode(
   const hash = hashApiToken(code)
   const issued = await prisma.oAuthCode.findUnique({
     where: { hash },
-    select: { userId: true },
+    select: { userId: true, scopes: true },
   })
   if (!issued) throw invalidGrant()
+  // A code that grants an administration scope takes turns with the switch:
+  // the settings lock first, before the account's row. Turning
+  // administration off strips codes, and so can only take scopes away from
+  // this one, never add one, after it was read here.
+  const administering = holdsAdminScope(issued.scopes)
 
   const outcome = await prisma.$transaction(async (tx) => {
+    let administration = false
+    if (administering) {
+      await lockSettings(tx)
+      administration = await administrationOn(tx)
+    }
     await lockUserRow(tx, issued.userId)
     const now = new Date()
     const { count } = await tx.oAuthCode.updateMany({
@@ -210,6 +223,14 @@ export async function exchangeCode(
       return { refused: 'grant' as const }
     if ((await countLiveConnections(tx, row.userId, now)) >= MAX_CONNECTIONS)
       return { refused: 'limit' as const }
+    // Turned off since the person approved: the connection is made without
+    // the administration scopes, as turning it off a moment later would
+    // have left it, and the answer's `scope` says what was granted. A code
+    // that granted nothing else grants nothing.
+    const scopes = signInScopes(row.scopes).filter(
+      (scope) => administration || !isAdminScope(scope)
+    )
+    if (!scopes.length) return { refused: 'grant' as const }
     // The code proves the account approved this; from here it is the actor.
     setAuditActor({ id: row.userId, name: row.user.name })
     const connection = await tx.agentConnection.create({
@@ -218,7 +239,7 @@ export async function exchangeCode(
         clientId: client.id,
         clientName: client.name,
         redirectUri: row.redirectUri,
-        scopes: signInScopes(row.scopes),
+        scopes,
       },
     })
     const tokens = await issuePair(
@@ -307,7 +328,13 @@ export async function refreshTokens(
       include: { connection: true },
     })
     const now = new Date()
-    if (!token || token.connection.revokedAt)
+    // A connection with an administration scope ends 30 days after it was
+    // authorized; a refresh does not extend that.
+    if (
+      !token ||
+      token.connection.revokedAt ||
+      connectionExpired(token.connection, now)
+    )
       return { refused: 'grant' as const }
     const { connection } = token
     // An old token coming back is a replay whatever else the request says:

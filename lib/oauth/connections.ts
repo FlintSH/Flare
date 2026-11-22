@@ -2,19 +2,26 @@ import type { Prisma } from '@prisma/client'
 
 import { recordAudit } from '@/lib/audit'
 import { prisma } from '@/lib/database/prisma'
+import { ADMIN_SCOPES, holdsAdminScope } from '@/lib/integrations/bearer-routes'
 
-import { AUDIT_CATEGORY } from './constants'
+import { ADMIN_CONNECTION_DAYS, AUDIT_CATEGORY } from './constants'
 import { signInScopes } from './urls'
 
 type Transaction = Prisma.TransactionClient
 
 /**
  * Why a connection ended: its owner disconnected it, its client revoked it,
- * an old refresh token or a used authorization code came back, or the account
- * was signed out everywhere.
+ * an old refresh token or a used authorization code came back, the account
+ * was signed out everywhere, or its administration grant was past its 30
+ * days when administration through MCP was switched.
  */
 export type RevokedReason =
-  'disconnected' | 'revoked' | 'replay' | 'code-reuse' | 'sessions-revoked'
+  | 'disconnected'
+  | 'revoked'
+  | 'replay'
+  | 'code-reuse'
+  | 'sessions-revoked'
+  | 'expired'
 
 /** What identifies a connection in rate limits, transfer URLs and the audit log. */
 export const connectionKey = (id: string) => `connection:${id}`
@@ -33,12 +40,45 @@ export function effectiveScopes(
   )
 }
 
-/** The connections of an account that still work: not revoked, with a refresh token left. */
+/** The moment before which a connection with an administration scope has ended. */
+export const adminConnectionCutoff = (now = new Date()) =>
+  new Date(now.getTime() - ADMIN_CONNECTION_DAYS * 24 * 60 * 60_000)
+
+/**
+ * Whether a connection has outlived its grant: one that holds an
+ * administration scope ends 30 days after it was authorized, used or not.
+ * Those scopes are granted only at sign-in, never added later, so the
+ * connection's creation is when that grant was made. `pastGrant` is the
+ * same rule as a query, for lists and the sweep.
+ */
+export function connectionExpired(
+  connection: { scopes: readonly string[]; createdAt: Date },
+  now = new Date()
+): boolean {
+  return (
+    holdsAdminScope(connection.scopes) &&
+    connection.createdAt <= adminConnectionCutoff(now)
+  )
+}
+
+/** `connectionExpired` as a condition on the table. */
+export const pastGrant = (now = new Date()) =>
+  ({
+    scopes: { hasSome: [...ADMIN_SCOPES] },
+    createdAt: { lte: adminConnectionCutoff(now) },
+  }) satisfies Prisma.AgentConnectionWhereInput
+
+/**
+ * The connections of an account that still work: not revoked, with a refresh
+ * token left, and not past the 30 days of an administration grant. They are
+ * what the integrations screen lists and what the limit of 50 counts.
+ */
 const live = (userId: string, now: Date) =>
   ({
     userId,
     revokedAt: null,
     tokens: { some: { refreshExpiresAt: { gt: now } } },
+    NOT: pastGrant(now),
   }) satisfies Prisma.AgentConnectionWhereInput
 
 export function countLiveConnections(
@@ -207,8 +247,9 @@ export async function revokeAccountConnections(
 }
 
 /**
- * Whether a connection is still live and still granted every one of
- * `scopes`, and stays so until `tx` ends. Uploads ask inside the transaction
+ * Whether a connection is still live (not ended, and not past the 30 days
+ * of an administration grant) and still granted every one of `scopes`, and
+ * stays so until `tx` ends. Uploads ask inside the transaction
  * that publishes a file. The row is held from here to the commit, so the
  * answer cannot go stale: ending or editing the connection either finished
  * before this read, and is seen by it, or waits until the file is published.
@@ -222,11 +263,12 @@ export async function connectionHolds(
   await holdConnection(tx, id)
   const connection = await tx.agentConnection.findUnique({
     where: { id },
-    select: { revokedAt: true, scopes: true },
+    select: { revokedAt: true, scopes: true, createdAt: true },
   })
   return Boolean(
     connection &&
     !connection.revokedAt &&
+    !connectionExpired(connection) &&
     scopes.every((scope) => connection.scopes.includes(scope))
   )
 }

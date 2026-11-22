@@ -13,6 +13,7 @@ import {
   agentClient,
   agentScopeChoices,
   destinationLabel,
+  handPickedScope,
   offeredPresets,
   outOfReach,
   reachableFromCloud,
@@ -771,8 +772,11 @@ describe('whether cloud clients can reach an address', () => {
 })
 
 describe('permission presets', () => {
+  // Invites and administration are never in a preset: ticked by hand only.
   const groupScopes = API_SCOPE_CATALOG.filter(
-    ({ group }) => group === 'files' || group === 'links' || group === 'account'
+    ({ group, scope }) =>
+      (group === 'files' || group === 'links' || group === 'account') &&
+      !handPickedScope(scope)
   ).map(({ scope }) => scope)
 
   it('offers read only, read and upload, and everything', () => {
@@ -822,7 +826,9 @@ describe('permission presets', () => {
       ].sort()
     )
     expect(tools('upload')).toHaveLength(13)
-    expect(tools('all')).toEqual(TOOL_NAMES)
+    expect(tools('all')).toEqual(
+      TOOL_NAMES.slice(0, TOOL_NAMES.indexOf('list_invites'))
+    )
     expect(tools('all')).toHaveLength(28)
     // The account tools are what Everything adds over the file scopes.
     const withoutAccount = TOOL_NAMES.filter((name) =>
@@ -831,9 +837,13 @@ describe('permission presets', () => {
         can: () => true,
       })
     )
-    expect(TOOL_NAMES.filter((name) => !withoutAccount.includes(name))).toEqual(
-      ['update_profile', 'save_upload_profile', 'delete_upload_profile']
-    )
+    expect(
+      tools('all').filter((name) => !withoutAccount.includes(name))
+    ).toEqual([
+      'update_profile',
+      'save_upload_profile',
+      'delete_upload_profile',
+    ])
     // A role that allows nothing is left with the tool that needs nothing.
     for (const { id } of AGENT_PRESETS)
       expect(tools(id, () => false)).toEqual(['get_account'])
@@ -941,6 +951,44 @@ describe('what a permission picker starts on', () => {
     expect(ids(between)).toEqual(['read', 'upload'])
     expect(between.choice).toBe('upload')
     expect(between.offered).toContain('files:delete')
+  })
+
+  it('never ticks invites or an administration scope for the person', () => {
+    const handPicked = [
+      'invites:write',
+      'admin:read',
+      'admin:users',
+      'admin:content',
+      'admin:settings',
+    ]
+    expect(available.filter(handPickedScope)).toEqual(handPicked)
+    // No preset holds one, whatever the role can use.
+    for (const preset of AGENT_PRESETS)
+      expect(preset.scopes.filter(handPickedScope), preset.id).toEqual([])
+    for (const preset of offeredPresets(available))
+      expect(preset.scopes.filter(handPickedScope), preset.id).toEqual([])
+    // A client that asks for nothing else gets them offered and unticked.
+    const asked = agentScopeChoices(available, { ceiling: handPicked })
+    expect(asked).toEqual({
+      offered: handPicked,
+      presets: [],
+      choice: 'custom',
+      scopes: [],
+    })
+    // Beside other scopes, only those others start ticked.
+    expect(
+      agentScopeChoices(available, {
+        ceiling: ['files:delete', 'admin:content', 'invites:write'],
+      })
+    ).toMatchObject({
+      offered: ['files:delete', 'invites:write', 'admin:content'],
+      choice: 'custom',
+      scopes: ['files:delete'],
+    })
+    // An edit starts on what the connection holds, theirs included.
+    expect(
+      agentScopeChoices(available, { held: ['files:read', 'admin:read'] })
+    ).toMatchObject({ choice: 'custom', scopes: ['files:read', 'admin:read'] })
   })
 
   it('never offers what the role cannot use', () => {

@@ -154,13 +154,28 @@ const sharedSourceSelect = {
   password: true,
 } satisfies Prisma.FileSelect
 type SharedSource = Prisma.FileGetPayload<{ select: typeof sharedSourceSelect }>
-type Viewer = { id: string; sessionVersion: number } | null
+type Viewer = {
+  id: string
+  sessionVersion: number
+  /**
+   * The credential the viewer came with, as the audit log names it: an
+   * agent's token or connection. A browser visitor has none.
+   */
+  credential?: string
+} | null
 export type SharedArchiveAccess = {
   file: SharedSource
   viewer: Viewer
   verifiedPasswordHash: string | null
   /** This request submitted the file password and it matched. */
   passwordChecked: boolean
+  /**
+   * A caller's own last check, for one that is not a browser visitor (an
+   * agent moderating through MCP). It runs in the locked recheck, after the
+   * visitor's own rules, as `ArchiveActor.authorize` does for the owner.
+   * Throw to refuse. Share pages pass none.
+   */
+  authorize?: (tx: Prisma.TransactionClient) => Promise<void>
 }
 
 async function currentSession(
@@ -173,7 +188,8 @@ async function currentSession(
   if (!user || user.sessionVersion !== viewer.sessionVersion) return null
   const email = tx ? await getEmailConfigForUpdate(tx) : await getEmailConfig()
   if (requiresEmailVerification(user, email)) return null
-  setAuditActor({ id: user.id, name: user.name })
+  // Naming the actor again replaces the credential, so it is named with it.
+  setAuditActor({ id: user.id, name: user.name, tokenId: viewer.credential })
   return { user: { id: user.id, ...(await getUserAccess(user.id, client)) } }
 }
 
@@ -307,6 +323,7 @@ export async function recheckSharedArchive(
       await assertSharedSource(access, file, () =>
         currentSession(access.viewer, tx)
       )
+      await access.authorize?.(tx)
       // Expiration is worker-applied throughout sharing. A completed DELETE or
       // SET_PRIVATE is observed above; a scheduled deadline alone is not a ban.
       signal.throwIfAborted()

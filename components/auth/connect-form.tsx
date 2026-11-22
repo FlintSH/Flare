@@ -9,11 +9,13 @@ import {
   AgentScopes,
   useAgentScopes,
 } from '@/components/integrations/scope-picker'
+import { adminConnectionEnd } from '@/components/integrations/shared'
 import { Icons } from '@/components/shared/icons'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { holdsAdminScope } from '@/lib/integrations/bearer-routes'
 import {
   type ReturnDestination,
   destinationLabel,
@@ -131,7 +133,22 @@ export function ConnectForm({
         </dd>
       </dl>
       {grantable && !left && (
-        <AgentScopes picker={picker} disabled={busy !== null} narrow />
+        <div className="space-y-2">
+          <AgentScopes
+            picker={picker}
+            credential="connection"
+            disabled={busy !== null}
+            narrow
+          />
+          {/* Beside the choice that sets it. Never on the first drawing,
+              which ticks no administration scope, so the server's date and
+              the browser's cannot disagree. */}
+          {holdsAdminScope(picker.scopes) && (
+            <p className="text-pretty text-sm text-muted-foreground">
+              This connection ends on {adminConnectionEnd()}.
+            </p>
+          )}
+        </div>
       )}
       {available && !grantable && (
         <p className="text-pretty text-sm text-muted-foreground">

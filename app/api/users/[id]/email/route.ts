@@ -1,73 +1,38 @@
 import { z } from 'zod'
 
-import { lockRoleChanges } from '@/lib/database/locks'
-import { prisma } from '@/lib/database/prisma'
-import { lockEmailUser, sendAccountToken } from '@/lib/email/account'
-import { getEmailConfig, getEmailConfigForUpdate } from '@/lib/email/config'
-import { canResendVerification, userEmailStatus } from '@/lib/email/eligibility'
-import { EmailHttpError } from '@/lib/email/errors'
 import { emailRoutes } from '@/lib/email/http'
 import { limitEmailRequest } from '@/lib/email/rate-limit'
+import {
+  USER_EMAIL_ACTIONS,
+  userEmailAction,
+  userEmailStatusFor,
+} from '@/lib/email/user-actions'
 import { requireSession } from '@/lib/http/access'
 import { readJson } from '@/lib/http/request'
 import { routes } from '@/lib/http/route'
-import {
-  assertAccessibleAdministrator,
-  assertCanManageUser,
-  requireActorPermission,
-} from '@/lib/permissions/server'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 
 type Context = { params: Promise<{ id: string }> }
 
 const api = routes('/api/users/[id]/email', emailRoutes)
 
 export const GET = api(async (request, { params }: Context) => {
-  await requireSession(request, 'users.email')
+  await requireSession(request, ADMIN_PERMISSIONS.manageUserEmail)
   const { id } = await params
-  const [user, config] = await Promise.all([
-    prisma.user.findUnique({ where: { id } }),
-    getEmailConfig(),
-  ])
-  if (!user) throw new EmailHttpError('Account not found.', 404)
-  return userEmailStatus(user, config)
+  return userEmailStatusFor(id)
 })
 
 export const POST = api(async (request, { params }: Context) => {
-  const { user: actor } = await requireSession(request, 'users.email')
+  const { user: actor } = await requireSession(
+    request,
+    ADMIN_PERMISSIONS.manageUserEmail
+  )
   const { id } = await params
   const { action } = await readJson(
     request,
-    z.object({ action: z.enum(['exempt', 'require', 'resend']) })
+    z.object({ action: z.enum(USER_EMAIL_ACTIONS) })
   )
-  let config = await getEmailConfig()
-  if (!config.enabled) throw new EmailHttpError('Email is disabled.')
-  await limitEmailRequest(request, config)
-  await prisma.$transaction(async (tx) => {
-    await lockRoleChanges(tx)
-    config = await getEmailConfigForUpdate(tx)
-    if (!config.enabled) throw new EmailHttpError('Email is disabled.')
-    await requireActorPermission(tx, actor.id, 'users.email')
-    await assertCanManageUser(tx, actor.id, id)
-    const user = await lockEmailUser(tx, id)
-    if (action === 'resend') {
-      if (!canResendVerification(user, config))
-        throw new EmailHttpError(
-          'This user must enroll their recovery address from their own profile.'
-        )
-      if (user.email) await limitEmailRequest(request, config, user.email)
-      await sendAccountToken(tx, user, 'verify', config)
-      return
-    }
-    await tx.user.update({
-      where: { id },
-      data: { emailExempt: action === 'exempt' },
-    })
-    await assertAccessibleAdministrator(tx, config)
-  })
-  return {
-    message:
-      action === 'resend'
-        ? 'Verification email queued.'
-        : 'Email verification exemption updated.',
-  }
+  return userEmailAction(actor.id, id, action, (config, recipient) =>
+    limitEmailRequest(request, config, recipient)
+  )
 })

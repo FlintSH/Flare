@@ -17,10 +17,12 @@ const generalPermissions: Record<string, Permission> = {
 /**
  * The MCP server's fields each have their own permission: turning it on opens
  * an endpoint agents authenticate to, the same class of change as
- * registration and OIDC.
+ * registration and OIDC. Letting agents administer the instance is for an
+ * administrator alone.
  */
 const mcpPermissions: Record<string, Permission> = {
   enabled: 'settings.security',
+  administration: 'administrator',
 }
 function mcpPatchAllowed(
   subject: { permissions?: readonly string[] },
@@ -32,7 +34,8 @@ function mcpPatchAllowed(
     fields.length > 0 &&
     fields.every(
       (field) =>
-        mcpPermissions[field] && hasPermission(subject, mcpPermissions[field])
+        Object.hasOwn(mcpPermissions, field) &&
+        hasPermission(subject, mcpPermissions[field])
     )
   )
 }
@@ -61,4 +64,22 @@ export function settingsPatchAllowed(
       )
     })
   )
+}
+
+/**
+ * The permission one settings field needs, as `settingsPatchAllowed` decides
+ * it, by its dotted path: `general.storage`, `general.mcp.enabled`,
+ * `appearance.theme`. Fields of `general` and `general.mcp` have their own;
+ * any other section has one for all of it. Undefined for a field nobody may
+ * change through a settings patch.
+ */
+export function settingsFieldPermission(path: string): Permission | undefined {
+  const [section, field, subfield] = path.split('.')
+  const own = (table: Record<string, Permission>, key: string | undefined) =>
+    key !== undefined && Object.hasOwn(table, key) ? table[key] : undefined
+  if (section === 'general')
+    return field === 'mcp'
+      ? own(mcpPermissions, subfield)
+      : own(generalPermissions, field)
+  return own(sectionPermissions, section)
 }

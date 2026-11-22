@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/database/prisma'
+import { ADMIN_SCOPES } from '@/lib/integrations/bearer-routes'
 
+import { adminConnectionCutoff, pastGrant } from './connections'
 import { MAX_UNUSED_CLIENTS, UNUSED_CLIENT_HOURS } from './constants'
 
 /** Rows one sweep statement takes at a time. */
@@ -40,13 +42,16 @@ export async function inBatches(
  *   again with the `client_id` it remembers.
  * - Token pairs whose refresh token expired: 90 days after they were issued,
  *   which for the newest pair of a connection means 90 days unused.
- * - Connections that ended, and connections left without a pair.
+ * - Connections that ended, connections left without a pair, and
+ *   connections holding an administration scope 30 days after they were
+ *   authorized, which no entry point accepts any more.
  *
  * Two of these reach further rows through the database's cascades, and do
  * not wait there either, because there is nothing to reach:
  *
- * - A connection takes its pairs with it, and one is taken only when it has
- *   none: ending a connection deletes its pairs in the same transaction.
+ * - A connection takes its pairs with it. One that ended has none: ending a
+ *   connection deletes its pairs in the same transaction. An administration
+ *   connection past its 30 days can still have some, and they go with it.
  *   Whatever adds or changes a pair (a refresh, an ending) holds the
  *   connection's row first, and a connection whose row is held is passed
  *   over here.
@@ -118,20 +123,31 @@ export async function cleanUpSignIn(now = new Date()) {
   // Connections are audited: the rows are taken here, and then removed
   // through the audited delete, which records each one it removes. It locks
   // the rows it is given, and these are already this transaction's.
+  const adminCutoff = adminConnectionCutoff(now)
+  const adminScopes: string[] = [...ADMIN_SCOPES]
   const connections = await inBatches(() =>
     prisma.$transaction(async (tx) => {
       const free = await tx.$queryRaw<{ id: string }[]>`
         SELECT c."id" FROM "AgentConnection" AS c
-        WHERE c."revokedAt" IS NOT NULL OR NOT EXISTS (
-          SELECT 1 FROM "AgentToken" AS t WHERE t."connectionId" = c."id"
-        )
+        WHERE c."revokedAt" IS NOT NULL
+          OR NOT EXISTS (
+            SELECT 1 FROM "AgentToken" AS t WHERE t."connectionId" = c."id"
+          )
+          OR (
+            c."scopes" && ${adminScopes}::text[]
+            AND c."createdAt" <= (${adminCutoff}::timestamptz AT TIME ZONE 'UTC')
+          )
         ORDER BY c."id" LIMIT ${SWEEP_BATCH} FOR UPDATE OF c SKIP LOCKED
       `
       if (!free.length) return 0
       const { count } = await tx.agentConnection.deleteMany({
         where: {
           id: { in: free.map(({ id }) => id) },
-          OR: [{ revokedAt: { not: null } }, { tokens: { none: {} } }],
+          OR: [
+            { revokedAt: { not: null } },
+            { tokens: { none: {} } },
+            pastGrant(now),
+          ],
         },
       })
       return count

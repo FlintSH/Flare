@@ -165,7 +165,7 @@ const features = [
   [
     'Automate',
     'AI agents (MCP)',
-    'Connect Claude Code, Codex, Cursor, Claude, ChatGPT, and other MCP clients to your account by signing in through your browser. They find, read, upload, and organize files, look inside, extract, or create an archive, and change account settings within the actions you allow.',
+    'Connect Claude Code, Codex, Cursor, Claude, ChatGPT, and other MCP clients to your account by signing in through your browser. They find, read, upload, and organize files, look inside, extract, or create an archive, change account settings, and manage invites within the actions you allow. Where an administrator allows it, they can help administer the instance too.',
     '/guide/agents',
   ],
   [

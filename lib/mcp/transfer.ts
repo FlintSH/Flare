@@ -123,16 +123,59 @@ async function createTransfer(
   }
 }
 
-/** A URL that downloads one of the account's files for the next few minutes. */
+/**
+ * How a download link was made, so it is rechecked the same way at use:
+ * `owner` for the account's own file, `moderator` for a file of `accountId`
+ * that a moderator read. Neither ever satisfies the other's recheck.
+ */
+export type TransferMode =
+  { as: 'owner' } | { as: 'moderator'; accountId: string }
+
+/**
+ * Where a row records the mode: the moderated account, in `options`, which
+ * download links otherwise use only for an archive entry. A row without it
+ * was made in owner mode.
+ */
+const MODERATED = 'moderating'
+
+/** What a download link stores in `options` for its mode. */
+const modeOptions = (account: string | undefined) =>
+  account ? { [MODERATED]: account } : {}
+
+/**
+ * A URL that downloads one of the account's files for the next few minutes,
+ * or, given `account`, one of that account's files for a moderator.
+ */
 export function createDownloadUrl(
   principal: AgentPrincipal,
   origin: string,
-  fileId: string
+  fileId: string,
+  account?: string
 ) {
   return createTransfer(principal, origin, DOWNLOAD_MINUTES, {
     kind: 'download',
     fileId,
+    ...(account && { options: modeOptions(account) }),
   })
+}
+
+/**
+ * The mode a download link was made in, read back from its row; null when
+ * the row records one that cannot be read, which no link may be used with.
+ */
+export function modeOf(transfer: TransferRow): TransferMode | null {
+  const options = transfer.options
+  if (
+    options === null ||
+    typeof options !== 'object' ||
+    Array.isArray(options) ||
+    !Object.hasOwn(options, MODERATED)
+  )
+    return { as: 'owner' }
+  const accountId = (options as Record<string, unknown>)[MODERATED]
+  return typeof accountId === 'string' && accountId
+    ? { as: 'moderator', accountId }
+    : null
 }
 
 /**
@@ -151,18 +194,20 @@ const entrySelector = z.union([
 
 /**
  * A URL that downloads one entry of an archive among the account's files for
- * the next few minutes.
+ * the next few minutes, or, given `account`, among that account's files for
+ * a moderator.
  */
 export async function createEntryUrl(
   principal: AgentPrincipal,
   origin: string,
   fileId: string,
-  entry: ArchiveEntrySelector
+  entry: ArchiveEntrySelector,
+  account?: string
 ) {
   return createTransfer(principal, origin, DOWNLOAD_MINUTES, {
     kind: 'archive-entry',
     fileId,
-    options: { entry: entrySelector.parse(entry) },
+    options: { entry: entrySelector.parse(entry), ...modeOptions(account) },
   })
 }
 

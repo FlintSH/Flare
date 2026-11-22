@@ -1,7 +1,7 @@
 import { ExpiryAction } from '@/types/events'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 
 import {
   API_SCOPE_CATALOG,
@@ -21,20 +21,25 @@ import {
   type ToolRow,
   type ToolSubject,
   missingNeeds,
+  moderationAllowed,
   needsMet,
   scopeAvailable,
   toolAllowed,
+  toolListed,
 } from '@/lib/mcp/catalog'
 import {
   ACTION_PERMISSIONS,
   type Action,
   EXPIRY_EFFECTS,
 } from '@/lib/permissions/actions'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 import {
   ALL_PERMISSIONS,
   type Permission,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import { settingsPatchAllowed } from '@/lib/permissions/settings'
+import { userUpdatePermission } from '@/lib/users/admin'
 
 // The tool definitions import the services; this file only reads their names.
 vi.mock('@/lib/database/prisma', () => ({ prisma: {} }))
@@ -69,13 +74,45 @@ const effects = TOOL_NAMES.flatMap((name) =>
   )
 )
 
+/** Exactly what `needs` asks for: its scopes, its permissions, and one of the alternatives. */
+const enough = (needs: ToolNeeds) =>
+  subject(needs.scopes, [
+    ...needs.permissions,
+    ...(needs.anyPermission?.slice(0, 1) ?? []),
+  ])
+
 /** The three ways the design asks every row and effect to be tested. */
 function expectNeedsEnforced(needs: ToolNeeds) {
   // Exactly what is asked for, and nothing else, is enough.
-  expect(needsMet(needs, subject(needs.scopes, needs.permissions))).toBe(true)
-  expect(missingNeeds(needs, subject(needs.scopes, needs.permissions))).toEqual(
-    { scopes: [], permissions: [] }
-  )
+  expect(needsMet(needs, enough(needs))).toBe(true)
+  expect(missingNeeds(needs, enough(needs))).toEqual({
+    scopes: [],
+    permissions: [],
+  })
+  // Any one of the alternatives will do, and having none of them will not.
+  const any = needs.anyPermission ?? []
+  for (const permission of any)
+    expect(
+      needsMet(
+        needs,
+        subject(needs.scopes, [...needs.permissions, permission])
+      ),
+      `with only ${permission} of the alternatives`
+    ).toBe(true)
+  if (any.length) {
+    const lacking = subject(
+      ALL_SCOPES,
+      ORDINARY_PERMISSIONS.filter((permission) => !any.includes(permission))
+    )
+    expect(needsMet(needs, lacking), 'without every alternative').toBe(false)
+    expect(missingNeeds(needs, lacking)).toEqual({
+      scopes: [],
+      permissions: needs.permissions.filter((permission) =>
+        any.includes(permission)
+      ),
+      anyPermission: any,
+    })
+  }
   // Every other scope and every other permission cannot stand in for one.
   for (const scope of needs.scopes) {
     const lacking = subject(without(ALL_SCOPES, scope), ORDINARY_PERMISSIONS)
@@ -104,8 +141,14 @@ function expectNeedsEnforced(needs: ToolNeeds) {
 }
 
 describe('the tool list and the catalog', () => {
-  it('name exactly the same tools, each once', async () => {
-    const { TOOLS } = await import('@/lib/mcp/tools')
+  let TOOLS: typeof import('@/lib/mcp/tools').TOOLS
+  // Every tool module, loaded cold: slow on a busy machine, so it has its
+  // own time and the tests below only read what it loaded.
+  beforeAll(async () => {
+    ;({ TOOLS } = await import('@/lib/mcp/tools'))
+  }, 60_000)
+
+  it('name exactly the same tools, each once', () => {
     const defined = TOOLS.map((tool) => tool.name)
     expect(new Set(defined).size, 'a tool is defined twice').toBe(
       defined.length
@@ -113,7 +156,7 @@ describe('the tool list and the catalog', () => {
     expect(sorted(defined)).toEqual(sorted(TOOL_NAMES))
   })
 
-  it('has the 28 tools of an account, in the order clients list them', () => {
+  it('has the 28 tools of an account, then invites and administration, in the order clients list them', () => {
     expect(TOOL_NAMES).toEqual([
       'get_account',
       'search_files',
@@ -143,7 +186,35 @@ describe('the tool list and the catalog', () => {
       'save_upload_profile',
       'delete_upload_profile',
       'export_account',
+      'list_invites',
+      'create_invite',
+      'revoke_invite',
+      'list_users',
+      'get_user',
+      'list_roles',
+      'get_instance_settings',
+      'search_audit_log',
+      'create_user',
+      'update_user',
+      'delete_user',
+      'save_role',
+      'delete_role',
+      'update_instance_settings',
+      'update_email_settings',
+      'send_test_email',
+      'update_instance_appearance',
     ])
+    expect(TOOL_NAMES).toHaveLength(45)
+  })
+
+  it('lets exactly the tools whose rows have moderation needs take an account', () => {
+    expect(
+      sorted(TOOLS.filter((tool) => tool.moderation).map((tool) => tool.name))
+    ).toEqual(
+      sorted(
+        TOOL_NAMES.filter((name) => (TOOL_CATALOG[name] as ToolRow).moderation)
+      )
+    )
   })
 
   it.each(rows)('%s has a short title for people', (_name, row) => {
@@ -158,23 +229,77 @@ describe('the access rule', () => {
     '%s is refused without each scope, refused without each role permission, allowed with all',
     (name, row) => {
       expectNeedsEnforced(row)
-      expect(toolAllowed(name, subject(row.scopes, row.permissions))).toBe(true)
-      for (const scope of row.scopes)
-        expect(
-          toolAllowed(
-            name,
-            subject(without(ALL_SCOPES, scope), ORDINARY_PERMISSIONS)
-          )
-        ).toBe(false)
-      for (const permission of row.permissions)
-        expect(
-          toolAllowed(
-            name,
-            subject(ALL_SCOPES, without(ORDINARY_PERMISSIONS, permission))
-          )
-        ).toBe(false)
+      expect(toolAllowed(name, enough(row))).toBe(true)
+      expect(toolListed(name, enough(row))).toBe(true)
+      // Without moderating, which is a way of its own.
+      const owner = (scopes: readonly string[], permissions: string[]) =>
+        subject(without(scopes, 'admin:content'), permissions)
+      for (const scope of row.scopes) {
+        const lacking = owner(without(ALL_SCOPES, scope), ORDINARY_PERMISSIONS)
+        expect(toolAllowed(name, lacking)).toBe(false)
+        expect(toolListed(name, lacking)).toBe(false)
+      }
+      for (const permission of row.permissions) {
+        const lacking = owner(
+          ALL_SCOPES,
+          without(ORDINARY_PERMISSIONS, permission)
+        )
+        expect(toolAllowed(name, lacking)).toBe(false)
+        expect(toolListed(name, lacking)).toBe(false)
+      }
     }
   )
+
+  const moderated = rows.filter(([, row]) => row.moderation)
+
+  it('gives exactly the seven content tools a moderator mode', () => {
+    expect(moderated.map(([name]) => name)).toEqual([
+      'search_files',
+      'get_file',
+      'read_file',
+      'list_short_links',
+      'set_file_sharing',
+      'delete_files',
+      'delete_short_link',
+    ])
+  })
+
+  it.each(moderated)(
+    'lets %s moderate with its moderation needs alone, and not without them',
+    (name, row) => {
+      const moderation = row.moderation!
+      expectNeedsEnforced(moderation)
+      // A second way to the same tool, not an extra requirement.
+      const moderator = enough(moderation)
+      expect(moderationAllowed(name, moderator)).toBe(true)
+      expect(toolAllowed(name, moderator)).toBe(false)
+      expect(toolListed(name, moderator)).toBe(true)
+      const owner = enough(row)
+      expect(moderationAllowed(name, owner)).toBe(false)
+      expect(toolListed(name, owner)).toBe(true)
+      // The scope with every other content permission is not enough.
+      const others = (
+        ['content.read', 'content.update', 'content.delete'] as const
+      ).filter((permission) => !moderation.permissions.includes(permission))
+      expect(toolListed(name, subject(['admin:content'], others))).toBe(false)
+      // And the permissions are no use without the scope.
+      expect(
+        toolListed(
+          name,
+          subject([], ['content.read', 'content.update', 'content.delete'])
+        )
+      ).toBe(false)
+    }
+  )
+
+  it('has no moderator mode on any other tool', () => {
+    for (const [name, row] of rows)
+      if (!row.moderation)
+        expect(
+          moderationAllowed(name, subject(ALL_SCOPES, ['administrator'])),
+          name
+        ).toBe(false)
+  })
 
   it.each(effects)(
     'the %s effect %s is refused without each scope, refused without each role permission, allowed with all',
@@ -204,7 +329,11 @@ describe('the access rule', () => {
   })
 })
 
-type Needs = { scopes: ApiScope[]; permissions: Permission[] }
+type Needs = {
+  scopes: ApiScope[]
+  permissions: Permission[]
+  anyPermission?: Permission[]
+}
 
 /**
  * Design 3.6, written out by hand: the scope and the role permissions each
@@ -214,7 +343,10 @@ type Needs = { scopes: ApiScope[]; permissions: Permission[] }
  * works over REST is then offered for MCP to exactly the same roles. The
  * design's "or `account:write`" for the profile list is its own effect.
  */
-const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
+const DESIGN: Record<
+  ToolName,
+  Needs & { effects?: Record<string, Needs>; moderation?: Needs }
+> = {
   get_account: {
     scopes: [],
     permissions: [],
@@ -237,12 +369,29 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
       },
     },
   },
-  search_files: { scopes: ['files:read'], permissions: ['files.read'] },
-  get_file: { scopes: ['files:read'], permissions: ['files.read'] },
-  read_file: { scopes: ['files:content'], permissions: ['files.read'] },
+  // The `account` argument of design 3.6: a second way to the same tool.
+  search_files: {
+    scopes: ['files:read'],
+    permissions: ['files.read'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.read'] },
+  },
+  get_file: {
+    scopes: ['files:read'],
+    permissions: ['files.read'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.read'] },
+  },
+  read_file: {
+    scopes: ['files:content'],
+    permissions: ['files.read'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.read'] },
+  },
   list_folders: { scopes: ['files:read'], permissions: ['files.read'] },
   list_tags: { scopes: ['files:read'], permissions: ['files.read'] },
-  list_short_links: { scopes: ['urls:read'], permissions: ['links.read'] },
+  list_short_links: {
+    scopes: ['urls:read'],
+    permissions: ['links.read'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.read'] },
+  },
   upload_file: { scopes: ['files:upload'], permissions: ['files.upload'] },
   create_paste: {
     scopes: ['files:upload'],
@@ -268,8 +417,16 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
       make_private: { scopes: ['files:share'], permissions: ['files.share'] },
     },
   },
-  set_file_sharing: { scopes: ['files:share'], permissions: ['files.share'] },
-  delete_files: { scopes: ['files:delete'], permissions: ['files.delete'] },
+  set_file_sharing: {
+    scopes: ['files:share'],
+    permissions: ['files.share'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.update'] },
+  },
+  delete_files: {
+    scopes: ['files:delete'],
+    permissions: ['files.delete'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.delete'] },
+  },
   save_folder: {
     scopes: ['files:organize'],
     permissions: ['folders.manage'],
@@ -294,7 +451,11 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
   },
   delete_tag: { scopes: ['files:organize'], permissions: ['tags.manage'] },
   create_short_link: { scopes: ['urls:write'], permissions: ['links.create'] },
-  delete_short_link: { scopes: ['urls:write'], permissions: ['links.delete'] },
+  delete_short_link: {
+    scopes: ['urls:write'],
+    permissions: ['links.delete'],
+    moderation: { scopes: ['admin:content'], permissions: ['content.delete'] },
+  },
   extract_archive: {
     scopes: ['files:content', 'files:upload'],
     permissions: ['files.read', 'files.upload', 'folders.manage'],
@@ -364,6 +525,103 @@ const DESIGN: Record<ToolName, Needs & { effects?: Record<string, Needs> }> = {
     scopes: ['files:read', 'files:content', 'urls:read'],
     permissions: ['profile.export', 'files.read', 'links.read'],
   },
+  // Design 3.6 and the PR 4 brief, from list_invites down.
+  list_invites: {
+    scopes: ['invites:write'],
+    permissions: [],
+    anyPermission: ['invites.create', 'invites.manage'],
+    effects: { all: { scopes: [], permissions: ['invites.manage'] } },
+  },
+  create_invite: {
+    scopes: ['invites:write'],
+    permissions: ['invites.create'],
+    effects: {
+      roles: { scopes: ['admin:users'], permissions: ['users.roles'] },
+    },
+  },
+  revoke_invite: {
+    scopes: ['invites:write'],
+    permissions: [],
+    anyPermission: ['invites.create', 'invites.manage'],
+  },
+  list_users: {
+    scopes: ['admin:read'],
+    permissions: ['users.read'],
+    effects: { email_status: { scopes: [], permissions: ['users.email'] } },
+  },
+  get_user: {
+    scopes: ['admin:read'],
+    permissions: ['users.read'],
+    effects: { email_status: { scopes: [], permissions: ['users.email'] } },
+  },
+  list_roles: {
+    scopes: ['admin:read'],
+    permissions: [],
+    anyPermission: ['roles.manage', 'users.roles', 'users.read'],
+  },
+  get_instance_settings: {
+    scopes: ['admin:read'],
+    permissions: ['settings.read'],
+    effects: { email: { scopes: [], permissions: ['settings.email'] } },
+  },
+  search_audit_log: { scopes: ['admin:read'], permissions: ['audit.read'] },
+  create_user: {
+    scopes: ['admin:users'],
+    permissions: ['users.create'],
+    effects: { roles: { scopes: [], permissions: ['users.roles'] } },
+  },
+  update_user: {
+    scopes: ['admin:users'],
+    permissions: [],
+    anyPermission: [
+      'users.update',
+      'users.roles',
+      'users.email',
+      'users.sessions',
+    ],
+    effects: {
+      profile: { scopes: [], permissions: ['users.update'] },
+      roles: { scopes: [], permissions: ['users.roles'] },
+      email_verification: { scopes: [], permissions: ['users.email'] },
+      sign_out: { scopes: [], permissions: ['users.sessions'] },
+    },
+  },
+  delete_user: { scopes: ['admin:users'], permissions: ['users.delete'] },
+  save_role: { scopes: ['admin:users'], permissions: ['roles.manage'] },
+  delete_role: { scopes: ['admin:users'], permissions: ['roles.manage'] },
+  update_instance_settings: {
+    scopes: ['admin:settings'],
+    permissions: [],
+    anyPermission: [
+      'settings.security',
+      'settings.storage',
+      'settings.general',
+      'appearance.manage',
+    ],
+    effects: {
+      registrations: { scopes: [], permissions: ['settings.security'] },
+      storage: { scopes: [], permissions: ['settings.storage'] },
+      credits: { scopes: [], permissions: ['settings.general'] },
+      ocr: { scopes: [], permissions: ['settings.general'] },
+      theme: { scopes: [], permissions: ['appearance.manage'] },
+      everyone_can_invite: {
+        scopes: [],
+        permissions: ['settings.security', 'invites.create'],
+      },
+    },
+  },
+  update_email_settings: {
+    scopes: ['admin:settings'],
+    permissions: ['settings.email'],
+  },
+  send_test_email: {
+    scopes: ['admin:settings'],
+    permissions: ['settings.email'],
+  },
+  update_instance_appearance: {
+    scopes: ['admin:settings'],
+    permissions: ['appearance.manage'],
+  },
 }
 
 type Mirror = {
@@ -374,9 +632,80 @@ type Mirror = {
   /**
    * Routes only a browser session may call, which the bearer route table
    * does not hold: the tool must need the permission each one's handler
-   * passes to `requireSession`, read from the route file.
+   * passes to `requireSession`, read from the route file. A handler that
+   * passes a list of alternatives is mirrored by `anyPermission`.
    */
   session?: [method: string, file: string][]
+  /**
+   * What the user edit route asks of these fields (`userUpdatePermission`,
+   * which `PUT /api/users` checks before anything else).
+   */
+  userEdit?: string[]
+  /**
+   * What the service under a route checks besides the route's own
+   * permission, written out here from the service's source.
+   */
+  service?: Permission[]
+  /**
+   * A settings patch the tool's effect makes: its permission must be exactly
+   * what `settingsPatchAllowed`, which the settings route runs, needs for it.
+   */
+  patch?: Record<string, unknown>
+  /** The row asks for any one of what its effects need, and nothing more. */
+  anyOfEffects?: true
+  /** What the `account` argument mirrors: the moderation routes. */
+  moderation?: Mirror
+}
+
+/**
+ * What each administration route asks of the session, as the PR 4 brief and
+ * design 3.6 state it, written out by hand. The routes read
+ * `ADMIN_PERMISSIONS`, and so does the catalog; this table is the test's
+ * own, so a change to that shared table fails here instead of moving the
+ * route and the tool together unnoticed.
+ */
+const ADMIN_ROUTE_PERMISSIONS: Record<string, readonly Permission[]> = {
+  listUsers: ['users.read'],
+  getUser: ['users.read'],
+  createUser: ['users.create'],
+  updateUser: ['users.update'],
+  assignUserRoles: ['users.roles'],
+  manageUserEmail: ['users.email'],
+  listRoles: ['roles.manage', 'users.roles', 'users.read'],
+  manageRoles: ['roles.manage'],
+  listInvites: ['invites.create', 'invites.manage'],
+  createInvite: ['invites.create'],
+  revokeInvite: ['invites.create', 'invites.manage'],
+  readSettings: ['settings.read'],
+  setEveryoneCanInvite: ['settings.security'],
+  manageEmailSettings: ['settings.email'],
+  manageAppearance: ['appearance.manage'],
+  readAuditLog: ['audit.read'],
+}
+
+/**
+ * What a session-only route's handler asks of the session, from its source:
+ * a quoted permission, or a key of `ADMIN_PERMISSIONS` read through the
+ * test's own table above. A list means any one of them.
+ */
+function sessionRequirement(
+  method: string,
+  file: string
+): readonly string[] | undefined {
+  const source = readFileSync(resolve(process.cwd(), file), 'utf8')
+  const start = source.indexOf(`export const ${method} = api(`)
+  if (start < 0) return undefined
+  const next = source.indexOf('\nexport const ', start + 1)
+  const handler = source.slice(start, next < 0 ? undefined : next)
+  const match =
+    /await requireSession\(\s*request,\s*(?:'([^']+)'|ADMIN_PERMISSIONS\.(\w+))/.exec(
+      handler
+    )
+  if (!match) return undefined
+  if (match[1]) return [match[1]]
+  const listed = ADMIN_ROUTE_PERMISSIONS[match[2]]
+  if (!listed) throw new Error(`${file} reads ADMIN_PERMISSIONS.${match[2]}`)
+  return listed
 }
 
 /** The permission a session-only route's handler requires, from its source. */
@@ -390,6 +719,7 @@ function sessionPermission(method: string, file: string): string | undefined {
 }
 
 const PROFILE_ROUTES = 'app/api/upload-profiles'
+const USER_ROUTES = 'app/api/users'
 
 /**
  * What each tool does over REST or in the dashboard today, per design 3.6.
@@ -414,14 +744,27 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
         profile_settings: { routes: [['PUT', '/api/profile']] },
       },
     },
-    search_files: { actions: ['viewFiles'], routes: [['GET', '/api/files']] },
-    get_file: { actions: ['viewFiles'], routes: [['GET', '/api/files']] },
-    read_file: { actions: ['viewFiles'] },
+    // Moderation mirrors the routes that act on another account's content.
+    search_files: {
+      actions: ['viewFiles'],
+      routes: [['GET', '/api/files']],
+      moderation: { session: [['GET', `${USER_ROUTES}/[id]/files/route.ts`]] },
+    },
+    get_file: {
+      actions: ['viewFiles'],
+      routes: [['GET', '/api/files']],
+      moderation: { session: [['GET', `${USER_ROUTES}/[id]/files/route.ts`]] },
+    },
+    read_file: {
+      actions: ['viewFiles'],
+      moderation: { session: [['GET', `${USER_ROUTES}/[id]/files/route.ts`]] },
+    },
     list_folders: { actions: ['viewFiles'], routes: [['GET', '/api/folders']] },
     list_tags: { actions: ['viewFiles'], routes: [['GET', '/api/tags']] },
     list_short_links: {
       actions: ['viewLinks'],
       routes: [['GET', '/api/urls']],
+      moderation: { session: [['GET', `${USER_ROUTES}/[id]/urls/route.ts`]] },
     },
     upload_file: { actions: ['uploadFiles'], routes: [['POST', '/api/files']] },
     create_paste: { actions: ['createPaste'] },
@@ -451,8 +794,18 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
         make_private: { actions: [EXPIRY_EFFECTS[ExpiryAction.SET_PRIVATE]] },
       },
     },
-    set_file_sharing: { actions: ['shareFiles'] },
-    delete_files: { actions: ['deleteFiles'] },
+    set_file_sharing: {
+      actions: ['shareFiles'],
+      moderation: {
+        session: [['PATCH', `${USER_ROUTES}/[id]/files/[fileId]/route.ts`]],
+      },
+    },
+    delete_files: {
+      actions: ['deleteFiles'],
+      moderation: {
+        session: [['DELETE', `${USER_ROUTES}/[id]/files/[fileId]/route.ts`]],
+      },
+    },
     save_folder: {
       actions: ['manageFolders'],
       routes: [
@@ -479,7 +832,12 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
     },
     delete_tag: { routes: [['DELETE', '/api/tags/tag-id']] },
     create_short_link: { routes: [['POST', '/api/urls']] },
-    delete_short_link: { routes: [['DELETE', '/api/urls/link-id']] },
+    delete_short_link: {
+      routes: [['DELETE', '/api/urls/link-id']],
+      moderation: {
+        session: [['DELETE', `${USER_ROUTES}/[id]/urls/[urlId]/route.ts`]],
+      },
+    },
     extract_archive: { actions: ['extractArchive'] },
     create_archive: { actions: ['createArchive'] },
     update_profile: {
@@ -531,6 +889,103 @@ const MIRRORS: Record<ToolName, Mirror & { effects?: Record<string, Mirror> }> =
       actions: ['exportAccount'],
       routes: [['GET', '/api/profile/export']],
     },
+    list_invites: {
+      session: [['GET', 'app/api/invites/route.ts']],
+      // lib/invites/service.ts: the `all` scope needs `invites.manage`.
+      effects: { all: { service: ['invites.manage'] } },
+    },
+    create_invite: {
+      session: [['POST', 'app/api/invites/route.ts']],
+      // lib/invites/service.ts: an invite with roles needs `users.roles`.
+      effects: { roles: { service: ['users.roles'] } },
+    },
+    revoke_invite: { session: [['DELETE', 'app/api/invites/[id]/route.ts']] },
+    list_users: {
+      session: [['GET', `${USER_ROUTES}/route.ts`]],
+      effects: {
+        email_status: {
+          session: [['GET', `${USER_ROUTES}/[id]/email/route.ts`]],
+        },
+      },
+    },
+    get_user: {
+      session: [
+        ['GET', `${USER_ROUTES}/route.ts`],
+        ['POST', `${USER_ROUTES}/[id]/login/route.ts`],
+      ],
+      effects: {
+        email_status: {
+          session: [['GET', `${USER_ROUTES}/[id]/email/route.ts`]],
+        },
+      },
+    },
+    list_roles: { session: [['GET', 'app/api/roles/route.ts']] },
+    get_instance_settings: {
+      session: [
+        ['GET', 'app/api/settings/invites/route.ts'],
+        ['GET', 'app/api/updates/check/route.ts'],
+      ],
+      effects: {
+        email: { session: [['GET', 'app/api/settings/email/route.ts']] },
+      },
+    },
+    search_audit_log: { session: [['GET', 'app/api/audit/route.ts']] },
+    create_user: {
+      session: [['POST', `${USER_ROUTES}/route.ts`]],
+      effects: { roles: { userEdit: ['roleIds'] } },
+    },
+    update_user: {
+      anyOfEffects: true,
+      effects: {
+        profile: {
+          userEdit: ['name', 'urlId', 'vanityId'],
+          session: [['DELETE', `${USER_ROUTES}/[id]/avatar/route.ts`]],
+        },
+        roles: { userEdit: ['roleIds'] },
+        email_verification: {
+          session: [['POST', `${USER_ROUTES}/[id]/email/route.ts`]],
+        },
+        sign_out: {
+          session: [['DELETE', `${USER_ROUTES}/[id]/sessions/route.ts`]],
+        },
+      },
+    },
+    delete_user: { session: [['DELETE', `${USER_ROUTES}/[id]/route.ts`]] },
+    save_role: {
+      session: [
+        ['POST', 'app/api/roles/route.ts'],
+        ['PATCH', 'app/api/roles/[id]/route.ts'],
+      ],
+    },
+    delete_role: { session: [['DELETE', 'app/api/roles/[id]/route.ts']] },
+    update_instance_settings: {
+      anyOfEffects: true,
+      effects: {
+        registrations: {
+          patch: { general: { registrations: { enabled: true } } },
+        },
+        storage: { patch: { general: { storage: { provider: 'local' } } } },
+        credits: { patch: { general: { credits: { showFooter: false } } } },
+        ocr: { patch: { general: { ocr: { enabled: false } } } },
+        theme: {
+          patch: { appearance: { theme: 'dark', customColors: {} } },
+        },
+        // lib/invites/service.ts: the account must hold `invites.create`.
+        everyone_can_invite: {
+          session: [['PUT', 'app/api/settings/invites/route.ts']],
+          service: ['invites.create'],
+        },
+      },
+    },
+    update_email_settings: {
+      session: [['PUT', 'app/api/settings/email/route.ts']],
+    },
+    send_test_email: {
+      session: [['POST', 'app/api/settings/email/test/route.ts']],
+    },
+    update_instance_appearance: {
+      session: [['POST', 'app/api/customization/route.ts']],
+    },
   }
 
 function expectMirrors(needs: ToolNeeds, mirror: Mirror, what: string) {
@@ -553,32 +1008,80 @@ function expectMirrors(needs: ToolNeeds, mirror: Mirror, what: string) {
         restScope,
       ])
   }
+  // Session routes, user edit fields and service checks add up: the tool
+  // needs every one of them, or any one of a route's alternatives.
+  const required = new Set<string>(mirror.service ?? [])
+  let alternatives: readonly string[] | undefined
   for (const [method, file] of mirror.session ?? []) {
-    const permission = sessionPermission(method, file)
-    expect(permission, `${method} in ${file} requires a permission`).toEqual(
-      expect.any(String)
+    const requirement = sessionRequirement(method, file)
+    expect(requirement, `${method} in ${file} requires a permission`).toEqual(
+      expect.any(Array)
     )
+    if (requirement!.length > 1) {
+      expect(
+        alternatives ?? requirement,
+        `${what}: one list of alternatives`
+      ).toEqual(requirement)
+      alternatives = requirement
+    } else required.add(requirement![0])
+  }
+  for (const field of mirror.userEdit ?? [])
+    required.add(userUpdatePermission([field]))
+  if (mirror.session?.length || mirror.userEdit || mirror.service) {
+    expect(sorted(needs.permissions), what).toEqual(sorted([...required]))
+    expect(sorted(needs.anyPermission ?? []), what).toEqual(
+      sorted(alternatives ?? [])
+    )
+  }
+  if (mirror.patch) {
+    // Exactly one permission, and it is what the settings patch needs.
+    expect(needs.permissions, what).toHaveLength(1)
+    const [permission] = needs.permissions
     expect(
-      sorted(needs.permissions),
-      `${what} against ${method} ${file}`
-    ).toEqual([permission])
+      settingsPatchAllowed({ permissions: [permission] }, mirror.patch),
+      what
+    ).toBe(true)
+    expect(
+      settingsPatchAllowed(
+        { permissions: without(ORDINARY_PERMISSIONS, permission) },
+        mirror.patch
+      ),
+      `${what} without ${permission}`
+    ).toBe(false)
   }
 }
 
 describe('the authorization matrix', () => {
+  const expectDesign = (
+    needs: ToolNeeds | undefined,
+    design: Needs,
+    what: string
+  ) => {
+    expect(needs, what).toBeDefined()
+    expect([...needs!.scopes], what).toEqual(design.scopes)
+    expect(sorted(needs!.permissions), what).toEqual(sorted(design.permissions))
+    expect(sorted(needs!.anyPermission ?? []), what).toEqual(
+      sorted(design.anyPermission ?? [])
+    )
+  }
+
   it.each(rows)('%s needs what the approved design says', (name, row) => {
     const design = DESIGN[name]
-    expect([...row.scopes]).toEqual(design.scopes)
-    expect(sorted(row.permissions)).toEqual(sorted(design.permissions))
+    expectDesign(row, design, name)
     expect(Object.keys(row.effects ?? {}).sort()).toEqual(
       Object.keys(design.effects ?? {}).sort()
     )
-    for (const [effect, needs] of Object.entries(design.effects ?? {})) {
-      expect([...row.effects![effect].scopes], effect).toEqual(needs.scopes)
-      expect(sorted(row.effects![effect].permissions), effect).toEqual(
-        sorted(needs.permissions)
-      )
-    }
+    for (const [effect, needs] of Object.entries(design.effects ?? {}))
+      expectDesign(row.effects![effect], needs, `${name}.${effect}`)
+    expect(Boolean(row.moderation), `${name} moderation`).toBe(
+      Boolean(design.moderation)
+    )
+    if (design.moderation)
+      expectDesign(row.moderation, design.moderation, `${name} moderation`)
+  })
+
+  it('reads from ADMIN_PERMISSIONS what the brief says each administration route asks', () => {
+    expect(ADMIN_PERMISSIONS).toEqual(ADMIN_ROUTE_PERMISSIONS)
   })
 
   it.each(rows)(
@@ -591,15 +1094,56 @@ describe('the authorization matrix', () => {
       )
       for (const [effect, effectMirror] of Object.entries(mirror.effects ?? {}))
         expectMirrors(row.effects![effect], effectMirror, `${name}.${effect}`)
+      if (mirror.anyOfEffects) {
+        // A call needs what it asks for; the tool, what some call could use.
+        expect(row.permissions, name).toEqual([])
+        const effectNeeds = Object.values(row.effects ?? {})
+        for (const needs of effectNeeds)
+          expect(
+            needsMet(row, subject(row.scopes, needs.permissions)),
+            `${name} with ${needs.permissions.join(', ')}`
+          ).toBe(true)
+        // And each alternative alone is enough for one of them.
+        for (const permission of row.anyPermission ?? [])
+          expect(
+            effectNeeds.some(
+              (needs) =>
+                needs.permissions.length === 1 &&
+                needs.permissions[0] === permission
+            ),
+            `${name}: ${permission} alone does something`
+          ).toBe(true)
+      }
+      expect(Boolean(row.moderation), `${name} moderation`).toBe(
+        Boolean(mirror.moderation)
+      )
+      if (mirror.moderation)
+        expectMirrors(row.moderation!, mirror.moderation, `${name} moderation`)
     }
   )
+
+  it('reads what an administration route asks of the session from its handler', () => {
+    expect(
+      sessionRequirement('DELETE', `${USER_ROUTES}/[id]/route.ts`)
+    ).toEqual(['users.delete'])
+    expect(sessionRequirement('GET', 'app/api/roles/route.ts')).toEqual([
+      'roles.manage',
+      'users.roles',
+      'users.read',
+    ])
+    // A handler that checks only after reading the body asks nothing first.
+    expect(sessionRequirement('PUT', `${USER_ROUTES}/route.ts`)).toBeUndefined()
+    expect(userUpdatePermission(['roleIds'])).toBe('users.roles')
+    expect(userUpdatePermission(['name', 'roleIds'])).toBe('users.update')
+  })
 
   it('lists every tool that has a REST route or dashboard action to mirror', () => {
     const unmirrored = TOOL_NAMES.filter(
       (name) =>
         !MIRRORS[name].actions?.length &&
         !MIRRORS[name].routes?.length &&
-        !MIRRORS[name].session?.length
+        !MIRRORS[name].session?.length &&
+        !MIRRORS[name].anyOfEffects
     )
     // Only the tool that describes the connection itself has neither.
     expect(unmirrored).toEqual(['get_account'])
@@ -842,6 +1386,12 @@ describe('annotations', () => {
       'list_short_links',
       // It hands out a download of everything and changes nothing.
       'export_account',
+      'list_invites',
+      'list_users',
+      'get_user',
+      'list_roles',
+      'get_instance_settings',
+      'search_audit_log',
     ])
     for (const name of readTools) {
       const { annotations }: ToolRow = TOOL_CATALOG[name]
@@ -866,7 +1416,45 @@ describe('annotations', () => {
       'update_profile',
       'save_upload_profile',
       'delete_upload_profile',
+      'revoke_invite',
+      // Every administration write, whatever it changes.
+      'create_user',
+      'update_user',
+      'delete_user',
+      'save_role',
+      'delete_role',
+      'update_instance_settings',
+      'update_email_settings',
+      'update_instance_appearance',
     ])
+  })
+
+  it('marks every administration write destructive, but the test email and a plain invite', () => {
+    const writes = TOOL_NAMES.filter((name) => {
+      const row: ToolRow = TOOL_CATALOG[name]
+      return (
+        !row.annotations.readOnly &&
+        row.scopes.some((scope) => scope.startsWith('admin:'))
+      )
+    })
+    expect(
+      writes.filter((name) => !TOOL_CATALOG[name].annotations.destructive)
+    ).toEqual(['send_test_email'])
+    // Sending mail destroys nothing, but it leaves Flare.
+    expect(TOOL_CATALOG.send_test_email.annotations).toEqual({
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      openWorld: true,
+    })
+    // An invite on its own adds a way in that can be revoked.
+    expect(TOOL_CATALOG.create_invite.annotations).toEqual({
+      readOnly: false,
+      destructive: false,
+      idempotent: false,
+      openWorld: false,
+    })
+    expect(TOOL_CATALOG.revoke_invite.annotations.destructive).toBe(true)
   })
 
   it('marks the account tools by what a repeated call does', () => {
@@ -905,6 +1493,7 @@ describe('annotations', () => {
       'set_file_sharing',
       'set_folder_sharing',
       'create_short_link',
+      'send_test_email',
     ])
   })
 
@@ -988,6 +1577,11 @@ describe('where a scope works', () => {
       'files:share',
       'files:delete',
       'account:write',
+      'invites:write',
+      'admin:read',
+      'admin:users',
+      'admin:content',
+      'admin:settings',
       'mcp',
     ])
     for (const scope of mcpOnly) {
@@ -1003,7 +1597,11 @@ describe('where a scope works', () => {
     const needed = new Set<string>()
     for (const name of TOOL_NAMES) {
       const row: ToolRow = TOOL_CATALOG[name]
-      for (const needs of [row, ...Object.values(row.effects ?? {})])
+      for (const needs of [
+        row,
+        ...Object.values(row.effects ?? {}),
+        ...(row.moderation ? [row.moderation] : []),
+      ])
         for (const scope of needs.scopes) needed.add(scope)
     }
     expect(MCP_SCOPES).toEqual(
@@ -1142,6 +1740,102 @@ describe('scopeAvailable', () => {
       expect(scopeAvailable(MCP_SCOPE, can(granted), true)).toBe(true)
       expect(scopeAvailable(MCP_SCOPE, can(granted), false)).toBe(false)
     }
+  })
+
+  const ADMIN = ['admin:read', 'admin:users', 'admin:content', 'admin:settings']
+
+  it('never offers an administration scope while administration through MCP is off', () => {
+    for (const scope of ADMIN)
+      for (const granted of roles) {
+        expect(scopeAvailable(scope, can(granted), true), scope).toBe(false)
+        expect(scopeAvailable(scope, can(granted), true, false), scope).toBe(
+          false
+        )
+        // Nor while the server itself is off.
+        expect(scopeAvailable(scope, can(granted), false, true), scope).toBe(
+          false
+        )
+      }
+  })
+
+  it.each<[string, Permission[][], Permission[][]]>([
+    [
+      'invites:write',
+      [['invites.create'], ['invites.manage']],
+      [[], ['users.create'], ['users.roles'], ['settings.security']],
+    ],
+    [
+      'admin:read',
+      [
+        ['users.read'],
+        ['roles.manage'],
+        ['users.roles'],
+        ['settings.read'],
+        ['audit.read'],
+      ],
+      [
+        [],
+        ['files.read'],
+        ['users.email'],
+        ['settings.email'],
+        ['content.read'],
+      ],
+    ],
+    [
+      'admin:users',
+      [
+        ['users.create'],
+        ['users.update'],
+        ['users.roles'],
+        ['users.email'],
+        ['users.sessions'],
+        ['users.delete'],
+        ['roles.manage'],
+      ],
+      [[], ['users.read'], ['invites.create'], ['content.delete']],
+    ],
+    [
+      'admin:content',
+      [['content.read'], ['content.update'], ['content.delete']],
+      [[], ['files.read', 'files.delete'], ['users.read']],
+    ],
+    [
+      'admin:settings',
+      [
+        ['settings.security'],
+        ['settings.storage'],
+        ['settings.general'],
+        ['settings.email'],
+        ['appearance.manage'],
+      ],
+      [[], ['settings.read'], ['appearance.personal'], ['invites.create']],
+    ],
+  ])(
+    'offers %s while administration is on only to a role that could use it',
+    (scope, enough, notEnough) => {
+      for (const granted of enough)
+        expect(
+          scopeAvailable(scope, can(granted), true, true),
+          `with ${granted.join(', ')}`
+        ).toBe(true)
+      for (const granted of notEnough)
+        expect(
+          scopeAvailable(scope, can(granted), true, true),
+          `with ${granted.join(', ') || 'no permission'}`
+        ).toBe(false)
+      expect(scopeAvailable(scope, can(['administrator']), true, true)).toBe(
+        true
+      )
+    }
+  )
+
+  it('offers invites without administration: they act on what the account may do itself', () => {
+    expect(scopeAvailable('invites:write', can(['invites.create']), true)).toBe(
+      true
+    )
+    expect(
+      scopeAvailable('invites:write', can(['invites.create']), false)
+    ).toBe(false)
   })
 
   it('never offers a scope that does not exist', () => {

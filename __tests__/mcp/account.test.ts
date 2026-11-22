@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DEFAULT_CONFIG } from '@/lib/config'
 import type { AgentPrincipal } from '@/lib/mcp/auth'
-import { TOOL_NAMES, toolAllowed } from '@/lib/mcp/catalog'
+import { TOOL_NAMES, toolAllowed, toolListed } from '@/lib/mcp/catalog'
 import { mcpHandler } from '@/lib/mcp/server'
 import { accountTools } from '@/lib/mcp/tools/account'
 import { accountSettingsSchema, profileTools } from '@/lib/mcp/tools/profile'
@@ -137,6 +137,7 @@ type Account = {
   connection: {
     scopes: string[]
     tools: string[]
+    moderator_only?: string[]
     upload_profile?: { id: string; name?: string }
   }
   storage?: { used_bytes: number; quota_bytes?: number }
@@ -965,6 +966,84 @@ describe('get_account', () => {
       }
     )
 
+    describe('for a connection that may moderate', () => {
+      const moderating: [string, string[], readonly string[]][] = [
+        [
+          'only moderate, reading and deleting',
+          ['admin:content'],
+          ['content.read', 'content.delete'],
+        ],
+        [
+          'moderate and read its own files',
+          ['admin:content', 'files:read', 'files:content', 'urls:read'],
+          [...DEFAULT_PERMISSIONS, 'content.read'],
+        ],
+        [
+          'moderate everything and use every scope',
+          [...EVERY_SCOPE, 'admin:content'],
+          [
+            ...DEFAULT_PERMISSIONS,
+            'content.read',
+            'content.update',
+            'content.delete',
+          ],
+        ],
+      ]
+
+      it.each(moderating)(
+        'lists the tools of either mode, and names those it may use only on other accounts, when it may %s',
+        async (_what, scopes, permissions) => {
+          const who = principal(scopes, permissions)
+          const answer = await getAccount(who)
+          expect(answer.connection.tools).toEqual(
+            TOOL_NAMES.filter((name) => toolListed(name, who))
+          )
+          const only = TOOL_NAMES.filter(
+            (name) => toolListed(name, who) && !toolAllowed(name, who)
+          )
+          expect(answer.connection.moderator_only ?? []).toEqual(only)
+          const listed: { name: string }[] = (await rpc(who, 'tools/list'))
+            .tools
+          expect([...answer.connection.tools].sort()).toEqual(
+            listed.map((tool) => tool.name).sort()
+          )
+        }
+      )
+
+      it('says a moderator who holds nothing for its own account may use the content tools only on others', async () => {
+        const answer = await getAccount(
+          principal(['admin:content'], ['content.read', 'content.delete'])
+        )
+        expect(answer.connection.tools).toEqual([
+          'get_account',
+          'search_files',
+          'get_file',
+          'read_file',
+          'list_short_links',
+          'delete_files',
+          'delete_short_link',
+        ])
+        expect(answer.connection.moderator_only).toEqual([
+          'search_files',
+          'get_file',
+          'read_file',
+          'list_short_links',
+          'delete_files',
+          'delete_short_link',
+        ])
+      })
+
+      it('names nothing as moderator-only when every tool it lists also works on its own account', async () => {
+        const answer = await getAccount(
+          principal(
+            ['admin:content', 'files:read', 'files:content', 'urls:read'],
+            [...DEFAULT_PERMISSIONS, 'content.read']
+          )
+        )
+        expect(answer.connection).not.toHaveProperty('moderator_only')
+      })
+    })
+
     const readTools = [
       'get_account',
       'search_files',
@@ -999,13 +1078,18 @@ describe('get_account', () => {
       expect(answer.connection.tools).toHaveLength(13)
     })
 
-    it('lists all 28 tools for every scope, and the account tools only with account:write', async () => {
+    it('lists all 28 tools of an account for every scope of one, and the account tools only with account:write', async () => {
       const everything = await getAccount(principal(EVERY_SCOPE))
-      expect(everything.connection.tools).toEqual(TOOL_NAMES)
+      // Invites and administration come after them, each with its own scope.
+      expect(everything.connection.tools).toEqual(
+        TOOL_NAMES.slice(0, TOOL_NAMES.indexOf('list_invites'))
+      )
       expect(everything.connection.tools).toHaveLength(28)
       const files = await getAccount(principal(FILE_AND_LINK_SCOPES))
       expect(
-        TOOL_NAMES.filter((name) => !files.connection.tools.includes(name))
+        everything.connection.tools.filter(
+          (name) => !files.connection.tools.includes(name)
+        )
       ).toEqual([
         'update_profile',
         'save_upload_profile',

@@ -49,7 +49,11 @@ import {
 } from '@/components/ui/table'
 
 import { apiRequest } from '@/lib/client/request'
-import { API_SCOPE_CATALOG, MCP_SCOPE } from '@/lib/integrations/bearer-routes'
+import {
+  API_SCOPE_CATALOG,
+  MCP_SCOPE,
+  holdsAdminScope,
+} from '@/lib/integrations/bearer-routes'
 import {
   CONNECTION_NAME_MAX_LENGTH,
   WEBHOOK_URL_MAX_LENGTH,
@@ -65,11 +69,12 @@ import type { AgentConnection } from './connected-agents'
 import { ScopePicker } from './scope-picker'
 import {
   DEFAULT_TOKEN_LIFETIME,
-  TOKEN_LIFETIMES,
+  allowedLifetime,
   cardHeaderRow,
   cardTitle,
   tokenExpiry,
 } from './shared'
+import { TokenLifetime } from './token-lifetime'
 
 type Token = {
   id: string
@@ -97,10 +102,11 @@ type Snapshot = {
   deliveries: Delivery[]
   profiles: { id: string; name: string }[]
   /**
-   * Whether the MCP server is on and where agents connect: null for the
-   * address this page was opened at. Sent to accounts that manage tokens.
+   * Whether the MCP server is on, where agents connect (null for the
+   * address this page was opened at) and whether administration through MCP
+   * is on. Sent to accounts that manage tokens.
    */
-  mcp?: { enabled: boolean; url: string | null }
+  mcp?: { enabled: boolean; url: string | null; administration: boolean }
   /** The agents that signed in through the browser. Sent with `mcp`. */
   connections?: AgentConnection[]
 }
@@ -177,6 +183,7 @@ export function IntegrationsPanel({
   const data = snapshot.data
   const refresh = snapshot.refetch
   const mcpOn = data?.mcp?.enabled ?? false
+  const administration = mcpOn && (data?.mcp?.administration ?? false)
   const [actionError, setError] = useState('')
   const error = actionError || snapshot.error?.message
   const [notice, setNotice] = useState('')
@@ -187,6 +194,7 @@ export function IntegrationsPanel({
   )
   const [copied, setCopied] = useState(false)
   const [selectedScopes, setSelectedScopes] = useState<string[]>([])
+  const [lifetime, setLifetime] = useState<string>(DEFAULT_TOKEN_LIFETIME)
 
   async function run(command: Record<string, unknown>, message: string) {
     setBusy(true)
@@ -206,6 +214,7 @@ export function IntegrationsPanel({
         setCopied(false)
         setForm(null)
         setSelectedScopes([])
+        setLifetime(DEFAULT_TOKEN_LIFETIME)
       }
       setNotice(message)
       await refresh()
@@ -226,7 +235,9 @@ export function IntegrationsPanel({
         name: values.get('name'),
         scopes: selectedScopes,
         profileId: values.get('profileId') || null,
-        expiresAt: tokenExpiry(Number(values.get('days'))),
+        expiresAt: tokenExpiry(
+          Number(allowedLifetime(lifetime, holdsAdminScope(selectedScopes)))
+        ),
       },
       'Token created.'
     )
@@ -357,6 +368,7 @@ export function IntegrationsPanel({
           <AgentsCard
             url={data.mcp.url ?? `${window.location.origin}/api/mcp`}
             connections={data.connections ?? []}
+            administration={administration}
             disabled={busy}
             onConnected={() => void refresh()}
             onDisconnect={(connection) =>
@@ -381,6 +393,7 @@ export function IntegrationsPanel({
               setForm(open ? 'token' : null)
               setError('')
               setSelectedScopes([])
+              setLifetime(DEFAULT_TOKEN_LIFETIME)
             }}
           >
             <Card className="min-w-0">
@@ -439,6 +452,8 @@ export function IntegrationsPanel({
                         onChange={setSelectedScopes}
                         can={can}
                         mcp={mcpOn}
+                        administration={administration}
+                        credential="token"
                       />
                     </fieldset>
                     <div className="space-y-2">
@@ -462,17 +477,12 @@ export function IntegrationsPanel({
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="token-expiry">Expires after</Label>
-                      <NativeSelect
+                      <TokenLifetime
                         id="token-expiry"
-                        name="days"
-                        defaultValue={DEFAULT_TOKEN_LIFETIME}
-                      >
-                        {TOKEN_LIFETIMES.map(([days, label]) => (
-                          <option key={days} value={days}>
-                            {label}
-                          </option>
-                        ))}
-                      </NativeSelect>
+                        value={lifetime}
+                        onChange={setLifetime}
+                        scopes={selectedScopes}
+                      />
                     </div>
                     <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                       <Button
@@ -483,6 +493,7 @@ export function IntegrationsPanel({
                           setForm(null)
                           setError('')
                           setSelectedScopes([])
+                          setLifetime(DEFAULT_TOKEN_LIFETIME)
                         }}
                       >
                         Cancel
@@ -514,10 +525,11 @@ export function IntegrationsPanel({
                     // is not listed among the permissions.
                     const agent =
                       token.scopes.includes(MCP_SCOPE) &&
-                      scopeAvailable(MCP_SCOPE, can, mcpOn)
+                      scopeAvailable(MCP_SCOPE, can, mcpOn, administration)
                     const tokenScopes = token.scopes.filter(
                       (scope) =>
-                        scope !== MCP_SCOPE && scopeAvailable(scope, can, mcpOn)
+                        scope !== MCP_SCOPE &&
+                        scopeAvailable(scope, can, mcpOn, administration)
                     )
                     return (
                       <div

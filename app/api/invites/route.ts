@@ -10,6 +10,7 @@ import {
   inviteListQuerySchema,
   listInvites,
 } from '@/lib/invites/service'
+import { ADMIN_PERMISSIONS } from '@/lib/permissions/admin-actions'
 import { getUserAccess } from '@/lib/permissions/server'
 import { generalLimiter, rateLimit } from '@/lib/security/rate-limit'
 
@@ -20,10 +21,7 @@ const api = routes('/api/invites', {
 })
 
 export const GET = api(async (request) => {
-  const { user } = await requireSession(request, [
-    'invites.create',
-    'invites.manage',
-  ])
+  const { user } = await requireSession(request, ADMIN_PERMISSIONS.listInvites)
   const parsed = inviteListQuerySchema.safeParse(
     Object.fromEntries(new URL(request.url).searchParams)
   )
@@ -37,7 +35,10 @@ export const POST = api(
   async (request) => {
     const limited = await rateLimit(request, generalLimiter)
     if (limited) return limited
-    const { user } = await requireSession(request, 'invites.create')
+    const { user } = await requireSession(
+      request,
+      ADMIN_PERMISSIONS.createInvite
+    )
     const parsed = inviteCreateSchema.safeParse(
       await readJson(request, { limit: 32 * 1024 })
     )

@@ -1,25 +1,40 @@
 import type { Prisma } from '@prisma/client'
 
 import { archiveRoutes } from '@/lib/archives/http'
-import { readArchiveEntry } from '@/lib/archives/service'
+import {
+  readArchiveEntry,
+  readSharedArchiveEntry,
+} from '@/lib/archives/service'
 import { setAuditOutcome, setAuditTarget } from '@/lib/audit'
+import { checkFileAccess } from '@/lib/files/access'
 import { type DeliveredFile, findFile, serveFile } from '@/lib/files/delivery'
 import { HttpError } from '@/lib/http/errors'
 import { apiResponse } from '@/lib/http/response'
 import { type RouteContract, routes } from '@/lib/http/route'
 import { type AgentPrincipal, credentialPrincipal } from '@/lib/mcp/auth'
-import { TOOL_CATALOG, type ToolName, toolAllowed } from '@/lib/mcp/catalog'
-import { archiveActor, credentialHolds } from '@/lib/mcp/publish-check'
+import {
+  TOOL_CATALOG,
+  type ToolName,
+  moderationAllowed,
+  toolAllowed,
+} from '@/lib/mcp/catalog'
+import {
+  archiveActor,
+  credentialHolds,
+  moderatorArchiveAccess,
+} from '@/lib/mcp/publish-check'
 import { mcpEnabled, mcpNotFound } from '@/lib/mcp/settings'
 import { ToolError } from '@/lib/mcp/tool'
 import {
   type TransferKind,
+  type TransferMode,
   claimExport,
   claimUpload,
   consumeUpload,
   endExport,
   entryOf,
   findTransfer,
+  modeOf,
   releaseExport,
   releaseUpload,
   uploadOf,
@@ -64,21 +79,31 @@ function refused(): Response {
 }
 
 /**
- * Who a transfer was made for, if they may still use the tool it came from.
+ * Who a transfer was made for, if they may still use the tool it came from
+ * in the mode the row records: as the owner (`toolAllowed`), or as a
+ * moderator (`moderationAllowed`: the `admin:content` scope, which counts
+ * only while administration through MCP is on, and the role's `content.*`
+ * permission). One mode's standing never passes the other's recheck.
  * Everything is read from the row and the database as they are now: the
  * request carries no credential and none is looked for.
  */
 async function holder(
   transfer: Transfer,
-  tool: ToolName
+  tool: ToolName,
+  mode: TransferMode = { as: 'owner' }
 ): Promise<AgentPrincipal | null> {
   const principal = await credentialPrincipal(transfer.credential)
+  const allowed = mode.as === 'owner' ? toolAllowed : moderationAllowed
   return principal &&
     principal.user.id === transfer.userId &&
-    toolAllowed(tool, principal)
+    allowed(tool, principal)
     ? principal
     : null
 }
+
+/** The account whose file a download link may send: the owner's own, or the moderated one. */
+const fileOwner = (transfer: Transfer, mode: TransferMode) =>
+  mode.as === 'owner' ? transfer.userId : mode.accountId
 
 /** While the server is off nothing is here and nothing is recorded, as at the endpoint. */
 function whileOn(
@@ -100,13 +125,23 @@ const deliveredFields = {
 
 /** One of the account's files, whole or in ranges, for as long as its link lasts. */
 async function sendFile(request: Request, transfer: Transfer) {
-  if (!(await holder(transfer, 'read_file'))) return refused()
+  const mode = modeOf(transfer)
+  if (!mode) return refused()
+  const principal = await holder(transfer, 'read_file', mode)
+  if (!principal) return refused()
   const file: DeliveredFile | null = transfer.fileId
     ? await findFile({ id: transfer.fileId }, deliveredFields)
     : null
   if (!file) return notFound()
-  // The link was made for the account's own file and opens no one else's.
-  if (file.userId !== transfer.userId) return refused()
+  // The link was made for one account's file and opens no one else's.
+  if (file.userId !== fileOwner(transfer, mode)) return refused()
+  // A moderator opens it as the delivery rules let a moderator, by role.
+  if (mode.as === 'moderator') {
+    const access = await checkFileAccess(file, {
+      user: { id: principal.user.id, permissions: principal.user.permissions },
+    })
+    if (!access.allowed || !access.canModerate) return refused()
+  }
   setAuditTarget({ type: 'file', id: file.id, name: file.name })
   // Not a visit: nothing is counted, and no session or password is asked.
   const response = await serveFile(request, file, {
@@ -124,7 +159,9 @@ async function sendFile(request: Request, transfer: Transfer) {
  * entry; the request adds only a `Range`.
  */
 async function sendEntry(request: Request, transfer: Transfer) {
-  const principal = await holder(transfer, 'read_file')
+  const mode = modeOf(transfer)
+  if (!mode) return refused()
+  const principal = await holder(transfer, 'read_file', mode)
   if (!principal) return refused()
   const entry = entryOf(transfer)
   const file =
@@ -135,18 +172,33 @@ async function sendEntry(request: Request, transfer: Transfer) {
         )
       : null
   if (!file || !entry) return notFound()
-  if (file.userId !== transfer.userId) return refused()
+  if (file.userId !== fileOwner(transfer, mode)) return refused()
   setAuditTarget({ type: 'file', id: file.id, name: file.name })
   let response: Response
   try {
     // Not a visit either: the reader counts nothing and asks for no session.
-    response = await readArchiveEntry(
-      await archiveActor(principal, 'read_file'),
-      file.id,
-      entry,
-      request,
-      false
-    )
+    if (mode.as === 'owner')
+      response = await readArchiveEntry(
+        await archiveActor(principal, 'read_file'),
+        file.id,
+        entry,
+        request,
+        false
+      )
+    else {
+      // The reader share pages use, with the moderator as the viewer: its
+      // checks read the moderator's role, never the owner's.
+      const access = await moderatorArchiveAccess(
+        principal,
+        mode.accountId,
+        file.id
+      )
+      if (!access) return notFound()
+      response = await readSharedArchiveEntry(access, entry, request, {
+        inline: false,
+        requester: `user:${principal.user.id}`,
+      })
+    }
   } catch (error) {
     // The credential ended, or the role changed, while the entry was found.
     if (

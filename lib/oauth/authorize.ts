@@ -3,12 +3,16 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto'
 import * as z from 'zod'
 
 import { setAuditTarget } from '@/lib/audit'
-import { lockUserRow } from '@/lib/database/locks'
+import { lockSettings, lockUserRow } from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { AccessError, HttpError } from '@/lib/http/errors'
-import { API_SCOPE_CATALOG } from '@/lib/integrations/bearer-routes'
+import {
+  API_SCOPE_CATALOG,
+  isAdminScope,
+} from '@/lib/integrations/bearer-routes'
 import { hashApiToken } from '@/lib/integrations/tokens'
 import { scopeAvailable } from '@/lib/mcp/catalog'
+import { administrationOn } from '@/lib/mcp/settings'
 import {
   type PermissionSubject,
   hasPermission,
@@ -283,6 +287,9 @@ function clientRedirect(
  * can use, and room for another connection; it then creates the code the
  * client redeems, bound to everything the request named, and answers where
  * to send the browser. The code is stored as a digest and never logged.
+ * An `admin:*` scope is granted only while administration through MCP is
+ * on, and this is one of the two places it can be: the other is creating a
+ * named token. Editing a connection later never adds one.
  *
  * `user.sessionVersion` is the version of the session that sent the answer.
  * The code is created under the account's row lock, and only while the
@@ -329,12 +336,22 @@ export async function decideConsent(
       `This sign-in cannot grant ${scopeLabels(beyond)}. Remove ${beyond.length === 1 ? 'it' : 'them'} and try again.`
     )
   if (!scopes.length) throw refused('Choose at least one permission.')
+  // Read only when it matters: administration scopes exist only while it is
+  // on. Read again under the settings lock below, before the code is made.
+  const admin = scopes.filter(isAdminScope)
+  const administrationOff = () =>
+    refused(
+      `Administration through MCP is turned off on this instance, so agents cannot have ${scopeLabels(admin)}. Remove ${admin.length === 1 ? 'it' : 'them'} and try again.`
+    )
+  const administration = admin.length > 0 && (await administrationOn())
+  if (admin.length && !administration) throw administrationOff()
   const unavailable = scopes.filter(
     (scope) =>
       !scopeAvailable(
         scope,
         (permission) => hasPermission(user, permission),
-        true
+        true,
+        administration
       )
   )
   if (unavailable.length)
@@ -350,6 +367,14 @@ export async function decideConsent(
   const code = newLinkToken()
   const now = new Date()
   await prisma.$transaction(async (tx) => {
+    // An administration grant takes turns with the switch: the settings
+    // lock comes first, before the account's row, and the setting is read
+    // as saved. Turning administration off then either commits first and
+    // refuses this, or waits and strips the code this makes.
+    if (admin.length) {
+      await lockSettings(tx)
+      if (!(await administrationOn(tx))) throw administrationOff()
+    }
     await lockUserRow(tx, user.id)
     const account = await tx.user.findUnique({
       where: { id: user.id },

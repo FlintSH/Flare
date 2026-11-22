@@ -1,4 +1,6 @@
 import { createHmac } from 'node:crypto'
+import { readdirSync } from 'node:fs'
+import { join, relative, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -79,6 +81,11 @@ describe('scoped API tokens', () => {
       'files:share',
       'files:delete',
       'account:write',
+      'invites:write',
+      'admin:read',
+      'admin:users',
+      'admin:content',
+      'admin:settings',
       'mcp',
     ])
     for (const scope of mcpOnly) {
@@ -122,6 +129,60 @@ describe('scoped API tokens', () => {
       expect(
         tokenAllowsRequest(scopes, { method, url: `https://flare.test${path}` })
       ).toBe(false)
+  })
+  it('gives no REST route at all to a token with invites and administration scopes', () => {
+    const scopes = [
+      'invites:write',
+      'admin:read',
+      'admin:users',
+      'admin:content',
+      'admin:settings',
+      'mcp',
+    ]
+    const app = resolve(process.cwd(), 'app')
+    const walk = (directory: string): string[] =>
+      readdirSync(directory, { withFileTypes: true }).flatMap((entry) =>
+        entry.isDirectory()
+          ? walk(join(directory, entry.name))
+          : [join(directory, entry.name)]
+      )
+    const paths = walk(join(app, 'api'))
+      .filter((file) => file.endsWith('/route.ts'))
+      .map(
+        (file) =>
+          '/' +
+          relative(app, file)
+            .replace(/\/route\.ts$/, '')
+            .replace(/\[[^\]]+\]/g, 'abc')
+      )
+    // The administration routes are among them.
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        '/api/users',
+        '/api/users/abc',
+        '/api/roles',
+        '/api/invites',
+        '/api/settings',
+        '/api/audit',
+        '/api/users/abc/files',
+      ])
+    )
+    for (const path of paths)
+      for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+        expect(
+          tokenAllowsRequest(scopes, {
+            method,
+            url: `https://flare.test${path}`,
+          }),
+          `${method} ${path}`
+        ).toBe(false)
+    for (const scope of scopes) {
+      expect(scopeWorksOverApi(scope), scope).toBe(false)
+      expect(
+        scopeUsable(scope, () => true),
+        scope
+      ).toBe(false)
+    }
   })
   it('allows only exact route/method combinations and never account or token management', () => {
     const allowed = (method: string, path: string, scopes = ['files:upload']) =>

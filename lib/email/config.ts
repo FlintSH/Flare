@@ -230,6 +230,18 @@ export async function prepareEmailConfig(
   }
 }
 
+/**
+ * Builds the document `saveEmailConfig` saves from the saved one, once the
+ * locks are held, so a change merged onto it cannot overwrite a save that
+ * landed in between. It may also refuse, with `tx` to read what it needs
+ * under the same locks.
+ */
+export type EmailConfigBuilder = (
+  saved: EmailConfig,
+  tx: Prisma.TransactionClient
+) => unknown
+
+/** Saves a whole email settings document, or what an `EmailConfigBuilder` makes. */
 export async function saveEmailConfig(
   input: unknown,
   options: { clearPassword?: boolean; applyToExisting?: boolean } = {}
@@ -238,8 +250,12 @@ export async function saveEmailConfig(
   // with account mutations and all other JSON settings writers.
   await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
+    const document =
+      typeof input === 'function'
+        ? await (input as EmailConfigBuilder)(await getSavedEmailConfig(tx), tx)
+        : input
     const { candidate, previous, effective } = await prepareEmailConfig(
-      input,
+      document,
       options.clearPassword,
       tx
     )

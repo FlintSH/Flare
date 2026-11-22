@@ -58,7 +58,8 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
     if (
       !['postgres:', 'postgresql:'].includes(url.protocol) ||
       !['localhost', '127.0.0.1'].includes(url.hostname) ||
-      !/^\/flare_mcp\d*_test$/.test(url.pathname)
+      // A worker sharing a checkout gets a lettered copy of its own.
+      !/^\/flare_mcp\d*_test(_[a-z])?$/.test(url.pathname)
     )
       throw new Error('Use the disposable local flare_mcp_test database')
     vi.stubEnv('DATABASE_URL', url.toString())
@@ -2278,6 +2279,403 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
         expect(await prisma.storageDeletion.count()).toBe(1)
       })
     })
+
+    describe("moderator mode on another account's content, through the real services", () => {
+      const MODERATOR_TOKEN =
+        'flr_database-suite-moderator-token-0123456789abcdefg'
+      let transferRoute: typeof import('@/app/api/mcp/transfer/[ticket]/route')
+      let storageModule: typeof import('@/lib/storage')
+      let passwords: typeof import('@/lib/files/password-hash')
+      const objects = new Map<string, Buffer>()
+      /** Runs once, the next time the archive is read from storage. */
+      let onArchiveRead: (() => Promise<unknown>) | undefined
+
+      /** The saved settings with MCP and administration through it as given. */
+      const administration = (on: boolean) =>
+        prisma.$transaction((tx) =>
+          config.applyConfigUpdate(tx, {
+            settings: {
+              general: { mcp: { enabled: true, administration: on } },
+            },
+          })
+        )
+
+      beforeAll(async () => {
+        transferRoute = await import('@/app/api/mcp/transfer/[ticket]/route')
+        storageModule = await import('@/lib/storage')
+        passwords = await import('@/lib/files/password-hash')
+      })
+      beforeEach(async () => {
+        await enable(true)
+        await administration(true)
+        await prisma.role.create({
+          data: {
+            name: 'Moderators',
+            position: 10,
+            permissions: ['content.read', 'content.update', 'content.delete'],
+            users: { connect: { id: 'mcp-alex' } },
+          },
+        })
+        await prisma.apiToken.create({
+          data: {
+            id: 'token-moderator',
+            userId: 'mcp-alex',
+            name: 'Moderator',
+            hash: tokens.hashApiToken(MODERATOR_TOKEN),
+            scopes: ['mcp', 'admin:content'],
+            expiresAt: new Date(Date.now() + 30 * 86_400_000),
+          },
+        })
+        await prisma.user.create({
+          data: {
+            id: 'mcp-tess',
+            name: 'Tess',
+            urlId: 'mcp-tess',
+            uploadToken: 'legacy-mcp-tess',
+          },
+        })
+        objects.clear()
+        const stored = (
+          id: string,
+          userId: string,
+          text: string,
+          data: Partial<Prisma.FileUncheckedCreateInput> = {}
+        ) => {
+          const path = `uploads/${userId}/${id}/${id}.txt`
+          objects.set(path, Buffer.from(text))
+          return prisma.file.create({
+            data: {
+              id,
+              userId,
+              name: `${id}.txt`,
+              urlPath: `/${userId}/${id}.txt`,
+              mimeType: 'text/plain',
+              size: Buffer.byteLength(text) / (1024 * 1024),
+              path,
+              ...data,
+            },
+          })
+        }
+        await stored('sam-private', 'mcp-sam', 'only Sam may see this', {
+          visibility: 'PRIVATE',
+        })
+        await stored('sam-locked', 'mcp-sam', 'behind a password', {
+          password: await passwords.hashFilePassword('correct horse battery'),
+        })
+        await stored('tess-note', 'mcp-tess', 'Tess wrote this')
+        await prisma.user.update({
+          where: { id: 'mcp-sam' },
+          data: { storageUsed: 1 },
+        })
+        vi.spyOn(storageModule, 'getStorageProvider').mockResolvedValue({
+          async getFileStream(
+            path: string,
+            range?: { start?: number; end?: number }
+          ) {
+            const { Readable } = await import('node:stream')
+            if (path.endsWith('.zip') && onArchiveRead) {
+              const change = onArchiveRead
+              onArchiveRead = undefined
+              await change()
+            }
+            const bytes = objects.get(path)
+            if (!bytes)
+              throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+            return Readable.from([
+              range
+                ? bytes.subarray(
+                    range.start ?? 0,
+                    range.end === undefined ? undefined : range.end + 1
+                  )
+                : bytes,
+            ])
+          },
+          async getFileSize(path: string) {
+            const bytes = objects.get(path)
+            if (!bytes)
+              throw Object.assign(new Error('missing'), { code: 'ENOENT' })
+            return bytes.length
+          },
+          async deleteFile(path: string) {
+            objects.delete(path)
+          },
+        } as never)
+        await audit.auditSettled()
+        events.length = 0
+      })
+      afterEach(() => vi.restoreAllMocks())
+
+      const moderate = (name: string, args: Record<string, unknown>) =>
+        callTool(name, { ...args, account: 'mcp-sam' }, MODERATOR_TOKEN)
+      const textOf = (answer: Awaited<ReturnType<typeof callTool>>) =>
+        (answer.body.result.content as { text: string }[])
+          .map((block) => block.text)
+          .join('\n')
+
+      it('reads a private and a password-protected file of another account, with no password', async () => {
+        for (const [id, words] of [
+          ['sam-private', 'only Sam may see this'],
+          ['sam-locked', 'behind a password'],
+        ]) {
+          const answer = await moderate('read_file', { file: id })
+          expect(answer.body.result.isError, textOf(answer)).toBeFalsy()
+          expect(textOf(answer)).toContain(words)
+        }
+        // A third account's file answers as one that does not exist.
+        const theirs = await moderate('read_file', { file: 'tess-note' })
+        const none = await moderate('read_file', { file: 'no-such-file' })
+        expect(theirs.body.result.isError).toBe(true)
+        expect(textOf(theirs)).toBe(textOf(none))
+        expect(textOf(theirs)).not.toContain('Tess wrote')
+        // The moderator's own token, without `account`, may read nothing.
+        const own = await callTool(
+          'read_file',
+          { file: 'sam-private' },
+          MODERATOR_TOKEN
+        )
+        expect(own.body.result.isError).toBe(true)
+        await audit.auditSettled()
+        expect(events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              action: 'mcp.read_file',
+              outcome: 'success',
+              actorId: 'mcp-alex',
+              targetType: 'file',
+              targetId: 'sam-locked',
+              details: expect.objectContaining({ tokenId: 'token-moderator' }),
+            }),
+          ])
+        )
+      })
+
+      it('finds files by search, with the moderation listing, and only the named account', async () => {
+        const answer = await moderate('search_files', {})
+        expect(answer.body.result.isError, textOf(answer)).toBeFalsy()
+        expect(
+          answer.body.result.structuredContent.files
+            .map((file: { id: string }) => file.id)
+            .sort()
+        ).toEqual(['sam-locked', 'sam-private'])
+        expect(answer.body.result.structuredContent.files).toContainEqual(
+          expect.objectContaining({ id: 'sam-locked', has_password: true })
+        )
+      })
+
+      it('deletes a file of another account and records who did it, to whom', async () => {
+        const answer = await moderate('delete_files', {
+          files: ['sam-private', 'tess-note'],
+        })
+        expect(answer.body.result.isError, textOf(answer)).toBeFalsy()
+        expect(answer.body.result.structuredContent.results).toEqual([
+          { id: 'sam-private', name: 'sam-private.txt', ok: true },
+          {
+            id: 'tess-note',
+            ok: false,
+            error:
+              'No file of that account has this ID. Use search_files with the same `account` to find it.',
+          },
+        ])
+        expect(
+          await prisma.file.findUnique({ where: { id: 'sam-private' } })
+        ).toBeNull()
+        expect(objects.has('uploads/mcp-sam/sam-private/sam-private.txt')).toBe(
+          false
+        )
+        // Nothing of the third account changed.
+        expect(
+          await prisma.file.findUnique({ where: { id: 'tess-note' } })
+        ).not.toBeNull()
+        await audit.auditSettled()
+        expect(events).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              action: 'mcp.delete_files',
+              actorId: 'mcp-alex',
+              targetType: 'file',
+              details: expect.objectContaining({ tokenId: 'token-moderator' }),
+            }),
+            // The deleted row, as the moderation route records it, names
+            // the account it belonged to.
+            expect.objectContaining({
+              action: 'file.delete',
+              targetId: 'sam-private',
+              actorId: 'mcp-alex',
+            }),
+          ])
+        )
+        const deleted = events.find(
+          (event) =>
+            event.action === 'file.delete' && event.targetId === 'sam-private'
+        )
+        expect(JSON.stringify(deleted)).toContain('mcp-sam')
+      })
+
+      it('serves a download link made in moderator mode until administration is turned off', async () => {
+        const answer = await moderate('read_file', {
+          file: 'sam-private',
+          download_url: true,
+        })
+        const { download_url: url } = JSON.parse(
+          answer.body.result.content[0].text
+        )
+        expect(isTransferUrl(url)).toBe(true)
+        const row = await prisma.agentTransfer.findFirstOrThrow()
+        expect(row).toMatchObject({
+          userId: 'mcp-alex',
+          credential: 'token:token-moderator',
+          options: { moderating: 'mcp-sam' },
+        })
+        const get = () =>
+          transferRoute.GET(new Request(url), {
+            params: Promise.resolve({
+              ticket: url.slice(url.lastIndexOf('/') + 1),
+            }),
+          })
+        const served = await get()
+        expect(served.status).toBe(200)
+        expect(await served.text()).toBe('only Sam may see this')
+        const counts = await prisma.file.findUniqueOrThrow({
+          where: { id: 'sam-private' },
+          select: { views: true, downloads: true },
+        })
+        expect(counts).toEqual({ views: 0, downloads: 0 })
+        await administration(false)
+        const after = await get()
+        expect(after.status).toBe(404)
+        expect(await after.json()).toEqual({ error: 'Not found' })
+        // Turning it on again revives nothing: the token lost the scope.
+        await administration(true)
+        expect((await get()).status).toBe(404)
+      })
+
+      describe('a slow archive read, rechecked as a moderator', () => {
+        let codec: typeof import('@/lib/archives/codec')
+        let indexCache: typeof import('@/lib/archives/index-cache')
+        beforeAll(async () => {
+          codec = await import('@/lib/archives/codec')
+          indexCache = await import('@/lib/archives/index-cache')
+        })
+        beforeEach(async () => {
+          indexCache.clearArchiveIndexCache()
+          onArchiveRead = undefined
+          const { mkdtemp, readFile, rm, writeFile } =
+            await import('node:fs/promises')
+          const { tmpdir } = await import('node:os')
+          const { join } = await import('node:path')
+          const directory = await mkdtemp(join(tmpdir(), 'mcp-moderator-'))
+          try {
+            const localPath = join(directory, 'a.txt')
+            await writeFile(localPath, 'inside the archive')
+            const output = join(directory, 'made.zip')
+            await codec.createArchive(output, 'zip', [
+              { path: 'a.txt', localPath, size: 18 },
+            ])
+            const path = 'uploads/mcp-sam/sam-zip/bundle.zip'
+            const bytes = await readFile(output)
+            objects.set(path, bytes)
+            await prisma.file.create({
+              data: {
+                id: 'sam-zip',
+                userId: 'mcp-sam',
+                name: 'bundle.zip',
+                urlPath: '/mcp-sam/bundle.zip',
+                mimeType: 'application/zip',
+                size: bytes.length / (1024 * 1024),
+                path,
+                visibility: 'PRIVATE',
+              },
+            })
+          } finally {
+            await rm(directory, { recursive: true, force: true })
+          }
+        })
+
+        it('lists the archive while the moderator still holds what it needs', async () => {
+          const answer = await moderate('read_file', { file: 'sam-zip' })
+          expect(answer.body.result.isError, textOf(answer)).toBeFalsy()
+          expect(textOf(answer)).toContain('a.txt')
+        })
+
+        it('records a listing that is still being read under the token that asked', async () => {
+          // The archive takes longer to read than a listing waits for it,
+          // so the answer is the progress so far. That path confirms the
+          // moderator without a transaction, in the request itself.
+          let finish = () => {}
+          onArchiveRead = () =>
+            new Promise<void>((resolve) => {
+              finish = resolve
+              setTimeout(resolve, 5000)
+            })
+          events.length = 0
+          const answer = await moderate('read_file', { file: 'sam-zip' })
+          finish()
+          expect(answer.body.result.isError, textOf(answer)).toBeFalsy()
+          expect(textOf(answer)).toContain('still reading this archive')
+          await audit.auditSettled()
+          expect(
+            events.filter((event) => event.action === 'mcp.read_file')
+          ).toEqual([
+            expect.objectContaining({
+              outcome: 'success',
+              actorId: 'mcp-alex',
+              details: expect.objectContaining({
+                tokenId: 'token-moderator',
+              }),
+            }),
+          ])
+        })
+
+        const ENDED =
+          "This connection was disconnected, lost the access to other accounts' content this call needs, or administration through MCP was turned off while the call was running."
+        it.each<[string, () => Promise<unknown>]>([
+          [
+            'the token is revoked',
+            () =>
+              prisma.apiToken.update({
+                where: { id: 'token-moderator' },
+                data: { revokedAt: new Date() },
+              }),
+          ],
+          [
+            'the moderation scope is taken off the token',
+            () =>
+              prisma.apiToken.update({
+                where: { id: 'token-moderator' },
+                data: { scopes: ['mcp'] },
+              }),
+          ],
+          [
+            'administration through MCP is turned off',
+            () => administration(false),
+          ],
+        ])(
+          'refuses a listing when %s while the archive is being read',
+          async (_what, change) => {
+            onArchiveRead = change
+            const answer = await moderate('read_file', { file: 'sam-zip' })
+            expect(answer.body.result.isError).toBe(true)
+            expect(textOf(answer)).toBe(ENDED)
+            expect(textOf(answer)).not.toContain('a.txt')
+          }
+        )
+
+        it('refuses an entry read when the token is revoked while the entry is being read', async () => {
+          onArchiveRead = () =>
+            prisma.apiToken.update({
+              where: { id: 'token-moderator' },
+              data: { revokedAt: new Date() },
+            })
+          const answer = await moderate('read_file', {
+            file: 'sam-zip',
+            entry: 'a.txt',
+          })
+          expect(answer.body.result.isError).toBe(true)
+          expect(textOf(answer)).toBe(ENDED)
+          expect(textOf(answer)).not.toContain('inside the archive')
+        })
+      })
+    })
   })
 
   describe('agent sign-in', () => {
@@ -4352,6 +4750,9 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
               principal,
               request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
               origin: ORIGIN,
+              moderating: null,
+              mayModerate: false,
+              requireModeration: () => {},
               allows: () => true,
               recheck: async () => {},
               requireEffect: () => {},
@@ -4920,6 +5321,9 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
             principal,
             request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
             origin: ORIGIN,
+            moderating: null,
+            mayModerate: false,
+            requireModeration: () => {},
             allows: () => true,
             recheck: async () => {},
             requireEffect: () => {},
@@ -5408,6 +5812,9 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
           principal,
           request: new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
           origin: ORIGIN,
+          moderating: null,
+          mayModerate: false,
+          requireModeration: () => {},
           allows: (effect) => catalog.needsMet(row.effects![effect], principal),
           recheck: async () => {},
           requireEffect(effect) {
@@ -5829,7 +6236,9 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
           server.toolContext(
             tool as never,
             principal ?? (await principalOf(SAVER_TOKEN)),
-            new Request(`${ORIGIN}/api/mcp`, { method: 'POST' })
+            new Request(`${ORIGIN}/api/mcp`, { method: 'POST' }),
+            null,
+            { countAdminWrite: () => {} }
           )
         )
       }
@@ -7024,6 +7433,1892 @@ suite.sequential('MCP against disposable PostgreSQL', () => {
         expect(await principalFor(pair.access_token)).not.toBeNull()
         await refreshed(clientId, pair)
       })
+    })
+
+    describe('administration through MCP', () => {
+      const ADMIN_READ = ['files:read', 'admin:read']
+      /** The settings as saved, written straight to the row: nothing else runs. */
+      const saveRaw = (administration: boolean) => {
+        const value = structuredClone(config.DEFAULT_CONFIG)
+        value.settings.general.mcp = { enabled: true, administration }
+        return prisma.config.upsert({
+          where: { key: 'flare_config' },
+          create: {
+            key: 'flare_config',
+            value: value as Prisma.InputJsonValue,
+          },
+          update: { value: value as Prisma.InputJsonValue },
+        })
+      }
+      /** Turns it on or off the way every settings write does. */
+      const turn = (administration: boolean) =>
+        prisma.$transaction((tx) =>
+          config.applyConfigUpdate(tx, {
+            settings: { general: { mcp: { enabled: true, administration } } },
+          })
+        )
+      const ADMIN_TOKEN = 'flr_database-suite-admin-token-0123456789abcdefghijk'
+      const adminToken = () =>
+        prisma.apiToken.create({
+          data: {
+            id: 'token-admin',
+            userId: 'mcp-alex',
+            name: 'Administration',
+            hash: tokens.hashApiToken(ADMIN_TOKEN),
+            scopes: ['mcp', 'files:read', 'admin:read', 'admin:users'],
+            expiresAt: new Date(Date.now() + 7 * DAY),
+          },
+        })
+      /** A token, a connection, and a pair of that connection narrowed to an administration scope. */
+      async function credentials() {
+        await saveRaw(true)
+        await adminToken()
+        const { clientId, pair, connectionId } = await connect({
+          scopes: ['files:read', 'admin:read', 'admin:content'],
+        })
+        const narrowed = await refreshed(clientId, pair, {
+          scope: 'files:read admin:read',
+        })
+        return { clientId, pair: narrowed, connectionId }
+      }
+      const scopesNow = async (connectionId: string, pair: Pair) => ({
+        token: (
+          await prisma.apiToken.findUniqueOrThrow({
+            where: { id: 'token-admin' },
+          })
+        ).scopes,
+        connection: (await connectionRow(connectionId)).scopes,
+        pair: (
+          await prisma.agentToken.findUniqueOrThrow({
+            where: { accessHash: tokens.hashApiToken(pair.access_token) },
+          })
+        ).scopes,
+      })
+
+      it('is off for settings saved before it existed', async () => {
+        const value = structuredClone(config.DEFAULT_CONFIG) as {
+          settings: { general: { mcp: Record<string, unknown> } }
+        }
+        value.settings.general.mcp = { enabled: true }
+        await prisma.config.update({
+          where: { key: 'flare_config' },
+          data: { value: value as Prisma.InputJsonValue },
+        })
+        expect(await settings.administrationOn()).toBe(false)
+        expect(
+          await prisma.$transaction((tx) => settings.administrationOn(tx))
+        ).toBe(false)
+        await saveRaw(true)
+        expect(await settings.administrationOn()).toBe(true)
+      })
+
+      it('drops the scopes from what a credential may use while off, even one that kept them', async () => {
+        const { pair, connectionId } = await credentials()
+        expect((await principalOf(ADMIN_TOKEN)).scopes).toEqual([
+          'files:read',
+          'admin:read',
+          'admin:users',
+        ])
+        expect((await principalFor(pair.access_token))!.scopes).toEqual(
+          ADMIN_READ
+        )
+        // Off, written past the settings code: the rows still hold them.
+        await saveRaw(false)
+        expect((await principalOf(ADMIN_TOKEN)).scopes).toEqual(['files:read'])
+        expect((await principalFor(pair.access_token))!.scopes).toEqual([
+          'files:read',
+        ])
+        expect(
+          (await auth.credentialPrincipal(`connection:${connectionId}`))!.scopes
+        ).toEqual(['files:read'])
+        expect((await scopesNow(connectionId, pair)).token).toContain(
+          'admin:read'
+        )
+      })
+
+      it('takes them from every token, connection and narrowed pair in the transaction that turns it off', async () => {
+        const { pair, connectionId } = await credentials()
+        let inside: Awaited<ReturnType<typeof scopesNow>> | undefined
+        let outside: Awaited<ReturnType<typeof scopesNow>> | undefined
+        await prisma.$transaction(async (tx) => {
+          await config.applyConfigUpdate(tx, {
+            settings: {
+              general: { mcp: { enabled: true, administration: false } },
+            },
+          })
+          inside = {
+            token: (
+              await tx.apiToken.findUniqueOrThrow({
+                where: { id: 'token-admin' },
+              })
+            ).scopes,
+            connection: (
+              await tx.agentConnection.findUniqueOrThrow({
+                where: { id: connectionId },
+              })
+            ).scopes,
+            pair: (
+              await tx.agentToken.findUniqueOrThrow({
+                where: { accessHash: tokens.hashApiToken(pair.access_token) },
+              })
+            ).scopes,
+          }
+          // Nobody else sees it before the settings are saved.
+          outside = await scopesNow(connectionId, pair)
+        })
+        expect(inside).toEqual({
+          token: ['mcp', 'files:read'],
+          connection: ['files:read'],
+          pair: ['files:read'],
+        })
+        expect(outside).toEqual({
+          token: ['mcp', 'files:read', 'admin:read', 'admin:users'],
+          connection: ['files:read', 'admin:read', 'admin:content'],
+          pair: ADMIN_READ,
+        })
+        expect(await scopesNow(connectionId, pair)).toEqual(inside)
+        await audit.auditSettled()
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            action: 'mcp.administration.scopesRemoved',
+            // A token, a connection and a pair.
+            details: { count: 3, reason: 'administration-off' },
+          })
+        )
+        // Turning it on again revives nothing.
+        await turn(true)
+        expect(await scopesNow(connectionId, pair)).toEqual(inside)
+        expect((await principalOf(ADMIN_TOKEN)).scopes).toEqual(['files:read'])
+        // What is left still works: fewer tools, nothing else.
+        expect((await principalFor(pair.access_token))!.scopes).toEqual([
+          'files:read',
+        ])
+      })
+
+      it('takes nothing when the settings write fails', async () => {
+        const { pair, connectionId } = await credentials()
+        const before = await scopesNow(connectionId, pair)
+        await expect(
+          prisma.$transaction(async (tx) => {
+            await config.applyConfigUpdate(tx, {
+              settings: {
+                general: { mcp: { enabled: true, administration: false } },
+              },
+            })
+            throw new Error('The rest of the change failed')
+          })
+        ).rejects.toThrow('The rest of the change failed')
+        expect(await scopesNow(connectionId, pair)).toEqual(before)
+        expect(await settings.administrationOn()).toBe(true)
+        // Nor does the audit log say anything was taken away.
+        await audit.auditSettled()
+        expect(
+          events.filter(
+            ({ action }) => action === 'mcp.administration.scopesRemoved'
+          )
+        ).toEqual([])
+      })
+
+      it('records no strip when the settings patch rolls back after saving', async () => {
+        const { pair, connectionId } = await credentials()
+        const patch = await import('@/lib/config/patch')
+        // An administrator who cannot sign in: the last check of the patch
+        // refuses after the settings, and the strip, were written.
+        await prisma.role.create({
+          data: {
+            name: 'Administrator',
+            position: 100,
+            permissions: ['administrator'],
+            users: { connect: { id: 'mcp-sam' } },
+          },
+        })
+        await expect(
+          patch.patchSettings(administrator('mcp-sam'), {
+            general: { mcp: { administration: false } },
+          })
+        ).rejects.toThrow('Keep at least one administrator who can sign in')
+        await audit.auditSettled()
+        expect(
+          events.filter(
+            ({ action }) => action === 'mcp.administration.scopesRemoved'
+          )
+        ).toEqual([])
+        expect((await scopesNow(connectionId, pair)).token).toContain(
+          'admin:read'
+        )
+      })
+
+      it('takes a scope planted while it was off away when it is turned on, and says why', async () => {
+        await saveRaw(false)
+        // Written past every check, as nothing in Flare can while it is off.
+        await adminToken()
+        await turn(true)
+        expect(
+          (
+            await prisma.apiToken.findUniqueOrThrow({
+              where: { id: 'token-admin' },
+            })
+          ).scopes
+        ).toEqual(['mcp', 'files:read'])
+        await audit.auditSettled()
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            action: 'mcp.administration.scopesRemoved',
+            details: { count: 1, reason: 'administration-on' },
+          })
+        )
+      })
+
+      it('takes them through the legacy whole-document settings write too', async () => {
+        const { pair, connectionId } = await credentials()
+        const settingsRoute = await import('@/app/api/settings/route')
+        // An administrator who can sign in, as the route checks at the end.
+        await prisma.role.create({
+          data: {
+            id: 'role-admin',
+            name: 'Administrator',
+            position: 100,
+            permissions: ['administrator'],
+            users: { connect: { id: 'mcp-sam' } },
+          },
+        })
+        await prisma.user.update({
+          where: { id: 'mcp-sam' },
+          data: { email: 'sam@example.com', password: 'hash' },
+        })
+        session.read.mockResolvedValueOnce({
+          user: { id: 'mcp-sam', permissions: ['administrator'] },
+        } as never)
+        const document = await config.readConfig(prisma)
+        document.settings.general.mcp.administration = false
+        const response = await settingsRoute.POST(
+          new Request(`${ORIGIN}/api/settings`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', origin: ORIGIN },
+            body: JSON.stringify(document),
+          })
+        )
+        expect(response.status).toBe(200)
+        expect(await scopesNow(connectionId, pair)).toEqual({
+          token: ['mcp', 'files:read'],
+          connection: ['files:read'],
+          pair: ['files:read'],
+        })
+      })
+
+      it('leaves every credential alone while it stays on, or for a save of something else', async () => {
+        const { pair, connectionId } = await credentials()
+        const before = await scopesNow(connectionId, pair)
+        await turn(true)
+        await prisma.$transaction((tx) =>
+          config.applyConfigUpdate(tx, {
+            settings: { general: { ocr: { enabled: false } } },
+          })
+        )
+        expect(await scopesNow(connectionId, pair)).toEqual(before)
+      })
+
+      describe('a connection that holds one', () => {
+        async function aged(scopes: string[], days: number) {
+          const signedIn = await connect({ scopes })
+          await prisma.agentConnection.update({
+            where: { id: signedIn.connectionId },
+            data: {
+              createdAt: new Date(Date.now() - days * DAY),
+              lastUsedAt: new Date(),
+            },
+          })
+          return signedIn
+        }
+        const holds = (connectionId: string, scopes: string[]) =>
+          prisma.$transaction((tx) =>
+            connections.connectionHolds(tx, connectionId, scopes)
+          )
+
+        beforeEach(() => saveRaw(true))
+
+        async function expectEnded(signedIn: Awaited<ReturnType<typeof aged>>) {
+          const row = await connectionRow(signedIn.connectionId)
+          expect(row.revokedAt).toBeInstanceOf(Date)
+          expect(row.revokedReason).toBe('expired')
+          // Its pairs went with it, as a disconnect takes them.
+          expect(row.tokens).toEqual([])
+          expect(await principalFor(signedIn.pair.access_token)).toBeNull()
+          expect(
+            await auth.credentialPrincipal(
+              `connection:${signedIn.connectionId}`
+            )
+          ).toBeNull()
+          const refused = await refresh(
+            signedIn.clientId,
+            signedIn.pair.refresh_token
+          )
+          expect(refused.status).toBe(400)
+          expect((await refused.json()).error).toBe('invalid_grant')
+          expect(
+            (await connections.listConnections('mcp-alex')).map(({ id }) => id)
+          ).not.toContain(signedIn.connectionId)
+        }
+        async function expectStripped(
+          signedIn: Awaited<ReturnType<typeof aged>>
+        ) {
+          expect((await connectionRow(signedIn.connectionId)).scopes).toEqual([
+            'files:read',
+          ])
+          expect(
+            (await principalFor(signedIn.pair.access_token))!.scopes
+          ).toEqual(['files:read'])
+          const next = await refreshed(signedIn.clientId, signedIn.pair)
+          expect(next.scope).toBe('files:read')
+          expect(
+            (await connections.listConnections('mcp-alex')).map(({ id }) => id)
+          ).toEqual([signedIn.connectionId])
+          expect(await liveCount()).toBe(1)
+        }
+
+        it('is ended, not brought back, when administration is turned off; one within its days is stripped', async () => {
+          const old = await aged(ADMIN_READ, 31)
+          const young = await aged(ADMIN_READ, 10)
+          await turn(false)
+          await expectEnded(old)
+          await expectStripped(young)
+        })
+
+        it('stays ended when administration is turned off and on again', async () => {
+          const old = await aged(ADMIN_READ, 31)
+          const young = await aged(ADMIN_READ, 10)
+          await turn(false)
+          await turn(true)
+          await expectEnded(old)
+          await expectStripped(young)
+        })
+
+        it('is ended by the strip when administration is turned on, too', async () => {
+          // Off, written past the settings code, so nothing was stripped yet.
+          const old = await aged(ADMIN_READ, 31)
+          await saveRaw(false)
+          await turn(true)
+          await expectEnded(old)
+        })
+
+        it('cannot be edited: Edit permissions answers as for one that is gone and changes nothing', async () => {
+          const old = await aged(ADMIN_READ, 31)
+          const before = await connectionRow(old.connectionId)
+          for (const scopes of [['files:read'], ADMIN_READ])
+            await expect(
+              integrations.runIntegrationCommand(administrator('mcp-alex'), {
+                action: 'update-agent',
+                id: old.connectionId,
+                scopes,
+              })
+            ).rejects.toThrow('Agent not found or already disconnected.')
+          const after = await connectionRow(old.connectionId)
+          expect(after.scopes).toEqual(before.scopes)
+          expect(after.revokedAt).toBeNull()
+          expect(await principalFor(old.pair.access_token)).toBeNull()
+        })
+
+        it('works for 30 days, at every place a connection is accepted', async () => {
+          const young = await aged(ADMIN_READ, 29)
+          expect(await principalFor(young.pair.access_token)).not.toBeNull()
+          expect(
+            await auth.credentialPrincipal(`connection:${young.connectionId}`)
+          ).not.toBeNull()
+          expect(await holds(young.connectionId, ['files:read'])).toBe(true)
+          await refreshed(young.clientId, young.pair)
+        })
+
+        it('is refused 30 days after it was authorized, used or not, while one without such a scope still works', async () => {
+          const admin = await aged(ADMIN_READ, 31)
+          const plain = await aged(READ, 31)
+          // The MCP endpoint.
+          expect(await principalFor(admin.pair.access_token)).toBeNull()
+          expect(await principalFor(plain.pair.access_token)).not.toBeNull()
+          // Transfer URLs.
+          expect(
+            await auth.credentialPrincipal(`connection:${admin.connectionId}`)
+          ).toBeNull()
+          expect(
+            await auth.credentialPrincipal(`connection:${plain.connectionId}`)
+          ).not.toBeNull()
+          // The check that publishes what an agent made.
+          expect(await holds(admin.connectionId, ['files:read'])).toBe(false)
+          expect(await holds(plain.connectionId, ['files:read'])).toBe(true)
+          // The refresh grant.
+          const refused = await refresh(
+            admin.clientId,
+            admin.pair.refresh_token
+          )
+          expect(refused.status).toBe(400)
+          expect((await refused.json()).error).toBe('invalid_grant')
+          await refreshed(plain.clientId, plain.pair)
+          // Nor is it listed, or counted toward the limit of 50.
+          expect(
+            (await connections.listConnections('mcp-alex')).map(({ id }) => id)
+          ).toEqual([plain.connectionId])
+          expect(await liveCount()).toBe(1)
+          // And the sweep removes it, and only it.
+          expect((await cleanup.cleanUpSignIn()).connections).toBe(1)
+          expect(
+            await prisma.agentConnection.findUnique({
+              where: { id: admin.connectionId },
+            })
+          ).toBeNull()
+          expect(
+            await prisma.agentConnection.findUnique({
+              where: { id: plain.connectionId },
+            })
+          ).not.toBeNull()
+        })
+      })
+
+      it('lets editing take a scope away but never add one', async () => {
+        await saveRaw(true)
+        const { connectionId } = await connect({
+          scopes: ['files:read', 'admin:read'],
+        })
+        const edit = (scopes: string[]) =>
+          integrations.runIntegrationCommand(administrator('mcp-alex'), {
+            action: 'update-agent',
+            id: connectionId,
+            scopes,
+          })
+        await expect(
+          edit(['files:read', 'admin:read', 'admin:users'])
+        ).rejects.toThrow('can only be granted when the agent signs in')
+        await expect(edit(['files:read', 'admin:read'])).resolves.toEqual({
+          ok: true,
+        })
+        await expect(edit(['files:read'])).resolves.toEqual({ ok: true })
+        expect((await connectionRow(connectionId)).scopes).toEqual([
+          'files:read',
+        ])
+        // Gone once taken away, whatever the switch says.
+        await expect(edit(['files:read', 'admin:read'])).rejects.toThrow(
+          'can only be granted when the agent signs in'
+        )
+      })
+
+      describe('the key-permission helpers', () => {
+        let keys: typeof import('@/lib/mcp/key-permissions')
+        beforeAll(async () => {
+          keys = await import('@/lib/mcp/key-permissions')
+        })
+        const underLock = <T>(
+          run: (tx: Prisma.TransactionClient) => Promise<T>
+        ) =>
+          prisma.$transaction(async (tx) => {
+            await locks.lockRoleChanges(tx)
+            return run(tx)
+          })
+
+        it('read Everyone and the roles as they are under the role lock', async () => {
+          const [mail, members] = await Promise.all([
+            prisma.role.create({
+              data: {
+                name: 'Mail',
+                position: 20,
+                permissions: ['settings.email'],
+              },
+            }),
+            prisma.role.create({
+              data: {
+                name: 'Members',
+                position: 10,
+                permissions: ['users.create', 'users.roles'],
+              },
+            }),
+          ])
+          expect(await underLock((tx) => keys.everyoneHoldsKey(tx))).toBe(false)
+          expect(
+            await underLock((tx) => keys.rolesGrantKey(tx, [members.id]))
+          ).toBe(false)
+          expect(
+            await underLock((tx) =>
+              keys.rolesGrantKey(tx, [members.id, mail.id])
+            )
+          ).toBe(true)
+          let holding = await underLock((tx) => keys.keyHoldingRoles(tx))
+          expect(holding.everyone).toBe(false)
+          expect([...holding.roleIds]).toEqual([mail.id])
+          expect(keys.grantsKey(holding, [])).toBe(false)
+          // Given to Everyone in the browser, a key reaches every invite.
+          await prisma.role.update({
+            where: { systemKey: 'everyone' },
+            data: { permissions: ['files.read', 'settings.security'] },
+          })
+          expect(await underLock((tx) => keys.everyoneHoldsKey(tx))).toBe(true)
+          holding = await underLock((tx) => keys.keyHoldingRoles(tx))
+          expect(keys.grantsKey(holding, [])).toBe(true)
+          expect(keys.grantsKey(holding, [members.id])).toBe(true)
+        })
+      })
+
+      describe('resolveAccount', () => {
+        let moderation: typeof import('@/lib/mcp/moderation')
+        beforeAll(async () => {
+          moderation = await import('@/lib/mcp/moderation')
+        })
+
+        it('finds one account by user ID, email in any case, or a name only one account has', async () => {
+          await prisma.user.update({
+            where: { id: 'mcp-sam' },
+            data: { name: 'Sam', email: 'Sam@Example.com' },
+          })
+          expect((await moderation.resolveAccount('mcp-sam')).id).toBe(
+            'mcp-sam'
+          )
+          expect((await moderation.resolveAccount('sam@example.com')).id).toBe(
+            'mcp-sam'
+          )
+          expect((await moderation.resolveAccount('SAM')).id).toBe('mcp-sam')
+          // A second account that takes the same name makes it ambiguous,
+          // and one named after the other's ID or address changes nothing.
+          await prisma.user.update({
+            where: { id: 'mcp-alex' },
+            data: { name: 'sam' },
+          })
+          await expect(moderation.resolveAccount('Sam')).rejects.toThrow(
+            'More than one account matches'
+          )
+          await prisma.user.update({
+            where: { id: 'mcp-alex' },
+            data: { name: 'mcp-sam' },
+          })
+          expect((await moderation.resolveAccount('mcp-sam')).id).toBe(
+            'mcp-sam'
+          )
+          await expect(moderation.resolveAccount('nobody')).rejects.toThrow(
+            'No account has that user ID, name or email'
+          )
+        })
+      })
+
+      describe('a grant in flight while the switch turns off', () => {
+        const ADMIN = [
+          'admin:read',
+          'admin:users',
+          'admin:content',
+          'admin:settings',
+        ]
+        const opening = () => {
+          let open!: () => void
+          const opened = new Promise<void>((resolve) => (open = resolve))
+          return { open, opened }
+        }
+        const pause = (ms: number) =>
+          new Promise((resolve) => setTimeout(resolve, ms))
+        /** Resolves once this many sessions wait for a lock. */
+        async function waitingFor(count: number) {
+          for (let attempt = 0; attempt < 500; attempt++) {
+            const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
+              SELECT count(*)::int AS "waiting" FROM pg_stat_activity
+              WHERE datname = current_database() AND wait_event_type = 'Lock'
+            `
+            if (waiting >= count) return
+            await pause(10)
+          }
+          throw new Error('Nothing came to wait for a lock')
+        }
+        /** A third session holding one row until it is let go. */
+        async function holding(table: 'User' | 'OAuthClient', id: string) {
+          const held = opening()
+          const go = opening()
+          const done = prisma.$transaction(
+            async (tx) => {
+              if (table === 'User')
+                await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${id} FOR UPDATE`
+              else
+                await tx.$queryRaw`SELECT "id" FROM "OAuthClient" WHERE "id" = ${id} FOR UPDATE`
+              held.open()
+              await go.opened
+            },
+            { timeout: 20_000 }
+          )
+          await held.opened
+          return { release: go.open, done }
+        }
+        /** The switch turned off and saved, but not committed until let go. */
+        async function turningOff() {
+          const held = opening()
+          const go = opening()
+          const done = prisma.$transaction(
+            async (tx) => {
+              await config.applyConfigUpdate(tx, {
+                settings: {
+                  general: { mcp: { enabled: true, administration: false } },
+                },
+              })
+              held.open()
+              await go.opened
+            },
+            { timeout: 20_000 }
+          )
+          await held.opened
+          return { release: go.open, done }
+        }
+        /** Turning the switch off, as it happens, while something else is in flight. */
+        const switchOff = () => turn(false)
+        /** What must hold whenever the switch is off: no credential has a scope. */
+        async function expectNoneHeld() {
+          expect(await settings.administrationOn()).toBe(false)
+          const where = { scopes: { hasSome: ADMIN } }
+          expect({
+            tokens: await prisma.apiToken.count({ where }),
+            connections: await prisma.agentConnection.count({ where }),
+            pairs: await prisma.agentToken.count({ where }),
+            codes: await prisma.oAuthCode.count({ where }),
+          }).toEqual({ tokens: 0, connections: 0, pairs: 0, codes: 0 })
+          // Turning it on again revives nothing.
+          await saveRaw(true)
+          const tokensNow = await prisma.apiToken.findMany({
+            where: { userId: 'mcp-alex' },
+          })
+          for (const token of tokensNow)
+            expect(
+              token.scopes.filter((scope) => ADMIN.includes(scope))
+            ).toEqual([])
+        }
+        const createToken = () =>
+          integrations.runIntegrationCommand(administrator('mcp-alex'), {
+            action: 'create-token',
+            name: 'In flight',
+            scopes: ['mcp', 'files:read', 'admin:read'],
+            expiresAt: new Date(Date.now() + 7 * DAY).toISOString(),
+          })
+
+        beforeEach(() => saveRaw(true))
+
+        it('creating a token: a token that commits first is stripped by the switch', async () => {
+          // The token's insert waits for the account's row after it read the
+          // switch as on.
+          const row = await holding('User', 'mcp-alex')
+          const creating = createToken()
+          await waitingFor(1)
+          const off = switchOff()
+          // The switch waits for the grant, or (without that) commits now.
+          await Promise.race([off, pause(300)])
+          row.release()
+          await row.done
+          await creating
+          await off
+          await expectNoneHeld()
+        })
+
+        it('creating a token: one that comes after the switch is refused', async () => {
+          const switching = await turningOff()
+          const creating = createToken().then(
+            () => null,
+            (error: Error) => error
+          )
+          await Promise.race([creating, pause(300)])
+          switching.release()
+          await switching.done
+          expect((await creating)?.message).toMatch(
+            /^Administration through MCP is turned off on this instance/
+          )
+          await expectNoneHeld()
+        })
+
+        it('the consent decision: a code made first is stripped by the switch', async () => {
+          const clientId = await registered()
+          const row = await holding('User', 'mcp-alex')
+          const approving = approve(clientId, {
+            scopes: ['files:read', 'admin:read'],
+          })
+          await waitingFor(1)
+          const off = switchOff()
+          await Promise.race([off, pause(300)])
+          row.release()
+          await row.done
+          const code = await approving
+          await off
+          await expectNoneHeld()
+          // What it grants now is what is left.
+          const response = await redeem(clientId, code)
+          expect(response.status).toBe(200)
+          expect((await response.json()).scope).toBe('files:read')
+        })
+
+        it('the consent decision: one that comes after the switch is refused', async () => {
+          const clientId = await registered()
+          const switching = await turningOff()
+          const approving = approve(clientId, {
+            scopes: ['files:read', 'admin:read'],
+          }).then(
+            () => null,
+            (error: Error) => error
+          )
+          await Promise.race([approving, pause(300)])
+          switching.release()
+          await switching.done
+          expect((await approving)?.message).toMatch(
+            /^Administration through MCP is turned off on this instance/
+          )
+          await expectNoneHeld()
+        })
+
+        it('redeeming a code: a connection made first is stripped by the switch', async () => {
+          const clientId = await registered()
+          const code = await approve(clientId, {
+            scopes: ['files:read', 'admin:read'],
+          })
+          // The new connection waits for its registration's row, after the
+          // code was claimed.
+          const row = await holding('OAuthClient', clientId)
+          const redeeming = redeem(clientId, code)
+          await waitingFor(1)
+          const off = switchOff()
+          // Two wait now: the redemption, and the switch.
+          await waitingFor(2)
+          row.release()
+          await row.done
+          const response = await redeeming
+          await off
+          expect(response.status).toBe(200)
+          await expectNoneHeld()
+          const connection = await prisma.agentConnection.findFirstOrThrow({
+            where: { clientId },
+          })
+          expect(connection.scopes).toEqual(['files:read'])
+        })
+
+        it('redeeming a code: one redeemed after the switch makes the connection without the scope', async () => {
+          const clientId = await registered()
+          const code = await approve(clientId, {
+            scopes: ['files:read', 'admin:read'],
+          })
+          const switching = await turningOff()
+          const redeeming = redeem(clientId, code)
+          await Promise.race([redeeming, pause(300)])
+          switching.release()
+          await switching.done
+          const response = await redeeming
+          expect(response.status).toBe(200)
+          expect((await response.json()).scope).toBe('files:read')
+          await expectNoneHeld()
+        })
+      })
+    })
+  })
+
+  describe('invites, users and roles through the real services', () => {
+    const USERS_TOKEN = 'flr_database-suite-users-token-0123456789abcdefghijk'
+    let locks: typeof import('@/lib/database/locks')
+    let inviteTokens: typeof import('@/lib/invites/tokens')
+    let roles: { admin: string; mail: string; members: string }
+
+    beforeAll(async () => {
+      locks = await import('@/lib/database/locks')
+      inviteTokens = await import('@/lib/invites/tokens')
+    })
+
+    beforeEach(async () => {
+      // Email limits are counted in the database, per acting account.
+      await prisma.emailRateLimit.deleteMany()
+      const value = structuredClone(config.DEFAULT_CONFIG) as {
+        settings: Record<string, unknown> & {
+          general: { mcp: { enabled: boolean; administration: boolean } }
+        }
+      }
+      value.settings.general.mcp = { enabled: true, administration: true }
+      // Email on, so the verification actions run; nothing is ever sent.
+      value.settings.email = {
+        enabled: true,
+        smtp: { host: 'smtp.invalid', authentication: false },
+        fromAddress: 'flare@example.com',
+        publicUrl: ORIGIN,
+      }
+      await prisma.config.upsert({
+        where: { key: 'flare_config' },
+        create: { key: 'flare_config', value: value as Prisma.InputJsonValue },
+        update: { value: value as Prisma.InputJsonValue },
+      })
+      const [admin, mail, members] = await Promise.all([
+        prisma.role.create({
+          data: {
+            name: 'Admin',
+            position: 100,
+            systemKey: 'administrator',
+            permissions: ['administrator'],
+          },
+        }),
+        prisma.role.create({
+          data: {
+            name: 'Mail',
+            position: 20,
+            permissions: ['settings.email', 'users.read'],
+          },
+        }),
+        prisma.role.create({
+          data: {
+            name: 'Members',
+            position: 10,
+            permissions: ['files.upload'],
+          },
+        }),
+      ])
+      roles = { admin: admin.id, mail: mail.id, members: members.id }
+      // An administrator who can sign in, so the last-administrator rule holds.
+      await prisma.user.update({
+        where: { id: 'mcp-alex' },
+        data: {
+          email: 'alex@example.com',
+          password: 'not-a-real-hash',
+          roles: { connect: { id: admin.id } },
+        },
+      })
+      await prisma.user.update({
+        where: { id: 'mcp-sam' },
+        data: {
+          email: 'sam@example.com',
+          roles: { connect: { id: members.id } },
+        },
+      })
+      await prisma.apiToken.create({
+        data: {
+          id: 'token-users',
+          userId: 'mcp-alex',
+          name: 'Users',
+          hash: tokens.hashApiToken(USERS_TOKEN),
+          scopes: ['mcp', 'invites:write', 'admin:read', 'admin:users'],
+          expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000),
+        },
+      })
+    })
+
+    /** One tool call through the real route, as a 2026-07-28 client sends it. */
+    async function callTool(
+      name: string,
+      args: Record<string, unknown>,
+      token = USERS_TOKEN
+    ) {
+      const response = await route.POST(
+        new Request(`${ORIGIN}/api/mcp`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${token}`,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'mcp-protocol-version': '2026-07-28',
+            'mcp-method': 'tools/call',
+            'mcp-name': name,
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name,
+              arguments: args,
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': {
+                  name: 'test',
+                  version: '1',
+                },
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            },
+          }),
+        })
+      )
+      expect(response.status).toBe(200)
+      const { result } = await response.json()
+      return result as {
+        isError?: boolean
+        content: { text: string }[]
+        structuredContent?: Record<string, never>
+      }
+    }
+    /** A refused call: its words, which must say the rule. */
+    async function refused(name: string, args: Record<string, unknown>) {
+      const result = await callTool(name, args)
+      expect(result.isError, result.content[0].text).toBe(true)
+      return result.content[0].text
+    }
+    const rolesOf = async (id: string) =>
+      (
+        await prisma.user.findUniqueOrThrow({
+          where: { id },
+          select: { roles: { select: { id: true }, orderBy: { id: 'asc' } } },
+        })
+      ).roles.map((role) => role.id)
+    const permissionsOf = async (id: string) =>
+      (await prisma.role.findUniqueOrThrow({ where: { id } })).permissions
+    const giveEveryone = (
+      client: Pick<Prisma.TransactionClient, 'role'>,
+      permission: string
+    ) =>
+      client.role.update({
+        where: { systemKey: 'everyone' },
+        data: { permissions: { push: permission } },
+      })
+
+    /**
+     * Runs `call` while another transaction holds the role lock, the way a
+     * role edit in the browser does while it saves. Once the call is waiting
+     * for that lock, so it has made every read before its own transaction,
+     * the other transaction makes `edit` and commits; the call then judges
+     * the committed state.
+     */
+    async function whileEditing<T>(
+      edit: (tx: Prisma.TransactionClient) => Promise<unknown>,
+      call: () => Promise<T>
+    ): Promise<T> {
+      let locked!: () => void
+      let release!: () => void
+      const holding = new Promise<void>((resolve) => (locked = resolve))
+      const released = new Promise<void>((resolve) => (release = resolve))
+      const editor = prisma.$transaction(
+        async (tx) => {
+          await locks.lockRoleChanges(tx)
+          locked()
+          await released
+          await edit(tx)
+        },
+        { timeout: 20_000 }
+      )
+      await holding
+      const pending = call()
+      for (let tries = 0; ; tries++) {
+        const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
+          SELECT count(*)::int AS waiting FROM pg_locks
+          WHERE locktype = 'advisory' AND NOT granted`
+        if (waiting > 0) break
+        if (tries > 200) throw new Error('The call never waited for the lock')
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      release()
+      await editor
+      return pending
+    }
+
+    it('grants no key permission through any tool, and keeps what a role or account already has', async () => {
+      const users = await prisma.user.count()
+      expect(
+        await refused('create_user', {
+          name: 'Robin',
+          email: 'robin@example.com',
+          roles: ['Mail'],
+        })
+      ).toContain('holds a key permission')
+      expect(await prisma.user.count()).toBe(users)
+
+      expect(
+        await refused('create_invite', { roles: ['Members', 'Mail'] })
+      ).toContain('holds a key permission')
+      expect(await prisma.invite.count()).toBe(0)
+
+      expect(
+        await refused('update_user', {
+          user: 'mcp-sam',
+          roles: ['Members', 'Mail'],
+        })
+      ).toContain('holds a key permission')
+      expect(await rolesOf('mcp-sam')).toEqual([roles.members])
+
+      for (const [role, permissions] of [
+        ['Members', ['files.upload', 'settings.security']],
+        ['Everyone', ['files.read', 'links.read', 'settings.email']],
+      ] as const)
+        expect(
+          await refused('save_role', { role, permissions: [...permissions] })
+        ).toContain('this would give the role')
+      expect(
+        await refused('save_role', {
+          name: 'Keys',
+          permissions: ['administrator'],
+        })
+      ).toContain('this would give the role administrator')
+      expect(await permissionsOf(roles.members)).toEqual(['files.upload'])
+      expect(
+        (
+          await prisma.role.findUniqueOrThrow({
+            where: { systemKey: 'everyone' },
+          })
+        ).permissions
+      ).toEqual(['files.read', 'links.read'])
+      expect(await prisma.role.count()).toBe(4)
+
+      // Keeping a key a role holds, and assigning ordinary roles, go through.
+      const kept = await callTool('save_role', {
+        role: 'Mail',
+        permissions: ['settings.email', 'users.read', 'audit.read'],
+      })
+      expect(kept.isError).toBeFalsy()
+      expect(await permissionsOf(roles.mail)).toEqual([
+        'settings.email',
+        'users.read',
+        'audit.read',
+      ])
+      await prisma.user.update({
+        where: { id: 'mcp-sam' },
+        data: { roles: { connect: { id: roles.mail } } },
+      })
+      // Sam keeps Mail and loses Members; then loses Mail too.
+      expect(
+        (await callTool('update_user', { user: 'mcp-sam', roles: ['Mail'] }))
+          .isError
+      ).toBeFalsy()
+      expect(await rolesOf('mcp-sam')).toEqual([roles.mail])
+      expect(
+        (await callTool('update_user', { user: 'mcp-sam', roles: [] })).isError
+      ).toBeFalsy()
+      expect(await rolesOf('mcp-sam')).toEqual([])
+      const invite = await callTool('create_invite', { roles: ['Members'] })
+      expect(invite.structuredContent!.invite).toMatchObject({
+        roles: [{ id: roles.members }],
+        url: expect.stringMatching(
+          /^https:\/\/files\.example\.com\/auth\/register\?invite=/
+        ),
+      })
+    })
+
+    it('makes no account and no invite while Everyone holds a key permission given in the browser', async () => {
+      await giveEveryone(prisma, 'settings.security')
+      expect(
+        await refused('create_user', {
+          name: 'Robin',
+          email: 'robin@example.com',
+        })
+      ).toContain('the Everyone role holds a key permission')
+      expect(await refused('create_invite', {})).toContain(
+        'the Everyone role holds a key permission'
+      )
+      expect(
+        await prisma.user.count({ where: { email: 'robin@example.com' } })
+      ).toBe(0)
+      expect(await prisma.invite.count()).toBe(0)
+    })
+
+    it('exempts no key holder from email verification', async () => {
+      await prisma.user.update({
+        where: { id: 'mcp-sam' },
+        data: { roles: { connect: { id: roles.mail } } },
+      })
+      expect(
+        await refused('update_user', {
+          user: 'sam@example.com',
+          email_verification: 'exempt',
+        })
+      ).toContain('exempting it from email verification')
+      const sam = () =>
+        prisma.user.findUniqueOrThrow({ where: { id: 'mcp-sam' } })
+      expect((await sam()).emailExempt).toBe(false)
+      await prisma.user.update({
+        where: { id: 'mcp-sam' },
+        data: { roles: { disconnect: { id: roles.mail } } },
+      })
+      expect(
+        (
+          await callTool('update_user', {
+            user: 'mcp-sam',
+            email_verification: 'exempt',
+          })
+        ).isError
+      ).toBeFalsy()
+      expect((await sam()).emailExempt).toBe(true)
+    })
+
+    describe('signing another account out with update_user', () => {
+      const REDIRECT = 'http://127.0.0.1:8976/callback'
+      let registerRoute: typeof import('@/app/api/oauth/register/route')
+      let tokenRoute: typeof import('@/app/api/oauth/token/route')
+      let authorize: typeof import('@/lib/oauth/authorize')
+      let sessions: typeof import('@/lib/auth/sessions')
+
+      beforeAll(async () => {
+        registerRoute = await import('@/app/api/oauth/register/route')
+        tokenRoute = await import('@/app/api/oauth/token/route')
+        authorize = await import('@/lib/oauth/authorize')
+        sessions = await import('@/lib/auth/sessions')
+      })
+
+      let address = 0
+      /** A whole agent sign-in of the account: register, approve, redeem. */
+      async function connectAgent(userId: string, scopes: string[]) {
+        const { createHash } = await import('node:crypto')
+        const registration = await registerRoute.POST(
+          new Request(`${ORIGIN}/api/oauth/register`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              'x-real-ip': `203.0.113.${++address}`,
+            },
+            body: JSON.stringify({
+              client_name: 'Users suite client',
+              redirect_uris: [REDIRECT],
+            }),
+          })
+        )
+        const clientId = (await registration.json()).client_id as string
+        const verifier = 'v'.repeat(64)
+        const request = new Request(`${ORIGIN}/api/oauth/authorize`)
+        const checked = await authorize.validateAuthorize(
+          new URLSearchParams({
+            response_type: 'code',
+            client_id: clientId,
+            redirect_uri: REDIRECT,
+            code_challenge: createHash('sha256')
+              .update(verifier)
+              .digest('base64url'),
+            code_challenge_method: 'S256',
+            state: 'state-1',
+            resource: `${ORIGIN}/api/mcp`,
+          }),
+          request
+        )
+        if (!('client' in checked))
+          throw new Error('The authorize request was refused')
+        const { sessionVersion } = await prisma.user.findUniqueOrThrow({
+          where: { id: userId },
+        })
+        const { redirect } = await authorize.decideConsent(
+          { id: userId, permissions: ['administrator'], sessionVersion },
+          {
+            request: authorize.signConsentRequest(checked, userId),
+            decision: 'approve',
+            scopes,
+          },
+          request
+        )
+        const response = await tokenRoute.POST(
+          new Request(`${ORIGIN}/api/oauth/token`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              grant_type: 'authorization_code',
+              client_id: clientId,
+              code: new URL(redirect).searchParams.get('code')!,
+              redirect_uri: REDIRECT,
+              code_verifier: verifier,
+              resource: `${ORIGIN}/api/mcp`,
+            }).toString(),
+          })
+        )
+        expect(response.status).toBe(200)
+        const { access_token } = (await response.json()) as {
+          access_token: string
+        }
+        const connection = await prisma.agentConnection.findFirstOrThrow({
+          where: { clientId },
+        })
+        return { accessToken: access_token, connectionId: connection.id }
+      }
+      const signedIn = async (accessToken: string) =>
+        Boolean(await auth.authenticateAgent(bearer(accessToken)))
+
+      it("ends the account's browser sessions and every agent it signed in, and leaves the acting account's own connection alone", async () => {
+        const browser = await sessions.createBrowserSession(
+          'mcp-sam',
+          1,
+          'credentials',
+          { ipAddress: '192.0.2.20', userAgent: 'Suite browser' }
+        )
+        const sams = [
+          await connectAgent('mcp-sam', ['files:read']),
+          await connectAgent('mcp-sam', ['files:read', 'files:content']),
+        ]
+        // The call comes through one of the acting account's own agents.
+        const mine = await connectAgent('mcp-alex', [
+          'files:read',
+          'admin:users',
+        ])
+        const before = await prisma.user.findUniqueOrThrow({
+          where: { id: 'mcp-alex' },
+        })
+        events.length = 0
+
+        const result = await callTool(
+          'update_user',
+          { user: 'sam@example.com', sign_out: true },
+          mine.accessToken
+        )
+        expect(result.isError, result.content[0].text).toBeFalsy()
+        expect(result.structuredContent).toMatchObject({
+          change: 'sign_out',
+        })
+
+        for (const agent of sams) {
+          expect(await signedIn(agent.accessToken)).toBe(false)
+          expect(
+            await prisma.agentConnection.findUniqueOrThrow({
+              where: { id: agent.connectionId },
+              include: { tokens: true },
+            })
+          ).toMatchObject({ revokedReason: 'sessions-revoked', tokens: [] })
+        }
+        // The same change moved the session version on, which ends the
+        // browser session.
+        const sam = await prisma.user.findUniqueOrThrow({
+          where: { id: 'mcp-sam' },
+        })
+        expect(sam.sessionVersion).toBe(2)
+        expect(
+          await sessions.findBrowserSession(
+            'mcp-sam',
+            browser.id,
+            sam.sessionVersion
+          )
+        ).toBeNull()
+        // The acting account keeps its agent, its named token and its sessions.
+        expect(await signedIn(mine.accessToken)).toBe(true)
+        expect(await signedIn(USERS_TOKEN)).toBe(true)
+        expect(
+          (
+            await prisma.agentConnection.findUniqueOrThrow({
+              where: { id: mine.connectionId },
+            })
+          ).revokedAt
+        ).toBeNull()
+        expect(
+          (await prisma.user.findUniqueOrThrow({ where: { id: 'mcp-alex' } }))
+            .sessionVersion
+        ).toBe(before.sessionVersion)
+        await audit.auditSettled()
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            action: 'agent_connection.revokeAll',
+            targetType: 'user',
+            targetId: 'mcp-sam',
+            details: expect.objectContaining({
+              count: 2,
+              reason: 'sessions-revoked',
+            }),
+          })
+        )
+      })
+    })
+
+    it('changes nothing for a call that mixes kinds of change', async () => {
+      const before = await prisma.user.findUniqueOrThrow({
+        where: { id: 'mcp-sam' },
+      })
+      expect(
+        await refused('update_user', {
+          user: 'mcp-sam',
+          name: 'Samuel',
+          roles: [],
+          email_verification: 'exempt',
+          sign_out: true,
+        })
+      ).toContain('ask for one kind of change per call')
+      const after = await prisma.user.findUniqueOrThrow({
+        where: { id: 'mcp-sam' },
+      })
+      expect(after).toMatchObject({
+        name: before.name,
+        emailExempt: before.emailExempt,
+        sessionVersion: before.sessionVersion,
+      })
+      expect(await rolesOf('mcp-sam')).toEqual([roles.members])
+    })
+
+    it('never signs out or deletes the acting account', async () => {
+      // A second administrator, so the last-administrator rule would not be
+      // what stops it.
+      await prisma.user.create({
+        data: {
+          id: 'mcp-kim',
+          name: 'Kim',
+          urlId: 'mcpkm',
+          uploadToken: 'legacy-mcp-kim',
+          email: 'kim@example.com',
+          password: 'not-a-real-hash',
+          roles: { connect: { id: roles.admin } },
+        },
+      })
+      const before = await prisma.user.findUniqueOrThrow({
+        where: { id: 'mcp-alex' },
+      })
+      expect(
+        await refused('update_user', { user: 'mcp-alex', sign_out: true })
+      ).toContain('cannot sign out the account this connection acts as')
+      expect(
+        await refused('delete_user', { user: 'alex@example.com' })
+      ).toContain('cannot delete the account this connection acts as')
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: 'mcp-alex' } }))
+          .sessionVersion
+      ).toBe(before.sessionVersion)
+      // Anyone else's account can be.
+      expect(
+        (await callTool('update_user', { user: 'mcp-kim', sign_out: true }))
+          .isError
+      ).toBeFalsy()
+      expect(
+        (await prisma.user.findUniqueOrThrow({ where: { id: 'mcp-kim' } }))
+          .sessionVersion
+      ).toBeGreaterThan(1)
+      expect(
+        (await callTool('delete_user', { user: 'mcp-kim' })).structuredContent
+      ).toMatchObject({ id: 'mcp-kim', files_deleted: 0 })
+      expect(await prisma.user.count({ where: { id: 'mcp-kim' } })).toBe(0)
+    })
+
+    describe('a role edited in the browser while the call waits for the role lock', () => {
+      it('save_role judges the role as committed: a key taken off cannot come back', async () => {
+        const text = await whileEditing(
+          (tx) =>
+            tx.role.update({
+              where: { id: roles.mail },
+              data: { permissions: ['users.read'] },
+            }),
+          () =>
+            refused('save_role', {
+              role: 'Mail',
+              permissions: ['settings.email', 'users.read'],
+            })
+        )
+        expect(text).toContain('this would give the role settings.email')
+        expect(await permissionsOf(roles.mail)).toEqual(['users.read'])
+      })
+
+      it('update_user judges whether the account holds a key as committed before exempting it', async () => {
+        const text = await whileEditing(
+          (tx) =>
+            tx.user.update({
+              where: { id: 'mcp-sam' },
+              data: { roles: { connect: { id: roles.mail } } },
+            }),
+          () =>
+            refused('update_user', {
+              user: 'mcp-sam',
+              email_verification: 'exempt',
+            })
+        )
+        expect(text).toContain('exempting it from email verification')
+        expect(
+          (await prisma.user.findUniqueOrThrow({ where: { id: 'mcp-sam' } }))
+            .emailExempt
+        ).toBe(false)
+      })
+
+      it('update_user judges the roles the account holds as committed', async () => {
+        await prisma.user.update({
+          where: { id: 'mcp-sam' },
+          data: { roles: { connect: { id: roles.mail } } },
+        })
+        // The agent read Sam with Mail and keeps it; meanwhile it was taken away.
+        const text = await whileEditing(
+          (tx) =>
+            tx.user.update({
+              where: { id: 'mcp-sam' },
+              data: { roles: { disconnect: { id: roles.mail } } },
+            }),
+          () =>
+            refused('update_user', {
+              user: 'mcp-sam',
+              roles: ['Members', 'Mail'],
+            })
+        )
+        expect(text).toContain('holds a key permission')
+        expect(await rolesOf('mcp-sam')).toEqual([roles.members])
+      })
+
+      it('create_invite and create_user judge the roles as committed', async () => {
+        const invite = await whileEditing(
+          (tx) =>
+            tx.role.update({
+              where: { id: roles.members },
+              data: { permissions: ['settings.security'] },
+            }),
+          () => refused('create_invite', { roles: ['Members'] })
+        )
+        expect(invite).toContain('holds a key permission')
+        expect(await prisma.invite.count()).toBe(0)
+        const user = await whileEditing(
+          (tx) => giveEveryone(tx, 'settings.email'),
+          () =>
+            refused('create_user', {
+              name: 'Robin',
+              email: 'robin@example.com',
+            })
+        )
+        expect(user).toContain('the Everyone role holds a key permission')
+        expect(
+          await prisma.user.count({ where: { email: 'robin@example.com' } })
+        ).toBe(0)
+      })
+    })
+
+    describe('list_invites', () => {
+      /** An invite of Alex's with a link, made past the tools. */
+      async function inviteWith(roleIds: string[]) {
+        const generated = inviteTokens.createInviteToken()
+        await prisma.invite.create({
+          data: {
+            creatorId: 'mcp-alex',
+            tokenHash: generated.hash,
+            token: generated.encrypted,
+            note: 'Made in the browser',
+            roles: { connect: roleIds.map((id) => ({ id })) },
+          },
+        })
+        return generated.token
+      }
+
+      it('never returns the link or token of an invite whose role holds a key permission', async () => {
+        const plain = await inviteWith([roles.members])
+        const keyed = await inviteWith([roles.mail])
+        const result = await callTool('list_invites', {})
+        expect(result.isError).toBeFalsy()
+        const text = JSON.stringify(result)
+        expect(text).toContain(plain)
+        expect(text).not.toContain(keyed)
+        expect(result.structuredContent).toMatchObject({
+          links_withheld: 1,
+          total: 2,
+        })
+      })
+
+      it('returns no link at all once Everyone gets a key permission in a role edit that commits while it waits', async () => {
+        const token = await inviteWith([])
+        expect(JSON.stringify(await callTool('list_invites', {}))).toContain(
+          token
+        )
+        const result = await whileEditing(
+          (tx) => giveEveryone(tx, 'settings.email'),
+          () => callTool('list_invites', {})
+        )
+        expect(result.isError).toBeFalsy()
+        expect(JSON.stringify(result)).not.toContain(token)
+        expect(result.structuredContent).toMatchObject({ links_withheld: 1 })
+      })
+    })
+  })
+
+  describe('instance settings, email and the studio through the real services', () => {
+    const SETTINGS_TOKEN =
+      'flr_database-suite-settings-token-0123456789abcdefgh'
+    const SAVED_KEYS = {
+      accessKeyId: 'AKIAIOSFODNN7EXAMPLE',
+      secretAccessKey: 'wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY',
+    }
+    let locks: typeof import('@/lib/database/locks')
+    let secretBox: typeof import('@/lib/security/secret-box')
+    let emailSchema: typeof import('@/lib/email/schema')
+    let actors = 0
+    let actor = ''
+
+    beforeAll(async () => {
+      locks = await import('@/lib/database/locks')
+      secretBox = await import('@/lib/security/secret-box')
+      emailSchema = await import('@/lib/email/schema')
+    })
+
+    beforeEach(async () => {
+      const value = structuredClone(config.DEFAULT_CONFIG) as {
+        settings: Record<string, unknown> & {
+          general: Record<string, unknown> & {
+            mcp: { enabled: boolean; administration: boolean }
+          }
+        }
+      }
+      value.settings.general.mcp = { enabled: true, administration: true }
+      value.settings.general.registrations = {
+        enabled: false,
+        disabledMessage: 'Closed',
+      }
+      value.settings.general.storage = {
+        provider: 's3',
+        s3: {
+          bucket: 'flare-files',
+          region: 'eu-west-1',
+          endpoint: 'https://s3.example.com',
+          forcePathStyle: false,
+          ...SAVED_KEYS,
+        },
+        quotas: { enabled: false, default: { value: 10, unit: 'GB' } },
+        maxUploadSize: { value: 100, unit: 'MB' },
+      }
+      // Email on, with a saved password; nothing is ever sent. Saved as
+      // every save leaves it, so a comparison can be byte for byte.
+      value.settings.email = emailSchema.emailConfigSchema.parse({
+        enabled: true,
+        smtp: {
+          host: 'smtp.invalid',
+          port: 2525,
+          security: 'starttls',
+          authentication: true,
+          username: 'mailer',
+          password: secretBox.encryptSecret('smtp-password', 'smtp'),
+        },
+        fromAddress: 'flare@example.com',
+        publicUrl: ORIGIN,
+        verification: { trustOidc: true },
+      })
+      await prisma.config.upsert({
+        where: { key: 'flare_config' },
+        create: { key: 'flare_config', value: value as Prisma.InputJsonValue },
+        update: { value: value as Prisma.InputJsonValue },
+      })
+      const admin = await prisma.role.create({
+        data: {
+          name: 'Admin',
+          position: 100,
+          systemKey: 'administrator',
+          permissions: ['administrator'],
+        },
+      })
+      // An administrator who can sign in, so the last-administrator rule
+      // holds. A new account for each test: the administration write limit
+      // counts per account for the whole run.
+      actor = `mcp-settings-${++actors}`
+      await prisma.user.create({
+        data: {
+          id: actor,
+          name: 'Settings agent',
+          urlId: actor,
+          uploadToken: `legacy-${actor}`,
+          email: `${actor}@example.com`,
+          password: 'not-a-real-hash',
+          roles: { connect: { id: admin.id } },
+        },
+      })
+      await prisma.apiToken.create({
+        data: {
+          id: 'token-settings',
+          userId: actor,
+          name: 'Settings',
+          hash: tokens.hashApiToken(SETTINGS_TOKEN),
+          scopes: ['mcp', 'admin:read', 'admin:settings'],
+          expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000),
+        },
+      })
+    })
+
+    /** One tool call through the real route, as a 2026-07-28 client sends it. */
+    async function callTool(name: string, args: Record<string, unknown>) {
+      const response = await route.POST(
+        new Request(`${ORIGIN}/api/mcp`, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${SETTINGS_TOKEN}`,
+            'content-type': 'application/json',
+            accept: 'application/json, text/event-stream',
+            'mcp-protocol-version': '2026-07-28',
+            'mcp-method': 'tools/call',
+            'mcp-name': name,
+          },
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 1,
+            method: 'tools/call',
+            params: {
+              name,
+              arguments: args,
+              _meta: {
+                'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+                'io.modelcontextprotocol/clientInfo': {
+                  name: 'test',
+                  version: '1',
+                },
+                'io.modelcontextprotocol/clientCapabilities': {},
+              },
+            },
+          }),
+        })
+      )
+      expect(response.status).toBe(200)
+      const { result } = await response.json()
+      return result as {
+        isError?: boolean
+        content: { text: string }[]
+        structuredContent?: Record<string, never>
+      }
+    }
+    async function refused(name: string, args: Record<string, unknown>) {
+      const result = await callTool(name, args)
+      expect(result.isError, result.content[0].text).toBe(true)
+      return result.content[0].text
+    }
+    async function succeeded(name: string, args: Record<string, unknown>) {
+      const result = await callTool(name, args)
+      expect(result.isError, result.content[0].text).toBeFalsy()
+      return result.structuredContent!
+    }
+    /** The settings document as saved, read past every cache. */
+    const saved = async () =>
+      (
+        (await config.readSavedConfigValue(
+          prisma
+        )) as (typeof config)['DEFAULT_CONFIG']
+      ).settings
+    const everyone = async () =>
+      (
+        await prisma.role.findUniqueOrThrow({
+          where: { systemKey: 'everyone' },
+        })
+      ).permissions
+    const setEveryone = (
+      client: Pick<Prisma.TransactionClient, 'role'>,
+      permissions: string[]
+    ) =>
+      client.role.update({
+        where: { systemKey: 'everyone' },
+        data: { permissions },
+      })
+
+    /**
+     * Runs `call` while another transaction holds the role lock, as a role
+     * edit or a settings save in the browser does. Once the call waits for
+     * the lock, so it has made every read before its own transaction, the
+     * other transaction makes `edit` and commits; the call then judges what
+     * was committed.
+     */
+    async function whileEditing<T>(
+      edit: (tx: Prisma.TransactionClient) => Promise<unknown>,
+      call: () => Promise<T>
+    ): Promise<T> {
+      let locked!: () => void
+      let release!: () => void
+      const holding = new Promise<void>((resolve) => (locked = resolve))
+      const released = new Promise<void>((resolve) => (release = resolve))
+      const editor = prisma.$transaction(
+        async (tx) => {
+          await locks.lockRoleChanges(tx)
+          locked()
+          await released
+          await edit(tx)
+        },
+        { timeout: 20_000 }
+      )
+      await holding
+      const pending = call()
+      for (let tries = 0; ; tries++) {
+        const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
+          SELECT count(*)::int AS waiting FROM pg_locks
+          WHERE locktype = 'advisory' AND NOT granted`
+        if (waiting > 0) break
+        if (tries > 200) throw new Error('The call never waited for the lock')
+        await new Promise((resolve) => setTimeout(resolve, 25))
+      }
+      release()
+      await editor
+      return pending
+    }
+
+    it('refuses to open registration once a browser edit gives Everyone a key permission', async () => {
+      const text = await whileEditing(
+        (tx) => setEveryone(tx, ['files.read', 'settings.security']),
+        () =>
+          refused('update_instance_settings', {
+            registrations: { enabled: true },
+            credits: { show_footer: false },
+          })
+      )
+      expect(text).toContain('Everyone role')
+      const settings = await saved()
+      expect(settings.general.registrations.enabled).toBe(false)
+      expect(settings.general.credits.showFooter).toBe(true)
+      // Taken away again in the browser while the next call waits, it opens.
+      await whileEditing(
+        (tx) => setEveryone(tx, ['files.read']),
+        () =>
+          succeeded('update_instance_settings', {
+            registrations: { enabled: true },
+          })
+      )
+      expect((await saved()).general.registrations.enabled).toBe(true)
+    })
+
+    it('refuses to let everyone invite in the same state, deciding under the lock', async () => {
+      expect(
+        await whileEditing(
+          (tx) => setEveryone(tx, ['files.read', 'settings.security']),
+          () =>
+            refused('update_instance_settings', { everyone_can_invite: true })
+        )
+      ).toContain('Everyone role')
+      expect(await everyone()).toEqual(['files.read', 'settings.security'])
+      await setEveryone(prisma, ['files.read'])
+      const answer = await succeeded('update_instance_settings', {
+        everyone_can_invite: true,
+      })
+      expect(answer).toMatchObject({
+        changed: ['everyone_can_invite'],
+        settings: { registrations: { everyone_can_invite: true } },
+      })
+      expect(await everyone()).toEqual(['files.read', 'invites.create'])
+    })
+
+    it('refuses the invite switch beside other settings, and writes neither', async () => {
+      const before = await saved()
+      expect(
+        await refused('update_instance_settings', {
+          ocr: { enabled: false },
+          everyone_can_invite: true,
+        })
+      ).toBe(
+        'Nothing was changed: `everyone_can_invite` is saved by itself. Send it in a call of its own, and the other settings in another.'
+      )
+      expect(await saved()).toEqual(before)
+      expect(await everyone()).toEqual(['files.read', 'links.read'])
+    })
+
+    it('never sends a saved S3 key to a new destination, comparing with what is saved', async () => {
+      for (const s3 of [
+        { bucket: 'other-bucket' },
+        { region: 'us-east-1' },
+        { endpoint: 'https://attacker.test' },
+        { force_path_style: true },
+      ]) {
+        expect(
+          await refused('update_instance_settings', { storage: { s3 } })
+        ).toContain('saved keys are never sent')
+        expect((await saved()).general.storage.s3).toMatchObject({
+          bucket: 'flare-files',
+          ...SAVED_KEYS,
+        })
+      }
+      // A destination changed in the browser while the call waits is what
+      // the call is compared with: the bucket it names is then new.
+      const browserBucket = await whileEditing(
+        (tx) =>
+          config.applyConfigUpdate(tx, {
+            settings: {
+              general: {
+                storage: { s3: { bucket: 'browser-bucket' } },
+              } as never,
+            },
+          }),
+        () =>
+          refused('update_instance_settings', {
+            storage: { s3: { region: 'eu-west-1', bucket: 'flare-files' } },
+          })
+      )
+      expect(browserBucket).toContain('bucket')
+      // The same destination keeps the saved keys untouched.
+      await succeeded('update_instance_settings', {
+        storage: {
+          s3: { bucket: 'browser-bucket' },
+          max_upload_size: { value: 2, unit: 'GB' },
+        },
+      })
+      expect((await saved()).general.storage).toMatchObject({
+        s3: { bucket: 'browser-bucket', ...SAVED_KEYS },
+        maxUploadSize: { value: 2, unit: 'GB' },
+      })
+      // A new destination with both keys saves both.
+      const moved = await succeeded('update_instance_settings', {
+        storage: {
+          s3: {
+            bucket: 'new-bucket',
+            access_key_id: 'AKIANEWKEY',
+            secret_access_key: 'new-secret-key',
+          },
+        },
+      })
+      expect((await saved()).general.storage.s3).toMatchObject({
+        bucket: 'new-bucket',
+        accessKeyId: 'AKIANEWKEY',
+        secretAccessKey: 'new-secret-key',
+      })
+      expect(JSON.stringify(moved)).not.toContain('new-secret-key')
+      expect(moved).toMatchObject({
+        storage_change: { s3_changed: ['bucket'], keys_replaced: true },
+      })
+    })
+
+    it('merges an email change onto a save that landed while it waited, and keeps where mail goes', async () => {
+      const before = (await saved()).email
+      const answer = await whileEditing(
+        (tx) =>
+          config.replaceSavedConfigSection(tx, 'email', {
+            ...before,
+            fromName: 'Saved in the browser',
+          }),
+        () =>
+          succeeded('update_email_settings', {
+            limits: { daily_limit: 77 },
+            branding: { accent_color: '#112233' },
+            verification: { mode: 'optional', token_hours: 6 },
+            recovery: { enabled: true },
+          })
+      )
+      const after = (await saved()).email
+      expect(after.fromName).toBe('Saved in the browser')
+      expect(after.limits.dailyLimit).toBe(77)
+      expect(after.branding.accentColor).toBe('#112233')
+      // Byte for byte: the connection, its saved password, the link address
+      // and the single sign-on rule.
+      expect(JSON.stringify(after.smtp)).toBe(JSON.stringify(before.smtp))
+      expect(after.publicUrl).toBe(before.publicUrl)
+      expect(after.verification.trustOidc).toBe(true)
+      expect(JSON.stringify(answer)).not.toContain(before.smtp.password)
+      expect(JSON.stringify(answer)).not.toContain('smtp-password')
+      expect(answer).toMatchObject({
+        email: {
+          connection: { host: 'smtp.invalid', password_saved: true },
+          limits: { daily_limit: 77 },
+        },
+      })
+    })
+
+    it('reads every section back without a secret', async () => {
+      const answer = await succeeded('get_instance_settings', {})
+      const text = JSON.stringify(answer)
+      for (const secret of [
+        ...Object.values(SAVED_KEYS),
+        'smtp-password',
+        (await saved()).email.smtp.password,
+      ])
+        expect(text).not.toContain(secret)
+      expect(answer).toMatchObject({
+        settings: {
+          storage: { s3: { access_key_id_saved: true } },
+          email: { connection: { password_saved: true } },
+          mcp: { enabled: true, administration: true },
+        },
+      })
+    })
+
+    it('tests only the saved connection, and reports the refusal', async () => {
+      const text = await refused('send_test_email', { action: 'connection' })
+      expect(text).toContain('The test failed')
+      expect(
+        await refused('send_test_email', {
+          action: 'connection',
+          config: { smtp: { host: '127.0.0.1' } },
+        })
+      ).toContain('Input validation error')
+    })
+
+    it('finds what it did in the audit log, page by page', async () => {
+      await audit.auditSettled()
+      await prisma.auditEvent.deleteMany()
+      await prisma.auditEvent.createMany({
+        data: Array.from({ length: 5 }, (_, index) => ({
+          action: 'settings.update',
+          category: 'settings',
+          outcome: 'success',
+          actorId: actor,
+          createdAt: new Date(Date.UTC(2026, 10, 1, 10, index)),
+        })),
+      })
+      const first = await succeeded('search_audit_log', {
+        category: 'settings',
+        limit: 2,
+      })
+      expect(first).toMatchObject({ total: 5 })
+      const ids = [first.events]
+      let cursor = (first as { next_cursor?: string }).next_cursor
+      while (cursor) {
+        const page = await succeeded('search_audit_log', {
+          category: 'settings',
+          limit: 2,
+          cursor,
+        })
+        ids.push(page.events)
+        cursor = (page as { next_cursor?: string }).next_cursor
+      }
+      const seen = ids.flat().map((event: { id: string }) => event.id)
+      expect(new Set(seen).size).toBe(5)
+      await prisma.auditEvent.deleteMany()
     })
   })
 })

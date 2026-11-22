@@ -39,6 +39,8 @@ OIDC auto-provisioning is a separate setting. Closing password registration does
 
 An invite link lets a person create their own local password account while registration is closed. It is the friendlier alternative to choosing someone's password with **New user**: the invited person picks their own username, email address, and password. The [invite guide](/guide/invites) covers creating, copying, sharing, tracking, and revoking links; this section covers who may invite and how to oversee invites across the instance.
 
+An AI agent its owner allowed **Manage invites** can list, create, and revoke invites through MCP with that owner's invite permissions; it never attaches a role that holds a [key permission](./roles#key-permissions) and never sees such an invite's link. [Agent access](./agents#administration-through-mcp) has the rules.
+
 ### Choose who can invite
 
 Invites use two [permissions](./roles#permission-reference) in the **Invitations** group. Neither is part of the default Everyone role, so **only administrators can invite until you grant them**.
@@ -139,6 +141,10 @@ With `users.email`, the user edit dialog exposes email verification state and ex
 An exemption permits access under the verification policy; it does not make an address verified or recoverable. Older accounts must enroll their recovery address from their own signed-in Profile. When **Send verification** is missing for an unverified account, ask the person to complete that flow rather than assuming an old saved email is trustworthy.
 
 Removing the last administrator exemption under an all-user policy requires a verified administrator recovery path. [Email policy details](/admin/email#choose-an-access-policy).
+
+### Accounts an agent creates
+
+An [AI agent](./agents#administration-through-mcp) with **Manage users and roles** can create accounts, but never with a password: MCP has no way to set one. Such an account cannot sign in. Password reset needs an existing password, and single sign-on does not link to an existing account by its address. To let the person in, open the account's **Edit user** dialog, enter a **New password**, and save; Flare signs the account out everywhere, as for any password change, and you send the password through your normal secure channel. An agent that is asked to bring someone in should create an [invite link](#invite-links) instead.
 
 ## Moderate files and shortened links
 

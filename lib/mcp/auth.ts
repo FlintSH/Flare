@@ -4,17 +4,26 @@ import { setAuditActor } from '@/lib/audit'
 import { accountFrom, accountPolicy, accountSelect } from '@/lib/auth/account'
 import { type AuthenticatedUser, authenticated } from '@/lib/auth/api-auth'
 import { prisma } from '@/lib/database/prisma'
-import { MCP_SCOPE } from '@/lib/integrations/bearer-routes'
+import {
+  MCP_SCOPE,
+  holdsAdminScope,
+  isAdminScope,
+} from '@/lib/integrations/bearer-routes'
 import {
   TOKEN_PREFIX,
   hashApiToken,
   tokenUsable,
 } from '@/lib/integrations/tokens'
-import { connectionKey, effectiveScopes } from '@/lib/oauth/connections'
+import {
+  connectionExpired,
+  connectionKey,
+  effectiveScopes,
+} from '@/lib/oauth/connections'
 import { ACCESS_TOKEN_PREFIX } from '@/lib/oauth/constants'
 import { type Permission, hasPermission } from '@/lib/permissions/catalog'
 
 import type { ToolSubject } from './catalog'
+import { administrationOn } from './settings'
 
 /**
  * The account an agent acts as, and what its credential lets it do. The
@@ -32,32 +41,44 @@ export type AgentPrincipal = {
 
 type Policy = Awaited<ReturnType<typeof accountPolicy>>
 
+/**
+ * The scopes a credential may use now: while administration through MCP is
+ * off, none of the `admin:*` ones, whatever a row still holds. Turning it off
+ * removes them from every row; this holds even for one that kept them. The
+ * settings are read only for a credential that holds such a scope.
+ */
+async function usableScopes(scopes: string[]): Promise<string[]> {
+  if (!holdsAdminScope(scopes) || (await administrationOn())) return scopes
+  return scopes.filter((scope) => !isAdminScope(scope))
+}
+
 type TokenAccount = Prisma.ApiTokenGetPayload<{
   include: { user: { select: typeof accountSelect } }
 }>
 
 /** The principal behind a usable token that carries the `mcp` marker, or null. */
-function tokenPrincipal(
+async function tokenPrincipal(
   token: TokenAccount | null,
   policy: Policy
-): AgentPrincipal | null {
+): Promise<AgentPrincipal | null> {
   if (!token || !tokenUsable(token) || !token.scopes.includes(MCP_SCOPE))
     return null
   const account = accountFrom(token.user, policy)
   if (account.emailAccessRequired) return null
+  const scopes = await usableScopes(token.scopes)
   setAuditActor({ id: account.id, name: account.name, tokenId: token.id })
   const user: AuthenticatedUser = {
     ...authenticated(account, 'token'),
     apiToken: {
       id: token.id,
-      scopes: token.scopes,
+      scopes,
       profileId: token.profileId,
     },
   }
   return {
     user,
     name: account.name,
-    scopes: token.scopes.filter((scope) => scope !== MCP_SCOPE),
+    scopes: scopes.filter((scope) => scope !== MCP_SCOPE),
     credentialKey: `token:${token.id}`,
     can: (permission: Permission) => hasPermission(user, permission),
   }
@@ -73,23 +94,25 @@ type ConnectionAccount = Prisma.AgentConnectionGetPayload<{
 /**
  * The principal behind a connection that has not been ended, or null. Its
  * scopes are what the person granted, within the ceiling of the token pair
- * the request came with; without a pair, the whole grant.
+ * the request came with; without a pair, the whole grant. A connection that
+ * holds an administration scope has ended 30 days after it was authorized.
  */
-function connectionPrincipal(
+async function connectionPrincipal(
   connection: ConnectionAccount | null,
   policy: Policy,
   pair: { narrowed: boolean; scopes: readonly string[] } = {
     narrowed: false,
     scopes: [],
   }
-): AgentPrincipal | null {
-  if (!connection || connection.revokedAt) return null
+): Promise<AgentPrincipal | null> {
+  if (!connection || connection.revokedAt || connectionExpired(connection))
+    return null
   const account = accountFrom(connection.user, policy)
   if (account.emailAccessRequired) return null
   const credentialKey = connectionKey(connection.id)
+  const scopes = await usableScopes(effectiveScopes(connection.scopes, pair))
   // The audit actor has one place for a credential; the key says which kind.
   setAuditActor({ id: account.id, name: account.name, tokenId: credentialKey })
-  const scopes = effectiveScopes(connection.scopes, pair)
   const user: AuthenticatedUser = {
     ...authenticated(account, 'agent'),
     agentConnection: { id: connection.id, scopes },
@@ -114,7 +137,7 @@ async function authenticateToken(
     }),
     accountPolicy(),
   ])
-  const principal = tokenPrincipal(token, policy)
+  const principal = await tokenPrincipal(token, policy)
   if (principal && token)
     // Best-effort activity metadata must not make an otherwise valid request fail.
     await prisma.apiToken
@@ -135,7 +158,7 @@ async function authenticateAccessToken(
     accountPolicy(),
   ])
   if (!pair || pair.accessExpiresAt <= new Date()) return null
-  const principal = connectionPrincipal(pair.connection, policy, pair)
+  const principal = await connectionPrincipal(pair.connection, policy, pair)
   if (principal)
     // Best-effort, as for a token.
     await prisma.agentConnection
@@ -154,7 +177,8 @@ async function authenticateAccessToken(
  * the `mcp` marker, so a token made for a script cannot drive an agent. An
  * access token from a sign-in works until it expires or its connection ends.
  * As on the REST API, an account that still has to verify its email is
- * refused.
+ * refused. While administration through MCP is off, no `admin:*` scope a
+ * credential still holds is used.
  */
 export async function authenticateAgent(
   request: Request
@@ -171,8 +195,9 @@ export async function authenticateAgent(
 
 /**
  * The principal a transfer URL was made for, as it stands now: null once the
- * credential is revoked, expired or no longer marked for MCP, or the account
- * must verify its email. A URL is made for a connection, not for one of its
+ * credential is revoked, expired or no longer marked for MCP, an
+ * administration connection is past its 30 days, or the account must verify
+ * its email; without its `admin:*` scopes while administration is off. A URL is made for a connection, not for one of its
  * access tokens, so it outlives a refresh and holds the connection's grant.
  */
 export async function credentialPrincipal(

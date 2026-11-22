@@ -2,16 +2,25 @@ import type { Prisma } from '@prisma/client'
 import { z } from 'zod'
 
 import { readConfig } from '@/lib/config'
-import { lockIntegrationChanges, lockWebhookQueue } from '@/lib/database/locks'
+import {
+  lockIntegrationChanges,
+  lockSettings,
+  lockWebhookQueue,
+} from '@/lib/database/locks'
 import { prisma } from '@/lib/database/prisma'
 import { HttpError } from '@/lib/http/errors'
 import { scopeAvailable } from '@/lib/mcp/catalog'
-import { mcpEnabled } from '@/lib/mcp/settings'
+import { administrationOn, mcpEnabled } from '@/lib/mcp/settings'
 import {
   listConnections,
   lockConnection,
+  pastGrant,
   revokeConnection,
 } from '@/lib/oauth/connections'
+import {
+  ADMIN_TOKEN_EXPIRY_LEEWAY_SECONDS,
+  ADMIN_TOKEN_MAX_DAYS,
+} from '@/lib/oauth/constants'
 import { SIGN_IN_SCOPES, signInScopes } from '@/lib/oauth/urls'
 import {
   type Permission,
@@ -27,6 +36,8 @@ import {
   API_SCOPE_CATALOG,
   type ApiScope,
   MCP_SCOPE,
+  holdsAdminScope,
+  isAdminScope,
   scopeWorksOverApi,
 } from './bearer-routes'
 import { CONNECTION_NAME_MAX_LENGTH, WEBHOOK_URL_MAX_LENGTH } from './limits'
@@ -138,9 +149,11 @@ type Account = { id: string } & PermissionSubject
 type Transaction = Prisma.TransactionClient
 
 /**
- * Whether agents can connect, and the address they connect to: the public
- * address, or null for the browser's own when none is configured. While the
- * MCP server is off the screen shows nothing about agents, so no address.
+ * Whether agents can connect, the address they connect to (the public
+ * address, or null for the browser's own when none is configured) and
+ * whether administration through MCP is on, so the screen offers its scopes.
+ * While the MCP server is off the screen shows nothing about agents, so no
+ * address and no administration.
  */
 async function agentAccess() {
   const enabled = await mcpEnabled()
@@ -148,6 +161,7 @@ async function agentAccess() {
   return {
     enabled,
     url: origin ? `${origin.href.replace(/\/+$/, '')}/api/mcp` : null,
+    administration: enabled && (await administrationOn()),
   }
 }
 
@@ -234,6 +248,17 @@ export async function runIntegrationCommand(account: Account, body: unknown) {
     await resolveWebhookTarget(command.url)
   const userId = account.id
   return prisma.$transaction(async (tx) => {
+    // A grant of an administration scope takes turns with the switch: the
+    // settings lock first, as `lib/database/locks.ts` orders it, so the
+    // setting read below is the saved one and turning administration off
+    // either commits before this, and is seen, or waits and strips what
+    // this grants.
+    if (
+      (command.action === 'create-token' ||
+        command.action === 'update-agent') &&
+      holdsAdminScope(command.scopes)
+    )
+      await lockSettings(tx)
     // Bound management changes across replicas, including test/retry admission.
     await lockIntegrationChanges(tx, userId)
     switch (command.action) {
@@ -283,7 +308,8 @@ async function assertAgentScopes(
     (scope) => scope !== MCP_SCOPE && !scopeWorksOverApi(scope)
   )
   if (!scopes.includes(MCP_SCOPE) && !agentOnly.length) return
-  if (!(await readConfig(tx)).settings.general.mcp.enabled)
+  const { mcp } = (await readConfig(tx)).settings.general
+  if (!mcp.enabled)
     throw new IntegrationError(
       'The MCP server is turned off on this instance, so tokens cannot have Agent access.'
     )
@@ -291,12 +317,35 @@ async function assertAgentScopes(
     throw new IntegrationError(
       `Agent access is needed for ${scopeLabels(agentOnly)}. Enable Agent access on the token, or remove ${agentOnly.length === 1 ? 'it' : 'them'}.`
     )
+  assertAdminScopesAllowed(scopes, mcp.administration)
+  assertRoleAllows(account, scopes, mcp.administration)
+}
+
+/** Refuses an `admin:*` scope while administration through MCP is off. */
+function assertAdminScopesAllowed(
+  scopes: readonly ApiScope[],
+  administration: boolean
+) {
+  const admin = scopes.filter(isAdminScope)
+  if (admin.length && !administration)
+    throw new IntegrationError(
+      `Administration through MCP is turned off on this instance, so agents cannot have ${scopeLabels(admin)}. Remove ${admin.length === 1 ? 'it' : 'them'}, or ask an administrator to turn it on in Settings.`
+    )
+}
+
+/** Refuses a scope the account's role cannot use right now, as the form offers them. */
+function assertRoleAllows(
+  account: Account,
+  scopes: readonly ApiScope[],
+  administration: boolean
+) {
   const unavailable = scopes.filter(
     (scope) =>
       !scopeAvailable(
         scope,
         (permission) => hasPermission(account, permission),
-        true
+        true,
+        administration
       )
   )
   if (unavailable.length)
@@ -332,8 +381,23 @@ async function createToken(
     await findOwnedProfile(tx, userId, input.profileId, unusable)
   }
   const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null
-  if (expiresAt && expiresAt <= new Date())
+  const now = new Date()
+  if (expiresAt && expiresAt <= now)
     throw new IntegrationError('Token expiration must be in the future.')
+  // A token that can administer the instance must not outlive a season.
+  // The form computes the date in the browser, whose clock may run a little
+  // ahead, so the 90-day choice is allowed a few minutes of slack.
+  if (
+    holdsAdminScope(input.scopes) &&
+    (!expiresAt ||
+      expiresAt.getTime() >
+        now.getTime() +
+          ADMIN_TOKEN_MAX_DAYS * 24 * 60 * 60_000 +
+          ADMIN_TOKEN_EXPIRY_LEEWAY_SECONDS * 1000)
+  )
+    throw new IntegrationError(
+      `A token with administration permissions must expire within ${ADMIN_TOKEN_MAX_DAYS} days. Choose an earlier expiration date.`
+    )
   const generated = createRandomApiToken()
   const token = await tx.apiToken.create({
     data: {
@@ -476,6 +540,17 @@ async function retryDelivery(tx: Transaction, userId: string, id: string) {
 
 const AGENT_GONE = 'Agent not found or already disconnected.'
 
+/**
+ * A connection its owner may still change: theirs, not ended, and not past
+ * the 30 days of an administration grant, which no edit brings back.
+ */
+const editable = (id: string, userId: string) => ({
+  id,
+  userId,
+  revokedAt: null,
+  NOT: pastGrant(),
+})
+
 /** Ends an agent's connection: every token it holds stops working at once. */
 async function disconnectAgent(tx: Transaction, userId: string, id: string) {
   if (!(await revokeConnection(tx, { id, userId }, 'disconnected')))
@@ -495,7 +570,8 @@ async function updateAgent(
   account: Account,
   input: z.infer<typeof updateAgentCommand>
 ) {
-  if (!(await readConfig(tx)).settings.general.mcp.enabled)
+  const { mcp } = (await readConfig(tx)).settings.general
+  if (!mcp.enabled)
     throw new IntegrationError(
       'The MCP server is turned off on this instance, so agent permissions cannot be changed.'
     )
@@ -506,25 +582,31 @@ async function updateAgent(
     throw new IntegrationError(
       `An agent that signed in cannot hold ${scopeLabels(ungrantable)}. Remove ${ungrantable.length === 1 ? 'it' : 'them'} and try again.`
     )
-  const unavailable = input.scopes.filter(
-    (scope) =>
-      !scopeAvailable(
-        scope,
-        (permission) => hasPermission(account, permission),
-        true
-      )
-  )
-  if (unavailable.length)
-    throw new IntegrationError(
-      `Your role does not allow ${scopeLabels(unavailable)}. Remove ${unavailable.length === 1 ? 'it' : 'them'} and try again.`
-    )
+  assertAdminScopesAllowed(input.scopes, mcp.administration)
+  assertRoleAllows(account, input.scopes, mcp.administration)
   // In catalog order, each once.
   const scopes = signInScopes(input.scopes)
   // The row first, as everything that ends or edits a connection takes it:
   // an upload publishing for it finishes before a permission is taken away.
   await lockConnection(tx, input.id)
+  // An administration scope is granted only when the agent signs in, which
+  // starts its 30 days. Editing can take one away but never add one.
+  if (holdsAdminScope(scopes)) {
+    const current = await tx.agentConnection.findFirst({
+      where: editable(input.id, account.id),
+      select: { scopes: true },
+    })
+    if (!current) throw new IntegrationError(AGENT_GONE)
+    const added = [...new Set(input.scopes)].filter(
+      (scope) => isAdminScope(scope) && !current.scopes.includes(scope)
+    )
+    if (added.length)
+      throw new IntegrationError(
+        `${scopeLabels(added)} can only be granted when the agent signs in. Remove ${added.length === 1 ? 'it' : 'them'}, or disconnect the agent and connect it again.`
+      )
+  }
   const { count } = await tx.agentConnection.updateMany({
-    where: { id: input.id, userId: account.id, revokedAt: null },
+    where: editable(input.id, account.id),
     data: { scopes },
   })
   if (!count) throw new IntegrationError(AGENT_GONE)

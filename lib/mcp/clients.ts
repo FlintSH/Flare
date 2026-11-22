@@ -7,7 +7,7 @@
  * Import nothing here except types: the dialog bundles this module for the
  * browser, and the handbook loads it where no other module can be resolved.
  */
-import type { ApiScope } from '@/lib/integrations/bearer-routes'
+import { type ApiScope, isAdminScope } from '@/lib/integrations/bearer-routes'
 
 /** The name clients list the server under. */
 export const MCP_SERVER_NAME = 'flare'
@@ -638,7 +638,8 @@ export function agentClient(id: string): AgentClient {
 /**
  * The permission presets, most limited first. Each lists catalog scopes; the
  * dialog offers only the ones the account's role can use. `urls:write` is
- * left out of the default because it includes deleting links.
+ * left out of the default because it includes deleting links. No preset
+ * holds a scope that reaches beyond the account (`handPickedScope`).
  */
 export const AGENT_PRESETS = [
   {
@@ -676,6 +677,13 @@ export const AGENT_PRESETS = [
   description: string
   scopes: readonly ApiScope[]
 }[]
+
+/**
+ * A scope that acts beyond the account: invites, which bring people in, and
+ * administration. It is never preselected; the person ticks it by hand.
+ */
+export const handPickedScope = (scope: string): boolean =>
+  scope === 'invites:write' || isAdminScope(scope)
 
 export type AgentPresetId = (typeof AGENT_PRESETS)[number]['id']
 export const DEFAULT_AGENT_PRESET: AgentPresetId = 'upload'
@@ -723,7 +731,8 @@ export type ScopeChoices = {
  * connection has now, when its permissions are being edited.
  *
  * A new connection starts on Read and upload, on the smallest preset when
- * that one is not offered, and on everything asked for when no preset fits.
+ * that one is not offered, and on everything asked for when no preset fits,
+ * except the scopes that are only ever ticked by hand.
  */
 export function agentScopeChoices(
   available: readonly string[],
@@ -751,7 +760,12 @@ export function agentScopeChoices(
     presets.find(({ id }) => id === DEFAULT_AGENT_PRESET) ?? presets[0]
   return preset
     ? { offered, presets, choice: preset.id, scopes: preset.scopes }
-    : { offered, presets, choice: 'custom', scopes: offered }
+    : {
+        offered,
+        presets,
+        choice: 'custom',
+        scopes: offered.filter((scope) => !handPickedScope(scope)),
+      }
 }
 
 /**

@@ -50,6 +50,11 @@ const SCOPES = [
   'urls:read',
   'urls:write',
   'account:write',
+  'invites:write',
+  'admin:read',
+  'admin:users',
+  'admin:content',
+  'admin:settings',
 ]
 
 const events: Partial<AuditInput>[] = []

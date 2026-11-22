@@ -37,7 +37,7 @@ Stable builds open the archive for their installed release; rolling builds open 
 
 ## General
 
-Reading instance settings needs `settings.read`; changing General needs `settings.general`. Access, SSO, and the [MCP server](/admin/agents) switch use `settings.security`, Storage uses `settings.storage`, Email uses `settings.email`, and instance appearance uses `appearance.manage`. Custom CSS/head HTML requires Administrator because it can execute browser code. Give the read permission alongside the relevant edit permission when delegating dashboard settings work.
+Reading instance settings needs `settings.read`; changing General needs `settings.general`. Access, SSO, and the [MCP server](/admin/agents) switch use `settings.security`, while [administration through MCP](/admin/agents#administration-through-mcp) needs Administrator; Storage uses `settings.storage`, Email uses `settings.email`, and instance appearance uses `appearance.manage`. Custom CSS/head HTML requires Administrator because it can execute browser code. Give the read permission alongside the relevant edit permission when delegating dashboard settings work.
 
 ### Background image OCR
 

@@ -185,10 +185,19 @@ export async function getInvitePolicy(
   }
 }
 
+/**
+ * A caller's own rule for what it may do with a page of invites, such as
+ * whether their links may leave the server. It runs under the role lock, in
+ * the transaction that then reads the page, so no role change commits between
+ * what it reads and the invites it judges. Throw to refuse.
+ */
+export type InviteListCheck = (tx: Prisma.TransactionClient) => Promise<void>
+
 export async function listInvites(
   userId: string,
   access: UserAccess,
-  query: InviteListQuery
+  query: InviteListQuery,
+  check?: InviteListCheck
 ) {
   const required: Permission =
     query.scope === 'all' ? 'invites.manage' : 'invites.create'
@@ -206,16 +215,26 @@ export async function listInvites(
         ? endedInviteWhere(now)
         : {}),
   }
-  const total = await prisma.invite.count({ where })
-  const pageCount = Math.max(1, Math.ceil(total / query.limit))
-  const page = Math.min(query.page, pageCount)
-  const records = await prisma.invite.findMany({
-    where,
-    select: inviteSelect,
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    skip: (page - 1) * query.limit,
-    take: query.limit,
-  })
+  const readPage = async (client: Client) => {
+    const total = await client.invite.count({ where })
+    const pageCount = Math.max(1, Math.ceil(total / query.limit))
+    const page = Math.min(query.page, pageCount)
+    const records = await client.invite.findMany({
+      where,
+      select: inviteSelect,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * query.limit,
+      take: query.limit,
+    })
+    return { total, pageCount, page, records }
+  }
+  const { total, pageCount, page, records } = check
+    ? await prisma.$transaction(async (tx) => {
+        await lockRoleChanges(tx)
+        await check(tx)
+        return readPage(tx)
+      })
+    : await readPage(prisma)
   const creators = await getActingAccess([
     ...new Set(
       records
@@ -230,13 +249,24 @@ export async function listInvites(
   }
 }
 
-export async function createInvite(actorId: string, input: InviteCreateInput) {
+/**
+ * A caller's own last check before an invite is created, run under the role
+ * lock once the service's own checks have passed. Throw to refuse.
+ */
+export type InviteCreateCheck = (tx: Prisma.TransactionClient) => Promise<void>
+
+export async function createInvite(
+  actorId: string,
+  input: InviteCreateInput,
+  check?: InviteCreateCheck
+) {
   const { invite, token } = await prisma.$transaction(async (tx) => {
     await lockRoleChanges(tx)
     const access = await requireActorPermission(tx, actorId, 'invites.create')
     const roles = input.roleIds.length
       ? await validateRoleAssignment(tx, actorId, null, input.roleIds)
       : []
+    await check?.(tx)
     const limits = limitsFor(access, await readInviteLimits(tx))
     if (limits) {
       if (input.maxUses === null || input.maxUses > limits.usesPerInvite)
@@ -420,7 +450,12 @@ export async function everyoneCanInvite(client: Client = prisma) {
  * The Settings switch is a shortcut for Everyone's Create invites grant. It
  * needs security settings and your own Create invites, not role management.
  */
-export async function setEveryoneCanInvite(actorId: string, enabled: boolean) {
+export async function setEveryoneCanInvite(
+  actorId: string,
+  enabled: boolean,
+  /** A caller's own refusal, under the role lock after the checks above. */
+  check?: (tx: Prisma.TransactionClient) => Promise<void>
+) {
   await setEveryonePermission('invites.create', enabled, async (tx) => {
     const access = await requireActorPermission(
       tx,
@@ -431,6 +466,7 @@ export async function setEveryoneCanInvite(actorId: string, enabled: boolean) {
       throw new PermissionError(
         'You can only change who may invite people when you can create invites yourself'
       )
+    await check?.(tx)
   })
   return { everyoneCanInvite: enabled }
 }

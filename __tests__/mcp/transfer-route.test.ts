@@ -45,6 +45,7 @@ const state = vi.hoisted(() => ({
   unreadable: false,
   everyone: [] as string[],
   enabled: true,
+  administration: false,
   storage: undefined as unknown,
   audits: [] as Array<Record<string, unknown>>,
 }))
@@ -58,6 +59,7 @@ const mocks = vi.hoisted(() => ({
   verifyEmail: vi.fn(),
   queries: vi.fn(),
   readEntry: vi.fn(),
+  readSharedEntry: vi.fn(),
   exportData: vi.fn(),
 }))
 
@@ -137,6 +139,18 @@ vi.mock('@/lib/database/prisma', () => {
           mocks.queries('file.findUnique')
           return state.files.find((file) => file.id === where.id) ?? null
         },
+        findFirst: async ({
+          where,
+        }: {
+          where: { id: string; userId: string }
+        }) => {
+          mocks.queries('file.findFirst')
+          return (
+            state.files.find(
+              (file) => file.id === where.id && file.userId === where.userId
+            ) ?? null
+          )
+        },
         update: mocks.countFile,
       },
       // The account's row, for the session version it is on.
@@ -153,6 +167,7 @@ vi.mock('@/lib/database/prisma', () => {
 // calls: what they are handed is what these tests are about.
 vi.mock('@/lib/archives/service', () => ({
   readArchiveEntry: mocks.readEntry,
+  readSharedArchiveEntry: mocks.readSharedEntry,
 }))
 vi.mock('@/lib/users/export', () => ({
   exportAccountData: mocks.exportData,
@@ -165,7 +180,11 @@ vi.mock('@/lib/email/policy', () => ({
 }))
 vi.mock('@/lib/config', () => ({
   getConfig: async () => ({
-    settings: { general: { mcp: { enabled: state.enabled } } },
+    settings: {
+      general: {
+        mcp: { enabled: state.enabled, administration: state.administration },
+      },
+    },
   }),
   // As the real one does, it reads the settings through the client it is
   // handed, so a test can tell a transaction's view from the cached one.
@@ -423,6 +442,8 @@ beforeEach(() => {
   state.users = [{ id: 'owner', sessionVersion: 1 }]
   state.unreadable = false
   mocks.readEntry.mockImplementation(async () => entryAnswer())
+  mocks.readSharedEntry.mockImplementation(async () => entryAnswer())
+  state.administration = false
   mocks.exportData.mockImplementation(async () => exportOf(['PK', 'zip']))
   state.everyone = [...DEFAULT_PERMISSIONS]
   state.enabled = true
@@ -2127,7 +2148,7 @@ describe('a transfer URL made for an agent that signed in', () => {
       await expect(authorize(tx)).resolves.toBeUndefined()
       expect(raw.agentConnection.findUnique).toHaveBeenCalledExactlyOnceWith({
         where: { id: 'connection-1' },
-        select: { revokedAt: true, scopes: true },
+        select: { revokedAt: true, scopes: true, createdAt: true },
       })
       expect(raw.config.findUnique).toHaveBeenCalledOnce()
       // A connection is not a named token, and nothing outside the
@@ -2232,6 +2253,233 @@ describe('a transfer URL made for an agent that signed in', () => {
           status: 403,
         }),
       ])
+    })
+  })
+})
+
+describe('a download link made in moderator mode', () => {
+  const moderators = {
+    id: 'moderators',
+    name: 'Moderators',
+    description: '',
+    color: '#000000',
+    position: 1,
+    systemKey: null,
+    permissions: ['content.read'],
+  }
+  /** A moderator's token: the moderation scope, and a role that reads content. */
+  const moderatorToken = {
+    ...token,
+    id: 'token-mod',
+    userId: 'moderator',
+    hash: hashApiToken('flr_ModeratorToken'),
+    scopes: ['admin:content', 'mcp'],
+    user: {
+      ...account,
+      id: 'moderator',
+      name: 'Mo',
+      urlId: 'mo',
+      roles: [moderators],
+    },
+  }
+  const withModerator = (override: Partial<typeof moderatorToken> = {}) => {
+    state.tokens = [{ ...token }, { ...moderatorToken, ...override }]
+  }
+  /** A link the moderator made for a file of the account `owner`. */
+  const moderated = (
+    kind: 'download' | 'archive-entry',
+    overrides: Partial<TransferRow> = {}
+  ) =>
+    transfer(kind, {
+      userId: 'moderator',
+      credential: 'token:token-mod',
+      options:
+        kind === 'archive-entry'
+          ? { entry: ENTRY, moderating: 'owner' }
+          : { moderating: 'owner' },
+      ...overrides,
+    })
+
+  beforeEach(() => {
+    withModerator()
+    state.administration = true
+    state.users.push({ id: 'moderator', sessionVersion: 3 })
+    // Private and behind a password: a moderator still reads it.
+    state.files = [
+      { ...file, visibility: 'PRIVATE', password: '$2b$10$somehashsomehash' },
+    ]
+  })
+
+  it("sends another account's file, without counting it or asking for a session or password", async () => {
+    const { secret } = moderated('download')
+    const response = await download(secret)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes)
+    expect(mocks.countFile).not.toHaveBeenCalled()
+    expect(mocks.session).not.toHaveBeenCalled()
+    expect(mocks.serverSession).not.toHaveBeenCalled()
+  })
+
+  it('records the moderator, the credential and the file of the other account', async () => {
+    const { secret } = moderated('download')
+    await (await download(secret)).arrayBuffer()
+    expect(await audited()).toEqual([
+      expect.objectContaining({
+        action: 'mcp.transfer.download',
+        outcome: 'success',
+        actorId: 'moderator',
+        targetType: 'file',
+        targetId: 'file-1',
+        details: expect.objectContaining({ tokenId: 'token-mod' }),
+      }),
+    ])
+  })
+
+  it('reads an entry through the reader everyone but the owner uses, as the moderator, never as the owner', async () => {
+    const { secret } = moderated('archive-entry')
+    const response = await download(secret)
+    expect(response.status).toBe(200)
+    expect(mocks.readEntry).not.toHaveBeenCalled()
+    expect(mocks.readSharedEntry).toHaveBeenCalledTimes(1)
+    const [access, entry, request, options] =
+      mocks.readSharedEntry.mock.calls[0]
+    expect(access).toEqual({
+      file: expect.objectContaining({ id: 'file-1', userId: 'owner' }),
+      // With the credential, so the reader's own check of the viewer keeps
+      // the download recorded under the agent that made the link.
+      viewer: { id: 'moderator', sessionVersion: 3, credential: 'token-mod' },
+      verifiedPasswordHash: null,
+      passwordChecked: false,
+      authorize: expect.any(Function),
+    })
+    expect(entry).toEqual(ENTRY)
+    expect(request).toBeInstanceOf(Request)
+    expect(options).toEqual({ inline: false, requester: 'user:moderator' })
+  })
+
+  it.each([
+    ['the token was revoked', { revokedAt: new Date() }, true],
+    ['the token lost the moderation scope', { scopes: ['mcp'] }, true],
+    ['administration through MCP was turned off', {}, false],
+  ])(
+    'answers the same 404 when %s while the entry was being read',
+    async (_what, token, administration) => {
+      // What the reader's locked recheck reads by then.
+      const tx = {
+        $queryRaw: vi.fn(async () => []),
+        apiToken: {
+          findUnique: async () => ({ ...moderatorToken, ...token }),
+        },
+        config: {
+          findUnique: async () => ({
+            value: {
+              general: { mcp: { enabled: true, administration } },
+            },
+          }),
+        },
+        user: { findUnique: async () => ({ roles: [moderators] }) },
+        role: { findUnique: async () => null },
+      }
+      mocks.readSharedEntry.mockImplementation(
+        async (access: { authorize: (tx: unknown) => Promise<void> }) => {
+          await access.authorize(tx)
+          return entryAnswer()
+        }
+      )
+      const { secret } = moderated('archive-entry')
+      await expectNotFound(await download(secret))
+      expect((await audited()).map(({ outcome }) => outcome as string)).toEqual(
+        ['denied']
+      )
+    }
+  )
+
+  const deaths: Array<{ name: string; arrange: (row: TransferRow) => void }> = [
+    {
+      name: 'the connection lost the moderation scope',
+      arrange: () => withModerator({ scopes: ['files:content', 'mcp'] }),
+    },
+    {
+      name: "the role no longer reads other accounts' content",
+      arrange: () =>
+        withModerator({
+          user: {
+            ...moderatorToken.user,
+            roles: [{ ...moderators, permissions: ['content.delete'] }],
+          },
+        }),
+    },
+    {
+      name: 'administration through MCP was turned off',
+      arrange: () => (state.administration = false),
+    },
+    {
+      name: 'the token was revoked',
+      arrange: () => withModerator({ revokedAt: new Date() }),
+    },
+    {
+      name: 'the token lost Agent access',
+      arrange: () => withModerator({ scopes: ['admin:content'] }),
+    },
+    {
+      name: 'the file now belongs to another account',
+      arrange: () => (state.files = [{ ...state.files[0], userId: 'third' }]),
+    },
+    {
+      name: 'the file now belongs to the moderator',
+      arrange: () =>
+        (state.files = [{ ...state.files[0], userId: 'moderator' }]),
+    },
+    { name: 'the file was deleted', arrange: () => (state.files = []) },
+    {
+      name: 'the row names the account in a form no link was made with',
+      arrange: (row) =>
+        (row.options =
+          row.kind === 'archive-entry'
+            ? { entry: ENTRY, moderating: '' }
+            : { moderating: 42 }),
+    },
+  ]
+
+  describe.each(['download', 'archive-entry'] as const)('for a %s', (kind) => {
+    it.each(deaths)('answers the same 404 once $name', async ({ arrange }) => {
+      const { secret, row } = moderated(kind)
+      arrange(row)
+      await expectNotFound(await download(secret))
+      const storage = state.storage as ReturnType<typeof memoryStorage>
+      expect(storage.getFileStream).not.toHaveBeenCalled()
+      expect(mocks.readEntry).not.toHaveBeenCalled()
+      expect(mocks.readSharedEntry).not.toHaveBeenCalled()
+    })
+
+    it("is never satisfied by the owner's standing", async () => {
+      // The file's own account, holding everything an owner link needs, and
+      // a row that says it moderates that same account.
+      const { secret } = transfer(kind, {
+        options:
+          kind === 'archive-entry'
+            ? { entry: ENTRY, moderating: 'owner' }
+            : { moderating: 'owner' },
+      })
+      await expectNotFound(await download(secret))
+      expect(mocks.readEntry).not.toHaveBeenCalled()
+      expect(mocks.readSharedEntry).not.toHaveBeenCalled()
+    })
+
+    it("never satisfies an owner link's recheck", async () => {
+      // An owner-mode row for the moderator's credential, naming a file of
+      // another account, and one naming a file of the moderator's own while
+      // the credential holds nothing an owner link needs.
+      const { secret } = transfer(kind, {
+        userId: 'moderator',
+        credential: 'token:token-mod',
+      })
+      await expectNotFound(await download(secret))
+      state.files = [{ ...file, userId: 'moderator' }]
+      await expectNotFound(await download(secret))
+      expect(mocks.readEntry).not.toHaveBeenCalled()
+      expect(mocks.readSharedEntry).not.toHaveBeenCalled()
     })
   })
 })
