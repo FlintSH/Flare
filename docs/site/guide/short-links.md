@@ -11,12 +11,12 @@ description: Shorten a link under your Flare domain, choose its ending, change w
 
 ## Shorten a link
 
-1. Open **Links** in the navigation. On a computer, the link field is ready to paste into.
+1. Open **Links** in the navigation. On a computer, the link field is ready to paste into; pasting anywhere on the page while no field has focus fills it in too.
 2. Paste a web address into **Paste a long link**. An address without `https://`, such as `example.com/launch`, gets it added.
 3. Check the ending after `/u/`. Flare suggests one from the address's words when it can: `https://github.com/FlintSH/Flare/releases/tag/v3.1.0` suggests `flare-releases-v3-1-0`. Press <kbd>Tab</kbd> in the ending field, or choose **Tab** (**Use** on a touch screen) at its end, to take it. Type your own instead, or leave it empty for a random six-character ending.
 4. Press <kbd>Enter</kbd> or choose **Shorten**.
 
-Shortening also copies the new link, so it's ready to paste. The link appears at the top of the list, briefly highlighted, with **Copied** on its button. If the browser didn't allow the copy, **Link created** appears instead and the row's **Copy** works as usual. If a search is active, creating a link clears it so the new one shows.
+Shortening also copies the new link, so it's ready to paste. To shorten without opening Links, paste the address on any other dashboard page and press <kbd>Enter</kbd> on the card that appears, or type it into **Find** and choose **Shorten**: both use a random ending, and the notice's **Manage** opens the new link's [sheet](./moving-around#a-sheet-for-every-file-and-link) ([paste anywhere](./moving-around#paste-anywhere)). The link appears at the top of the list, briefly highlighted, with **Copied** on its button. If the browser didn't allow the copy, **Link created** appears instead and the row's **Copy** works as usual. If a search is active, creating a link clears it so the new one shows.
 
 While you compose, Flare reads the address in your browser, without visiting it:
 
@@ -31,17 +31,26 @@ If two links created at the same moment draw the same random ending, Flare gives
 
 ## Find and manage your links
 
-Each row shows the short link, then where it leads without `https://`. The full address is the top line of the row's **⋯** menu. Clicks and the creation date sit to the right, or under the destination on phones. Newer links appear first. Type in **Search links** to filter by ending or destination.
+Each row shows the short link, then where it leads without `https://`. The full address is the top line of the row's **⋯** menu. Clicks and the creation date sit to the right, or under the destination on phones. Newer links appear first. Type in **Search links** to filter by ending or destination. When the link you're shortening carries a password or token (a reset link, `token=`, `pwd=` and the like), the field says so before you make it public: anyone with the short link could use it.
 
 - **Copy** copies the complete short link. If the browser refuses clipboard access, press and hold or right-click the short link and copy its address.
 - **⋯ → Open destination** opens where the link leads, without counting a click.
-- **⋯ → QR code** shows the short link as a QR code, for a slide, a poster or a phone across the room, with **Download PNG** and **Copy link**. The code is made in your browser.
-- **⋯ → Change destination** sends the link somewhere else. Everyone who opens it, including people you already sent it to, goes to the new address from then on. The ending and clicks stay. To use a different ending, create a new link (and delete the old one if it should stop working).
-- **⋯ → Delete** stops the redirect after you confirm. The ending then becomes free, and anyone on this instance can create a link with it, so a deleted link you shared could later lead somewhere else. Deleting a short link does not remove the destination page or prevent someone using its full address. If deleting fails, **Could not delete the link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link still works.
+- **⋯ → Delete** stops the redirect after you confirm (see below).
+- Choose the short link itself to open its [sheet](./moving-around#a-sheet-for-every-file-and-link), the same panel as a file's. Find and **Manage** after shortening open it too.
 
-<Screenshot src="/screenshots/workspace/urls-edit.png" alt="Change destination dialog for a short link, with the full current destination in an editable field and Save and Cancel" caption="Change where a link leads without changing the link people already have." />
+The sheet holds everything else about the link:
 
-Changing a destination needs both `links.create` and `links.delete`, because it retires the old redirect and makes a new one. **Change destination** is hidden from roles without both. Listing needs `links.read`, creating `links.create` and deleting `links.delete`. Revoking these dashboard permissions does not disable existing public redirects; delete a link to stop its redirect.
+- **Copy** copies the complete short link.
+- **Leads to** shows the full destination; choosing it opens it without counting a click. **Change** sends the link somewhere else. Everyone who opens it, including people you already sent it to, goes to the new address from then on. The ending and clicks stay. To use a different ending, create a new link (and delete the old one if it should stop working). **Cancel** or <kbd>Esc</kbd> leaves it unchanged.
+- **Clicks** counts redirects (see below).
+- **QR code** shows the short link as a QR code, for a slide, a poster or a phone across the room, with **Download**. The code is made in your browser.
+- **Delete**, at the bottom, stops the redirect after you confirm. The ending then becomes free, and anyone on this instance can create a link with it, so a deleted link you shared could later lead somewhere else. Deleting a short link does not remove the destination page or prevent someone using its full address. If deleting fails, **Could not delete the link** gives Flare's reason when there is one, such as **Permission denied**; otherwise it says your link still works.
+
+Earlier versions put **QR code** and **Change destination** in the row's **⋯** menu, each in its own dialog.
+
+<Screenshot src="/screenshots/continuity/link-sheet.webp" alt="A link sheet titled github.com, Short link made 12 days ago, the short link with Copy, Leads to the v3.1.0 release address with Change, Clicks 97, and a QR code with Download" caption="A short link's sheet: where it leads, its clicks and its QR code." />
+
+Changing a destination needs both `links.create` and `links.delete`, because it retires the old redirect and makes a new one. **Change** is hidden from roles without both. Listing needs `links.read`, creating `links.create` and deleting `links.delete`. Revoking these dashboard permissions does not disable existing public redirects; delete a link to stop its redirect.
 
 ## Understand clicks
 
@@ -64,7 +73,7 @@ For a custom integration, use a [named API token](../api/authentication) with `u
 | Problem                              | Next step                                                                                                                                                                                                                                                                                                              |
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Address rejected                     | Flare adds `https://` to a plain site address such as `example.com/page`; anything else needs its `https://` or `http://`. Check for spaces or malformed characters. Other schemes, such as `ftp://`, show **Only HTTP and HTTPS URLs are allowed**.                                                                   |
-| Link goes to the wrong page          | Choose **⋯ → Change destination** and correct the address. The short link people already have keeps working.                                                                                                                                                                                                           |
+| Link goes to the wrong page          | Open the link's sheet, choose **Change** beside **Leads to** and correct the address. The short link people already have keeps working.                                                                                                                                                                                |
 | Short link no longer opens           | Check that it still exists and that the instance's domain is reachable.                                                                                                                                                                                                                                                |
 | Short link opens a destination error | The redirect may be working while the target page is unavailable or requires sign-in. Test the original URL.                                                                                                                                                                                                           |
 | Your list fails to load              | Use **Try again** or reload after checking your connection. A load failure is not a successful deletion. Links you create meanwhile still appear, under the error. After you create, change or delete a link, Flare reads the list again; if that read fails, the list on screen stays as it is, your change included. |

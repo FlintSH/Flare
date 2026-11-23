@@ -40,10 +40,13 @@ export function FileViewerContent({
   file,
   password,
   hydrated,
+  ownView,
 }: {
   file: FileViewerFile
   password?: string
   hydrated: boolean
+  /** The owner looking at their own file: nothing counts it as a view. */
+  ownView?: boolean
 }) {
   const urls = fileUrls(file, { password })
   const src = hydrated ? urls.content : undefined
@@ -75,6 +78,7 @@ export function FileViewerContent({
         <VideoViewer
           file={file}
           lookupUrl={urls.direct}
+          src={ownView ? urls.content : undefined}
           poster={thumbnailLoader({
             src: urls.thumbnail,
             width: VIDEO_POSTER_SIZE,

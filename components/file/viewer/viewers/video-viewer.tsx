@@ -20,35 +20,40 @@ const LOOKUP_FAILED = 'This video couldn’t be loaded.'
 export function VideoViewer({
   file,
   lookupUrl,
+  src,
   poster,
 }: {
   file: { name: string }
   lookupUrl: string
+  /** Plays from here without asking `lookupUrl` (the owner's own view). */
+  src?: string
   poster?: string
 }) {
-  const [direct, setDirect] = useState<{ url?: string; error?: string }>({})
+  const [looked, setLooked] = useState<{ url?: string; error?: string }>({})
+  const direct = src ? { url: src } : looked
   const [failedUrl, setFailedUrl] = useState<string>()
 
   useEffect(() => {
+    if (src) return
     const controller = new AbortController()
-    setDirect({})
+    setLooked({})
     apiRequest<{ url?: string }>(lookupUrl, {
       signal: controller.signal,
       fallback: LOOKUP_FAILED,
     }).then(
       ({ url }) => {
-        if (!controller.signal.aborted) setDirect({ url })
+        if (!controller.signal.aborted) setLooked({ url })
       },
       (error: unknown) => {
         if (!controller.signal.aborted)
-          setDirect({
+          setLooked({
             error:
               error instanceof RefusedRequest ? error.message : LOOKUP_FAILED,
           })
       }
     )
     return () => controller.abort()
-  }, [lookupUrl])
+  }, [lookupUrl, src])
 
   if (direct.error) {
     return <ErrorState error={direct.error} />

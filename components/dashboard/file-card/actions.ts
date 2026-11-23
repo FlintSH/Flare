@@ -1,6 +1,5 @@
 import {
   Archive,
-  ArrowUpRight,
   Download,
   Eye,
   FolderInput,
@@ -22,8 +21,6 @@ export interface FileActionDescriptor {
   needs?: Action
   /** The file menu's item. */
   menu?: string | ((state: { hasPassword: boolean; busy: boolean }) => string)
-  /** The button over the preview: its tooltip and its accessible name. */
-  button?: { title: string; label: (name: string) => string }
   /** The selection bar's button. */
   batch?: string
 }
@@ -31,17 +28,14 @@ export interface FileActionDescriptor {
 /** Every action the library offers on files, with what each needs. */
 export const FILE_ACTIONS = {
   browseArchive: { icon: Archive, needs: 'viewFiles', menu: 'Browse archive' },
-  open: { icon: ArrowUpRight, menu: 'Open file' },
   copyLink: {
     icon: LinkIcon,
     needs: 'shareFiles',
     menu: 'Copy link',
-    button: { title: 'Copy link', label: (name) => `Copy link to ${name}` },
   },
   download: {
     icon: Download,
     menu: 'Download file',
-    button: { title: 'Download', label: (name) => `Download ${name}` },
   },
   editTags: {
     icon: Tag,
@@ -59,43 +53,26 @@ export const FILE_ACTIONS = {
     icon: Eye,
     needs: 'shareFiles',
     menu: 'Change visibility',
-    button: {
-      title: 'Change visibility',
-      label: (name) => `Change visibility of ${name}`,
-    },
   },
   password: {
     icon: KeyRound,
     needs: 'shareFiles',
     menu: ({ hasPassword }) =>
       hasPassword ? 'Manage password' : 'Add password',
-    button: {
-      title: 'Password protection',
-      label: (name) => `Password protection for ${name}`,
-    },
   },
   expiration: {
     icon: Timer,
     needs: 'manageExpiration',
     menu: 'Manage expiration',
-    button: {
-      title: 'Manage expiration',
-      label: (name) => `Manage expiration of ${name}`,
-    },
   },
   ocr: {
     icon: ScanText,
     menu: ({ busy }) => (busy ? 'Extracting text…' : 'Extract text (OCR)'),
-    button: {
-      title: 'Extract text (OCR)',
-      label: (name) => `Extract text from ${name}`,
-    },
   },
   delete: {
     icon: Trash2,
     needs: 'deleteFiles',
     menu: 'Delete file',
-    button: { title: 'Delete', label: (name) => `Delete ${name}` },
   },
   createArchive: {
     icon: Archive,
@@ -114,21 +91,13 @@ export function fileActionAllowed(
   return !needs || allows(subject, needs)
 }
 
-/** The buttons over a card's preview, in order. */
-export const CARD_BUTTONS = [
-  'copyLink',
-  'download',
-  'visibility',
-  'password',
-  'ocr',
-  'expiration',
-  'delete',
-] as const satisfies readonly FileActionId[]
-
-/** The card menu's groups, in order. */
+/**
+ * The card menu's groups, in order: the quick things. Everything about the
+ * file itself (who can open it, password, expiry, folder, tags, text in
+ * images) is in its sheet, which a click on the card opens.
+ */
 export const CARD_MENU = [
-  ['browseArchive', 'open', 'copyLink', 'download'],
-  ['editTags', 'move', 'visibility', 'password', 'expiration', 'ocr'],
+  ['browseArchive', 'copyLink', 'download'],
   ['delete'],
 ] as const satisfies readonly (readonly FileActionId[])[]
 

@@ -5,7 +5,7 @@ description: Browse archives of any size, preview images, video, audio, and text
 
 # Work with archives
 
-Open an archive from **Files → file menu → Browse archive**, or browse an accessible archive on its share page. Flare can browse **ZIP, TAR, TAR.GZ/TGZ, and GZIP** files without first adding their contents to a library. It reads only what it needs: the archive's file list, then the entry you open. A multi-gigabyte ZIP opens as quickly as a small one, and an image, video, or log inside it starts showing without the rest of the archive being read. Share-page visitors can preview and download individual entries. In your own library, you can also extract contents into a new folder or create a ZIP or TAR.GZ from files you own.
+Open an archive from **Files → ⋯ → Browse archive** or its [sheet](./moving-around#a-sheet-for-every-file-and-link), or browse an accessible archive on its share page. Flare can browse **ZIP, TAR, TAR.GZ/TGZ, and GZIP** files without first adding their contents to a library. It reads only what it needs: the archive's file list, then the entry you open. A multi-gigabyte ZIP opens as quickly as a small one, and an image, video, or log inside it starts showing without the rest of the archive being read. Share-page visitors can preview and download individual entries. In your own library, you can also extract contents into a new folder or create a ZIP or TAR.GZ from files you own.
 
 Share-page browsing follows the archive file's [visibility and password rules](./sharing#choose-who-can-open-a-file). An unprotected public archive can be browsed while signed out. A protected public archive requires its file password; knowing a private file's password does not make it public. Owners with `files.read` and accounts with `content.read` retain their usual privileged file access. Named API tokens do not grant archive access over the REST API.
 
@@ -145,7 +145,7 @@ The new wrapper preserves the archive's directory hierarchy. Its name follows th
 Extracted files add to your storage usage while the original archive remains stored. Account quota and the instance's maximum file size still apply. Filename-based automatic tags, automatic OCR when enabled, and `file.ready` webhooks use the normal processing flow for the new files; OCR may finish after extraction completes. These are separate library files, so later edits to them do not change the source archive.
 
 ::: details See the preserved folders and new library files
-<Screenshot src="/screenshots/archives/extracted-folder.webp" alt="Field kit unpacked library folder containing drafts, empty, guide, and images subfolders" caption="The wrapper preserves the directory hierarchy, including an empty folder." />
+<Screenshot src="/screenshots/archives/extracted-folder.webp" alt="The Field kit unpacked folder in the library with its Subfolders list open: drafts with 1 file, empty with 0 files, guide with 2 files, and images with 1 file" caption="The wrapper preserves the directory hierarchy, including an empty folder." />
 
 <Screenshot src="/screenshots/archives/extracted-files.webp" alt="Extracted guide folder containing README.md and checklist.csv as private library files" caption="The extracted files are ordinary library items, ready for normal previews and organization." />
 :::

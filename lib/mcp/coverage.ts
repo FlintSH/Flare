@@ -136,6 +136,14 @@ export const API_COVERAGE: Record<
   '/api/tags/{id}/apply': { POST: tools('save_tag') },
 
   // Short links
+  '/api/search': {
+    POST: noted(
+      'Find in the dashboard searches files, links and folders at once; agents search each with its own tool.',
+      'search_files',
+      'list_short_links',
+      'list_folders'
+    ),
+  },
   '/api/urls': {
     GET: tools('list_short_links'),
     POST: tools('create_short_link'),

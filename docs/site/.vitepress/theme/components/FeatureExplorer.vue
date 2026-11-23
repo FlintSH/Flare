@@ -20,6 +20,24 @@ const features = [
   ],
   [
     'Share',
+    'Paste anywhere',
+    'Paste a file, link or text on any page and press Enter to upload it, shorten it, or open it in Paste, with what it will get shown first.',
+    '/guide/moving-around',
+  ],
+  [
+    'Organize',
+    'Find anything',
+    'The bar becomes the search: Ctrl+K or ⌘K on any page reaches your files, links, folders, pages and settings by the words you’d use, such as “sharex” or “2fa”.',
+    '/guide/moving-around',
+  ],
+  [
+    'Share',
+    'File and link sheets',
+    'Click any file or short link for one place with its preview, link and every setting you can change: access, password, expiry, folder, tags, QR code.',
+    '/guide/moving-around',
+  ],
+  [
+    'Share',
     'Rich previews',
     'Images with zoom, video and audio in Flare’s own player, PDFs, CSV and TSV tables, plain text, and syntax-highlighted code, each under the file’s name, type, size, and actions.',
     '/guide/sharing',

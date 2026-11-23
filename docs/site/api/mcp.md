@@ -1287,27 +1287,28 @@ The third column is either tool names or one of these:
 
 ### Files
 
-| Route                                            | Methods        | Tools or reason                                    | Note                                                                                           |
-| ------------------------------------------------ | -------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `/api/files`                                     | GET            | `search_files`, `get_file`                         |                                                                                                |
-| `/api/files`                                     | POST           | `upload_file`, `create_paste`, `create_upload_url` |                                                                                                |
-| `/api/files/types`                               | GET            | `search_files`                                     | search_files filters by type; no tool lists the types an account has.                          |
-| `/api/files/timeline`                            | GET            | `search_files`                                     | search_files answers the total for a date range, not counts per period.                        |
-| `/api/files/chunks`                              | GET, POST, PUT | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
-| `/api/files/chunks/{uploadId}/part/{partNumber}` | GET, PUT       | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
-| `/api/files/chunks/{uploadId}/complete`          | POST           | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
-| `/api/files/chunks/{uploadId}`                   | DELETE         | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                  |
-| `/api/files/{id}`                                | PATCH          | `set_file_sharing`                                 |                                                                                                |
-| `/api/files/{id}`                                | DELETE         | `delete_files`                                     |                                                                                                |
-| `/api/files/{path}`                              | GET            | `read_file`                                        |                                                                                                |
-| `/api/files/{id}/download`                       | GET, POST      | `read_file`                                        |                                                                                                |
-| `/api/files/{id}/thumbnail`                      | GET            | `read_file`                                        |                                                                                                |
-| `/api/files/{id}/ocr`                            | GET            | `read_file`                                        | read_file returns the text Flare has already read from an image; it does not start a new read. |
-| `/api/files/{id}/expiry`                         | GET            | `get_file`, `search_files`                         |                                                                                                |
-| `/api/files/{id}/expiry`                         | POST, DELETE   | `set_file_expiry`                                  |                                                                                                |
-| `/api/files/folders`                             | POST           | `move_files`                                       |                                                                                                |
-| `/api/files/tags`                                | GET            | `get_file`, `search_files`                         |                                                                                                |
-| `/api/files/tags`                                | PATCH          | `tag_files`                                        |                                                                                                |
+| Route                                            | Methods        | Tools or reason                                    | Note                                                                                                   |
+| ------------------------------------------------ | -------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `/api/files`                                     | GET            | `search_files`, `get_file`                         |                                                                                                        |
+| `/api/files`                                     | POST           | `upload_file`, `create_paste`, `create_upload_url` |                                                                                                        |
+| `/api/files/types`                               | GET            | `search_files`                                     | search_files filters by type; no tool lists the types an account has.                                  |
+| `/api/files/timeline`                            | GET            | `search_files`                                     | search_files answers the total for a date range, not counts per period.                                |
+| `/api/search`                                    | POST           | `search_files`, `list_short_links`, `list_folders` | Find in the dashboard searches files, links and folders at once; agents search each with its own tool. |
+| `/api/files/chunks`                              | GET, POST, PUT | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                          |
+| `/api/files/chunks/{uploadId}/part/{partNumber}` | GET, PUT       | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                          |
+| `/api/files/chunks/{uploadId}/complete`          | POST           | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                          |
+| `/api/files/chunks/{uploadId}`                   | DELETE         | `create_upload_url`                                | An upload URL takes the whole file in one request; MCP has no chunked upload.                          |
+| `/api/files/{id}`                                | PATCH          | `set_file_sharing`                                 |                                                                                                        |
+| `/api/files/{id}`                                | DELETE         | `delete_files`                                     |                                                                                                        |
+| `/api/files/{path}`                              | GET            | `read_file`                                        |                                                                                                        |
+| `/api/files/{id}/download`                       | GET, POST      | `read_file`                                        |                                                                                                        |
+| `/api/files/{id}/thumbnail`                      | GET            | `read_file`                                        |                                                                                                        |
+| `/api/files/{id}/ocr`                            | GET            | `read_file`                                        | read_file returns the text Flare has already read from an image; it does not start a new read.         |
+| `/api/files/{id}/expiry`                         | GET            | `get_file`, `search_files`                         |                                                                                                        |
+| `/api/files/{id}/expiry`                         | POST, DELETE   | `set_file_expiry`                                  |                                                                                                        |
+| `/api/files/folders`                             | POST           | `move_files`                                       |                                                                                                        |
+| `/api/files/tags`                                | GET            | `get_file`, `search_files`                         |                                                                                                        |
+| `/api/files/tags`                                | PATCH          | `tag_files`                                        |                                                                                                        |
 
 ### Folders, tags, and short links
 

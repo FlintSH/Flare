@@ -71,3 +71,28 @@ export async function rateLimit(
     })
   }
 }
+
+/**
+ * Find asks as people type, so it has its own budget, counted per account:
+ * a fast typist never spends another feature's requests.
+ */
+export const findLimiter = requestLimit('find', 120)
+
+/** A 429 once this account has spent `limiter`, otherwise null. */
+export async function rateLimitAccount(
+  userId: string,
+  limiter: RateLimiterMemory
+): Promise<Response | null> {
+  try {
+    await limiter.consume(`user:${userId}`)
+    return null
+  } catch {
+    return new Response(JSON.stringify({ error: 'Too many requests' }), {
+      status: 429,
+      headers: {
+        'Content-Type': 'application/json',
+        'Retry-After': String(limiter.duration),
+      },
+    })
+  }
+}

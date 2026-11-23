@@ -1,20 +1,26 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 
 import { UploadIcon } from 'lucide-react'
 
 import { folderDestination, libraryHref } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
+import { savedOutcome } from '@/lib/uploads/choices'
+import type { SavedUploadSettings } from '@/lib/uploads/saved-settings'
 import { uploadTray } from '@/lib/uploads/tray'
 import { cn } from '@/lib/utils'
 
+import { useFolders } from '@/hooks/use-folders'
+import { useFreshDefaults } from '@/hooks/use-fresh-defaults'
 import { usePermissions } from '@/hooks/use-permissions'
 import { useToast } from '@/hooks/use-toast'
 
 interface GlobalDropZoneProps {
   maxSize: number
+  /** What a plain upload gets, said before the drop. */
+  saved: SavedUploadSettings | null
 }
 
 /**
@@ -30,12 +36,13 @@ export function dropFolder(
   return folderDestination(new URLSearchParams(location.search).get('folder'))
 }
 
-export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
+export function GlobalDropZone({ maxSize, saved }: GlobalDropZoneProps) {
   const { toast } = useToast()
   const { user } = usePermissions()
   const [isDragging, setIsDragging] = useState(false)
   const [_dragCounter, setDragCounter] = useState(0)
-  const [droppingInFolder, setDroppingInFolder] = useState(false)
+  const [folderId, setFolderId] = useState<string | null>(null)
+  const { read: readDefaults, reading } = useFreshDefaults()
 
   const handleDragEnter = useCallback(
     (e: DragEvent) => {
@@ -49,13 +56,14 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           (item) => item.kind === 'file'
         )
         if (hasFiles) {
-          setDroppingInFolder(!!dropFolder(window.location, user))
+          readDefaults()
+          setFolderId(dropFolder(window.location, user))
           setDragCounter((prev) => prev + 1)
           setIsDragging(true)
         }
       }
     },
-    [user]
+    [user, readDefaults]
   )
 
   const handleDragLeave = useCallback((e: DragEvent) => {
@@ -121,6 +129,12 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
     }
   }, [handleDragEnter, handleDragLeave, handleDragOver, handleDrop])
 
+  // Claimed only once the defaults read on opening are in.
+  const current = reading ? null : saved
+  const outcome = current
+    ? savedOutcome(current.effective, allows(user, 'shareFiles'))
+    : null
+
   return (
     <div
       aria-hidden={!isDragging}
@@ -140,11 +154,30 @@ export function GlobalDropZone({ maxSize }: GlobalDropZoneProps) {
           Drop files to upload
         </h2>
         <p className="mt-3 text-muted-foreground">
-          {droppingInFolder
-            ? 'Release to upload into this folder with your default upload profile.'
-            : 'Release to upload with your default upload profile.'}
+          {[
+            outcome && (outcome.visibility === 'PUBLIC' ? 'Public' : 'Private'),
+            outcome?.expires,
+            folderId ? <FolderName key="folder" id={folderId} /> : 'Unfiled',
+            current?.profile && `${current.profile.name} profile`,
+          ]
+            .filter(Boolean)
+            .map((part, index) => (
+              <Fragment key={index}>
+                {index > 0 && ' · '}
+                {part}
+              </Fragment>
+            ))}
         </p>
       </div>
     </div>
   )
+}
+
+/**
+ * "into" a folder by its name. Only rendered for a folder open in Files,
+ * whose list is already loaded there.
+ */
+export function FolderName({ id }: { id: string }) {
+  const { folders } = useFolders()
+  return `into ${folders.find((folder) => folder.id === id)?.name ?? 'this folder'}`
 }

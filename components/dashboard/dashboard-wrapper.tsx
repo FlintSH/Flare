@@ -1,29 +1,45 @@
+import { Suspense } from 'react'
+
 import { GlobalDropZone } from '@/components/dashboard/global-drop-zone'
 import { DashboardNav } from '@/components/dashboard/nav'
 import { UserNav } from '@/components/dashboard/user-nav'
+import { FileSheetHost } from '@/components/file/sheet/file-sheet-host'
+import { PasteAnywhere } from '@/components/intake/paste-anywhere'
 import { DynamicBackground } from '@/components/layout/dynamic-background'
 import { Footer } from '@/components/layout/footer'
 import { PermissionGate } from '@/components/roles/permission-gate'
 import { UploadTraySync } from '@/components/upload/upload-tray-sync'
 
+import type { InstanceFeatures } from '@/lib/navigation/places'
+import type { SavedUploadSettings } from '@/lib/uploads/saved-settings'
+
 interface DashboardWrapperProps {
   children: React.ReactNode
   showFooter: boolean
   maxUploadSize: number
+  /** What a plain upload gets, which drop and paste say before they start. */
+  saved: SavedUploadSettings | null
+  features: InstanceFeatures
 }
 
 export function DashboardWrapper({
   children,
   showFooter,
   maxUploadSize,
+  saved,
+  features,
 }: DashboardWrapperProps) {
   return (
     <div className="relative flex flex-col flex-1 min-h-screen">
       <DynamicBackground />
       <PermissionGate permission="files.upload">
-        <GlobalDropZone maxSize={maxUploadSize} />
+        <GlobalDropZone maxSize={maxUploadSize} saved={saved} />
         <UploadTraySync />
       </PermissionGate>
+      <PasteAnywhere maxSize={maxUploadSize} saved={saved} />
+      <Suspense>
+        <FileSheetHost />
+      </Suspense>
 
       <a
         href="#main-content"
@@ -40,7 +56,7 @@ export function DashboardWrapper({
         />
         <div className="relative mx-auto max-w-7xl px-4">
           <div className="flex h-16 items-center gap-3 rounded-2xl border border-border/60 bg-background/85 px-4 shadow-sm backdrop-blur-xl sm:px-6">
-            <DashboardNav />
+            <DashboardNav features={features} />
             <div className="ml-auto flex shrink-0 items-center">
               <UserNav />
             </div>

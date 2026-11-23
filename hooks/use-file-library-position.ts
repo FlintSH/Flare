@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+import { FILE_SHEET_PARAM, LINK_SHEET_PARAM } from '@/lib/client/file-sheet'
 import { type LibraryFilters, readLibraryFilters } from '@/lib/library/contract'
 import {
   libraryPositionKey,
@@ -15,14 +16,26 @@ type PendingPosition = {
   scope?: string
 }
 
+/**
+ * The address's query without a file's or link's sheet: a sheet opens over
+ * the library, so opening, stepping or closing one doesn't move it.
+ */
+function libraryQuery(search: string | URLSearchParams) {
+  const params = new URLSearchParams(search)
+  params.delete(FILE_SHEET_PARAM)
+  params.delete(LINK_SHEET_PARAM)
+  return params.toString()
+}
+
 /** Store only a filter identity and file rank in this browser history entry. */
 export function useFileLibraryPosition(
   filters: LibraryFilters,
   pathname: string,
-  urlQuery: string,
+  addressQuery: string,
   onRestore: () => void,
   scope?: string
 ) {
+  const urlQuery = libraryQuery(addressQuery)
   const key = libraryPositionKey(filters, scope)
   const fallback = (filters.page - 1) * filters.limit
   const position = useRef(
@@ -32,7 +45,12 @@ export function useFileLibraryPosition(
   )
   const pending = useRef<PendingPosition | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const previous = useRef({ key, pathname, query: urlQuery })
+  const previous = useRef({
+    key,
+    pathname,
+    query: urlQuery,
+    address: addressQuery,
+  })
   const restoreCallback = useRef(onRestore)
   restoreCallback.current = onRestore
 
@@ -46,7 +64,7 @@ export function useFileLibraryPosition(
     // Local filters can change before router.push commits its URL. Equally, a
     // link can commit its destination before this component's cleanup runs.
     if (
-      actual.toString() !== next.query ||
+      libraryQuery(actual) !== next.query ||
       libraryPositionKey(readLibraryFilters(actual), next.scope) !== next.key
     )
       return
@@ -73,11 +91,18 @@ export function useFileLibraryPosition(
   )
 
   useEffect(() => {
+    const last = previous.current
+    previous.current = { key, pathname, query: urlQuery, address: addressQuery }
+    // A sheet opened, stepped or closed over the library: it stays put.
+    if (
+      last.key === key &&
+      last.pathname === pathname &&
+      last.query === urlQuery
+    )
+      return
     if (timer.current !== null) clearTimeout(timer.current)
     timer.current = null
     pending.current = null
-    const last = previous.current
-    previous.current = { key, pathname, query: urlQuery }
     const actual = new URLSearchParams(window.location.search)
     const matches =
       window.location.pathname === pathname &&
@@ -96,7 +121,7 @@ export function useFileLibraryPosition(
       moved
     )
       restoreCallback.current()
-  }, [key, pathname, urlQuery, fallback, scope])
+  }, [key, pathname, urlQuery, addressQuery, fallback, scope])
 
   useEffect(() => {
     const click = (event: MouseEvent) => {
@@ -108,6 +133,14 @@ export function useFileLibraryPosition(
       if (
         window.location.pathname !== pathname ||
         libraryPositionKey(readLibraryFilters(actual), scope) !== key
+      )
+        return
+      // Back or Forward past a sheet's entry (only the sheet in the address
+      // changed): the library under it is where it was.
+      const address = actual.toString()
+      if (
+        address !== previous.current.address &&
+        libraryQuery(actual) === previous.current.query
       )
         return
       if (timer.current !== null) clearTimeout(timer.current)

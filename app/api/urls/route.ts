@@ -21,7 +21,13 @@ export const POST = api(async (request) => {
 
 export const GET = api(async (request) => {
   const user = await requireAccount(request)
-  return apiResponse({ urls: await listOwnShortLinks(user.id) })
+  // ?id= asks for one of the account's links (a link's sheet), not all:
+  // exactly that id, so an empty or over-long one matches nothing.
+  const id = new URL(request.url).searchParams.get('id')
+  if (id !== null && (!id || id.length > 64)) return apiResponse({ urls: [] })
+  return apiResponse({
+    urls: await listOwnShortLinks(user.id, id ?? undefined),
+  })
 })
 
 export const OPTIONS = preflight('token')

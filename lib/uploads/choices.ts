@@ -56,7 +56,7 @@ export const RELATIVE_EXPIRATIONS: readonly {
 const afterLabel = (after: RelativeExpiration) =>
   RELATIVE_EXPIRATIONS.find((option) => option.value === after)!.label
 
-function savedExpiry(
+export function savedExpiry(
   expiration: Required<UploadProfileOptions>['expiration']
 ): Expiry {
   return expiration === 'DISABLED'
@@ -134,6 +134,40 @@ export function expiryLabel(expiry: Expiry, action: ExpiryAction) {
   return expiry.kind === 'after'
     ? `${verb} after ${afterLabel(expiry.after)}`
     : `${verb} ${format(expiry.at, 'MMM d, p')}`
+}
+
+/**
+ * What a plain upload gets from saved settings, in words for one line: its
+ * visibility and when it expires.
+ */
+export function savedOutcome(
+  saved: Required<UploadProfileOptions>,
+  canShare: boolean
+) {
+  return {
+    visibility:
+      canShare && saved.visibility === 'PUBLIC'
+        ? ('PUBLIC' as const)
+        : ('PRIVATE' as const),
+    expires: expiryLabel(savedExpiry(saved.expiration), saved.expiryAction),
+  }
+}
+
+/**
+ * Whether making `expiration` the account's default (with its action) would
+ * give plain uploads that expiry, with `profile`, the default profile, laid
+ * over the account's values as uploads merge them. A custom date (null)
+ * can't be saved.
+ */
+export function accountDecidesExpiry(
+  expiration: Required<UploadProfileOptions>['expiration'] | null,
+  profile: UploadProfileOptions | null
+) {
+  if (!expiration) return false
+  // A profile that sets the time decides it, whatever it's set to; one that
+  // sets only the action decides what happens, which Never doesn't need.
+  if (profile?.expiration !== undefined) return false
+  return expiration === 'DISABLED' || profile?.expiryAction === undefined
 }
 
 /** What a profile does, in short parts, for choosing between them. */

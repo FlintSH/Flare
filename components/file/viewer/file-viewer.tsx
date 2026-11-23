@@ -9,6 +9,8 @@ interface FileViewerProps {
   file: FileViewerFile
   /** Sent with every request for the file's content. */
   password?: string
+  /** The owner looking at their own file (its sheet): no view is counted. */
+  ownView?: boolean
 }
 
 /** Smaller changes than this, in pixels, aren't worth easing. */
@@ -58,7 +60,7 @@ function useSettledHeight() {
   return frame
 }
 
-export function FileViewer({ file, password }: FileViewerProps) {
+export function FileViewer({ file, password, ownView }: FileViewerProps) {
   // PDFs and audio load once hydrated: whether a PDF shows inline depends on
   // the browser, and the audio player must be listening before its file
   // starts to load. An image doesn't wait; its viewer reads how it ended.
@@ -68,7 +70,12 @@ export function FileViewer({ file, password }: FileViewerProps) {
 
   return (
     <div ref={frame} className="flex min-w-0 items-center justify-center">
-      <FileViewerContent file={file} password={password} hydrated={hydrated} />
+      <FileViewerContent
+        file={file}
+        password={password}
+        hydrated={hydrated}
+        ownView={ownView}
+      />
     </div>
   )
 }

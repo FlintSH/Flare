@@ -40,9 +40,11 @@ Continue with [uploading files](./uploading) and [sharing and privacy](./sharing
 
 ## Find your way around
 
-The bar at the top of the dashboard holds your own places: **Files**, **Upload**, **Paste**, and **Links**. Select your avatar at the right of the bar for the account menu, which has **Profile** and **Sign out**. If your roles let you help run the instance, the bar ends with an **Admin** menu after a thin divider.
+The bar at the top of the dashboard holds your own places: **Files**, **Upload**, **Paste**, and **Links**. If your roles let you help run the instance, an **Admin** menu follows after a thin divider. The magnifier at the end of those buttons is **Find**. Your avatar at the right opens the account menu, with **Profile** and **Sign out**.
 
-<Screenshot src="/screenshots/navigation/admin-menu.webp" alt="Dashboard bar with Files, Upload, Paste, and Links, then a divider and an open Admin menu listing Users, Roles, Audit log, and Settings, each with a short description" caption="Administration pages share one Admin menu, so the bar stays the same length however much access you have." />
+You don't need to know where something lives. Press <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd>) and type what you're after, a file or a setting such as `sharex`. Click any file or short link to open its sheet, where everything about it can change. Paste a file, link or text on any page and Flare offers the one thing to do with it. See [Find, sheets and paste anywhere](./moving-around).
+
+<Screenshot src="/screenshots/navigation/admin-menu.webp" alt="Dashboard bar with Files, Upload, Paste, and Links, then a divider, an open Admin menu and a search magnifier listing Users, Roles, Audit log, and Settings, each with a short description" caption="Administration pages share one Admin menu, so the bar stays the same length however much access you have." />
 
 | Place                      | What you can do                                                                                                                                       |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |

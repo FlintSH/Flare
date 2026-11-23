@@ -17,6 +17,7 @@ import {
   ChevronDown,
   Clock,
   Folder,
+  FolderPlus,
   Globe,
   KeyRound,
   Lock,
@@ -24,6 +25,10 @@ import {
   Tag,
 } from 'lucide-react'
 
+import {
+  FolderDialog,
+  TagManager,
+} from '@/components/dashboard/library-dialogs'
 import {
   FilePasswordHint,
   filePasswordFieldProps,
@@ -57,12 +62,14 @@ import {
   RELATIVE_EXPIRATIONS,
   type RelativeExpiration,
   type Visibility,
+  accountDecidesExpiry,
   expiryLabel,
   permittedAction,
   profileSummary,
 } from '@/lib/uploads/choices'
 import { cn } from '@/lib/utils'
 
+import { useSaveDefaults } from './save-defaults'
 import type { UploadOptionsState } from './use-upload-options'
 
 /**
@@ -170,21 +177,25 @@ export function UploadOptionsBar({
   const saved = state.unpicked
   const set = (change: Partial<typeof choices>) =>
     setChoices((current) => ({ ...current, ...change }))
+  /** Unpicks these chips once their choice is saved, unless they changed. */
+  const clearIfStill = (submitted: Partial<typeof choices>) => () =>
+    setChoices((current) => {
+      const keys = Object.keys(submitted) as (keyof typeof choices)[]
+      return keys.every((key) => current[key] === submitted[key])
+        ? {
+            ...current,
+            ...Object.fromEntries(keys.map((key) => [key, undefined])),
+          }
+        : current
+    })
 
   const profileList = profiles.data?.profiles ?? []
   // The page says which lists exist, so chips don't appear as they load.
-  const showProfiles =
-    can.chooseProfile && (state.saved.has.profiles || profileList.length > 0)
-  const showFolders =
-    can.chooseFolder &&
-    (state.saved.has.folders ||
-      folders.folders.length > 0 ||
-      !!choices.folderId)
-  const showTags =
-    can.tag &&
-    (state.saved.has.tags ||
-      tags.tags.length > 0 ||
-      effective.tagIds.length > 0)
+  // Each chip the role can use is always there, so profiles, folders and
+  // tags can be found where they're used; empty, its menu makes the first.
+  const showProfiles = can.chooseProfile
+  const showFolders = can.chooseFolder
+  const showTags = can.tag
   const sortedFolders = [...folders.folders].sort((a, b) =>
     folderPath(folders.folders, a.id).localeCompare(
       folderPath(folders.folders, b.id)
@@ -192,10 +203,12 @@ export function UploadOptionsBar({
   )
 
   // The default applies when nothing is picked; without one, no profile does.
-  const defaultProfile =
-    profiles.data?.profiles.find(
-      ({ id }) => id === profiles.data?.defaultProfileId
-    ) ?? state.saved.profile
+  // The page's value stands in only until the list loads.
+  const defaultProfile = profiles.data
+    ? profiles.data.profiles.find(
+        ({ id }) => id === profiles.data?.defaultProfileId
+      )
+    : state.saved.profile
   const profileId =
     choices.profileId === undefined
       ? (defaultProfile?.id ?? null)
@@ -206,6 +219,86 @@ export function UploadOptionsBar({
       'Profile')
     : 'No profile'
   const accountOnly = state.account
+  const defaults = useSaveDefaults()
+  const [creatingFolder, setCreatingFolder] = useState(false)
+  const [managingTags, setManagingTags] = useState(false)
+  const selectedProfile = profileId
+    ? profileList.find(({ id }) => id === profileId)
+    : undefined
+  const accountExpiry =
+    effective.expiry.kind === 'never'
+      ? ('DISABLED' as const)
+      : effective.expiry.kind === 'after'
+        ? effective.expiry.after
+        : null
+  // Whether saving this expiry as the account's would change plain uploads,
+  // the ones that pick nothing and so get the default profile over the
+  // account's settings, or the default profile decides it. Unknown while
+  // the profiles load.
+  const defaultOptions = profiles.data
+    ? (profiles.data.profiles.find(
+        ({ id }) => id === profiles.data?.defaultProfileId
+      )?.options ?? null)
+    : state.saved.profile
+      ? undefined
+      : null
+  const expirySource =
+    defaultOptions === undefined || !accountExpiry
+      ? null
+      : accountDecidesExpiry(accountExpiry, defaultOptions)
+        ? ({ kind: 'account' } as const)
+        : ({
+            kind: 'profile',
+            name: defaultProfile?.name ?? null,
+          } as const)
+  // Saving is offered, or said to be the default profile's call, only for a
+  // pick the role could save that differs from the account's default.
+  const savable =
+    can.saveDefaults &&
+    !!accountExpiry &&
+    (accountExpiry !== accountOnly.expiration ||
+      (accountExpiry !== 'DISABLED' &&
+        effective.expiryAction !== accountOnly.expiryAction))
+  const expiryFooter = !savable ? null : expirySource?.kind === 'profile' ? (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem asChild>
+        <Link href="/dashboard/profile?section=uploads#upload-profiles">
+          <span className="min-w-0 text-xs text-muted-foreground">
+            {expirySource.name
+              ? `Your default profile, ${expirySource.name}, decides expiry`
+              : 'Your default profile decides expiry'}
+          </span>
+        </Link>
+      </DropdownMenuItem>
+    </>
+  ) : expirySource?.kind === 'account' && accountExpiry ? (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        onSelect={() =>
+          void defaults.saveExpiry(
+            {
+              expiration: accountExpiry,
+              action: effective.expiryAction,
+              label: expiryLabel(effective.expiry, effective.expiryAction),
+            },
+            {
+              expiration: accountOnly.expiration,
+              action: accountOnly.expiryAction,
+            },
+            // Cleared only if it's still the choice that was saved.
+            clearIfStill({
+              expiry: choices.expiry,
+              expiryAction: choices.expiryAction,
+            })
+          )
+        }
+      >
+        Save as account default
+      </DropdownMenuItem>
+    </>
+  ) : null
 
   return (
     <div className="space-y-2">
@@ -267,9 +360,35 @@ export function UploadOptionsBar({
                   />
                 </DropdownMenuRadioGroup>
                 <DropdownMenuSeparator />
+                {/* (A profile deleted elsewhere is no choice to save.) */}
+                {(selectedProfile?.id ?? null) !==
+                  (defaultProfile?.id ?? null) &&
+                  (!profileId || Boolean(selectedProfile)) &&
+                  profiles.data && (
+                    <DropdownMenuItem
+                      onSelect={() =>
+                        void defaults.makeDefault(
+                          selectedProfile
+                            ? {
+                                id: selectedProfile.id,
+                                name: selectedProfile.name,
+                              }
+                            : null,
+                          profiles.data?.defaultProfileId ?? null,
+                          clearIfStill({ profileId: choices.profileId })
+                        )
+                      }
+                    >
+                      {selectedProfile
+                        ? `Make ${selectedProfile.name} the default`
+                        : 'Use no profile by default'}
+                    </DropdownMenuItem>
+                  )}
                 <DropdownMenuItem asChild>
-                  <Link href="/dashboard/profile?section=uploads">
-                    Manage profiles
+                  <Link href="/dashboard/profile?section=uploads#upload-profiles">
+                    {profileList.length || state.saved.has.profiles
+                      ? 'Manage profiles'
+                      : 'New profile…'}
                   </Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -311,6 +430,7 @@ export function UploadOptionsBar({
             canAct={can.act}
             onChange={(expiry, expiryAction) => set({ expiry, expiryAction })}
             onReset={() => set({ expiry: undefined, expiryAction: undefined })}
+            footer={expiryFooter}
           />
 
           {showFolders && (
@@ -352,6 +472,15 @@ export function UploadOptionsBar({
                     </DropdownMenuRadioItem>
                   ))}
                 </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() =>
+                    FolderDialog.show(() => setCreatingFolder(true))
+                  }
+                >
+                  <FolderPlus />
+                  New folder…
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
@@ -398,6 +527,12 @@ export function UploadOptionsBar({
                     </DropdownMenuCheckboxItem>
                   )
                 })}
+                {tags.tags.length > 0 && <DropdownMenuSeparator />}
+                <DropdownMenuItem
+                  onSelect={() => TagManager.show(() => setManagingTags(true))}
+                >
+                  {tags.tags.length ? 'Manage tags…' : 'New tag…'}
+                </DropdownMenuItem>
                 {effective.picked.tags && (
                   <ResetItem
                     saved={
@@ -434,6 +569,27 @@ export function UploadOptionsBar({
         <p role="alert" className="text-sm text-destructive">
           {state.problem}
         </p>
+      )}
+      {creatingFolder && (
+        <FolderDialog
+          action={{ kind: 'create', parentId: null }}
+          onClose={() => setCreatingFolder(false)}
+          onCreated={(folder) => {
+            setCreatingFolder(false)
+            set({ folderId: folder.id })
+          }}
+          onDeleted={() => {}}
+        />
+      )}
+      {managingTags && (
+        <TagManager
+          open
+          onOpenChange={setManagingTags}
+          onDeleted={(id) =>
+            effective.tagIds.includes(id) &&
+            set({ tagIds: effective.tagIds.filter((tag) => tag !== id) })
+          }
+        />
       )}
     </div>
   )
@@ -613,6 +769,7 @@ function ExpiryChip({
   canAct,
   onChange,
   onReset,
+  footer,
 }: {
   expiry: Expiry
   action: ExpiryAction
@@ -622,6 +779,8 @@ function ExpiryChip({
   canAct: (action: ExpiryAction) => boolean
   onChange: (expiry: Expiry, action: ExpiryAction) => void
   onReset: () => void
+  /** Ends the menu: saving the choice as a default, or what decides it. */
+  footer?: ReactNode
 }) {
   const trigger = useRef<HTMLButtonElement>(null)
   const [custom, setCustom] = useState(false)
@@ -706,6 +865,7 @@ function ExpiryChip({
             </>
           )}
           {picked && <ResetItem saved={saved} onSelect={onReset} />}
+          {footer}
         </DropdownMenuContent>
       </DropdownMenu>
       <ExpiryModal

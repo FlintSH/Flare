@@ -63,6 +63,8 @@ On **Upload** and **Paste**, the first button in the options row picks the profi
 
 Each profile in the menu lists what it does: visibility, expiration, original or random names, tags and share page style. The other buttons in the row show the effective visibility, expiration, folder and tags, and can override each for that upload.
 
+To make the profile you picked your default without leaving the page, choose **Make … the default** in the same menu (**Use no profile by default** for **No profile**). The expiration button can likewise save its choice as your account default, but only when that default is what decides a plain upload's expiry; when your default profile sets the expiration or what happens then, the menu names it instead. See [changing defaults where you use them](./moving-around#change-defaults-where-you-use-them).
+
 [Creating or extracting an archive](./archives#choose-an-upload-profile-deliberately) has a separate default: **Private (no profile)** creates private files without expiration and bypasses your account's saved default profile. You can explicitly select an owned profile in either archive dialog. Its normal settings and permissions then apply to the new outputs, while **Save to** independently chooses the destination. Review a public profile carefully: it can expose extracted files or the contents of a newly packaged archive even when the source files were private.
 
 ::: details Example: make one upload public without changing your default

@@ -1,12 +1,11 @@
 'use client'
 
-import { Fragment, useState } from 'react'
+import { type MouseEvent, useState } from 'react'
 
 import Image from 'next/image'
 import Link from 'next/link'
 
 import { FileType } from '@/types/components/file'
-import { ExpiryAction } from '@/types/events'
 import { format, formatDistanceToNow } from 'date-fns'
 import {
   Clock,
@@ -15,63 +14,31 @@ import {
   Folder,
   Globe,
   KeyRound,
-  Loader2,
   Lock,
   MoreHorizontal,
   Tag,
   Timer,
 } from 'lucide-react'
 
-import {
-  CARD_BUTTONS,
-  CARD_MENU,
-  FILE_ACTIONS,
-  type FileActionId,
-  fileActionAllowed,
-} from '@/components/dashboard/file-card/actions'
-import {
-  ArchiveBrowserDialog,
-  ExpiryModal,
-  FileTagsDialog,
-  ImageLightbox,
-  MoveFilesDialog,
-} from '@/components/dashboard/library-dialogs'
+import { FileActionMenuItems } from '@/components/file/actions/file-action-menu'
+import { useFileActions } from '@/components/file/actions/use-file-actions'
 import { FileTypeIcon } from '@/components/file/file-type-icon'
 import { VideoBadge } from '@/components/file/video-badge'
-import { OcrDialog } from '@/components/shared/ocr-dialog'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
-import { RefusedRequest, apiRequest } from '@/lib/client/request'
+import { openFileSheet } from '@/lib/client/file-sheet'
 import { fileKind, fileTypeLabel, hasThumbnail } from '@/lib/files/file-kind'
-import { filePasswordHint } from '@/lib/files/password-policy'
-import { fileUrls, thumbnailLoader } from '@/lib/files/urls'
+import { thumbnailLoader } from '@/lib/files/urls'
 import type { FolderView } from '@/lib/folders/schema'
 import { cn, formatFileSize, getRelativeTime } from '@/lib/utils'
-
-import { useOcr } from '@/hooks/use-ocr'
-import { usePermissions } from '@/hooks/use-permissions'
-import { useRequestLifetime } from '@/hooks/use-request-lifetime'
-import { useToast } from '@/hooks/use-toast'
 
 // Folder and tag labels share one fixed-height line with the activity counts,
 // so every card in the grid keeps the same height. Each name is capped so a
@@ -81,19 +48,12 @@ const labelClassName =
   'inline-flex h-5 min-w-0 items-center gap-1 overflow-hidden rounded-md border border-border/60 bg-muted/70 px-1.5 text-[11px] leading-4 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none'
 const compactCount = new Intl.NumberFormat(undefined, { notation: 'compact' })
 
-const TRY_AGAIN = 'Please try again.'
-const failure = (error: unknown) =>
-  error instanceof RefusedRequest ? error.message : TRY_AGAIN
-
 interface FileCardProps {
   file: FileType
   onDelete?: (id: string) => void
-  onUpdate?: () => void
-  onPreview?: (file: FileType) => void
   onBrowseArchive?: () => void
   onEditTags?: () => void
   onTagSelect?: (id: string) => void
-  onMove?: () => void
   folder?: FolderView
   onFolderSelect?: (id: string) => void
   selected?: boolean
@@ -107,249 +67,40 @@ interface FileCardProps {
 export function FileCard({
   file,
   onDelete,
-  onUpdate,
-  onPreview,
   onBrowseArchive,
   onEditTags,
   onTagSelect,
-  onMove,
   folder,
   onFolderSelect,
   selected,
   onSelect,
 }: FileCardProps) {
-  const { user } = usePermissions()
-  const { toast } = useToast()
-  const lifetime = useRequestLifetime()
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false)
-  const [isVisibilityDialogOpen, setIsVisibilityDialogOpen] = useState(false)
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [password, setPassword] = useState('')
-  const passwordHint = password ? filePasswordHint(password) : null
-  const [visibility, setVisibility] = useState<'PUBLIC' | 'PRIVATE'>(
-    file.visibility
-  )
-  const [mutation, setMutation] = useState<
-    'delete' | 'password' | 'visibility' | null
-  >(null)
-  const urls = fileUrls(file)
-  const ocr = useOcr(urls.ocr)
-  const [isExpiryModalOpen, setIsExpiryModalOpen] = useState(false)
   const [previewFailed, setPreviewFailed] = useState(false)
-
-  const handlePasswordDialogOpenChange = (open: boolean) => {
-    if (mutation === 'password') return
-    setPassword('')
-    setIsPasswordDialogOpen(open)
+  // A file opens its sheet in the app; a modified click still opens its
+  // share page in a new tab, as a link does.
+  const openSheet = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    event.preventDefault()
+    openFileSheet(file.id)
   }
-
-  const handleCopyLink = async () => {
-    const { signal } = lifetime.current
-    if (signal.aborted) return
-    try {
-      await navigator.clipboard.writeText(
-        fileUrls(file, { origin: window.location.origin }).page
-      )
-      if (signal.aborted) return
-      toast({
-        title: 'Link copied',
-        description: 'Your file is ready to share.',
-      })
-    } catch {
-      if (signal.aborted) return
-      toast({
-        title: 'Couldn’t copy the link',
-        description: 'Open the file and copy its address from your browser.',
-        variant: 'destructive',
-      })
-    }
-  }
-
-  const handleDelete = async () => {
-    const { signal } = lifetime.current
-    if (mutation || signal.aborted) return
-    setMutation('delete')
-    try {
-      await apiRequest(`/api/files/${file.id}`, {
-        method: 'DELETE',
-        signal,
-        fallback: TRY_AGAIN,
-      })
-      if (signal.aborted) return
-      setIsDeleteDialogOpen(false)
-      onDelete?.(file.id)
-      toast({
-        title: 'File deleted',
-        description: 'The file has been permanently deleted.',
-      })
-    } catch (error) {
-      if (signal.aborted) return
-      toast({
-        title: 'Couldn’t delete this file',
-        description: failure(error),
-        variant: 'destructive',
-      })
-    } finally {
-      if (!signal.aborted) setMutation(null)
-    }
-  }
-
-  const handlePasswordUpdate = async () => {
-    const { signal } = lifetime.current
-    if (mutation || signal.aborted) return
-    setMutation('password')
-    try {
-      await apiRequest(`/api/files/${file.id}`, {
-        method: 'PATCH',
-        body: { password: password || null },
-        signal,
-        fallback: TRY_AGAIN,
-      })
-      if (signal.aborted) return
-      toast({
-        title: password
-          ? 'Password protection enabled'
-          : 'Password protection removed',
-        description: password
-          ? 'Visitors need your password to open this file.'
-          : 'The file no longer requires a password.',
-      })
-      setPassword('')
-      setIsPasswordDialogOpen(false)
-      onUpdate?.()
-    } catch (error) {
-      if (signal.aborted) return
-      toast({
-        title: 'Couldn’t update the password',
-        description: failure(error),
-        variant: 'destructive',
-      })
-    } finally {
-      if (!signal.aborted) setMutation(null)
-    }
-  }
-
-  const handleVisibilityUpdate = async () => {
-    const { signal } = lifetime.current
-    if (mutation || signal.aborted) return
-    setMutation('visibility')
-    try {
-      await apiRequest(`/api/files/${file.id}`, {
-        method: 'PATCH',
-        body: { visibility },
-        signal,
-        fallback: TRY_AGAIN,
-      })
-      if (signal.aborted) return
-      toast({
-        title: 'Visibility updated',
-        description: `This file is now ${visibility.toLowerCase()}.`,
-      })
-      setIsVisibilityDialogOpen(false)
-      onUpdate?.()
-    } catch (error) {
-      if (signal.aborted) return
-      toast({
-        title: 'Couldn’t update visibility',
-        description: failure(error),
-        variant: 'destructive',
-      })
-    } finally {
-      if (!signal.aborted) setMutation(null)
-    }
-  }
-
-  const handleExpiryUpdate = async (
-    expiresAt: Date | null,
-    action?: ExpiryAction
-  ) => {
-    const { signal } = lifetime.current
-    if (signal.aborted) return
-    try {
-      await apiRequest(`/api/files/${file.id}/expiry`, {
-        ...(expiresAt
-          ? {
-              body: {
-                expiresAt: expiresAt.toISOString(),
-                action: action || ExpiryAction.DELETE,
-              },
-            }
-          : { method: 'DELETE' }),
-        signal,
-        fallback: TRY_AGAIN,
-      })
-      if (signal.aborted) return
-      toast({
-        title: expiresAt ? 'Expiration scheduled' : 'Expiration removed',
-        description: expiresAt
-          ? 'Your file’s expiration has been updated.'
-          : 'This file will no longer expire.',
-      })
-      setIsExpiryModalOpen(false)
-      onUpdate?.()
-    } catch (error) {
-      if (signal.aborted) return
-      toast({
-        title: 'Couldn’t update expiration',
-        description: failure(error),
-        variant: 'destructive',
-      })
-      // ExpiryModal keeps the form open when saving fails.
-      throw error
-    }
-  }
-
-  const isImage = file.mimeType.startsWith('image/')
+  const {
+    urls,
+    editTags,
+    offered,
+    permitted,
+    menuLabel,
+    preloadDialogs,
+    dialogs: fileDialogs,
+  } = useFileActions(file, {
+    onDelete,
+    onBrowseArchive,
+    onEditTags,
+  })
   const isVideo = fileKind(file).kind === 'video'
   const visibilityLabel = file.visibility === 'PUBLIC' ? 'Public' : 'Private'
   const VisibilityIcon = file.visibility === 'PUBLIC' ? Globe : Lock
   const tags = file.tags ?? []
   const visibleTags = tags.slice(0, folder ? 1 : 2)
-  const permitted = (id: FileActionId) => fileActionAllowed(user, id)
-  const browseArchive = permitted('browseArchive') ? onBrowseArchive : undefined
-  // What each action does on this card; one without an entry isn't offered.
-  const handlers: Partial<
-    Record<
-      FileActionId,
-      { run?: () => void; href?: string; download?: string; disabled?: boolean }
-    >
-  > = {
-    ...(browseArchive && { browseArchive: { run: browseArchive } }),
-    open: { href: urls.page },
-    copyLink: { run: () => void handleCopyLink() },
-    download: { href: urls.download, download: file.name },
-    ...(onEditTags && { editTags: { run: onEditTags } }),
-    ...(onMove && { move: { run: onMove } }),
-    visibility: {
-      run: () => {
-        setVisibility(file.visibility)
-        setIsVisibilityDialogOpen(true)
-      },
-    },
-    password: { run: () => handlePasswordDialogOpenChange(true) },
-    expiration: {
-      run: () => ExpiryModal.show(() => setIsExpiryModalOpen(true)),
-    },
-    ...(isImage && {
-      ocr: { run: () => void ocr.extract(), disabled: ocr.loading },
-    }),
-    delete: { run: () => setIsDeleteDialogOpen(true) },
-  }
-  const offered = (id: FileActionId) =>
-    permitted(id) ? handlers[id] : undefined
-  // The tag count opens the editor only where the menu offers it.
-  const editTags = offered('editTags')
-  // The dialogs this card opens are fetched on first use. That starts when
-  // the pointer or the keyboard reaches a card, so they are usually here by
-  // the time one is asked for.
-  const preloadDialogs = () => {
-    if (browseArchive) ArchiveBrowserDialog.preload()
-    else if (isImage && onPreview) ImageLightbox.preload()
-    if (editTags) FileTagsDialog.preload()
-    if (offered('move')) MoveFilesDialog.preload()
-    if (offered('expiration')) ExpiryModal.preload()
-  }
-
   return (
     <Card
       onPointerEnter={preloadDialogs}
@@ -370,22 +121,9 @@ export function FileCard({
           prefetch={false}
           href={urls.page}
           aria-label={`Open ${file.name}`}
-          aria-haspopup={
-            browseArchive || (isImage && onPreview) ? 'dialog' : undefined
-          }
-          onClick={(event) => {
-            if (
-              (browseArchive || (isImage && onPreview)) &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.shiftKey &&
-              !event.altKey
-            ) {
-              event.preventDefault()
-              if (browseArchive) browseArchive()
-              else onPreview?.(file)
-            }
-          }}
+          aria-haspopup="dialog"
+          data-sheet-opener={file.id}
+          onClick={openSheet}
           className="relative block aspect-[4/3] overflow-hidden bg-muted/50 after:pointer-events-none after:absolute after:inset-0 after:z-10 after:hidden after:ring-2 after:ring-inset after:ring-ring focus-visible:outline-none focus-visible:after:block"
         >
           {hasThumbnail(file) && !previewFailed ? (
@@ -402,19 +140,15 @@ export function FileCard({
               />
               {/* Steps aside for the hover and focus controls, as the
                   icon of a file without a picture does. */}
-              {isVideo && (
-                <VideoBadge className="transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0" />
-              )}
+              {isVideo && <VideoBadge />}
             </>
           ) : (
-            // The icon steps aside for the hover and focus controls, so it
-            // doesn't show through between them.
-            <div className="flex h-full flex-col items-center justify-center gap-3 transition-opacity group-has-[:focus-visible]:opacity-0 [@media(hover:hover)]:group-hover:opacity-0">
+            <div className="flex h-full flex-col items-center justify-center gap-3">
               <FileTypeIcon
                 file={file}
                 className="h-12 w-12 text-muted-foreground"
               />
-              <span className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground">
+              <span className="rounded-md border border-border bg-background/60 px-2 py-1 text-xs font-medium text-muted-foreground max-sm:hidden">
                 {file.name.includes('.')
                   ? file.name.split('.').pop()?.toUpperCase().slice(0, 12)
                   : fileTypeLabel(file.mimeType)}
@@ -422,83 +156,6 @@ export function FileCard({
             </div>
           )}
         </Link>
-        {/* Hover and keyboard focus veil the preview halfway toward the page
-            colour, in both themes, with solid buttons on top. Only keyboard
-            focus counts, so a tap on a phone doesn't leave the card veiled. */}
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background/50 opacity-0 transition-opacity group-has-[:focus-visible]:opacity-100 group-has-[:focus-visible]:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:[&>*]:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100">
-          {browseArchive ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-background"
-              onClick={browseArchive}
-            >
-              Browse archive
-            </Button>
-          ) : isImage && onPreview ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-background"
-              onClick={() => onPreview(file)}
-            >
-              View image
-            </Button>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="bg-background"
-              asChild
-            >
-              <Link prefetch={false} href={urls.page}>
-                View
-              </Link>
-            </Button>
-          )}
-          <div className="flex max-w-[calc(100%-1rem)] flex-wrap justify-center gap-1">
-            {CARD_BUTTONS.map((id) => {
-              const handler = offered(id)
-              if (!handler) return null
-              const { icon: Icon, button } = FILE_ACTIONS[id]
-              const className =
-                id === 'delete'
-                  ? 'h-8 w-8 bg-background text-destructive hover:bg-danger/10 hover:text-destructive'
-                  : 'h-8 w-8 bg-background'
-              return handler.href ? (
-                <Button
-                  key={id}
-                  variant="outline"
-                  size="icon"
-                  className={className}
-                  asChild
-                >
-                  <a
-                    href={handler.href}
-                    download={handler.download}
-                    aria-label={button.label(file.name)}
-                    title={button.title}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </a>
-                </Button>
-              ) : (
-                <Button
-                  key={id}
-                  variant="outline"
-                  size="icon"
-                  className={className}
-                  disabled={handler.disabled}
-                  onClick={handler.run}
-                  aria-label={button.label(file.name)}
-                  title={button.title}
-                >
-                  <Icon className="h-4 w-4" />
-                </Button>
-              )
-            })}
-          </div>
-        </div>
         {onSelect && (
           <label className="absolute left-2 top-2 z-10 flex cursor-pointer items-center rounded-lg border border-border/50 bg-background/95 p-2 shadow-sm">
             <input
@@ -526,52 +183,7 @@ export function FileCard({
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>Manage file</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {CARD_MENU.map((group, index) => (
-                <Fragment key={index}>
-                  {index > 0 && <DropdownMenuSeparator />}
-                  {group.map((id) => {
-                    const handler = offered(id)
-                    if (!handler) return null
-                    const { icon: Icon, menu } = FILE_ACTIONS[id]
-                    const content = (
-                      <>
-                        <Icon />
-                        {typeof menu === 'function'
-                          ? menu({
-                              hasPassword: file.hasPassword,
-                              busy: ocr.loading,
-                            })
-                          : menu}
-                      </>
-                    )
-                    return (
-                      <DropdownMenuItem
-                        key={id}
-                        asChild={!!handler.href}
-                        disabled={handler.disabled}
-                        onSelect={handler.run}
-                        className={
-                          id === 'delete'
-                            ? 'text-destructive focus:bg-danger/10 focus:text-destructive'
-                            : undefined
-                        }
-                      >
-                        {!handler.href ? (
-                          content
-                        ) : handler.download ? (
-                          <a href={handler.href} download={handler.download}>
-                            {content}
-                          </a>
-                        ) : (
-                          <Link prefetch={false} href={handler.href}>
-                            {content}
-                          </Link>
-                        )}
-                      </DropdownMenuItem>
-                    )
-                  })}
-                </Fragment>
-              ))}
+              <FileActionMenuItems offered={offered} label={menuLabel} />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -595,7 +207,7 @@ export function FileCard({
         {file.expiresAt && !onSelect && permitted('expiration') && (
           <button
             type="button"
-            onClick={() => ExpiryModal.show(() => setIsExpiryModalOpen(true))}
+            onClick={() => openFileSheet(file.id)}
             title={`Expiration scheduled for ${format(new Date(file.expiresAt), 'PPP p')}`}
             className="absolute left-2 top-2 inline-flex h-8 max-w-[calc(100%-3.5rem)] items-center gap-1 rounded-md border border-border/50 bg-background/90 px-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
@@ -607,15 +219,6 @@ export function FileCard({
             </span>
           </button>
         )}
-        {ocr.loading && (
-          <div
-            role="status"
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background/90"
-          >
-            <Loader2 className="h-7 w-7 animate-spin text-primary" />
-            <span className="text-sm font-medium">Extracting text…</span>
-          </div>
-        )}
       </div>
       <div className="border-t border-border/40 p-2.5 sm:p-3">
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2 gap-y-0.5 sm:flex-nowrap">
@@ -623,6 +226,8 @@ export function FileCard({
             prefetch={false}
             href={urls.page}
             title={file.name}
+            aria-haspopup="dialog"
+            onClick={openSheet}
             className="min-w-0 max-w-full basis-full truncate rounded-sm text-sm font-medium sm:basis-auto hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {file.name}
@@ -700,219 +305,7 @@ export function FileCard({
         </div>
       </div>
 
-      <Dialog
-        open={isPasswordDialogOpen}
-        onOpenChange={handlePasswordDialogOpenChange}
-      >
-        <DialogContent className="rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {file.hasPassword ? 'Manage password' : 'Protect this file'}
-            </DialogTitle>
-            <DialogDescription className="break-words">
-              Add another layer of privacy to{' '}
-              <span className="font-medium text-foreground">{file.name}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (passwordHint) return
-              if (password || file.hasPassword) void handlePasswordUpdate()
-            }}
-            className="space-y-5"
-          >
-            <div className="space-y-2">
-              <Label htmlFor={`password-${file.id}`}>
-                {file.hasPassword ? 'New password' : 'Password'}
-              </Label>
-              <Input
-                id={`password-${file.id}`}
-                type="password"
-                autoComplete="new-password"
-                value={password}
-                disabled={mutation === 'password'}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Enter a password"
-                aria-invalid={Boolean(passwordHint)}
-                aria-describedby={`password-hint-${file.id}`}
-              />
-              <p
-                id={`password-hint-${file.id}`}
-                className={cn(
-                  'text-pretty text-xs',
-                  passwordHint ? 'text-destructive' : 'text-muted-foreground'
-                )}
-              >
-                {passwordHint ??
-                  (file.hasPassword
-                    ? 'Use at least 8 characters, or leave this empty to remove the current password.'
-                    : 'Use at least 8 characters. Anyone you share this file with will need this password.')}
-              </p>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={mutation === 'password'}
-                onClick={() => handlePasswordDialogOpenChange(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={
-                  mutation === 'password' ||
-                  (!password && !file.hasPassword) ||
-                  Boolean(passwordHint)
-                }
-              >
-                {mutation === 'password' && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                {file.hasPassword
-                  ? password
-                    ? 'Update password'
-                    : 'Remove password'
-                  : 'Add password'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isVisibilityDialogOpen}
-        onOpenChange={(open) => {
-          if (mutation !== 'visibility') setIsVisibilityDialogOpen(open)
-        }}
-      >
-        <DialogContent className="rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Who can open this file?</DialogTitle>
-            <DialogDescription className="break-words">
-              Choose how you share{' '}
-              <span className="font-medium text-foreground">{file.name}</span>.
-            </DialogDescription>
-          </DialogHeader>
-          <RadioGroup
-            value={visibility}
-            onValueChange={(value) =>
-              setVisibility(value as 'PUBLIC' | 'PRIVATE')
-            }
-            disabled={mutation === 'visibility'}
-            className="gap-3"
-          >
-            {[
-              {
-                value: 'PUBLIC',
-                label: 'Public',
-                description:
-                  'Anyone with the link can open it. Password protection still applies.',
-                icon: Globe,
-              },
-              {
-                value: 'PRIVATE',
-                label: 'Private',
-                description:
-                  'Only you and instance administrators can open it.',
-                icon: Lock,
-              },
-            ].map(({ value, label, description, icon: Icon }) => (
-              <Label
-                key={value}
-                htmlFor={`${file.id}-${value}`}
-                className={cn(
-                  'flex cursor-pointer items-start gap-3 rounded-xl border p-4',
-                  visibility === value && 'border-primary bg-primary/5'
-                )}
-              >
-                <RadioGroupItem
-                  value={value}
-                  id={`${file.id}-${value}`}
-                  className="mt-0.5"
-                />
-                <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-sm font-medium">
-                    <Icon className="h-4 w-4 text-muted-foreground" />
-                    {label}
-                  </span>
-                  <span className="mt-1 block text-pretty text-xs font-normal leading-5 text-muted-foreground">
-                    {description}
-                  </span>
-                </span>
-              </Label>
-            ))}
-          </RadioGroup>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={mutation === 'visibility'}
-              onClick={() => setIsVisibilityDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={
-                mutation === 'visibility' || visibility === file.visibility
-              }
-              onClick={handleVisibilityUpdate}
-            >
-              {mutation === 'visibility' && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Save visibility
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          if (mutation !== 'delete') setIsDeleteDialogOpen(open)
-        }}
-      >
-        <DialogContent className="rounded-2xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete this file?</DialogTitle>
-            <DialogDescription className="break-words">
-              <span className="font-medium text-foreground">{file.name}</span>{' '}
-              will be permanently deleted and its shared link will stop working.
-              This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={mutation === 'delete'}
-              onClick={() => setIsDeleteDialogOpen(false)}
-            >
-              Keep file
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={mutation === 'delete'}
-              onClick={handleDelete}
-            >
-              {mutation === 'delete' && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Delete file
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <OcrDialog {...ocr.dialog} filename={file.name} />
-      <ExpiryModal
-        isOpen={isExpiryModalOpen}
-        onOpenChange={setIsExpiryModalOpen}
-        onConfirm={handleExpiryUpdate}
-        initialDate={file.expiresAt ? new Date(file.expiresAt) : null}
-        initialAction={file.expiryAction ?? undefined}
-        title="Manage expiration"
-        description="Choose when this file is deleted or made private."
-      />
+      {fileDialogs}
     </Card>
   )
 }

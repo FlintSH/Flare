@@ -36,13 +36,13 @@ Search, tag filters, sorting, dates, and image browsing stay within the folder y
 
 ## Move files
 
-For one file, open its menu and choose **Move to folder**. For several files, choose **Select**, select individual files or **Select visible files**, and choose **Move**. Pick a destination and confirm.
+For one file, open its [sheet](./moving-around#a-sheet-for-every-file-and-link), choose **Move** beside **Folder**, and choose the folder. For several files, choose **Select**, select individual files or **Select visible files**, and choose **Move**. Pick a destination and confirm.
 
 A selection can include up to 100 files and stays selected as you scroll. **Select visible files** adds only loaded files currently on screen, not every file in the folder. Changing the folder or filters clears the selection; finish the move first.
 
 Choose **Unfiled** to remove files from their current folder. Moving a file preserves its share link, tags, password, visibility, and expiration.
 
-<Screenshot src="/screenshots/timeline/library-selection.webp" alt="A library selection retained while scrolling, with Select visible files and Move controls" caption="Select visible files, scroll to add others, then choose Move to pick a destination for the selection." />
+<Screenshot src="/screenshots/timeline/library-selection.webp" alt="A library selection retained while scrolling: 8 selected up to 100, with Select visible files, Create archive, Move, Edit tags and Done in the selection bar" caption="Select visible files, scroll to add others, then choose Move to pick a destination for the selection." />
 
 ::: tip Moving changes collection membership
 When a folder has a share link, moving a public file into it adds that file to the collection. Moving it out removes it from the collection. Its separate file link continues to follow its own access settings.
@@ -51,9 +51,9 @@ When a folder has a share link, moving a public file into it adds that file to t
 ## Upload into the right place
 
 - **Upload here**, beside the folder's path and in an empty folder, opens the upload page with the current folder selected. It appears only when your role has both `files.upload` and `folders.manage`, because Flare saves uploads into a folder only for roles that can manage folders. Earlier versions showed it with `files.upload` alone, and the upload then failed.
-- The folder button on **Upload** and **Paste** (**Unfiled** until you choose one) puts the new file in one of your folders. It appears only with `folders.manage` and once you have a folder; without the permission, uploads are unfiled, even from a link that opens the upload page with a folder selected. Earlier versions called it **Save to**, offered no folder on **Paste**, and showed it to roles without the permission, whose uploads then failed.
+- The folder button on **Upload** and **Paste** (**Unfiled** until you choose one) puts the new file in one of your folders. **New folder…** at the end of its menu creates a top-level folder and selects it. It appears with `folders.manage`, even before you have a folder; without the permission, uploads are unfiled, even from a link that opens the upload page with a folder selected. Earlier versions called it **Save to**, offered no folder on **Paste**, showed it to roles without the permission, whose uploads then failed, and until this version hid it until you had a folder.
 - Dropping files onto the library uploads them into the folder currently open when your role has `folders.manage`, and leaves them unfiled otherwise. Earlier versions tried the open folder, and the upload then failed. See [quick drag-and-drop](./uploading#quick-drag-and-drop).
-- Dropping files elsewhere in the dashboard leaves them unfiled.
+- Dropping or [pasting files](./moving-around#paste-anywhere) elsewhere in the dashboard leaves them unfiled. A file pasted while a folder is open in **Files** goes into it, as a drop does.
 
 An empty folder's message suggests only what your role allows: uploading here, or moving existing files in, which needs `files.update` and `folders.manage`. With neither, it says your role can't add files to folders.
 

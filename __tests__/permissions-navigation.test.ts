@@ -25,7 +25,11 @@ vi.mock('next-auth/react', () => ({
       : { data: { user: mocks.user }, status: 'authenticated' },
   signOut: vi.fn(),
 }))
-vi.mock('next/navigation', () => ({ usePathname: () => mocks.pathname }))
+vi.mock('next/navigation', () => ({
+  usePathname: () => mocks.pathname,
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
+}))
 vi.mock('@/components/customization/instance-brand', () => ({
   InstanceBrand: () => React.createElement('span', null, 'Flare'),
 }))

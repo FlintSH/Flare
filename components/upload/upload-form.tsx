@@ -37,7 +37,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { copyText } from '@/lib/client/clipboard'
-import { handOff, takeHandoff } from '@/lib/client/handoff'
+import { handOff, onHandoff, takeHandoff } from '@/lib/client/handoff'
+import { claimPaste } from '@/lib/client/paste-claim'
 import { apiRequest } from '@/lib/client/request'
 import { folderDestination, libraryHref } from '@/lib/library/contract'
 import { loneLink } from '@/lib/paste/insights'
@@ -164,7 +165,10 @@ export function UploadForm({
     // the file arrives.
     const profileId =
       allowed.chooseProfile && choices.profileId === undefined
-        ? (profiles.data?.defaultProfileId ?? saved.profile?.id ?? null)
+        ? // A loaded "no default" is that, not the page's older value.
+          profiles.data
+          ? profiles.data.defaultProfileId
+          : (saved.profile?.id ?? null)
         : choices.profileId
     return {
       options: pinnedUploadOptions(
@@ -204,13 +208,17 @@ export function UploadForm({
   // Files handed over by Paste, where they were pasted.
   useEffect(() => {
     // Pasted on Paste: they wait here until the settings are seen.
-    const handed = takeHandoff('files')
-    if (handed)
-      setRefused(
-        tray.add(handed.files, maxSize, {
-          held: 'Check the settings above, then upload.',
-        }).length
-      )
+    const take = () => {
+      const handed = takeHandoff('files')
+      if (handed)
+        setRefused(
+          tray.add(handed.files, maxSize, {
+            held: 'Check the settings above, then upload.',
+          }).length
+        )
+    }
+    take()
+    return onHandoff(take)
   }, [tray, maxSize])
 
   // Drop anywhere on the page.
@@ -305,8 +313,12 @@ export function UploadForm({
         })
       }
     }
+    const release = claimPaste()
     document.addEventListener('paste', paste)
-    return () => document.removeEventListener('paste', paste)
+    return () => {
+      release()
+      document.removeEventListener('paste', paste)
+    }
   }, [add, canPaste, canShorten, router, toast])
 
   const newest = trayFiles.filter((file) => file.batch === batch)

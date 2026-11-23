@@ -46,6 +46,7 @@ vi.mock('@/hooks/use-tags', () => ({
   useTags: () => ({ tags: [], loading: false, error: false }),
 }))
 vi.mock('@/components/upload-profiles/profile-picker', () => ({
+  UPLOAD_PROFILES: 'upload-profiles',
   useUploadProfiles: () => ({ data: null, error: '' }),
 }))
 

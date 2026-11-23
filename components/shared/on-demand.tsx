@@ -61,6 +61,10 @@ export function onDemand<Props extends object>(
       // A failed attempt is reported when someone asks to see it.
       if (!Loaded) fetchCode().catch(() => {})
     },
+    /** Resolves once the code is here; rejects if it couldn't be fetched. */
+    ready(): Promise<void> {
+      return Loaded ? Promise.resolve() : fetchCode()
+    },
     show(open: () => void, stillWanted: () => boolean = () => true) {
       const request = ++latestRequest
       if (Loaded) return open()
