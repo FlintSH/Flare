@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { ToastAction } from '@/components/ui/toast'
 
 import { libraryChanged } from '@/lib/library/changes'
+import { allows } from '@/lib/permissions/actions'
 import { uploadTray } from '@/lib/uploads/tray'
 
 import { usePermissions } from '@/hooks/use-permissions'
@@ -30,6 +31,7 @@ export function UploadTraySync() {
   const pathname = usePathname()
   const { user } = usePermissions()
   const away = pathname !== UPLOAD_PATH
+  const canManage = allows(user, 'viewFiles')
 
   // The list belongs to whoever is signed in.
   const account = user?.id
@@ -75,9 +77,9 @@ export function UploadTraySync() {
               </ToastAction>
             ),
           })
-        else notifyUploaded(uploaded)
+        else notifyUploaded(uploaded, canManage)
       }),
-    [client, router, away]
+    [client, router, away, canManage]
   )
   return null
 }

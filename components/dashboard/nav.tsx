@@ -1,14 +1,16 @@
 'use client'
 
-import { useId, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 
-import { ChevronDown, LogOut, Menu, Wrench } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, Search, Wrench, X } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
 import { InstanceBrand } from '@/components/customization/instance-brand'
+import { TagManager } from '@/components/dashboard/library-dialogs'
+import { onDemand } from '@/components/shared/on-demand'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -24,6 +26,8 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet'
 
+import { libraryHref } from '@/lib/library/contract'
+import type { InstanceFeatures } from '@/lib/navigation/places'
 import { cn } from '@/lib/utils'
 
 import { useSignOut } from '@/hooks/use-sign-out'
@@ -215,8 +219,82 @@ function SheetLinks({
   })
 }
 
-export function DashboardNav() {
+const FindCommand = onDemand(() =>
+  import('@/components/find/find-command').then((module) => module.FindCommand)
+)
+
+/** ⌘K on Apple keyboards, Ctrl K elsewhere. */
+function useShortcutLabel() {
+  const [label, setLabel] = useState('Ctrl K')
+  useEffect(() => {
+    if (/Mac|iPhone|iPad/.test(navigator.userAgent)) setLabel('⌘K')
+  }, [])
+  return label
+}
+
+export function DashboardNav({ features }: { features: InstanceFeatures }) {
   const pathname = usePathname()
+  // On Files the bar is the library's search, and shows what it's searching.
+  const params = useSearchParams()
+  const librarySearch =
+    pathname === libraryHref() ? (params.get('search') ?? '') : ''
+  const router = useRouter()
+  const clearLibrarySearch = () => {
+    const next = new URLSearchParams(params.toString())
+    next.delete('search')
+    const query = next.toString()
+    router.replace(query ? `${pathname}?${query}` : pathname, {
+      scroll: false,
+    })
+  }
+  // Find takes the place of the pills: the bar becomes where you type.
+  const [finding, setFinding] = useState<'bar' | 'screen' | null>(null)
+  const [managingTags, setManagingTags] = useState(false)
+  const shortcut = useShortcutLabel()
+  const findButton = useRef<HTMLButtonElement>(null)
+  const startFinding = (layout: 'bar' | 'screen') =>
+    FindCommand.show(() => setFinding(layout))
+  const phoneFindButton = useRef<HTMLButtonElement>(null)
+  // Focus goes back to the Find button you can see, unless Find closed
+  // because you went somewhere or clicked something else.
+  const stopFinding = useCallback((restoreFocus = true) => {
+    setFinding(null)
+    if (!restoreFocus) return
+    requestAnimationFrame(() =>
+      (findButton.current?.offsetParent
+        ? findButton.current
+        : phoneFindButton.current
+      )?.focus()
+    )
+  }, [])
+  useEffect(() => {
+    const key = (event: KeyboardEvent) => {
+      if (
+        event.key.toLowerCase() !== 'k' ||
+        !(event.metaKey || event.ctrlKey) ||
+        event.altKey ||
+        event.shiftKey ||
+        event.isComposing ||
+        // An editor that uses the keys itself (Paste's code editor) keeps them.
+        event.defaultPrevented
+      )
+        return
+      // A sheet or dialog has the page; Find waits until it's closed.
+      event.preventDefault()
+      if (
+        !finding &&
+        document.querySelector('[role="dialog"], [role="alertdialog"]')
+      )
+        return
+      if (finding) stopFinding()
+      else
+        // The bar when its track is on screen (its width depends on how many
+        // places the account has), full screen otherwise.
+        startFinding(findButton.current?.offsetParent ? 'bar' : 'screen')
+    }
+    window.addEventListener('keydown', key)
+    return () => window.removeEventListener('keydown', key)
+  })
   const [open, setOpen] = useState(false)
   const { data: session, status } = useSession()
   const signOut = useSignOut()
@@ -244,6 +322,22 @@ export function DashboardNav() {
         <InstanceBrand iconClassName="h-6 w-6 text-primary" />
       </Link>
 
+      {/* An account with no pages in the bar (profile only) still has
+          Find, for its settings: its own button, full screen. */}
+      {!showMenuButton && (
+        <Button
+          ref={phoneFindButton}
+          variant="ghost"
+          size="icon"
+          className="ml-auto"
+          aria-label="Find"
+          aria-haspopup="dialog"
+          onPointerEnter={FindCommand.preload}
+          onClick={() => startFinding('screen')}
+        >
+          <Search className="h-5 w-5" />
+        </Button>
+      )}
       {showMenuButton && (
         <div
           className={cn(
@@ -251,6 +345,17 @@ export function DashboardNav() {
             roomy ? 'md:hidden' : 'min-[900px]:hidden'
           )}
         >
+          <Button
+            variant="ghost"
+            size="icon"
+            ref={phoneFindButton}
+            aria-label="Find"
+            aria-haspopup="dialog"
+            onPointerEnter={FindCommand.preload}
+            onClick={() => startFinding('screen')}
+          >
+            <Search className="h-5 w-5" />
+          </Button>
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Open navigation">
@@ -331,22 +436,109 @@ export function DashboardNav() {
         >
           {/* In light mode the track is a step darker, so the raised white
               pill of the current page stands out from it. */}
-          <div className="flex items-center gap-1 rounded-xl border border-border/40 bg-muted/60 p-1 dark:bg-muted/25">
-            {workspace.map((item) => (
-              <NavPill key={item.href} item={item} pathname={pathname} />
-            ))}
-            {workspace.length > 0 && admin.length > 0 && (
-              <span aria-hidden="true" className="mx-1 h-5 w-px bg-border" />
+          <div
+            className={cn(
+              'flex items-center gap-1 rounded-xl border border-border/40 bg-muted/60 p-1 transition-[width] duration-200 dark:bg-muted/25 motion-reduce:transition-none',
+              finding === 'bar' && 'w-[min(40rem,100%)]'
             )}
-            {admin.length === 1 ? (
-              <NavPill item={admin[0]} pathname={pathname} />
+          >
+            {finding === 'bar' ? (
+              <FindCommand
+                layout="bar"
+                onClose={stopFinding}
+                features={features}
+                onManageTags={() =>
+                  TagManager.show(() => setManagingTags(true))
+                }
+              />
             ) : (
-              admin.length > 1 && (
-                <AdminMenu items={admin} pathname={pathname} />
-              )
+              <>
+                {workspace.map((item) => (
+                  <NavPill key={item.href} item={item} pathname={pathname} />
+                ))}
+                {workspace.length > 0 && admin.length > 0 && (
+                  <span
+                    aria-hidden="true"
+                    className="mx-1 h-5 w-px bg-border"
+                  />
+                )}
+                {admin.length === 1 ? (
+                  <NavPill item={admin[0]} pathname={pathname} />
+                ) : (
+                  admin.length > 1 && (
+                    <AdminMenu items={admin} pathname={pathname} />
+                  )
+                )}
+                <Button
+                  ref={findButton}
+                  variant="ghost"
+                  // Its name includes the search it shows.
+                  aria-label={librarySearch ? `Find: ${librarySearch}` : 'Find'}
+                  aria-keyshortcuts="Meta+K Control+K"
+                  aria-haspopup="listbox"
+                  title={`Find (${shortcut})`}
+                  onPointerEnter={FindCommand.preload}
+                  onFocus={FindCommand.preload}
+                  onClick={() => startFinding('bar')}
+                  className={cn(
+                    pillClassName,
+                    // A search is a state of the page, not another page, so
+                    // it isn't raised like the current one.
+                    librarySearch
+                      ? 'max-w-40 pl-2.5 pr-1 text-foreground'
+                      : 'w-9 px-0'
+                  )}
+                >
+                  <Search
+                    className={cn('h-4 w-4', librarySearch && 'text-primary')}
+                    aria-hidden="true"
+                  />
+                  {librarySearch && (
+                    <span className="truncate">{librarySearch}</span>
+                  )}
+                </Button>
+                {librarySearch && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Clear the search for ${librarySearch}`}
+                    title="Clear search"
+                    onClick={() => {
+                      clearLibrarySearch()
+                      // This button goes with the search; focus stays here.
+                      requestAnimationFrame(() => findButton.current?.focus())
+                    }}
+                    className="-ml-1 h-9 w-7 rounded-lg text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>
+      )}
+      {finding === 'screen' && (
+        <FindCommand
+          layout="screen"
+          onClose={stopFinding}
+          features={features}
+          onManageTags={() => TagManager.show(() => setManagingTags(true))}
+        />
+      )}
+      {managingTags && (
+        <TagManager
+          open={managingTags}
+          onOpenChange={setManagingTags}
+          // Files filtered by a tag that's gone would show nothing.
+          onDeleted={(id) => {
+            if (pathname !== libraryHref() || params.get('tag') !== id) return
+            const next = new URLSearchParams(params)
+            next.delete('tag')
+            const kept = next.toString()
+            router.replace(kept ? `${pathname}?${kept}` : pathname)
+          }}
+        />
       )}
     </nav>
   )

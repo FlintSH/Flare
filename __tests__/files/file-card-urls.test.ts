@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { FileCard } from '@/components/dashboard/file-card'
 
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }))
 vi.mock('next-auth/react', () => ({
   useSession: () => ({
     data: { user: { id: 'owner', permissions: ['files.share'] } },
@@ -35,10 +36,10 @@ const thumbnail = (html: string) =>
   /<img[^>]* src="([^"]+)"/.exec(html)?.[1].replaceAll('&amp;', '&')
 
 describe('library file card addresses', () => {
-  it('links the share page, download and thumbnail of a file', () => {
+  // Download is in the card's menu, which file-card-actions checks.
+  it('links the share page and thumbnail of a file', () => {
     const html = render()
     expect(html).toContain('href="/Ab3dE/photo.png"')
-    expect(html).toContain('href="/api/files/cmfilecard0001/download"')
     expect(thumbnail(html)).toMatch(
       /^\/api\/files\/cmfilecard0001\/thumbnail\?w=\d+$/
     )

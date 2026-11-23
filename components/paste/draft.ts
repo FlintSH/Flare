@@ -12,6 +12,12 @@ export type PasteDraft = {
   name: string
   /** A language chosen without a name; unset, Flare detects it. */
   language?: Language
+  /**
+   * It holds a link that carries a credential, handed over to be kept
+   * private: the paste starts private each time the page opens, until a
+   * visibility is chosen.
+   */
+  private?: boolean
 }
 
 const EMPTY: PasteDraft = { content: '', name: '' }

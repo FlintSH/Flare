@@ -1154,9 +1154,18 @@
         "operationId": "listShortLinks",
         "summary": "List your short links",
         "tags": ["Short links"],
-        "description": "Requires the urls:read scope. Newest first; no pagination or filtering parameters. The token owner must currently have links.read; role revocation applies on the next request.",
+        "description": "Requires the urls:read scope. Newest first, without pagination. With id (up to 64 characters; an empty or longer one matches nothing), returns only that link when the token owner owns it, or an empty list. The token owner must currently have links.read; role revocation applies on the next request.",
         "security": [{ "BearerAuth": [] }],
         "x-flare-scope": "urls:read",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "description": "One of your short links, by id.",
+            "schema": { "type": "string", "maxLength": 64 }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Success.",

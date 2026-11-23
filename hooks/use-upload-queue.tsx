@@ -8,10 +8,13 @@ import { useQueryClient } from '@tanstack/react-query'
 
 import { ToastAction } from '@/components/ui/toast'
 
+import { openFileSheet } from '@/lib/client/file-sheet'
 import { libraryChanged } from '@/lib/library/changes'
+import { allows } from '@/lib/permissions/actions'
 import type { UploadOptions, UploadResponse } from '@/lib/uploads/client'
 import { type UploadBatch, createUploadQueue } from '@/lib/uploads/queue'
 
+import { usePermissions } from '@/hooks/use-permissions'
 import { toast } from '@/hooks/use-toast'
 
 /** Copies upload links and says whether that worked. */
@@ -41,21 +44,29 @@ export function notifyUploadInProgress() {
 const link = (file: UploadResponse) => file.pageUrl || file.url
 
 /** Says how a batch went, with its links, to someone not watching it. */
-export function notifyUploaded(files: readonly UploadResponse[]) {
+export function notifyUploaded(
+  files: readonly UploadResponse[],
+  /** Whether this account can open a file's sheet (it reads the library). */
+  canManage: boolean
+) {
   if (files.length === 1) {
     const [file] = files
+    const sheet = canManage ? file.id : undefined
     toast({
       title: 'Upload complete',
       description: `Successfully uploaded ${file.name}`,
       action: (
         <div className="flex gap-2">
           <ToastAction
-            altText="Open file"
+            altText={sheet ? 'Manage the file' : 'Open file'}
+            // Its sheet in the app when the server named it; else its page.
             onClick={() =>
-              window.open(link(file), '_blank', 'noopener,noreferrer')
+              sheet
+                ? openFileSheet(sheet)
+                : window.open(link(file), '_blank', 'noopener,noreferrer')
             }
           >
-            Open
+            {sheet ? 'Manage' : 'Open'}
           </ToastAction>
           <ToastAction
             altText="Copy link"
@@ -107,6 +118,8 @@ export function useUploadQueue({
   )
   const router = useRouter()
   const client = useQueryClient()
+  const { user } = usePermissions()
+  const canManage = allows(user, 'viewFiles')
   useEffect(() => queue.dispose, [queue])
 
   const settle = (
@@ -119,7 +132,7 @@ export function useUploadQueue({
       router.refresh()
     }
     if (quiet?.()) return batch
-    if (!batch.failure) notifyUploaded(batch.uploaded)
+    if (!batch.failure) notifyUploaded(batch.uploaded, canManage)
     else {
       const { message, remaining } = batch.failure
       toast({

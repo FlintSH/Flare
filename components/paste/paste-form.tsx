@@ -39,7 +39,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 
 import { copyText, copyWhenReady } from '@/lib/client/clipboard'
-import { handOff, takeHandoff } from '@/lib/client/handoff'
+import { openFileSheet } from '@/lib/client/file-sheet'
+import { credentialIn } from '@/lib/client/give'
+import { handOff, onHandoff, takeHandoff } from '@/lib/client/handoff'
+import { claimPaste } from '@/lib/client/paste-claim'
 import { detectLanguage, suggestPasteName } from '@/lib/files/detect-language'
 import {
   LANGUAGES,
@@ -52,6 +55,7 @@ import {
 } from '@/lib/files/file-kind'
 import { renameForLanguage } from '@/lib/files/paste-name'
 import { findSecret, loneLink } from '@/lib/paste/insights'
+import { allows } from '@/lib/permissions/actions'
 import { expiryLabel } from '@/lib/uploads/choices'
 import { uploadPaste } from '@/lib/uploads/client'
 import type { SavedUploadSettings } from '@/lib/uploads/saved-settings'
@@ -88,6 +92,8 @@ const LANGUAGE_CHOICES = [...LANGUAGES].sort((a, b) =>
 )
 
 type Created = {
+  /** The paste's file, for its sheet; missing from servers that don't send it. */
+  id?: string
   name: string
   url: string
   content: string
@@ -138,29 +144,67 @@ export function PasteForm({
 }) {
   const hydrated = useHydrated()
   const options = useUploadOptions(saved)
-  const { can } = usePermissions()
+  const { setChoices } = options
+  const { can, user } = usePermissions()
   const router = useRouter()
   const [draft, setDraft] = useState<PasteDraft>(() => readDraft(owner))
+  // A draft kept private (it holds a credential link) is private whenever
+  // this page opens with it, unless a visibility was chosen here.
+  const keepPrivate = Boolean(draft.private)
+  const chosenVisibility = options.choices.visibility
+  // Once each time the page opens with such a draft: a visibility reset
+  // afterwards is a choice too.
+  const madePrivate = useRef(false)
+  useEffect(() => {
+    if (!keepPrivate) {
+      madePrivate.current = false
+      return
+    }
+    if (madePrivate.current) return
+    madePrivate.current = true
+    if (chosenVisibility === undefined)
+      setChoices((current) => ({ ...current, visibility: 'PRIVATE' }))
+  }, [keepPrivate, chosenVisibility, setChoices])
+  const handOffs = useRef(0)
+  const [created, setCreated] = useState<Created | null>(null)
+  // Pastes on this page go into its editor, not the dashboard's card.
+  useEffect(() => claimPaste(), [])
   const { toast } = useToast()
   // Text handed over by Upload, taken once the page is on screen. A draft
   // already here is kept, with the new text after it.
   useEffect(() => {
-    const handed = takeHandoff('text')
-    if (!handed) return
-    const kept = readDraft(owner)
-    const next = kept.content.trim()
-      ? {
-          ...kept,
-          content: `${kept.content.replace(/\s+$/, '')}\n\n${handed.text}`,
-        }
-      : { content: handed.text, name: '' }
-    writeDraft(owner, next)
-    setDraft(next)
-    if (kept.content.trim()) toast({ title: 'Added to the end of your draft' })
-  }, [owner, toast])
+    const take = () => {
+      const handed = takeHandoff('text')
+      if (!handed) return
+      const kept = readDraft(owner)
+      const joined = kept.content.trim()
+        ? {
+            ...kept,
+            content: `${kept.content.replace(/\s+$/, '')}\n\n${handed.text}`,
+          }
+        : { content: handed.text, name: '' }
+      const next =
+        handed.private || kept.private ? { ...joined, private: true } : joined
+      writeDraft(owner, next)
+      setDraft(next)
+      // Handed over as private (it carries a credential): private now,
+      // whatever was chosen before; the draft remembers it for next time.
+      if (handed.private)
+        setChoices((current) => ({ ...current, visibility: 'PRIVATE' }))
+
+      // Shown at once, in place of a paste just made; one still being made
+      // leaves this draft alone when it finishes.
+      handOffs.current += 1
+      setCreated(null)
+      if (kept.content.trim())
+        toast({ title: 'Added to the end of your draft' })
+    }
+    take()
+    // Handed over while this page is open (Find used here).
+    return onHandoff(take)
+  }, [owner, toast, setChoices])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const [created, setCreated] = useState<Created | null>(null)
   const [copied, setCopied] = useState(false)
   const [passwordRequest, setPasswordRequest] = useState(0)
   const hintId = useId()
@@ -186,7 +230,10 @@ export function PasteForm({
   // Read behind typing, so a long paste never slows a key press.
   const reading = useDeferredValue(draft.content)
   const secret = useMemo(
-    () => (publicWithoutPassword ? findSecret(reading) : null),
+    () =>
+      publicWithoutPassword
+        ? (findSecret(reading) ?? credentialIn(reading))
+        : null,
     [publicWithoutPassword, reading]
   )
   const link = useMemo(() => loneLink(reading), [reading])
@@ -213,6 +260,7 @@ export function PasteForm({
       ...(options.passwordSet ? ['Password'] : []),
       expiryLabel(effective.expiry, effective.expiryAction),
     ].join(' · ')
+    const handOffsAtSubmit = handOffs.current
     const making = uploadPaste(file, options.options)
     // Asked for within the click or key press, written once the link exists.
     const copying = copyWhenReady(
@@ -221,7 +269,35 @@ export function PasteForm({
     making.then(
       async (paste) => {
         const copiedNow = await copying
+        // Text handed over meanwhile is the editor's now: it stays.
+        if (handOffs.current !== handOffsAtSubmit) {
+          // What was just published comes off the front of the draft; what
+          // was handed over stays, so it isn't published twice.
+          const kept = readDraft(owner)
+          // (Appending trimmed the end of the draft, so compare that way.)
+          const published = submitted.content.replace(/\s+$/, '')
+          // Only the joiner goes with it, so the handed text keeps its
+          // own leading indentation.
+          const rest = kept.content.startsWith(`${published}\n\n`)
+            ? kept.content.slice(published.length + 2)
+            : kept.content.startsWith(published)
+              ? kept.content.slice(published.length).replace(/^\n+/, '')
+              : kept.content
+          // The name was the published paste's.
+          const next = {
+            ...kept,
+            content: rest,
+            name: kept.name === submitted.name ? '' : kept.name,
+          }
+          writeDraft(owner, next)
+          setDraft(next)
+          toast({ title: copiedNow ? 'Link copied' : 'Paste created' })
+          options.clearPassword()
+          setSubmitting(false)
+          return
+        }
         setCreated({
+          id: paste.id,
           name: paste.name,
           url: paste.pageUrl || paste.url,
           content: submitted.content,
@@ -262,6 +338,8 @@ export function PasteForm({
 
   const mac = hydrated && /Mac|iPhone|iPad/.test(navigator.userAgent)
 
+  // Its sheet when this account can open it (it reads the library).
+  const sheetId = allows(user, 'viewFiles') ? created?.id : undefined
   if (created)
     return (
       <div className="overflow-hidden rounded-xl border bg-background/40">
@@ -301,9 +379,28 @@ export function PasteForm({
               {copied ? 'Copied' : 'Copy link'}
             </Button>
             <Button asChild variant="outline">
-              <a href={created.url} target="_blank" rel="noopener noreferrer">
-                Open
-                <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+              <a
+                href={created.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                // Its sheet in the app; a modified click opens its page.
+                onClick={(event) => {
+                  if (
+                    !sheetId ||
+                    event.metaKey ||
+                    event.ctrlKey ||
+                    event.shiftKey ||
+                    event.altKey
+                  )
+                    return
+                  event.preventDefault()
+                  openFileSheet(sheetId)
+                }}
+              >
+                {sheetId ? 'Manage' : 'Open'}
+                {!sheetId && (
+                  <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+                )}
               </a>
             </Button>
             <Button variant="ghost" onClick={() => setCreated(null)}>

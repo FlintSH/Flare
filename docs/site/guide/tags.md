@@ -15,13 +15,16 @@ Tags, automatic matching rules, and tag names belong to your account. They are n
 
 ## Add a tag to a file
 
-1. In **Files**, open the file menu and choose **Edit tags**.
-2. Search for an existing tag, or type a name to create one.
-3. Wait for the current assignments to load, then select the tags you want. Changes save as you make them.
+1. In **Files**, choose the file to open its [sheet](./moving-around#a-sheet-for-every-file-and-link), and choose **Add** (or **Edit**) beside **Tags**.
+2. Tick the tags you want; each tick saves at once, and the menu stays open for the next. **New tag…** (or **Manage tags…** once you have some) creates one.
 
-Tag names can be up to 40 characters. Use short names that will make sense when you see them on a file card, such as **Invoices**, **Design**, or **Reference**. Flare trims the ends of a name and saves each run of spaces, tabs, or line breaks as one space. Names that differ only in letter case are the same tag: with **Work** saved, creating **work** reports that you already have a tag with that name. The search in **Edit tags** compares names the same way, spaces included: `Work ` with a trailing space, or `work  notes` with two spaces, lists the existing tag. Earlier versions showed nothing for the first and offered to create the second again.
+To tag several files at once, choose **Select** in **Files**, pick the files and choose **Edit tags** in the selection bar. That editor searches your tags, creates one from what you type, and waits for the files' current tags to load before showing them checked, unchecked or mixed.
+
+Tag names can be up to 40 characters. Use short names that will make sense when you see them on a file card, such as **Invoices**, **Design**, or **Reference**. Flare trims the ends of a name and saves each run of spaces, tabs, or line breaks as one space. Names that differ only in letter case are the same tag: with **Work** saved, creating **work** reports that you already have a tag with that name. The search in the selection bar's **Edit tags** compares names the same way, spaces included: `Work ` with a trailing space, or `work  notes` with two spaces, lists the existing tag. Earlier versions showed nothing for the first and offered to create the second again.
 
 <Screenshot src="/screenshots/timeline/library-tags.webp" alt="Edit tags showing Favorites unchecked after another client removed it from a selected file and the library was refreshed" caption="The editor reads current assignments before showing checked, unchecked, or mixed tags." />
+
+You can also open the tag manager from the **Tags** button on **Upload** and **Paste** (**New tag…** before you have one, **Manage tags…** after), or by searching for `tags` in [Find](./moving-around#find-anything).
 
 ## Tag several files together
 
@@ -39,7 +42,7 @@ This works well after a one-off upload batch. For a recurring source, let an upl
 
 ## Find files by tag
 
-Choose **Tags** beside the library filters, or click a tag on a file. On a phone, first open **Filters** to reveal **Tags**. The selected tag stays visible as a chip below search even when the filter controls are closed; choose its **×** to clear only that tag. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest when your role can edit tags. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
+Choose **Tags** beside the library filters, or click a tag on a file. On a phone, first open **Filters** to reveal **Tags**. The selected tag stays visible as a chip below search even when the filter controls are closed; choose its **×** to clear only that tag. A [file card](./library#read-a-file-card) shows up to two tags, or one tag beside its folder name; choose **+N** to see the rest in the file's sheet when your role can edit tags. Search, dates, sorting, folders, and image browsing continue to work inside that tag selection. [Continuous scrolling and the date rail](./library#scroll-through-your-library) cover every matching file with that tag.
 
 - Choose **Untagged** to find files without tags.
 - Choose **All files** in the tag filter to clear the tag selection.
@@ -73,7 +76,7 @@ Create a tag called **Receipts**, turn on automatic matching, and choose **File 
 :::
 
 ::: details Try a rule based on image text
-Create **Support request** with an **Extracted text** rule for `ticket number`. Upload a screenshot containing those words, then choose **Extract text (OCR)** from its file menu. After OCR completes, matching text adds the tag. This depends on the recognition result: blurry or stylized text may not be read accurately.
+Create **Support request** with an **Extracted text** rule for `ticket number`. Upload a screenshot containing those words, then choose **Extract text** in its [sheet](./moving-around#a-sheet-for-every-file-and-link). After OCR completes, matching text adds the tag. This depends on the recognition result: blurry or stylized text may not be read accurately.
 :::
 
 ### Apply a rule to older files

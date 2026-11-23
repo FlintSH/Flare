@@ -78,15 +78,18 @@ export function ExpiryModal({
     setCheckedAt(Date.now())
   }
 
+  // Reset when it opens or its starting value changes, not each time a
+  // caller makes a new Date for the same moment.
+  const initialTime = initialDate?.getTime() ?? null
   useEffect(() => {
     if (isOpen) {
-      setDate(initialDate || null)
+      setDate(initialTime === null ? null : new Date(initialTime))
       setCheckedAt(Date.now())
       setPreset(null)
       setAction(initialAction)
       setIsLoading(false)
     }
-  }, [isOpen, initialDate, initialAction])
+  }, [isOpen, initialTime, initialAction])
 
   const handleConfirm = async () => {
     setIsLoading(true)

@@ -626,7 +626,7 @@ export function InstanceSettings({
         )}
         <fieldset disabled={!can('settings.general')}>
           <div className="space-y-6">
-            <Card>
+            <Card id="image-search" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Image search</CardTitle>
                 <CardDescription className="text-pretty">
@@ -660,7 +660,7 @@ export function InstanceSettings({
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card id="credits" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Credits</CardTitle>
                 <CardDescription className="text-pretty">
@@ -751,7 +751,7 @@ export function InstanceSettings({
         )}
         <fieldset disabled={!can('settings.security')}>
           <div className="space-y-6">
-            <Card>
+            <Card id="registration" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Registration</CardTitle>
                 <CardDescription className="text-pretty">
@@ -963,7 +963,7 @@ export function InstanceSettings({
                 )}
               </CardContent>
             </Card>
-            <Card>
+            <Card id="single-sign-on" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Single sign-on (OIDC)</CardTitle>
                 <CardDescription className="text-pretty">
@@ -1390,7 +1390,7 @@ export function InstanceSettings({
         )}
         <fieldset disabled={!can('settings.storage')}>
           <div className="space-y-6">
-            <Card>
+            <Card id="file-storage" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>File storage</CardTitle>
                 <CardDescription className="text-pretty">
@@ -1736,7 +1736,7 @@ export function InstanceSettings({
                 </div>
               </CardContent>
             </Card>
-            <Card>
+            <Card id="storage-quotas" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Storage quotas</CardTitle>
                 <CardDescription className="text-pretty">

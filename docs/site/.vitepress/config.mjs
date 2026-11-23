@@ -88,6 +88,7 @@ export default defineConfig({
       ]),
       group('Use Flare', [
         ['Your first steps', '/guide/'],
+        ['Find, sheets & paste anywhere', '/guide/moving-around'],
         ['Upload files', '/guide/uploading'],
         ['File library & timeline', '/guide/library'],
         ['Archives', '/guide/archives'],

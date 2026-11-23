@@ -11,19 +11,19 @@ Browsing your library requires `files.read`. File edits, sharing changes, and de
 
 Upgrading from 2.0? Check the [2.1 compatibility notes](/hosting/maintenance#upgrading-from-2-0-to-2-1) for plain copied links and URL-ID changes before updating saved links or custom clients. The dependency refresh keeps the filtering and viewer controls described here.
 
-<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare's file library with an account-wide file count, search, folders, filters, and a grid of previews" caption="One continuous library includes every matching file, with the same search, folders, and file actions." />
+<Screenshot src="/screenshots/timeline/library-desktop.webp" alt="Flare's file library with an account-wide file count, folders, filters, and a grid of previews; the bar above has the magnifier that searches it" caption="One continuous library includes every matching file. Search it from the bar." />
 
 ## Read a file card
 
 Every card has the same layout and height, whether or not a file has tags or a folder. A video card shows a frame from the video, taken about a second in, with a play button over it; earlier builds showed a video icon. A file without a preview shows an icon for its kind: video, audio, text or PDF, code, table for CSV and spreadsheets, archive, or a plain file. The icon follows the same rules as the [share page viewer](./sharing#what-recipients-can-preview), so a CSV file or archive saved under a generic type is recognized by its name, and **Users → More actions → View content** shows the same icons. Earlier builds chose the icon from the stored type alone and matched parts of it, so code types such as JSON, XML, Markdown, and shell scripts showed a text or plain file icon, while Java archives showed a code icon. Badges on the preview show whether the file is **Public** or **Private**, or **Protected** by a password, and how long ago you uploaded it. Below the preview, the first line shows the filename and size. The second line shows the file's folder and tags on the left and its view and download counts on the right. Counts of 1,000 or more are abbreviated, such as 1.4K or 13K; point at a count to see the exact number.
 
-A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role allows **Edit tags** (`files.update` and `tags.manage`), choose it to see every tag there. Earlier versions opened the editor for every role, where any change then failed. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
+A card shows up to two labels: two tags, or the folder and one tag. **+N** counts the file's other tags; when your role can edit tags (`files.update` and `tags.manage`), choose it to open the file's sheet, whose **Tags** row lists every tag with **Edit**. Earlier versions opened a separate tags dialog. Labels are shortened when they don't fit; point at a label to see its full name. Choose a tag to [show every file with that tag](./tags#find-files-by-tag), or choose the folder to open it. Cards inside a folder leave out the name of the folder you are viewing.
 
 ## Scroll through your library
 
 Scroll normally with your mouse, trackpad, or touch screen. More files load as you reach them, without a **Next page** button. You can browse every matching file without changing pages.
 
-Flare keeps cards and nearby file data in a limited window around your position. Returning to an earlier part of a large library may briefly show loading placeholders while those files load again. The file count describes the whole filtered result, not just the cards currently on screen. Your browser's Find command only searches rendered content; use the library's search field to find files anywhere in your account.
+Flare keeps cards and nearby file data in a limited window around your position. Returning to an earlier part of a large library may briefly show loading placeholders while those files load again. The file count describes the whole filtered result, not just the cards currently on screen. Your browser's Find command only searches rendered content; search from the bar (its magnifier, or <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd>) to find files anywhere in your account.
 
 With **Newest first** or **Oldest first**, a slim date rail on the right helps you stay oriented. Its date label appears while you scroll, hover, or focus it, then recedes when you finish. On wide screens the rail stays faintly visible in the page margin. Choose **Dates** beside **Sort & filters** on phones, or **Browse by date** on tablets, to open a date dialog. Drag the horizontal slider or use its arrow keys to jump, then close the dialog to browse those files. The dialog stays in place while the library moves to your date. The control stays out of the cards, leaving the gallery and search panel aligned with the navbar. Click or drag along the rail to jump through the matching upload history. Flare loads files near your destination without first downloading every file you passed.
 
@@ -51,15 +51,15 @@ Signing in as another account, or starting a new session for the same account, l
 
 Filters in the page address remain bookmark settings. If an old folder or tag filter leaves the new account's view empty, choose **All files**, then **Reset filters**. Start any unfinished file action again after checking the new selection. Changing accounts cannot undo an operation the server already accepted.
 
-<Screenshot src="/screenshots/timeline/library-account-switch.webp" alt="The original library tab after signing in as Jamie in another tab, showing Jamie's 97 demonstration files with no previous selection or archive dialog" caption="A real account switch loads the new account's library in the original tab. These filenames and images are disposable demonstration data." />
+<Screenshot src="/screenshots/timeline/library-account-switch.webp" alt="The original library tab after signing in as Alex in another tab, showing Alex's 17 demonstration files with no previous selection or archive dialog" caption="After an account switch, the original tab shows only the new account's files. This is the demonstration account's library with no selection or dialog open, not a recording of the switch. Filenames and images are disposable demonstration data." />
 
-The gallery uses two compact columns on phones and adds columns as the available content width grows, up to four. Cards and the search panel share the navbar’s content width. Date navigation uses a separate control on narrower screens, without reserving space beside the cards. Phone cards keep the filename, size, visibility, and any tags in view. View/download counters stay on wider cards; the upload-age badge appears on wider screens. Tap an image preview to inspect it at full size. Existing files and saved filters need no migration.
+The gallery uses two compact columns on phones and adds columns as the available content width grows, up to four. Cards and the filter panel share the navbar’s content width. Date navigation uses a separate control on narrower screens, without reserving space beside the cards. Phone cards keep the filename, size, visibility, and any tags in view. View/download counters stay on wider cards; the upload-age badge appears on wider screens. Tap a card to open its sheet; tap the picture there to see it at full size. Existing files and saved filters need no migration.
 
 ## Search and narrow the results
 
-Type in the search field to find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.
+Search from the bar: on **Files**, choose the magnifier at the end of the bar's buttons, or press <kbd>Ctrl</kbd>+<kbd>K</kbd> (<kbd>⌘</kbd>+<kbd>K</kbd>), and type. The library narrows as you type, and the magnifier shows the search once you close it ([the bar is the library's search](./moving-around#the-bar-is-the-library-s-search)). Searches find matches in filenames and extracted OCR text. Matching ignores capitalization. Search does not read the contents of every text file, PDF, or document: searchable content comes from image text that Flare has extracted.
 
-Use the controls beside search to narrow the current library. On a phone, choose **Sort & filters** to reveal sorting and labeled tag, visibility, file-type, and upload-date controls. The number on **Sort & filters** counts active tag, type, visibility, date-range, and grouping choices, and the applied values remain visible below search when these controls are closed:
+Use the controls at the top of the library to narrow it. On a phone, choose **Sort & filters** to reveal sorting and labeled tag, visibility, file-type, and upload-date controls. The number on **Sort & filters** counts active tag, type, visibility, date-range, and grouping choices, and the applied values remain visible below them when these controls are closed:
 
 | Control         | Choices and behavior                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -70,15 +70,15 @@ Use the controls beside search to narrow the current library. On a phone, choose
 | **File type**   | Select the MIME types present in your library. Use **Find a file type…** to search MIME types (such as `image/png`) or display names, ignoring capitalization. Search narrows the choices without clearing selected types, and resets when you close the dropdown. Types are grouped into images, videos, audio, documents, and finally other files. Documents include PDF, text, code, and CSV types, such as `application/json`, and office documents; archives are other files. |
 | **Upload date** | Choose a date range and optionally group results by week, month, or year.                                                                                                                                                                                                                                                                                                                                                                                                          |
 
-The file-type picker keeps **Other files** after the named categories. Type a MIME value such as `application/` or a readable label such as `Plain text` in **Find a file type** to narrow its choices. These captures show the real gallery with isolated demonstration data, on desktop and at a phone viewport.
+The file-type picker keeps **Other files** after the named categories. Type a MIME value such as `text/` or a readable label such as `Plain text` in **Find a file type** to narrow its choices. These captures show the real gallery with isolated demonstration data, on desktop and at a phone viewport.
 
-![Desktop gallery file-type picker with Images and Documents above Other files.](/screenshots/file-types/order.webp)
+![Desktop gallery file-type picker listing Images (JPEG, PNG) above Documents (Plain text, TypeScript, X-Python).](/screenshots/file-types/order.webp)
 
-![Phone gallery file-type picker searching application/ and showing PDF and Other file as matches.](/screenshots/file-types/mobile-search.webp)
+![Phone gallery with Sort & filters open and the file-type picker searching text/, showing Plain text, TypeScript and X-Python as matches.](/screenshots/file-types/mobile-search.webp)
 
 Separate controls combine. For example, a folder, an image type, and a search phrase narrow results to matching images in that folder. Visibility is the notable exception within its own menu: checking multiple values includes any selected value.
 
-Each applied filter appears as a removable chip below search. Choose its **×** to remove only that search, tag, file type, visibility choice, date range, or grouping; the other constraints and current folder stay selected. A date chip names the selected dates in your browser’s time zone.
+Each applied filter appears as a removable chip below the controls. Choose its **×** to remove only that search, tag, file type, visibility choice, date range, or grouping; the other constraints and current folder stay selected. A date chip names the selected dates in your browser’s time zone. On wider screens a search on its own shows in the bar instead of as a chip, with **×** to clear it. Earlier versions had a search field at the top of **Files**.
 
 **Reset filters** clears search, tags, dates, types, visibility, sorting, and grouping while keeping the folder you are browsing. To leave the folder too, choose **All files** in the folder browser.
 
@@ -104,9 +104,9 @@ A video card shows a frame from the video as a small WebP picture, so a library 
 
 <Screenshot src="/screenshots/video-thumbnails/library-videos.webp" alt="Library cards for five MP4 and WebM videos, one of them password-protected, each showing a frame from the video with a round play button in the middle, beside an image card and a file named broken.mp4 that could not be decoded, which keeps its video icon" caption="Disposable demonstration videos in the rendered library. The last card is a file that isn't really a video, so it keeps its icon." />
 
-<Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Four real library cards previewing an animated GIF, a password-protected PNG, a private PNG, and a public PNG" caption="These disposable uploads show image previews under each sharing mode in the rendered application." />
+<Screenshot src="/screenshots/thumbnails/library-previews.webp" alt="Library cards with image previews: public canyon and Wallpapers photos, a public alpine-lake photo, two private text files with a Private badge, screenshot images, and TypeScript and Python files with a file-type tile instead of a preview" caption="Image files show a preview under their name, and other files a file-type tile, each with its Public or Private badge. These are disposable demonstration uploads." />
 
-Open an image preview to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence. The viewer's header shows the image's name and upload date; once you move to another image, it also shows that image's place in the sequence, such as **12 of 40**. On narrow screens, long names and labels are shortened with an ellipsis so they stay clear of the header controls.
+Choose an image card to open its [sheet](./moving-around#a-sheet-for-every-file-and-link), then choose the picture to browse it in the full-screen viewer. The image sequence respects the active folder, search, tags, sorting, and other filters, including images beyond the cards currently loaded in the library. Other file types are skipped in that image sequence. The viewer's header shows the image's name and upload date; once you move to another image, it also shows that image's place in the sequence, such as **12 of 40**. On narrow screens, long names and labels are shortened with an ellipsis so they stay clear of the header controls.
 
 | Action                 | How                                        |
 | ---------------------- | ------------------------------------------ |
@@ -125,25 +125,18 @@ If an image disappears from the filtered results while you browse, Flare may ask
 
 ## Work with a file
 
-Open the card's menu for the full action list. On a desktop, preview actions also appear on hover or keyboard focus; the menu keeps the same actions available on touch screens.
+Choose a card, its name, or its expiry badge to open the file's [sheet](./moving-around#a-sheet-for-every-file-and-link): its preview, its link with **Copy**, and every setting where you can change it (who can open it, password, expiry, folder, tags), with **Share page**, **Download** and **Delete**, plus **Extract text** on an image and **Browse archive** for an archive. Choosing a card with <kbd>Ctrl</kbd>, <kbd>⌘</kbd> or <kbd>Shift</kbd> held opens its share page instead.
 
-- **Open file:** open its share/viewer page.
+The card's **⋯** menu keeps the quick things:
+
+- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives). Flare offers it for ZIP, TAR, TAR.GZ, GZIP, RAR, and 7z files, recognized by their type or name. An image, video, audio, or PDF file named like an archive, such as `photo.zip`, opens as that file; earlier builds offered **Browse archive** for it.
 - **Copy link:** copy its share-page URL. The link starts with the address you opened Flare at and uses your account's URL ID, not your [vanity URL](./upload-profiles#account-upload-defaults). Links shown after an upload start with the instance's public URL instead, and use your vanity URL when you have one.
 - **Download file:** save a copy to your device.
-- **Browse archive:** browse supported archives of any size, preview images, video, audio, and text inside them, download an entry, or extract into a new folder. See [archives](./archives). Flare offers it for ZIP, TAR, TAR.GZ, GZIP, RAR, and 7z files, recognized by their type or name. An image, video, audio, or PDF file named like an archive, such as `photo.zip`, opens as that file; earlier builds offered **Browse archive** for it.
-- **Edit tags:** add or remove private organizational labels.
-- **Move to folder:** change its library location without changing the file link.
-- **Change visibility:** switch between public and private.
-- **Add password / Manage password:** protect, replace the password, or remove password protection.
-- **Manage expiration:** schedule deletion or a change to private, or remove the schedule.
-- **Extract text (OCR):** read text from an image.
 - **Delete file:** permanently remove the file after confirmation.
 
-The card menu and the buttons shown when you hover a file follow the same permissions. **Change visibility** and **Add password / Manage password** require `files.share`; **Manage expiration** requires `files.update`. Neither grant implies the other: a person allowed to share can manage passwords without file-edit permission, and a person allowed to edit can open expiration controls without sharing permission. Scheduling **Delete** still additionally requires `files.delete`, and **Set to private** requires `files.share`.
+Earlier versions put every action in this menu and in a row of buttons over the preview on hover; those settings now live in the sheet.
 
-<Screenshot src="/screenshots/roles/share-only-menu.webp" alt="File menu for an account with sharing permission showing Add password and Change visibility, without Manage expiration" caption="Sharing permission makes password controls available independently of file-edit permission." />
-
-<Screenshot src="/screenshots/roles/edit-only-menu.webp" alt="File menu for an account with file-edit permission showing Manage expiration, without password or visibility actions" caption="File-edit permission opens expiration controls; each scheduled action still needs its own permission." />
+The sheet shows **Access**, **Folder**, **Tags** and **Activity** to everyone who can see the file and lets you change each only with the permission it needs; **Password** and **Expires** appear only to roles that can change them. **Access** and **Password** require `files.share`; **Expires** requires `files.update`. Neither grant implies the other: a person allowed to share can manage passwords without file-edit permission, and a person allowed to edit can change expiration without sharing permission. Scheduling **Then delete** still additionally requires `files.delete`, and **Then make private** requires `files.share`; the sheet starts on the one your role can use. **Move** needs `files.update` and `folders.manage`, and tags need `files.update` and `tags.manage`.
 
 If a visibility, password, expiration, or delete action fails, its message gives Flare's reason when there is one, for example **File not found** for a file deleted in another tab, or **Permission denied** after your role changed. Without a reason, for example when the connection drops, it says **Please try again.** Earlier versions said **Please try again.** for every failure. After any of these actions succeeds, the library reloads to show the changed file.
 
@@ -167,13 +160,13 @@ Changing the search, filters, folder, sort, or grouping clears the selection. **
 
 **Edit tags** reloads current tag assignments for the whole selection before enabling edits, including selected files outside the visible window. See [bulk tagging](./tags#tag-several-files-together) for checkbox meanings and loading recovery.
 
-<Screenshot src="/screenshots/timeline/library-selection.webp" alt="Library selection mode with Select visible files, a selected-file count, Move, Create archive, Edit tags, and Done controls" caption="Keep a selection while scrolling; bulk actions apply to the selected files, up to 100 at a time." />
+<Screenshot src="/screenshots/timeline/library-selection.webp" alt="Library selection mode scrolled down: the selection bar stays under the navigation with Select visible files, 8 selected up to 100, Create archive, Move, Edit tags and Done, above selected file cards with checked boxes" caption="Keep a selection while scrolling; bulk actions apply to the selected files, up to 100 at a time." />
 
 With `files.read` and `files.upload`, **Create archive** packages up to 100 selected owned files into a new ZIP or TAR.GZ. It defaults to private/no expiration; explicitly choosing an upload profile applies that profile’s settings. Saving into a folder also requires `folders.manage`. The originals remain unchanged; [archive limits and defaults](./archives#create-an-archive-from-selected-files) apply separately from ordinary uploads.
 
 ## Read text in images with OCR
 
-For an image, choose **Extract text (OCR)**. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the card shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
+Open the image's sheet and choose **Extract text** on the picture's corner. Flare processes the image on the server and opens the extracted text; use the dialog's copy action to reuse it. Until Flare answers, the button shows **Extracting text…**; on a share page, **Extract text** reads **Reading image…**. The dialog then opens with the text or one of the messages below. Earlier versions opened the share page's dialog straight away with a spinner. If your browser blocks the clipboard, **Copy text** shows **Couldn’t copy the text**; select the text in the dialog and copy it instead. OCR can make screenshots searchable and can trigger [automatic tag rules](./tags#automatic-tags).
 
 If the administrator enables automatic OCR, images can be processed after upload without a manual request. Upload completion does not mean OCR has completed. Manual extraction remains useful when automatic processing is disabled.
 
@@ -187,7 +180,7 @@ Flare reads one image at a time, and requests and automatic processing share tha
 | Flare couldn’t read text from this image  | The last attempt failed. Flare waits 5 minutes before reading that image again; the message says when. Try a clearer, larger PNG or JPEG if it keeps failing.       |
 | Couldn’t extract text. Please try again.  | The request didn't reach Flare, for example because the connection dropped. Choose **Try again**.                                                                   |
 
-<Screenshot src="/screenshots/workspace/files-ocr.png" alt="Dialog showing text extracted from an image" caption="OCR makes text inside an image available to copy and search." />
+<Screenshot src="/screenshots/workspace/files-ocr.png" alt="The sheet for harbor-dusk.jpg open beside the library, with an Extract text button on the corner of its preview, the file link with Copy, and Access, Password, Expires, Folder, Tags and Activity rows" caption="Choose Extract text on an image's corner in its sheet. Once the text is read, it can be copied and searched." />
 
 Administrators with `audit.read` can inspect OCR start, completion, and failure events alongside the file’s other activity in [Audit log](/admin/audit). Those audit details do not include extracted text. Ask for an investigation when processing repeatedly fails; do not assume a successful upload also completed OCR.
 

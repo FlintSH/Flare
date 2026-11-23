@@ -5,7 +5,7 @@ description: Turn Flare's MCP server on or off, decide who can connect AI agents
 
 # Agent access (MCP server)
 
-The MCP server lets people connect AI agents such as Claude Code, Codex, Cursor, Claude, and ChatGPT to their own Flare accounts, by signing in through the browser or with a token. It is off on every instance, new or upgraded, until someone with `settings.security` turns it on in **Admin → Settings → Access**.
+The MCP server lets people connect AI agents such as Claude Code, Codex, Cursor, Claude, and ChatGPT to their own Flare accounts, by signing in through the browser or with a token. It is off on every instance, new or upgraded, until someone with `settings.security` turns it on in **Admin → Settings → Access**. While it's off, [Find](../guide/moving-around#find-anything) lists **AI agents** for those administrators marked **Off**, leading to this switch; other people don't see it.
 
 ## Turn it on
 

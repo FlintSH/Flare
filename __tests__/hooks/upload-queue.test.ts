@@ -31,6 +31,10 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: harness.invalidate }),
 }))
 vi.mock('@/hooks/use-toast', () => ({ toast: harness.toast }))
+// The finished-upload notice offers Manage to roles that can view files.
+vi.mock('@/hooks/use-permissions', () => ({
+  usePermissions: () => ({ user: { permissions: ['files.read'] } }),
+}))
 vi.mock('@/lib/uploads/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/uploads/client')>()),
   uploadFile: harness.upload,

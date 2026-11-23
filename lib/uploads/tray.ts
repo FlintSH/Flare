@@ -376,6 +376,13 @@ export function createUploadTray(send = uploadFile) {
         void run()
       }
     },
+    /** Forgets a finished file deleted elsewhere (its sheet), by its id. */
+    forgetFile(fileId: string) {
+      const gone = state.files
+        .filter((file) => file.status === 'done' && file.result?.id === fileId)
+        .map(({ key }) => key)
+      if (gone.length) drop(new Set(gone))
+    },
     /** Forgets every finished file; anything still going stays. */
     clear() {
       drop(

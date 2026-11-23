@@ -28,6 +28,12 @@ export const FileTagsDialog = onDemand(() =>
   )
 )
 
+export const FolderDialog = onDemand(() =>
+  import('@/components/folders/folder-dialog').then(
+    (module) => module.FolderDialog
+  )
+)
+
 export const TagManager = onDemand(() =>
   import('@/components/tags/tag-manager').then((module) => module.TagManager)
 )

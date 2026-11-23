@@ -7,13 +7,28 @@
  */
 export type Handoff =
   | { kind: 'link'; url: string }
-  | { kind: 'text'; text: string }
+  | {
+      kind: 'text'
+      text: string
+      /** Opened as a private paste (it carries a credential). */
+      private?: boolean
+    }
   | { kind: 'files'; files: readonly File[] }
 
 let waiting: Handoff | null = null
 
+const HANDOFF_EVENT = 'flare:handoff'
+
 export function handOff(handoff: Handoff) {
   waiting = handoff
+  // A page that's already open (Find used on Links itself) takes it now.
+  window.dispatchEvent(new Event(HANDOFF_EVENT))
+}
+
+/** Calls `take` whenever something is handed over while a page is open. */
+export function onHandoff(take: () => void) {
+  window.addEventListener(HANDOFF_EVENT, take)
+  return () => window.removeEventListener(HANDOFF_EVENT, take)
 }
 
 /** What was handed to a page of this kind, once. */

@@ -16,7 +16,7 @@ description: Write or paste text and code in an editor that highlights it like t
 3. Check the options row under the editor. It works as on [Upload](./uploading#choose-the-options): profile, **Public** or **Private** with an optional password, expiration, folder and tags.
 4. Choose **Create paste**, or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on a Mac) in the editor.
 
-Creating the paste also copies its link, so you can paste it straight into a chat or an issue. The editor stays, read-only, showing exactly what you shared, with the link, **Copied**, **Open** and **New paste** above it. If the browser didn't allow the copy, for example because you switched tabs while the paste was being created, the button reads **Copy link** instead; the paste was still created once. Choose **New paste** for another. Your options stay for the next paste, except the password, which clears.
+Creating the paste also copies its link, so you can paste it straight into a chat or an issue. The editor stays, read-only, showing exactly what you shared, with the link, **Copied**, **Manage** and **New paste** above it. **Manage** opens the paste's [sheet](./moving-around#a-sheet-for-every-file-and-link), where you can change who can open it and when it expires; hold <kbd>Ctrl</kbd> or <kbd>⌘</kbd> to open its share page instead. A role that can't view your files gets **Open**, the share page, in its place. If the browser didn't allow the copy, for example because you switched tabs while the paste was being created, the button reads **Copy link** instead; the paste was still created once. Choose **New paste** for another. Your options stay for the next paste, except the password, which clears.
 
 <Screenshot src="/screenshots/workspace/paste-complete.png" alt="A created paste: its link with Copied, Open and New paste above the TypeScript code it holds, described as deploy.ts, TypeScript, Public, Never expires" caption="The link is already on your clipboard, and the text stays as it was shared." />
 
@@ -28,7 +28,7 @@ Text that is only spaces or empty lines can't be created. While the paste is bei
 
 What you've written stays while you move around Flare: open **Files** and come back, and the text and name are still there. Reloading the page, closing the tab or signing out ends the draft, so while it has text the browser asks first, on whichever Flare page is open. A paste that finishes after you left and came back clears its own text only, not anything you typed since. Drafts are kept in the tab's memory only, never in browser storage, because pastes often hold logs, keys and other private text.
 
-Text sent from [Upload](./uploading#upload-from-your-browser) with **Make a paste** is added after a blank line at the end of a draft you already have, never in its place, and Flare says so.
+Text sent from [Upload](./uploading#upload-from-your-browser) with **Make a paste**, or [pasted on another dashboard page](./moving-around#paste-anywhere) and opened with **Open in Paste**, is added after a blank line at the end of a draft you already have, never in its place, and Flare says so. Text is never shared from another page without passing through Paste.
 
 Earlier versions used a plain text box, offered no expiration, folder or tag choice, and lost the text when you left the page. Before this version you named the language yourself, and creating a paste replaced the text with its link.
 
@@ -76,7 +76,7 @@ Logs and configuration snippets can contain passwords, access tokens, email addr
 
 **Paste** uses the same [upload profiles](./upload-profiles) as other uploads. A profile can choose visibility, relative expiration and its action, randomized URL naming, share-page style, and tags. The options row starts from your default profile; pick another from its first button, or change one option for this paste.
 
-For example, create a **One-day snippets** profile with public visibility, a one-day expiration, and **Delete file**. Select it when sharing a temporary diagnostic snippet, or choose **Deleted after 1 day** on the expiration button for a single paste. After creation, you can adjust the paste under **Files → file menu → Manage expiration**.
+For example, create a **One-day snippets** profile with public visibility, a one-day expiration, and **Delete file**. Select it when sharing a temporary diagnostic snippet, or choose **Deleted after 1 day** on the expiration button for a single paste. After creation, change it in the paste's sheet, under **Expires**.
 
 ## Manage pastes in your library
 

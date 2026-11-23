@@ -396,7 +396,7 @@ export function IntegrationsPanel({
               setLifetime(DEFAULT_TOKEN_LIFETIME)
             }}
           >
-            <Card className="min-w-0">
+            <Card id="api-tokens" className="min-w-0 scroll-mt-28">
               <CardHeader className={cardHeaderRow}>
                 <div className="min-w-0 space-y-1.5">
                   <h2 className={cardTitle}>API tokens</h2>
@@ -634,7 +634,7 @@ export function IntegrationsPanel({
               setSelectedScopes([])
             }}
           >
-            <Card className="min-w-0">
+            <Card id="webhooks" className="min-w-0 scroll-mt-28">
               <CardHeader className={cardHeaderRow}>
                 <div className="min-w-0 space-y-1.5">
                   <h2 className={cardTitle}>Webhooks</h2>

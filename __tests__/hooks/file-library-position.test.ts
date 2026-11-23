@@ -273,6 +273,28 @@ describe('file library history positions', () => {
     expect(history.replaceState).not.toHaveBeenCalled()
   })
 
+  it('keeps its place while a sheet opens, steps and closes over it', () => {
+    history.state = withLibraryPosition(nextState, key, 700)
+    let hook = render()
+    expect(hook.position.current).toBe(700)
+    hook.record(720)
+    // The sheet's own entry: no saved place of its own.
+    location.search = '?file=a'
+    history.state = null
+    hook = render(filters, 'file=a')
+    expect(hook.position.current).toBe(720)
+    location.search = '?file=b'
+    hook = render(filters, 'file=b')
+    expect(hook.position.current).toBe(720)
+    // Back to the library's entry.
+    location.search = ''
+    history.state = withLibraryPosition(nextState, key, 700)
+    dispatch('popstate')
+    hook = render()
+    expect(hook.position.current).toBe(720)
+    expect(onRestore).not.toHaveBeenCalled()
+  })
+
   it('restores another filter entry after popstate and ignores foreign paths', () => {
     const hook = render()
     hook.record(48)

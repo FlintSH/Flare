@@ -2,6 +2,8 @@
 
 import { useRef, useState } from 'react'
 
+import { useRouter } from 'next/navigation'
+
 import {
   AlertCircle,
   ChevronDown,
@@ -39,6 +41,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+import { defaultsWritten, setDefaultProfile } from '@/lib/client/profile'
 import { apiRequest } from '@/lib/client/request'
 import {
   PROFILE_NAME_MAX_LENGTH,
@@ -207,12 +210,16 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
       fallback: 'Could not save your changes.',
     })
   }
+  const router = useRouter()
   async function perform(action: () => Promise<void>) {
     setBusy(true)
     setMessage('')
     try {
       await action()
       void refresh()
+      // The dashboard's paste card and drop overlay show the saved settings
+      // from the layout, which this brings up to date.
+      router.refresh()
     } catch (failure) {
       setMessage(
         failure instanceof Error ? failure.message : 'Please try again.'
@@ -396,9 +403,10 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                   disabled={busy}
                   onClick={() =>
                     void perform(async () => {
-                      await request('/api/upload-profiles/default', 'PUT', {
-                        profileId: null,
-                      })
+                      await setDefaultProfile(
+                        null,
+                        'Could not save your changes.'
+                      )
                     })
                   }
                 >
@@ -678,6 +686,11 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                       disabled={busy}
                       onClick={() =>
                         void perform(async () => {
+                          // Deleting the default clears it: an older Undo
+                          // must not bring back the profile before it
+                          // (counted as it starts, like every write).
+                          if (data?.defaultProfileId === editing.id)
+                            defaultsWritten.profile += 1
                           await request(
                             `/api/upload-profiles/${editing.id}`,
                             'DELETE'
@@ -710,9 +723,10 @@ export function ProfileManager({ embedded = false }: { embedded?: boolean }) {
                       disabled={busy || data?.defaultProfileId === editing.id}
                       onClick={() =>
                         void perform(async () => {
-                          await request('/api/upload-profiles/default', 'PUT', {
-                            profileId: editing.id,
-                          })
+                          await setDefaultProfile(
+                            editing.id,
+                            'Could not save your changes.'
+                          )
                           toast({ title: 'Default profile updated' })
                         })
                       }

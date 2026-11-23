@@ -51,7 +51,7 @@ export function AgentsCard({
       administration={administration}
       onCreated={onConnected}
     >
-      <Card className="min-w-0">
+      <Card id="agents" className="min-w-0 scroll-mt-28">
         <CardHeader className={cardHeaderRow}>
           <div className="min-w-0 space-y-1.5">
             <h2 className={cardTitle}>Agents</h2>

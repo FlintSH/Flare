@@ -94,7 +94,7 @@ curl --fail-with-body \
 }
 ```
 
-Links are ordered newest first. The endpoint returns the account's whole list; it has no pagination or filtering parameters. An empty account receives `data.urls: []`. The answer carries `Cache-Control: private, no-store`; earlier versions sent no caching header with it.
+Links are ordered newest first. The endpoint returns the account's whole list, without pagination. Add `?id=cm_link` to fetch just one of your links: `data.urls` then holds that link, or is empty when no link of yours has that id (an empty id, or one longer than 64 characters, matches nothing). Earlier builds ignored `id` and always returned the whole list. An empty account receives `data.urls: []`. The answer carries `Cache-Control: private, no-store`; earlier versions sent no caching header with it.
 
 ## Change where a link leads
 

@@ -27,6 +27,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 
+import { openFileSheet } from '@/lib/client/file-sheet'
+import { allows } from '@/lib/permissions/actions'
 import {
   LINK_FORMATS,
   LINK_FORMAT_NAMES,
@@ -35,6 +37,8 @@ import {
 import { formatTransfer } from '@/lib/uploads/speed'
 import type { TrayFile } from '@/lib/uploads/tray'
 import { cn, formatBytes } from '@/lib/utils'
+
+import { usePermissions } from '@/hooks/use-permissions'
 
 /** The link without its scheme, as people read it. */
 export const readable = (url: string) => url.replace(/^https?:\/\//, '')
@@ -67,6 +71,10 @@ export function TrayRow({
   onMakePrivate?: () => void
 }) {
   const { status, name, result } = file
+  // Its sheet when this account can open it (it reads the library); else
+  // the link opens its share page.
+  const { user } = usePermissions()
+  const sheetId = allows(user, 'viewFiles') ? result?.id : undefined
   const sending = status === 'sending'
   // Every byte is out and the server is storing it: too late to cancel
   // without leaving a file behind, so it finishes.
@@ -96,6 +104,20 @@ export function TrayRow({
               target="_blank"
               rel="noopener noreferrer"
               title={name}
+              // Its sheet, where everything about it can change; a modified
+              // click opens its page instead.
+              onClick={(event) => {
+                if (
+                  !sheetId ||
+                  event.metaKey ||
+                  event.ctrlKey ||
+                  event.shiftKey ||
+                  event.altKey
+                )
+                  return
+                event.preventDefault()
+                openFileSheet(sheetId)
+              }}
               className="truncate rounded-sm text-sm font-medium underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
             >
               {name}

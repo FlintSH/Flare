@@ -16,11 +16,8 @@ import {
   ArrowUpRight,
   Check,
   Copy,
-  Download,
   Loader2,
   MoreHorizontal,
-  Pencil,
-  QrCode,
   RefreshCw,
   Search,
   Trash2,
@@ -39,14 +36,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -55,11 +44,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { copyText, copyWhenReady } from '@/lib/client/clipboard'
-import { takeHandoff } from '@/lib/client/handoff'
+import { openLinkSheet } from '@/lib/client/file-sheet'
+import { LINKS_CHANGED, asLink, linkCarriesCredential } from '@/lib/client/give'
+import { onHandoff, takeHandoff } from '@/lib/client/handoff'
+import { claimPaste, isEditable } from '@/lib/client/paste-claim'
 import { RefusedRequest, apiRequest } from '@/lib/client/request'
 import {
   sameDestination,
@@ -71,7 +62,6 @@ import {
   SHORT_CODE_MAX_LENGTH,
   type ShortLink,
   shortLinkInputSchema,
-  shortLinkUpdateSchema,
   shortLinkUrl,
 } from '@/lib/links/schema'
 import { cn } from '@/lib/utils'
@@ -102,8 +92,6 @@ export function LinksManager() {
   const { can } = usePermissions()
   const canCreate = can('links.create')
   const canDelete = can('links.delete')
-  // A new destination retires the old redirect, so it needs both.
-  const canEdit = canCreate && canDelete
   const hydrated = useHydrated()
   const origin = hydrated ? window.location.origin : ''
   const { toast } = useToast()
@@ -116,9 +104,7 @@ export function LinksManager() {
   const [query, setQuery] = useState('')
   const [fresh, setFresh] = useState<string>()
   const [copied, setCopied] = useState<string>()
-  const [editing, setEditing] = useState<ShortLink | null>(null)
   const [deleting, setDeleting] = useState<ShortLink | null>(null)
-  const [coding, setCoding] = useState<ShortLink | null>(null)
   const [announcement, setAnnouncement] = useState('')
 
   const load = useCallback(
@@ -155,6 +141,12 @@ export function LinksManager() {
     const controller = new AbortController()
     void load(controller.signal)
     return () => controller.abort()
+  }, [load])
+  // A change made in a link's sheet shows here too.
+  useEffect(() => {
+    const changed = () => void load(undefined, true)
+    window.addEventListener(LINKS_CHANGED, changed)
+    return () => window.removeEventListener(LINKS_CHANGED, changed)
   }, [load])
 
   // After a change, read the list again. A read already under way started
@@ -318,12 +310,9 @@ export function LinksManager() {
                   origin={origin}
                   fresh={fresh === link.id}
                   copied={copied === link.id}
-                  canEdit={canEdit}
                   canDelete={canDelete}
                   onCopy={() => void copy(link)}
-                  onEdit={() => setEditing(link)}
                   onDelete={() => setDeleting(link)}
-                  onQrCode={() => setCoding(link)}
                 />
               ))}
             </ul>
@@ -331,25 +320,6 @@ export function LinksManager() {
         )}
       </div>
 
-      <QrCodeDialog
-        link={coding}
-        origin={origin}
-        onClose={() => setCoding(null)}
-        onCopy={(link) => void copy(link)}
-      />
-      <EditLinkDialog
-        link={editing}
-        origin={origin}
-        onClose={() => setEditing(null)}
-        onSaved={(saved) => {
-          setLinks((current) =>
-            current.map((link) => (link.id === saved.id ? saved : link))
-          )
-          setEditing(null)
-          reconcile()
-          toast({ title: 'Link updated' })
-        }}
-      />
       <DeleteLinkDialog
         link={deleting}
         origin={origin}
@@ -397,13 +367,54 @@ function LinkComposer({
   // phone's keyboard waits for a tap. Taken once the page is on screen, as a
   // render can be thrown away and run again.
   useEffect(() => {
-    const handed = takeHandoff('link')
-    if (handed) setUrl(handed.url)
+    const take = () => {
+      const handed = takeHandoff('link')
+      if (handed) setUrl(handed.url)
+      return Boolean(handed)
+    }
+    take()
     if (window.matchMedia('(pointer: fine)').matches) field.current?.focus()
+    // Handed over while this page is open: it fills the field the same way.
+    return onHandoff(() => {
+      if (take()) field.current?.focus()
+    })
+  }, [])
+  // A link pasted anywhere on this page, with no field focused, goes into
+  // the field, instead of the dashboard's paste-anywhere card.
+  useEffect(() => {
+    const release = claimPaste()
+    const paste = (event: ClipboardEvent) => {
+      // A link's sheet or another dialog has the page.
+      if (
+        event.defaultPrevented ||
+        isEditable(event.target) ||
+        document.querySelector(
+          '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'
+        )
+      )
+        return
+      const pasted = event.clipboardData?.getData('text/plain').trim()
+      // Only a web address: other text isn't a link to shorten.
+      const address = pasted && asLink(pasted)
+      if (!address || !field.current || field.current.disabled) return
+      event.preventDefault()
+      setUrl(address)
+      field.current.focus()
+    }
+    document.addEventListener('paste', paste)
+    return () => {
+      release()
+      document.removeEventListener('paste', paste)
+    }
   }, [])
 
   const address = withScheme(url)
   const tracking = useMemo(() => trackingParameters(address), [address])
+  // The same rule as Find and the paste card: said before it's made public.
+  const carries = useMemo(
+    () => (address ? linkCarriesCredential(address) : null),
+    [address]
+  )
   const suggestion = useMemo(
     () => (code ? null : suggestEnding(address)),
     [address, code]
@@ -448,7 +459,12 @@ function LinkComposer({
     )
     creating.then(
       (link) => {
-        setUrl('')
+        // A link handed over meanwhile stays in the field.
+        setUrl((current) =>
+          current === address || withScheme(current.trim()) === address
+            ? ''
+            : current
+        )
         setCode('')
         setRemoved(null)
         setBusy(false)
@@ -462,6 +478,11 @@ function LinkComposer({
   }
 
   const notes = [
+    carries && (
+      <span key="carries" className="font-medium text-warning">
+        It carries {carries}. Anyone with the short link could use it.
+      </span>
+    ),
     tracking && (
       <span
         key="tracking"
@@ -651,23 +672,17 @@ function LinkRow({
   origin,
   fresh,
   copied,
-  canEdit,
   canDelete,
   onCopy,
-  onEdit,
   onDelete,
-  onQrCode,
 }: {
   link: ShortLink
   origin: string
   fresh: boolean
   copied: boolean
-  canEdit: boolean
   canDelete: boolean
   onCopy: () => void
-  onEdit: () => void
   onDelete: () => void
-  onQrCode: () => void
 }) {
   const created = new Date(link.createdAt)
   const host = origin.replace(/^https?:\/\//, '')
@@ -683,6 +698,21 @@ function LinkRow({
           href={shortLinkUrl(link.shortCode)}
           target="_blank"
           rel="noopener noreferrer"
+          aria-haspopup="dialog"
+          // Its sheet, with everything about it; a modified click opens the
+          // link itself, as a link does.
+          onClick={(event) => {
+            if (
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            )
+              return
+            event.preventDefault()
+            openLinkSheet(link.id)
+          }}
+          data-sheet-opener={link.id}
           className="block truncate rounded-sm font-mono text-sm outline-none underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span className="hidden text-muted-foreground sm:inline">{host}</span>
@@ -747,16 +777,6 @@ function LinkRow({
               Open destination
             </a>
           </DropdownMenuItem>
-          <DropdownMenuItem onSelect={onQrCode}>
-            <QrCode className="h-4 w-4" aria-hidden="true" />
-            QR code
-          </DropdownMenuItem>
-          {canEdit && (
-            <DropdownMenuItem onSelect={onEdit}>
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              Change destination
-            </DropdownMenuItem>
-          )}
           {canDelete && (
             <>
               <DropdownMenuSeparator />
@@ -780,120 +800,6 @@ const clicks = (count: number) =>
 
 const when = (date: Date) =>
   format(date, isSameYear(date, new Date()) ? 'MMM d' : 'MMM d, yyyy')
-
-function EditLinkDialog({
-  link,
-  origin,
-  onClose,
-  onSaved,
-}: {
-  link: ShortLink | null
-  origin: string
-  onClose: () => void
-  onSaved: (link: ShortLink) => void
-}) {
-  const [url, setUrl] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  useEffect(() => {
-    if (!link) return
-    setUrl(link.targetUrl)
-    setError('')
-    setBusy(false)
-  }, [link])
-
-  const save = async (event: FormEvent) => {
-    event.preventDefault()
-    if (!link || busy) return
-    setError('')
-    let body: z.infer<typeof shortLinkUpdateSchema>
-    try {
-      body = shortLinkUpdateSchema.parse({ url: url.trim() })
-    } catch (failure) {
-      setError(problem(failure, 'Check the link and try again.'))
-      return
-    }
-    setBusy(true)
-    try {
-      onSaved(
-        await apiRequest<ShortLink>(`/api/urls/${link.id}`, {
-          method: 'PATCH',
-          body,
-          fallback: 'Could not save. The link still leads where it did.',
-        })
-      )
-    } catch (failure) {
-      setError(
-        problem(failure, 'Could not save. The link still leads where it did.')
-      )
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Dialog
-      open={Boolean(link)}
-      onOpenChange={(open) => !open && !busy && onClose()}
-    >
-      <DialogContent className="sm:max-w-lg">
-        <form onSubmit={save} noValidate className="space-y-5">
-          <DialogHeader>
-            <DialogTitle>Change destination</DialogTitle>
-            <DialogDescription>
-              Everyone who opens{' '}
-              <span className="break-all font-mono text-foreground">
-                {link && shortLinkUrl(link.shortCode, origin)}
-              </span>{' '}
-              will go to the new address. Its clicks are kept.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="link-destination">Destination</Label>
-            <Input
-              id="link-destination"
-              type="url"
-              inputMode="url"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              disabled={busy}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? 'link-destination-error' : undefined}
-              className="font-mono text-sm"
-            />
-            {error && (
-              <p
-                id="link-destination-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {error}
-              </p>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              disabled={busy || !url.trim() || url.trim() === link?.targetUrl}
-            >
-              {busy && (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-              )}
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  )
-}
 
 function DeleteLinkDialog({
   link,
@@ -963,105 +869,5 @@ function DeleteLinkDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-/**
- * The short link as a QR code, for a slide, a poster or a phone across the
- * room. Made in the browser; nothing is sent anywhere.
- */
-function QrCodeDialog({
-  link,
-  origin,
-  onClose,
-  onCopy,
-}: {
-  link: ShortLink | null
-  origin: string
-  onClose: () => void
-  onCopy: (link: ShortLink) => void
-}) {
-  const [image, setImage] = useState<{ for: string; url: string } | null>(null)
-  const [failed, setFailed] = useState(false)
-  const address = link ? shortLinkUrl(link.shortCode, origin) : ''
-
-  useEffect(() => {
-    if (!address) return
-    let current = true
-    setFailed(false)
-    import('qrcode')
-      .then((QRCode) =>
-        QRCode.toDataURL(address, {
-          width: 768,
-          margin: 2,
-          errorCorrectionLevel: 'M',
-          color: { dark: '#000000', light: '#ffffff' },
-        })
-      )
-      .then(
-        (url) => {
-          if (current) setImage({ for: address, url })
-        },
-        () => {
-          if (current) setFailed(true)
-        }
-      )
-    return () => {
-      current = false
-    }
-  }, [address])
-
-  const ready = image?.for === address ? image.url : null
-
-  return (
-    <Dialog open={!!link} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>QR code</DialogTitle>
-          <DialogDescription className="break-all font-mono text-xs">
-            {address.replace(/^https?:\/\//, '')}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="mx-auto flex aspect-square w-full max-w-64 items-center justify-center overflow-hidden rounded-xl bg-white p-2">
-          {ready ? (
-            // A data URL made here; next/image would only add a wrapper.
-            <img
-              src={ready}
-              alt={`QR code for ${address}`}
-              className="h-full w-full [image-rendering:pixelated]"
-            />
-          ) : failed ? (
-            <p className="px-4 text-center text-sm text-neutral-600">
-              The QR code could not be made. Copy the link instead.
-            </p>
-          ) : (
-            <Loader2
-              className="h-6 w-6 animate-spin text-neutral-400"
-              aria-label="Making the QR code"
-            />
-          )}
-        </div>
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            variant="outline"
-            onClick={() => link && onCopy(link)}
-            disabled={!link}
-          >
-            <Copy className="h-4 w-4" aria-hidden="true" />
-            Copy link
-          </Button>
-          <Button asChild disabled={!ready}>
-            <a
-              href={ready ?? undefined}
-              download={link ? `${link.shortCode}-qr.png` : undefined}
-              aria-disabled={!ready}
-            >
-              <Download className="h-4 w-4" aria-hidden="true" />
-              Download PNG
-            </a>
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }

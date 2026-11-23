@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   NO_CHOICES,
+  accountDecidesExpiry,
   effectiveUpload,
   expiryLabel,
   expiryProblem,
@@ -217,5 +218,30 @@ describe('an expiration the role can carry out', () => {
     expect(
       expiryProblem({ expiry: after, expiryAction: 'SET_PRIVATE' }, only())
     ).toMatch(/can’t schedule expirations.*Never/)
+  })
+})
+
+describe('accountDecidesExpiry', () => {
+  it('is the account when the default profile sets nothing about expiry', () => {
+    expect(accountDecidesExpiry('DAY', { visibility: 'PUBLIC' })).toBe(true)
+    expect(accountDecidesExpiry('DAY', null)).toBe(true)
+  })
+
+  it('is the profile when it sets the time, even to the same value', () => {
+    expect(accountDecidesExpiry('DAY', { expiration: 'WEEK' })).toBe(false)
+    expect(accountDecidesExpiry('DAY', { expiration: 'DAY' })).toBe(false)
+  })
+
+  it('is the profile when it sets only what happens', () => {
+    expect(accountDecidesExpiry('DAY', { expiryAction: 'SET_PRIVATE' })).toBe(
+      false
+    )
+  })
+
+  it('ignores the action for Never, and never saves a custom date', () => {
+    expect(
+      accountDecidesExpiry('DISABLED', { expiryAction: 'SET_PRIVATE' })
+    ).toBe(true)
+    expect(accountDecidesExpiry(null, null)).toBe(false)
   })
 })

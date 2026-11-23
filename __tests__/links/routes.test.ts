@@ -250,6 +250,28 @@ describe('owner short-link API', () => {
     )
   })
 
+  it("looks up one of the caller's links by id, scoped to the caller", async () => {
+    links.findMany.mockResolvedValue([stored])
+    await listOwn(new Request('https://flare.test/api/urls?id=cm_link'))
+    expect(links.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'owner', id: 'cm_link' } })
+    )
+  })
+
+  it('matches nothing for an empty or over-long id', async () => {
+    links.findMany.mockClear()
+    for (const id of ['', 'x'.repeat(65)]) {
+      const response = await listOwn(
+        new Request(`https://flare.test/api/urls?id=${id}`)
+      )
+      expect(await response.json()).toEqual({
+        data: { urls: [] },
+        success: true,
+      })
+    }
+    expect(links.findMany).not.toHaveBeenCalled()
+  })
+
   it('deletes an owned link with an empty 204', async () => {
     links.findUnique.mockResolvedValue({ userId: 'owner' })
     const response = await deleteOwn(

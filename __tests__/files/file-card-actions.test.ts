@@ -15,6 +15,7 @@ vi.mock('next-auth/react', () => ({
   }),
 }))
 // Menus render their items as if open.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => {} }) }))
 vi.mock('@/components/ui/dropdown-menu', () => {
   const part = ({ children }: { children?: React.ReactNode }) =>
     React.createElement('div', null, children)
@@ -49,45 +50,42 @@ function card(...permissions: string[]) {
       file,
       onBrowseArchive: noop,
       onEditTags: noop,
-      onMove: noop,
     })
   )
 }
 
 describe('file card actions', () => {
-  it('offers each action only with the permissions it needs', () => {
+  it('offers the quick actions, each only with the permission it needs', () => {
     const none = card()
+    for (const label of ['Browse archive', 'Copy link', 'Delete file'])
+      expect(none, label).not.toContain(label)
+    expect(none).toContain('Download file')
+    expect(card('files.read')).toContain('Browse archive')
+    expect(card('files.share')).toContain('Copy link')
+    expect(card('files.delete')).toContain('Delete file')
+  })
+
+  it('leaves the file’s settings to its sheet, which the card opens', () => {
+    const all = card(
+      'files.read',
+      'files.share',
+      'files.update',
+      'files.delete',
+      'tags.manage',
+      'folders.manage'
+    )
     for (const label of [
-      'Browse archive',
-      'Copy link',
       'Change visibility',
       'Add password',
       'Manage expiration',
-      'Delete file',
       'Edit tags',
       'Move to folder',
     ])
-      expect(none, label).not.toContain(label)
-    expect(none).toContain('Open file')
-    expect(none).toContain('Download file')
-
-    expect(card('files.read')).toContain('Browse archive')
-    const sharing = card('files.share')
-    expect(sharing).toContain('aria-label="Copy link to bundle.zip"')
-    expect(sharing).toContain('Change visibility')
-    expect(sharing).toContain('Add password')
-    expect(card('files.update')).toContain('Manage expiration')
-    expect(card('files.delete')).toContain('aria-label="Delete bundle.zip"')
+      expect(all, label).not.toContain(label)
+    expect(all).toContain('aria-haspopup="dialog"')
   })
 
-  it('needs file editing as well as tags or folders to organize a file', () => {
-    expect(card('tags.manage')).not.toContain('Edit tags')
-    expect(card('folders.manage')).not.toContain('Move to folder')
-    expect(card('files.update', 'tags.manage')).toContain('Edit tags')
-    expect(card('files.update', 'folders.manage')).toContain('Move to folder')
-  })
-
-  it('opens the tag editor from the hidden-tag count only where the menu offers Edit tags', () => {
+  it('opens the tag editor from the hidden-tag count only where the role can tag', () => {
     const tagged = {
       ...file,
       tags: ['Work', 'Taxes', 'Receipts'].map((name) => ({ id: name, name })),

@@ -30,7 +30,7 @@ Flare records [instance audit events](/admin/audit) for application activity, in
 
 ## Share a public file
 
-1. Set its visibility to **Public** while uploading, or choose **Change visibility** from its library menu.
+1. Set its visibility to **Public** while uploading, or choose **Public** under **Access** in its [sheet](./moving-around#a-sheet-for-every-file-and-link).
 2. Choose **Copy link**.
 3. Send the copied URL to your recipient.
 4. If you added a password, send that separately.
@@ -41,7 +41,7 @@ Public files can be opened by anyone who obtains their URL, including someone a 
 
 ## Protect a link with a password
 
-Add a password in the upload form, or use **Files → file menu → Add password**. For an already protected file, **Manage password** lets you replace or remove it. Recipients open the link, enter the password in **File password**, and choose **Access file** to unlock the viewer. A wrong password keeps the file locked and shows a message under the field. The form sends the password as the page's `password` query parameter; if an address repeats it, Flare checks the first one, where earlier versions showed a server error. An account with `content.update`, such as an administrator, can also change a file's visibility and add, replace, or remove its password from **Users → More actions → View content** ([moderating files](/admin/users#moderate-files-and-shortened-links)).
+Add a password in the upload form, or choose **Add** beside **Password** in the file's [sheet](./moving-around#a-sheet-for-every-file-and-link) (shown while the file is public). For an already protected file, **Change** replaces the password and **Remove** removes it. Recipients open the link, enter the password in **File password**, and choose **Access file** to unlock the viewer. A wrong password keeps the file locked and shows a message under the field. The form sends the password as the page's `password` query parameter; if an address repeats it, Flare checks the first one, where earlier versions showed a server error. An account with `content.update`, such as an administrator, can also change a file's visibility and add, replace, or remove its password from **Users → More actions → View content** ([moderating files](/admin/users#moderate-files-and-shortened-links)).
 
 <Screenshot src="/screenshots/workspace/share-protected.png" alt="Password-protected share page asking a visitor to unlock the file" caption="A protected public file asks visitors for its password before showing the content." />
 
@@ -84,6 +84,8 @@ Earlier builds sized each card to its content, so every type had a different wid
 <Screenshot src="/screenshots/sharing/share-page-image.webp" alt="Flare share page for a JPEG image: the file's icon, name, type and size with Download, Copy link, Extract text and Open original beside them, and the picture below" caption="The name, type, size, and actions sit above the preview on every share page." />
 
 <Screenshot src="/screenshots/sharing/share-page-phone.webp" alt="The same share page on a phone, with Download as a wide button and the other actions as icon buttons above the picture" caption="On a phone the actions stay above the preview, with icons for everything but Download." />
+
+Share pages look the same to everyone, the file's owner included. You manage your own files from their [sheet](./moving-around#a-sheet-for-every-file-and-link) in the dashboard; **Share page** there opens this page in a new tab. Opening your own share page counts a view, as it always has; opening the sheet doesn't.
 
 ## What recipients can preview
 
@@ -164,7 +166,7 @@ The usual share link has a path such as `/your-id/screenshot.png`. It opens the 
 
 Links work for signed-out visitors whatever the file is called. Earlier builds asked them to sign in when a link's name had no extension, for example a file named `README`; those links now open like any other public link.
 
-Files uploaded by earlier builds can have link names that keep characters from the original filename, such as `My Report-1.PDF` or `notes.h#ml`. These links now escape `#`, `?`, `%`, and `\` in such names, so they reach the file: the library's **Open file** and **Copy link**; the file links in **Users → More actions → View content**; the share page's previews, video playback, password form, **Copy link**, **Copy text**, and **Open original**; and the addresses in social previews. Earlier builds wrote those characters as they were, so a link stopped at a `#` or `?`, broke at a `%`, or read a `\` as `/`. Spaces and other characters are written as your browser writes them, so other copied links read as before.
+Files uploaded by earlier builds can have link names that keep characters from the original filename, such as `My Report-1.PDF` or `notes.h#ml`. These links now escape `#`, `?`, `%`, and `\` in such names, so they reach the file: the file's sheet and its card's **Copy link**; the file links in **Users → More actions → View content**; the share page's previews, video playback, password form, **Copy link**, **Copy text**, and **Open original**; and the addresses in social previews. Earlier builds wrote those characters as they were, so a link stopped at a `#` or `?`, broke at a `%`, or read a `\` as `/`. Spaces and other characters are written as your browser writes them, so other copied links read as before.
 
 Appending `/raw` requests the file content without the surrounding page. For video files, `/direct` is a helper that returns JSON containing a playback URL: a temporary signed storage URL on S3, or on local storage the file's `/raw` link, carrying the password you sent. It is not a general-purpose download route. Appending `/media` gives an address you can keep, for a player on another site or a bookmark: each request is checked, then redirected to a newly signed storage URL for video and audio on S3, and to the file's `/raw` content otherwise. All three check file access before returning a response. Appending one does not bypass private visibility or passwords. Use the page's **Download** action when you want to save a copy.
 
@@ -200,12 +202,12 @@ If the stored file itself is gone from the server's disk or the S3 bucket, raw l
 
 ## Give a file a lifetime
 
-With `files.update`, use **Manage expiration** to schedule one of two actions:
+With `files.update`, choose **Change** beside **Expires** in the file's [sheet](./moving-around#a-sheet-for-every-file-and-link) to schedule one of two actions:
 
-- **Delete:** also requires `files.delete`; remove the saved file and stop the link from serving it.
-- **Set to private:** also requires `files.share`; stop public access while keeping your file and its storage usage.
+- **Then delete:** also requires `files.delete`; remove the saved file and stop the link from serving it.
+- **Then make private:** also requires `files.share`; stop public access while keeping your file and its storage usage.
 
-For a file that already has an expiration, the dialog opens with its time and its action selected. Earlier versions always selected **Delete file**, so saving a new time for a file set to become private switched it to deletion unless you chose **Set to private** again.
+For a file that already has an expiration, **Expires** names when and what happens, for example **Goes private in 2 days**, and **Change** opens with that action selected; choosing a new time keeps it. Earlier versions always selected **Delete file** in a dialog, so saving a new time for a file set to become private switched it to deletion unless you chose **Set to private** again.
 
 While an expiration is scheduled, the file's share page tells recipients how long they have, as **Expires in …** beside its size, whichever action you chose.
 

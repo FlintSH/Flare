@@ -1,6 +1,7 @@
 import type { LibraryFilters } from './contract'
 
-const HISTORY_POSITION = 'flareFileLibrary'
+/** The history state key holding the library's place. */
+export const HISTORY_POSITION = 'flareFileLibrary'
 
 /**
  * Canonical filters, including legacy page links, identify this history entry.

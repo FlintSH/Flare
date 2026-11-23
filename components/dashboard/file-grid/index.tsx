@@ -37,7 +37,6 @@ import {
 } from '@/components/dashboard/file-card/actions'
 import { FileCardSkeleton } from '@/components/dashboard/file-grid/file-card-skeleton'
 import { FileFilters } from '@/components/dashboard/file-grid/file-filters'
-import { SearchInput } from '@/components/dashboard/file-grid/search-input'
 import { VirtualFiles } from '@/components/dashboard/file-grid/virtual-files'
 import {
   ArchiveBrowserDialog,
@@ -52,6 +51,11 @@ import { PageHeader, pagePanelClassName } from '@/components/layout/page-header'
 import { TagFilter } from '@/components/tags/tag-filter'
 import { Button } from '@/components/ui/button'
 
+import {
+  onViewImage,
+  openFileSheet,
+  setSheetOrder,
+} from '@/lib/client/file-sheet'
 import { fileTypeLabel } from '@/lib/files/file-kind'
 import { fileUrls } from '@/lib/files/urls'
 import {
@@ -72,6 +76,7 @@ import {
 } from '@/lib/library/contract'
 import { allows } from '@/lib/permissions/actions'
 import type { PermissionSubject } from '@/lib/permissions/catalog'
+import { cn } from '@/lib/utils'
 
 import { SessionScoped, useAccountQuery } from '@/hooks/use-account-query'
 import { useFileFilters } from '@/hooks/use-file-filters'
@@ -306,6 +311,27 @@ function FileLibrary({ scope }: { scope: string }) {
     navigationPending,
     navigationStale,
   } = useImageGallery(filters, files, refreshKey)
+  // An open sheet steps through the files on screen with the arrow keys.
+  useEffect(() => setSheetOrder(files.map(({ id }) => id)), [files])
+  useEffect(() => () => setSheetOrder([]), [])
+  // A file's sheet opens its picture here, in the viewer that steps through
+  // the library's images.
+  // Only one the library has loaded; another (from Find, or moved out of
+  // this folder) opens on its own.
+  const loaded = useRef<readonly FileType[]>(files)
+  useEffect(() => {
+    loaded.current = files
+  }, [files])
+  useEffect(
+    () =>
+      onViewImage<FileType>((image) => {
+        if (!loaded.current.some(({ id }) => id === image.id)) return false
+        ImageLightbox.show(() => open(image), sameLibrary())
+        return true
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [open]
+  )
   const hasActiveFilters = Boolean(
     filters.tag ||
     filters.search ||
@@ -318,6 +344,15 @@ function FileLibrary({ scope }: { scope: string }) {
     filters.tag === UNTAGGED
       ? 'Untagged'
       : tags.find((tag) => tag.id === filters.tag)?.name || 'Selected tag'
+  const onlySearch =
+    !!filters.search &&
+    !filters.tag &&
+    !filters.types.length &&
+    !filters.visibility.length &&
+    !filters.dateFrom &&
+    !filters.dateTo &&
+    filters.sortBy === DEFAULT_SORT &&
+    filters.groupBy === 'none'
   const onlyTagFilter =
     !!filters.tag &&
     !filters.search &&
@@ -413,7 +448,6 @@ function FileLibrary({ scope }: { scope: string }) {
           }
         />
         <div className="flex flex-col gap-3 xl:flex-row">
-          <SearchInput onSearch={setSearch} initialValue={filters.search} />
           <FileFilters
             dateControl={
               <div ref={dateControls} className="min-[1360px]:hidden" />
@@ -444,7 +478,17 @@ function FileLibrary({ scope }: { scope: string }) {
         {(hasActiveFilters ||
           filters.sortBy !== DEFAULT_SORT ||
           filters.groupBy !== 'none') && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          // A search alone shows in the bar on wider screens, which clears it
+          // too; phones keep its chip.
+          <div
+            className={cn(
+              'mt-3 flex flex-wrap items-center gap-2',
+              // The bar's track (and its search) shows from 900px for every
+              // account, earlier for some; below 900px the chip keeps the
+              // search in view.
+              onlySearch && 'min-[900px]:hidden'
+            )}
+          >
             {filters.tag && (
               <FilterChip label={activeTagName} onRemove={() => setTag(null)}>
                 <Tag className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -499,15 +543,17 @@ function FileLibrary({ scope }: { scope: string }) {
                 onRemove={() => setGroupBy('none')}
               />
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 rounded-lg text-xs"
-              onClick={resetFilters}
-            >
-              <X className="mr-1 h-3 w-3" />
-              Reset filters
-            </Button>
+            {!onlySearch && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 rounded-lg text-xs"
+                onClick={resetFilters}
+              >
+                <X className="mr-1 h-3 w-3" />
+                Reset filters
+              </Button>
+            )}
           </div>
         )}
         <FolderBrowser
@@ -703,10 +749,6 @@ function FileLibrary({ scope }: { scope: string }) {
                   )
                   refreshFiles()
                 }}
-                onUpdate={refreshFiles}
-                onPreview={(image) =>
-                  ImageLightbox.show(() => open(image), sameLibrary())
-                }
                 onBrowseArchive={
                   isArchiveCandidate(file.name, file.mimeType)
                     ? () =>
@@ -716,18 +758,9 @@ function FileLibrary({ scope }: { scope: string }) {
                         )
                     : undefined
                 }
-                onEditTags={() =>
-                  FileTagsDialog.show(
-                    () => setTaggingFiles([file]),
-                    sameLibrary()
-                  )
-                }
-                onMove={() =>
-                  MoveFilesDialog.show(
-                    () => setMovingFiles([file]),
-                    sameLibrary()
-                  )
-                }
+                // A file's tags are edited in its sheet, like everything else
+                // about it; the tags dialog is for several files at once.
+                onEditTags={() => openFileSheet(file.id)}
                 folder={
                   // Inside a folder, every card would repeat the open folder.
                   file.folderId === filters.folder

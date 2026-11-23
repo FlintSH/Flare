@@ -123,6 +123,8 @@ export function useUploadOptions(
       chooseFolder: canChooseFolder,
       tag: canTag,
       chooseProfile: canChooseProfile,
+      /** Save a choice as the account's own default. */
+      saveDefaults: can('profile.update'),
     },
     saved,
     initialFolder: initialFolder?.name

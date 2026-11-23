@@ -131,6 +131,22 @@ export async function updateOwnShortLink(
   }
 }
 
+/** The owner's newest links whose ending or destination contains `query`. */
+export async function searchOwnShortLinks(
+  userId: string,
+  query: string,
+  take: number
+): Promise<ShortLink[]> {
+  const contains = { contains: query, mode: 'insensitive' as const }
+  const links = await prisma.shortenedUrl.findMany({
+    where: { userId, OR: [{ shortCode: contains }, { targetUrl: contains }] },
+    orderBy: { createdAt: 'desc' },
+    take,
+    select: shortLinkSelect,
+  })
+  return links.map((link) => linkView(link))
+}
+
 /** Another account's link is refused rather than reported missing. */
 async function assertOwnLink(userId: string, id: string) {
   const link = await prisma.shortenedUrl.findUnique({
@@ -141,10 +157,13 @@ async function assertOwnLink(userId: string, id: string) {
   if (link.userId !== userId) throw new ShortLinkError('Unauthorized', 403)
 }
 
-/** The owner's links, newest first. */
-export async function listOwnShortLinks(userId: string): Promise<ShortLink[]> {
+/** The owner's links, newest first; with `id`, just that one (if theirs). */
+export async function listOwnShortLinks(
+  userId: string,
+  id?: string
+): Promise<ShortLink[]> {
   const links = await prisma.shortenedUrl.findMany({
-    where: { userId },
+    where: { userId, ...(id ? { id } : {}) },
     orderBy: { createdAt: 'desc' },
     select: shortLinkSelect,
   })

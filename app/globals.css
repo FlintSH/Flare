@@ -140,6 +140,11 @@ body {
   html:has([data-flare-scrim][data-state='open']) {
     background-color: var(--scrim-solid);
   }
+  /* A full-screen surface (Find on a phone or tablet) fills the gutter
+     with its own colour instead. */
+  html:has([data-flare-fullscreen][data-state='open']) {
+    background-color: var(--overlay);
+  }
 
   /* Focus rings draw their 2px gap in the page colour; on the lifted
      overlay surface (dialogs, menus, popovers, bars) paint it in the

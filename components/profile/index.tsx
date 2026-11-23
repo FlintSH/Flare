@@ -314,7 +314,7 @@ export function ProfileClient({
 
       <PreferencesPanel active={displayedSection === 'data'}>
         <div className="space-y-6">
-          <Card>
+          <Card id="storage" className="scroll-mt-28">
             <CardHeader>
               <CardTitle>Room for your files</CardTitle>
               <CardDescription>
@@ -333,7 +333,7 @@ export function ProfileClient({
             </CardContent>
           </Card>
           {allows(sessionUser, 'exportAccount') && (
-            <Card>
+            <Card id="export" className="scroll-mt-28">
               <CardHeader>
                 <CardTitle>Take your files with you</CardTitle>
                 <CardDescription>
@@ -347,7 +347,7 @@ export function ProfileClient({
             </Card>
           )}
           <PermissionGate permission="profile.update">
-            <Card className="border-danger/30">
+            <Card id="delete-account" className="scroll-mt-28 border-danger/30">
               <CardHeader>
                 <CardTitle>Delete your account</CardTitle>
                 <CardDescription>
