@@ -456,6 +456,10 @@ describe('refusals that a retry cannot fix', () => {
     expect(refusedForGood(new UploadFailure(REQUEST_TOO_LARGE, 413))).toBe(
       false
     )
+    // A proxy that answers in JSON of its own.
+    expect(
+      refusedForGood(new UploadFailure('Request entity too large', 413))
+    ).toBe(false)
     expect(refusedForGood(new UploadFailure('Invalid filename.', 400))).toBe(
       false
     )
