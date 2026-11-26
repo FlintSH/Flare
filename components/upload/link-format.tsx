@@ -84,7 +84,7 @@ export function LinkFormatMenu({
       <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
           variant={attached ? 'default' : 'ghost'}
-          size="sm"
+          size={attached ? 'default' : 'sm'}
           className={
             attached
               ? 'gap-1 rounded-l-none border-0 border-l border-l-primary-foreground/25 px-2 font-normal focus-visible:z-10'

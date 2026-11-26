@@ -102,7 +102,7 @@ function EndFirst({ text }: { text: string }) {
 
 /** Over the picture, in the same style as the library's cards. */
 const overlayChip =
-  'inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-background/90 px-1.5 text-xs tabular-nums backdrop-blur-sm'
+  'inline-flex h-6 items-center gap-1 rounded-md border border-border/40 bg-background/90 px-1.5 text-[11px] font-medium tracking-normal tabular-nums backdrop-blur-sm'
 
 /**
  * One file on the Upload page, as a card like the library's: its picture,
@@ -279,12 +279,15 @@ export function TrayTile({
 
         {failed ? (
           <div className="mt-1 flex flex-col items-start gap-1.5">
-            <p className="flex min-w-0 max-w-full items-start gap-1 text-xs text-destructive">
+            <p
+              className="flex min-w-0 max-w-full items-start gap-1 text-xs leading-snug text-destructive"
+              title={file.reason}
+            >
               <AlertCircle
                 className="mt-px h-3.5 w-3.5 shrink-0"
                 aria-hidden="true"
               />
-              <span className="min-w-0 break-words">{file.reason}</span>
+              <Reason text={file.reason ?? ''} />
             </p>
             {/* Not for a refusal of its type or size: sending it again
                 would only be refused again. */}
@@ -302,9 +305,9 @@ export function TrayTile({
             )}
           </div>
         ) : result ? (
-          <div className="flex min-w-0 items-center gap-1">
+          <div className="mt-0.5 flex min-w-0 items-center gap-1">
             <p
-              className="flex min-w-0 flex-1 font-mono text-xs text-muted-foreground"
+              className="flex min-w-0 flex-1 text-xs text-muted-foreground"
               title={result.link}
             >
               <EndFirst text={endingOf(result.link)} />
@@ -313,7 +316,7 @@ export function TrayTile({
               type="button"
               variant="ghost"
               size="icon"
-              className="-mr-1.5 h-8 w-8 shrink-0"
+              className="-my-1 -mr-1 h-7 w-7 shrink-0"
               aria-label={`Copy ${LINK_FORMAT_NAMES[format].toLowerCase()} for ${name}`}
               title={copied ? 'Copied' : 'Copy'}
               onClick={() => onCopy(format)}
@@ -327,27 +330,35 @@ export function TrayTile({
           </div>
         ) : (
           <p className="mt-0.5 truncate text-xs tabular-nums text-muted-foreground">
-            {finishing ? (
-              'Finishing…'
-            ) : sending ? (
-              // The speed is in the line above on phones.
-              <>
-                <span className="sm:hidden">
-                  {formatTransfer(file.uploaded, file.size, null)}
-                </span>
-                <span className="max-sm:hidden">
-                  {formatTransfer(file.uploaded, file.size, file.speed)}
-                </span>
-              </>
-            ) : status === 'waiting' ? (
-              `${formatBytes(file.size)} · waiting`
-            ) : (
-              formatBytes(file.size)
-            )}
+            {finishing
+              ? 'Finishing…'
+              : sending
+                ? // The speed is said once, in the line above the cards.
+                  formatTransfer(file.uploaded, file.size, null)
+                : status === 'waiting'
+                  ? `${formatBytes(file.size)} · waiting`
+                  : formatBytes(file.size)}
           </p>
         )}
       </div>
     </li>
+  )
+}
+
+/**
+ * Why a file failed: the cause in red, any technical detail after its colon
+ * quieter, so the file's name still leads its card.
+ */
+function Reason({ text }: { text: string }) {
+  const colon = text.indexOf(': ')
+  if (colon < 1) return <span className="min-w-0 break-words">{text}</span>
+  return (
+    <span className="min-w-0 break-words">
+      {text.slice(0, colon + 1)}
+      <span className="line-clamp-2 text-muted-foreground">
+        {text.slice(colon + 2)}
+      </span>
+    </span>
   )
 }
 

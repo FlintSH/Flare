@@ -522,21 +522,29 @@ export function UploadForm({
   )
 
   const waiting = newest.filter(({ status }) => status === 'waiting').length
-  const status = held.length
-    ? `${files(held.length)} waiting`
+  // The batch's heading says where it stands; the detail beside it is quieter.
+  const [status, detail]: [string, string | null] = held.length
+    ? [`${files(held.length)} waiting`, null]
     : paused
-      ? `Paused · ${waiting} waiting`
+      ? ['Paused', `${waiting} waiting`]
       : going
         ? [
             `Uploading ${Math.min(done.length + failedCount + 1, newest.length)} of ${newest.length}`,
-            sending?.speed ? formatSpeed(sending.speed) : null,
-            sending?.speed ? remaining((total - sent) / sending.speed) : null,
+            sending?.speed
+              ? [
+                  formatSpeed(sending.speed),
+                  remaining((total - sent) / sending.speed),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : null,
           ]
-            .filter(Boolean)
-            .join(' · ')
         : failed
-          ? `${done.length} of ${newest.length} uploaded · ${failedCount} failed`
-          : `${files(done.length)} uploaded · ${formatBytes(total)}`
+          ? [
+              `${done.length} of ${newest.length} uploaded`,
+              `${failedCount} failed`,
+            ]
+          : [`${files(done.length)} uploaded`, formatBytes(total)]
   const publicDone = done.filter(
     (file) => file.outcome?.visibility === 'PUBLIC' && file.result?.id
   )
@@ -615,7 +623,7 @@ export function UploadForm({
               <Plus className="h-4 w-4" aria-hidden="true" />
               Choose files
             </Button>
-            <p className="mt-3 text-sm text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               Up to {formatBytes(maxSize)} each
             </p>
             {tips && <UploadTips shown={tips} onHide={() => void hideTips()} />}
@@ -654,9 +662,22 @@ export function UploadForm({
           <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <h2
               id="upload-batch-heading"
-              className="min-w-0 text-sm font-medium tabular-nums"
+              className="min-w-0 text-base font-semibold tracking-tight tabular-nums"
             >
               {status}
+              {detail && (
+                <span
+                  className={cn(
+                    'ml-2 text-xs font-normal tracking-normal',
+                    failed && !going && !held.length && !paused
+                      ? 'font-medium text-destructive'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  <span className="sr-only">, </span>
+                  {detail}
+                </span>
+              )}
             </h2>
             <p className="sr-only" aria-live="polite">
               {done.length
@@ -668,7 +689,7 @@ export function UploadForm({
             </p>
             <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
               {batchFolder && done.length > 0 && (
-                <Button asChild variant="ghost" size="sm">
+                <Button asChild variant="ghost" className="px-3">
                   <Link href={libraryHref({ folder: batchFolder.id })}>
                     <Folder className="h-4 w-4" aria-hidden="true" />
                     Open {batchFolder.name}
@@ -677,8 +698,8 @@ export function UploadForm({
               )}
               {pausedBy !== null && (
                 <Button
-                  size="sm"
                   variant="outline"
+                  className="px-3"
                   onClick={() => tray.retry(pausedBy)}
                 >
                   <RotateCw className="h-4 w-4" aria-hidden="true" />
@@ -687,7 +708,7 @@ export function UploadForm({
               )}
               {held.length > 0 ? (
                 <Button
-                  size="sm"
+                  className="px-3"
                   disabled={'held' in settings}
                   onClick={() => tray.release(settings)}
                 >
@@ -698,13 +719,12 @@ export function UploadForm({
                 done.length > 0 && (
                   <div className="flex flex-1 items-center sm:flex-none">
                     <Button
-                      size="sm"
-                      className="flex-1 rounded-r-none focus-visible:z-10 sm:flex-none"
+                      className="flex-1 rounded-r-none px-3 focus-visible:z-10 sm:flex-none"
                       onClick={() => void copy(done)}
                     >
                       <Copy className="h-4 w-4" aria-hidden="true" />
                       {copyLabel}
-                      <kbd className="ml-1 hidden rounded border border-current/30 px-1 font-sans text-[11px] leading-4 opacity-70 [@media(pointer:fine)]:sm:inline">
+                      <kbd className="ml-0.5 hidden font-sans text-[11px] font-normal leading-4 opacity-60 [@media(pointer:fine)]:sm:inline">
                         {copyKey}
                       </kbd>
                     </Button>
@@ -719,8 +739,7 @@ export function UploadForm({
               {finished && (
                 <Button
                   variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground max-sm:hidden"
+                  className="px-3 text-muted-foreground max-sm:hidden"
                   onClick={() => tray.clear()}
                   title="Uploaded files stay in your library"
                 >
@@ -781,12 +800,16 @@ export function UploadForm({
           </ul>
           {earlier.length > 0 && (
             <details className="group !mt-6 border-t border-border/60 pt-4">
-              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-sm font-semibold outline-none hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
                 <ChevronRight
-                  className="h-4 w-4 transition-transform group-open:rotate-90 motion-reduce:transition-none"
+                  className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
                   aria-hidden="true"
                 />
-                Earlier · {files(earlier.length)}
+                Earlier
+                <span className="ml-1 text-xs font-normal tabular-nums text-muted-foreground">
+                  <span className="sr-only">, </span>
+                  {files(earlier.length)}
+                </span>
               </summary>
               <ul className={cn(tileGrid, 'mt-3')}>
                 {earlier.map((file) => (

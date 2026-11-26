@@ -13,7 +13,7 @@ export type UploadTipsShown = {
 }
 
 const linkClassName =
-  'rounded-sm font-medium text-foreground underline underline-offset-4 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+  'rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 /**
  * What makes uploading automatic, at the foot of an empty Upload page: the
@@ -30,7 +30,7 @@ export function UploadTips({
   return (
     <aside
       aria-label="Upload tips"
-      className="mt-8 flex max-w-xl items-center gap-1 text-pretty text-sm text-muted-foreground max-sm:hidden"
+      className="mt-8 flex max-w-xl items-center gap-1 text-pretty text-xs text-muted-foreground max-sm:hidden"
     >
       <p>
         {shown.tools && (
@@ -61,12 +61,12 @@ export function UploadTips({
       <Button
         variant="ghost"
         size="icon"
-        className="h-8 w-8 shrink-0"
+        className="h-7 w-7 shrink-0"
         aria-label="Hide these tips"
         title="Hide these tips"
         onClick={onHide}
       >
-        <X className="h-4 w-4" aria-hidden="true" />
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
       </Button>
     </aside>
   )
