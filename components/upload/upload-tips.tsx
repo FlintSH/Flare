@@ -10,8 +10,6 @@ export type UploadTipsShown = {
   createProfile: boolean
   /** The role can download the screenshot tools. */
   tools: boolean
-  /** The account has a default profile, which tool uploads follow. */
-  defaultProfile: boolean
 }
 
 const linkClassName =

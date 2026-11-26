@@ -11,6 +11,7 @@ import {
   Copy,
   EyeOff,
   Folder,
+  ListX,
   MoreHorizontal,
   Plus,
   RotateCw,
@@ -508,7 +509,11 @@ export function UploadForm({
   const empty = trayFiles.length === 0
   const mac = hydrated && /Mac|iPhone|iPad/.test(navigator.userAgent)
   const copyKey = mac ? '⌘C' : 'Ctrl+C'
-  const canShare = hydrated && typeof navigator.share === 'function'
+  // The share sheet is for phones and tablets; desktops copy.
+  const canShare =
+    hydrated &&
+    typeof navigator.share === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches
   const canDelete = can('files.delete')
   const batchFolder = newest.find((file) => file.outcome?.folder)?.outcome
     ?.folder
@@ -661,7 +666,7 @@ export function UploadForm({
             <p className="sr-only" aria-live="polite">
               {announcement}
             </p>
-            <div className="flex w-full items-center gap-1.5 sm:w-auto">
+            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
               {batchFolder && done.length > 0 && (
                 <Button asChild variant="ghost" size="sm">
                   <Link href={libraryHref({ folder: batchFolder.id })}>
@@ -694,7 +699,7 @@ export function UploadForm({
                   <div className="flex flex-1 items-center sm:flex-none">
                     <Button
                       size="sm"
-                      className="flex-1 rounded-r-none sm:flex-none"
+                      className="flex-1 rounded-r-none focus-visible:z-10 sm:flex-none"
                       onClick={() => void copy(done)}
                     >
                       <Copy className="h-4 w-4" aria-hidden="true" />
@@ -715,20 +720,24 @@ export function UploadForm({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground"
+                  className="text-muted-foreground max-sm:hidden"
                   onClick={() => tray.clear()}
                   title="Uploaded files stay in your library"
                 >
                   Clear list
                 </Button>
               )}
-              {batchMenu && (
+              {/* On phones Clear list moves in here, beside Copy's width. */}
+              {(batchMenu || finished) && (
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-9 w-9 data-[state=open]:bg-accent"
+                      className={cn(
+                        'h-9 w-9 data-[state=open]:bg-accent',
+                        !batchMenu && 'sm:hidden'
+                      )}
                       aria-label="More for this list"
                     >
                       <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
@@ -749,6 +758,15 @@ export function UploadForm({
                         {publicDone.length === 1
                           ? 'Make private'
                           : `Make ${publicDone.length} private`}
+                      </DropdownMenuItem>
+                    )}
+                    {finished && (
+                      <DropdownMenuItem
+                        className="sm:hidden"
+                        onSelect={() => tray.clear()}
+                      >
+                        <ListX className="h-4 w-4" aria-hidden="true" />
+                        Clear list
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>

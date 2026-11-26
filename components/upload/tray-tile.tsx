@@ -184,7 +184,6 @@ export function TrayTile({
                   className="h-3.5 w-3.5 animate-spin"
                   aria-hidden="true"
                 />
-                <span className="sr-only">Finishing</span>
               </span>
             ) : (
               <OverlayButton
@@ -280,12 +279,12 @@ export function TrayTile({
 
         {failed ? (
           <div className="mt-1 flex flex-col items-start gap-1.5">
-            <p className="flex min-w-0 items-start gap-1 text-xs text-destructive">
+            <p className="flex min-w-0 max-w-full items-start gap-1 text-xs text-destructive">
               <AlertCircle
                 className="mt-px h-3.5 w-3.5 shrink-0"
                 aria-hidden="true"
               />
-              <span className="break-words">{file.reason}</span>
+              <span className="min-w-0 break-words">{file.reason}</span>
             </p>
             {/* Not for a refusal of its type or size: sending it again
                 would only be refused again. */}
@@ -340,6 +339,8 @@ export function TrayTile({
                   {formatTransfer(file.uploaded, file.size, file.speed)}
                 </span>
               </>
+            ) : status === 'waiting' ? (
+              `${formatBytes(file.size)} · waiting`
             ) : (
               formatBytes(file.size)
             )}
@@ -427,7 +428,11 @@ function Badges({ file }: { file: TrayFile }) {
     outcome.expires && { icon: Clock, label: outcome.expires },
   ].filter((badge) => !!badge)
   return badges.map(({ icon: Icon, label }) => (
-    <span key={label} title={label} className={overlayChip}>
+    <span
+      key={label}
+      title={label}
+      className={cn(overlayChip, 'pointer-events-auto')}
+    >
       <Icon className="h-3 w-3" aria-hidden="true" />
       <span className="sr-only">{label}</span>
     </span>

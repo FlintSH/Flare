@@ -87,7 +87,7 @@ export function LinkFormatMenu({
           size="sm"
           className={
             attached
-              ? 'gap-1 rounded-l-none border-l border-primary-foreground/25 px-2 font-normal'
+              ? 'gap-1 rounded-l-none border-0 border-l border-l-primary-foreground/25 px-2 font-normal focus-visible:z-10'
               : 'gap-1 px-2 text-muted-foreground data-[state=open]:bg-accent'
           }
           aria-label={`Copy as: ${LINK_FORMAT_NAMES[format]}`}

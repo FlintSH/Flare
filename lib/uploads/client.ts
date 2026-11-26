@@ -1,3 +1,4 @@
+import { TYPE_MISMATCH } from './refusals'
 import { type UploadResponse, parseUploadResponse } from './response'
 import type { UploadProfileOptions } from './schema'
 
@@ -76,12 +77,14 @@ export function stopsEveryUpload(error: unknown) {
 }
 
 /**
- * Whether the server refused this file for something sending it again can't
- * change: its type, or its size over the per-file limit.
+ * Whether Flare refused this file for something sending it again can't
+ * change: contents that don't match its type, or a size over the per-file
+ * limit. A proxy's bare 413 isn't one: an administrator can raise that.
  */
 export function refusedForGood(error: unknown) {
   if (!(error instanceof UploadFailure) || stopsEveryUpload(error)) return false
-  return error.status === 413 || error.status === 415
+  if (error.status === 413) return error.message !== REQUEST_TOO_LARGE
+  return error.status === 400 && error.message.startsWith(TYPE_MISMATCH)
 }
 
 /** Splits files by the server's maximum file size, which it checks again. */

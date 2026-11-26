@@ -38,7 +38,6 @@ export default async function UploadPage({
       hasPermission(session.user, 'uploadProfiles.manage') &&
       !saved.has.profiles,
     tools: allows(session.user, 'uploaderTools'),
-    defaultProfile: !!saved.profile,
   }
 
   return (

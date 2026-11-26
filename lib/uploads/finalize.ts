@@ -28,6 +28,7 @@ import { validateFileType } from '@/lib/security/file-validation'
 import type { StorageProvider } from '@/lib/storage'
 import { captureStorageTarget } from '@/lib/storage/targets'
 import { applyAutomaticTags, applyProfileTags } from '@/lib/tags/service'
+import { TYPE_MISMATCH } from '@/lib/uploads/refusals'
 import { bytesToMB } from '@/lib/utils/size'
 
 import { assertFits, uploadCapacity } from './capacity'
@@ -123,7 +124,7 @@ export async function prepareUpload(
     type.detectedType
   if (!type.valid && !adopted)
     throw new UploadError(
-      `File type mismatch: detected ${type.detectedType}, claimed ${mimeType}`
+      `${TYPE_MISMATCH}: detected ${type.detectedType}, claimed ${mimeType}`
     )
   const passwordHash =
     input.passwordHash !== undefined

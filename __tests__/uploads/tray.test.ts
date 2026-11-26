@@ -275,6 +275,25 @@ describe('upload tray', () => {
     })
   })
 
+  it('offers no second try for a refusal that would only repeat', async () => {
+    const client = fakeClient()
+    const tray = createUploadTray(client.send)
+    tray.add([file('big.bin'), file('b.txt')], 100, publicly())
+    ;(await client.next()).fail(
+      new UploadFailure('A file exceeds the upload size limit.', 413)
+    )
+    ;(await client.next()).fail(new UploadFailure('Upload interrupted.', 400))
+    await vi.waitFor(() =>
+      expect(tray.getState().files[1]!.status).toBe('failed')
+    )
+    const [big, other] = tray.getState().files
+    expect(big!.final).toBe(true)
+    expect(other!.final).toBe(false)
+    tray.retry(big!.key)
+    expect(tray.getState().files[0]!.status).not.toBe('failed')
+    expect(tray.getState().files[0]!.final).toBeUndefined()
+  })
+
   it.each([
     [new UploadFailure('This would exceed your storage quota.', 413), true],
     [new UploadFailure('Your role no longer allows this upload.', 403), true],
