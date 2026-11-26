@@ -13,7 +13,7 @@ description: Write or paste text and code in an editor that highlights it like t
 
 1. Open **Paste**. On a computer, the editor is ready to type in.
 2. Paste or type your text. Flare [reads it](#flare-reads-what-you-paste): the language, a name, and anything worth a second look.
-3. Check the options row under the editor. It works as on [Upload](./uploading#choose-the-options): profile, **Public** or **Private** with an optional password, expiration, folder and tags.
+3. Check the options row under the editor. It works as on [Upload](./uploading#choose-the-options): profile, **Public** or **Private** with an optional password, expiration, folder and tags. A button with nothing set (**Profile**, **Folder**, **Tags**) has a dashed outline, and the row wraps on a phone instead of scrolling sideways.
 4. Choose **Create paste**, or press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> (<kbd>⌘</kbd>+<kbd>Enter</kbd> on a Mac) in the editor.
 
 Creating the paste also copies its link, so you can paste it straight into a chat or an issue. The editor stays, read-only, showing exactly what you shared, with the link, **Copied**, **Manage** and **New paste** above it. **Manage** opens the paste's [sheet](./moving-around#a-sheet-for-every-file-and-link), where you can change who can open it and when it expires; hold <kbd>Ctrl</kbd> or <kbd>⌘</kbd> to open its share page instead. A role that can't view your files gets **Open**, the share page, in its place. If the browser didn't allow the copy, for example because you switched tabs while the paste was being created, the button reads **Copy link** instead; the paste was still created once. Choose **New paste** for another. Your options stay for the next paste, except the password, which clears.

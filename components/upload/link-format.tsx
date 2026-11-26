@@ -71,18 +71,25 @@ export function LinkFormatMenu({
   format,
   onChange,
   disabled,
+  attached,
 }: {
   format: LinkFormat
   onChange: (format: LinkFormat) => void
   disabled?: boolean
+  /** The second half of a Copy button, joined to it. */
+  attached?: boolean
 }) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild disabled={disabled}>
         <Button
-          variant="ghost"
+          variant={attached ? 'default' : 'ghost'}
           size="sm"
-          className="gap-1 px-2 text-muted-foreground data-[state=open]:bg-accent"
+          className={
+            attached
+              ? 'gap-1 rounded-l-none border-l border-primary-foreground/25 px-2 font-normal'
+              : 'gap-1 px-2 text-muted-foreground data-[state=open]:bg-accent'
+          }
           aria-label={`Copy as: ${LINK_FORMAT_NAMES[format]}`}
         >
           {LINK_FORMAT_NAMES[format]}

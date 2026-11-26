@@ -75,6 +75,15 @@ export function stopsEveryUpload(error: unknown) {
   )
 }
 
+/**
+ * Whether the server refused this file for something sending it again can't
+ * change: its type, or its size over the per-file limit.
+ */
+export function refusedForGood(error: unknown) {
+  if (!(error instanceof UploadFailure) || stopsEveryUpload(error)) return false
+  return error.status === 413 || error.status === 415
+}
+
 /** Splits files by the server's maximum file size, which it checks again. */
 export function partitionBySize(files: readonly File[], maxSize: number) {
   const fitting: File[] = []

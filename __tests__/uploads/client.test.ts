@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { partitionBySize, uploadFile, uploadPaste } from '@/lib/uploads/client'
+import {
+  UploadFailure,
+  partitionBySize,
+  refusedForGood,
+  uploadFile,
+  uploadPaste,
+} from '@/lib/uploads/client'
 
 const MiB = 1024 * 1024
 const REQUEST_TOO_LARGE =
@@ -428,5 +434,22 @@ describe('pastes', () => {
   ])('report a %i answer', async (status, body, message) => {
     FakeRequest.server = (request) => request.respond(status, body)
     await expect(uploadPaste(paste(), {})).rejects.toThrow(message)
+  })
+})
+
+describe('refusals that a retry cannot fix', () => {
+  it('counts a refused type or size, not quota, sign-in or server trouble', () => {
+    expect(refusedForGood(new UploadFailure('Type not allowed', 415))).toBe(
+      true
+    )
+    expect(refusedForGood(new UploadFailure('Too large', 413))).toBe(true)
+    expect(
+      refusedForGood(
+        new UploadFailure('This would exceed your storage quota.', 413)
+      )
+    ).toBe(false)
+    expect(refusedForGood(new UploadFailure('Conflict', 409))).toBe(false)
+    expect(refusedForGood(new UploadFailure('Down', 503))).toBe(false)
+    expect(refusedForGood(new Error('Network error'))).toBe(false)
   })
 })
