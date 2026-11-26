@@ -354,8 +354,9 @@ function Reason({ text }: { text: string }) {
   if (colon < 1) return <span className="min-w-0 break-words">{text}</span>
   return (
     <span className="min-w-0 break-words">
-      {text.slice(0, colon + 1)}
-      <span className="line-clamp-2 text-muted-foreground">
+      {text.slice(0, colon + 1)}{' '}
+      {/* Cut to two lines only where a pointer can show the tooltip. */}
+      <span className="text-muted-foreground [@media(pointer:fine)]:line-clamp-2">
         {text.slice(colon + 2)}
       </span>
     </span>
