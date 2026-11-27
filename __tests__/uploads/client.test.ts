@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { partitionBySize, uploadFile, uploadPaste } from '@/lib/uploads/client'
+import {
+  UploadFailure,
+  partitionBySize,
+  refusedForGood,
+  uploadFile,
+  uploadPaste,
+} from '@/lib/uploads/client'
+import { TYPE_MISMATCH } from '@/lib/uploads/refusals'
 
 const MiB = 1024 * 1024
 const REQUEST_TOO_LARGE =
@@ -428,5 +435,42 @@ describe('pastes', () => {
   ])('report a %i answer', async (status, body, message) => {
     FakeRequest.server = (request) => request.respond(status, body)
     await expect(uploadPaste(paste(), {})).rejects.toThrow(message)
+  })
+})
+
+describe('refusals that a retry cannot fix', () => {
+  it('counts a refused type or size, not quota, sign-in or server trouble', () => {
+    expect(
+      refusedForGood(
+        new UploadFailure(
+          `${TYPE_MISMATCH}: detected image/png, claimed text/plain`,
+          400
+        )
+      )
+    ).toBe(true)
+    expect(
+      refusedForGood(
+        new UploadFailure('A file exceeds the upload size limit.', 413)
+      )
+    ).toBe(true)
+    expect(refusedForGood(new UploadFailure(REQUEST_TOO_LARGE, 413))).toBe(
+      false
+    )
+    // A proxy that answers in JSON of its own.
+    expect(
+      refusedForGood(new UploadFailure('Request entity too large', 413))
+    ).toBe(false)
+    expect(refusedForGood(new UploadFailure('Invalid filename.', 400))).toBe(
+      false
+    )
+    expect(refusedForGood(new UploadFailure('Use multipart.', 415))).toBe(false)
+    expect(
+      refusedForGood(
+        new UploadFailure('This would exceed your storage quota.', 413)
+      )
+    ).toBe(false)
+    expect(refusedForGood(new UploadFailure('Conflict', 409))).toBe(false)
+    expect(refusedForGood(new UploadFailure('Down', 503))).toBe(false)
+    expect(refusedForGood(new Error('Network error'))).toBe(false)
   })
 })

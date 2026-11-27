@@ -4,6 +4,7 @@ import {
   type UploadResponse,
   isUploadCancelled,
   partitionBySize,
+  refusedForGood,
   stopsEveryUpload,
   uploadFile,
 } from './client'
@@ -42,6 +43,8 @@ export type TrayFile = {
   readonly speed: number | null
   /** Why it failed, or what it waits for while held. */
   readonly reason?: string
+  /** Failed for a reason trying again can't change, such as its type. */
+  readonly final?: boolean
   readonly outcome?: TrayOutcome
   readonly result?: {
     /** Missing from servers that don't send it, which can't delete here. */
@@ -207,6 +210,7 @@ export function createUploadTray(send = uploadFile) {
               progress: 0,
               speed: null,
               reason,
+              final: refusedForGood(error),
             })
             // A refusal of this one file lets the rest go on.
             if (stopsEveryUpload(error)) update({ pausedBy: next.key })
@@ -360,7 +364,12 @@ export function createUploadTray(send = uploadFile) {
         pausedBy: state.pausedBy === key ? null : state.pausedBy,
         files: state.files.map((file) =>
           file.key === key
-            ? { ...file, status: 'waiting', reason: undefined }
+            ? {
+                ...file,
+                status: 'waiting',
+                reason: undefined,
+                final: undefined,
+              }
             : file
         ),
       })

@@ -58,7 +58,7 @@ Flare resolves an upload's choices in this order:
 On **Upload** and **Paste**, the first button in the options row picks the profile:
 
 - Your default profile, marked **(default)**, applies until you choose another.
-- **No profile** bypasses the saved default and uses your account settings only.
+- **No profile** bypasses the saved default and uses your account settings only. The button then reads **Profile** with a dashed outline.
 - **A named profile** uses that profile for this upload.
 
 Each profile in the menu lists what it does: visibility, expiration, original or random names, tags and share page style. The other buttons in the row show the effective visibility, expiration, folder and tags, and can override each for that upload.

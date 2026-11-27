@@ -85,9 +85,23 @@ const Chip = forwardRef<
     value: string
     picked?: boolean
     invalid?: boolean
+    /** Nothing is set (no profile, unfiled, no tags): the chip names itself. */
+    empty?: boolean
+    /** What an empty chip shows, when shorter than its name. */
+    label?: string
   }
 >(function Chip(
-  { icon: Icon, name, value, picked, invalid, className, ...props },
+  {
+    icon: Icon,
+    name,
+    value,
+    picked,
+    invalid,
+    empty,
+    label,
+    className,
+    ...props
+  },
   ref
 ) {
   return (
@@ -98,6 +112,9 @@ const Chip = forwardRef<
       aria-label={`${name}: ${value}${picked ? ', changed for this upload' : ''}`}
       className={cn(
         'relative h-8 min-w-0 max-w-full gap-1.5 rounded-lg bg-background/70 px-2 text-[13px] font-normal data-[state=open]:bg-accent sm:h-9 sm:gap-2 sm:px-3 sm:text-sm',
+        empty &&
+          !picked &&
+          'border-dashed bg-transparent text-muted-foreground hover:text-foreground',
         picked && 'border-primary bg-primary/10',
         invalid && 'border-danger bg-danger/10 text-destructive',
         className
@@ -108,9 +125,18 @@ const Chip = forwardRef<
         className="h-3.5 w-3.5 text-muted-foreground sm:h-4 sm:w-4"
         aria-hidden="true"
       />
-      <span className="min-w-0 max-w-[10rem] truncate">{value}</span>
+      {/* On phones an empty folder or tags chip is its icon, so the row
+          stays short; a bare profile icon says too little. */}
+      <span
+        className={cn(
+          'min-w-0 max-w-[10rem] truncate',
+          empty && !picked && !label && 'max-sm:hidden'
+        )}
+      >
+        {empty && !picked ? (label ?? name) : value}
+      </span>
       <ChevronDown
-        className="hidden h-3.5 w-3.5 text-muted-foreground sm:block"
+        className="h-3.5 w-3.5 text-muted-foreground"
         aria-hidden="true"
       />
       {picked && (
@@ -303,13 +329,11 @@ export function UploadOptionsBar({
   return (
     <div className="space-y-2">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        {/* One row that scrolls sideways on phones, where touch-sized chips
-            would otherwise stack three deep above the list; it wraps on
-            wider screens. The fade says there is more. */}
+        {/* Wraps, so every chip stays in view on phones too. */}
         <div
           role="group"
           aria-label="Upload options"
-          className="-mx-2.5 flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-1 pl-2.5 pr-8 [mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)] [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:gap-2 sm:overflow-visible sm:p-0 sm:[mask-image:none] [&::-webkit-scrollbar]:hidden [&>*]:shrink-0"
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 sm:gap-2"
         >
           {showProfiles && (
             <DropdownMenu modal={false}>
@@ -318,6 +342,8 @@ export function UploadOptionsBar({
                   icon={SlidersHorizontal}
                   name="Upload profile"
                   value={profiles.error ? 'Profiles unavailable' : profileName}
+                  empty={!profiles.error && !profileId}
+                  label="Profile"
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -451,6 +477,7 @@ export function UploadOptionsBar({
                   }
                   picked={!!choices.folderId && !folders.missing}
                   invalid={folders.missing}
+                  empty={!choices.folderId && !folders.missing}
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent
@@ -501,6 +528,7 @@ export function UploadOptionsBar({
                         : `${effective.tagIds.length} tags`
                   }
                   picked={effective.picked.tags}
+                  empty={effective.tagIds.length === 0}
                 />
               </DropdownMenuTrigger>
               <DropdownMenuContent

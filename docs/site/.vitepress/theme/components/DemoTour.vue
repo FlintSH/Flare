@@ -15,7 +15,7 @@ const steps = [
     title: 'Upload options',
     label: 'Upload',
     src: '/screenshots/workspace/upload.png',
-    text: 'Drop, choose or paste files. The row under them shows who can open them, when they expire, and where they go, and each setting is one click to change.',
+    text: 'Drop, choose or paste files. The bar under them shows who can open them, when they expire, and where they go, and each setting is one click to change.',
     link: '/guide/uploading',
   },
   {

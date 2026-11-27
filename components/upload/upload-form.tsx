@@ -11,6 +11,7 @@ import {
   Copy,
   EyeOff,
   Folder,
+  ListX,
   MoreHorizontal,
   Plus,
   RotateCw,
@@ -57,7 +58,7 @@ import { useUploadTray } from '@/hooks/use-upload-tray'
 
 import { LinkFormatMenu, useLinkFormat } from './link-format'
 import { UploadOptionsBar } from './options-bar'
-import { TrayRow } from './tray-row'
+import { TrayTile } from './tray-tile'
 import { UploadTips, type UploadTipsShown } from './upload-tips'
 import { useUploadOptions } from './use-upload-options'
 
@@ -86,6 +87,9 @@ function copyBelongsElsewhere(event: ClipboardEvent) {
   const selection = window.getSelection()
   return !!selection && !selection.isCollapsed && !!selection.toString()
 }
+
+/** The library's card grid, a little denser. */
+const tileGrid = 'grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4'
 
 const textFileName = (file: TrayFile) => file.result?.name ?? file.name
 
@@ -505,8 +509,11 @@ export function UploadForm({
   const empty = trayFiles.length === 0
   const mac = hydrated && /Mac|iPhone|iPad/.test(navigator.userAgent)
   const copyKey = mac ? '⌘C' : 'Ctrl+C'
-  const pasteKey = mac ? '⌘V' : 'Ctrl+V'
-  const canShare = hydrated && typeof navigator.share === 'function'
+  // The share sheet is for phones and tablets; desktops copy.
+  const canShare =
+    hydrated &&
+    typeof navigator.share === 'function' &&
+    window.matchMedia('(pointer: coarse)').matches
   const canDelete = can('files.delete')
   const batchFolder = newest.find((file) => file.outcome?.folder)?.outcome
     ?.folder
@@ -515,21 +522,29 @@ export function UploadForm({
   )
 
   const waiting = newest.filter(({ status }) => status === 'waiting').length
-  const status = held.length
-    ? `${files(held.length)} waiting`
+  // The batch's heading says where it stands; the detail beside it is quieter.
+  const [status, detail]: [string, string | null] = held.length
+    ? [`${files(held.length)} waiting`, null]
     : paused
-      ? `Paused · ${waiting} waiting`
+      ? ['Paused', `${waiting} waiting`]
       : going
         ? [
             `Uploading ${Math.min(done.length + failedCount + 1, newest.length)} of ${newest.length}`,
-            sending?.speed ? formatSpeed(sending.speed) : null,
-            sending?.speed ? remaining((total - sent) / sending.speed) : null,
+            sending?.speed
+              ? [
+                  formatSpeed(sending.speed),
+                  remaining((total - sent) / sending.speed),
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
+              : null,
           ]
-            .filter(Boolean)
-            .join(' · ')
         : failed
-          ? `${done.length} of ${files(newest.length)} uploaded`
-          : `${files(done.length)} uploaded · ${formatBytes(total)}`
+          ? [
+              `${done.length} of ${newest.length} uploaded`,
+              `${failedCount} failed`,
+            ]
+          : [`${files(done.length)} uploaded`, formatBytes(total)]
   const publicDone = done.filter(
     (file) => file.outcome?.visibility === 'PUBLIC' && file.result?.id
   )
@@ -552,8 +567,18 @@ export function UploadForm({
         : undefined,
   })
 
+  const copyLabel =
+    done.length < newest.length
+      ? `Copy ${done.length} of ${links(newest.length)}`
+      : done.length === 1
+        ? 'Copy link'
+        : `Copy ${links(done.length)}`
+  const batchMenu =
+    (canShare && done.length > 0) ||
+    (options.can.share && publicDone.length > 0)
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <input
         ref={input}
         type="file"
@@ -571,17 +596,10 @@ export function UploadForm({
             'border-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.15)]'
         )}
       >
-        <div className="border-b border-border/60 bg-muted/20 p-2.5 sm:p-3">
-          <UploadOptionsBar state={options} passwordId="upload-password" />
-        </div>
-
         {empty ? (
-          <button
-            type="button"
-            onClick={() => input.current?.click()}
-            aria-label="Choose files to upload"
+          <div
             className={cn(
-              'flex w-full flex-col items-center justify-center px-4 py-14 text-center outline-none transition-colors hover:bg-muted/20 focus-visible:bg-muted/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:py-20',
+              'flex flex-col items-center justify-center px-4 py-12 text-center transition-colors motion-reduce:transition-none sm:py-16',
               dragging && 'bg-primary/5'
             )}
           >
@@ -593,188 +611,215 @@ export function UploadForm({
             >
               <Upload className="h-5 w-5" aria-hidden="true" />
             </span>
-            <span className="text-balance text-base font-medium">
-              {dragging ? (
-                'Drop to upload'
-              ) : (
-                <>
-                  <span className="[@media(pointer:coarse)]:hidden">
-                    Drop files here or{' '}
-                    <span className="text-primary underline underline-offset-4">
-                      choose files
-                    </span>
-                  </span>
-                  <span className="hidden [@media(pointer:coarse)]:inline">
-                    Choose files
-                  </span>
-                </>
-              )}
-            </span>
-            <span className="mt-1.5 max-w-md text-balance text-sm text-muted-foreground">
-              They upload right away with the settings above, up to{' '}
-              {formatBytes(maxSize)} each
-              <span className="[@media(pointer:coarse)]:hidden">
-                . Paste with {pasteKey}
-              </span>
-            </span>
-          </button>
+            <h2 className="text-balance text-lg font-semibold tracking-tight [@media(pointer:coarse)]:sr-only">
+              {/* Touch has nothing to drop: the button says it. */}
+              {dragging ? 'Drop to upload' : 'Drop, paste or choose files'}
+            </h2>
+            <Button
+              type="button"
+              className="mt-4 [@media(pointer:coarse)]:mt-0"
+              onClick={() => input.current?.click()}
+            >
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              Choose files
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Up to {formatBytes(maxSize)} each
+            </p>
+            {tips && <UploadTips shown={tips} onHide={() => void hideTips()} />}
+          </div>
         ) : (
-          <section aria-labelledby="upload-batch-heading">
-            <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 pt-3 sm:px-4">
-              <h2
-                id="upload-batch-heading"
-                className="min-w-0 text-sm tabular-nums text-muted-foreground"
-              >
-                {status}
-              </h2>
-              <p className="sr-only" aria-live="polite">
-                {done.length
-                  ? `${done.length} of ${files(newest.length)} uploaded`
-                  : ''}
-              </p>
-              <p className="sr-only" aria-live="polite">
-                {announcement}
-              </p>
-              <div className="flex flex-wrap items-center gap-1">
-                {batchFolder && done.length > 0 && (
-                  <Button asChild variant="ghost" size="sm">
-                    <Link href={libraryHref({ folder: batchFolder.id })}>
-                      <Folder className="h-4 w-4" aria-hidden="true" />
-                      Open {batchFolder.name}
-                    </Link>
-                  </Button>
-                )}
-                {pausedBy !== null && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => tray.retry(pausedBy)}
-                  >
-                    <RotateCw className="h-4 w-4" aria-hidden="true" />
-                    Resume
-                  </Button>
-                )}
-                {held.length > 0 ? (
-                  <Button
-                    size="sm"
-                    disabled={'held' in settings}
-                    onClick={() => tray.release(settings)}
-                  >
-                    <Upload className="h-4 w-4" aria-hidden="true" />
-                    Upload {files(held.length)}
-                  </Button>
-                ) : (
-                  done.length > 0 && (
-                    <>
-                      <LinkFormatMenu format={format} onChange={setFormat} />
-                      {canShare && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => void share()}
-                          className="[@media(pointer:fine)]:hidden"
-                        >
-                          <Share2 className="h-4 w-4" aria-hidden="true" />
-                          Share
-                        </Button>
-                      )}
-                      <Button size="sm" onClick={() => void copy(done)}>
-                        <Copy className="h-4 w-4" aria-hidden="true" />
-                        {/* While others still go, say how many are in. */}
-                        {done.length < newest.length
-                          ? `Copy ${done.length} of ${links(newest.length)}`
-                          : done.length === 1
-                            ? 'Copy'
-                            : `Copy ${links(done.length)}`}
-                        <kbd className="ml-1 hidden rounded border border-current/30 px-1 font-sans text-[11px] leading-4 opacity-70 [@media(pointer:fine)]:sm:inline">
-                          {copyKey}
-                        </kbd>
-                      </Button>
-                      {options.can.share && publicDone.length > 0 && (
-                        <DropdownMenu modal={false}>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 data-[state=open]:bg-accent"
-                              aria-label="More for these files"
-                            >
-                              <MoreHorizontal
-                                className="h-4 w-4"
-                                aria-hidden="true"
-                              />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuItem
-                              onSelect={() => void makePrivate(publicDone)}
-                            >
-                              <EyeOff className="h-4 w-4" aria-hidden="true" />
-                              {publicDone.length === 1
-                                ? 'Make private'
-                                : `Make ${publicDone.length} private`}
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </>
-                  )
-                )}
-              </div>
-            </div>
-            <ul className="mx-3 mt-2 divide-y divide-border/70 overflow-hidden rounded-lg border sm:mx-4">
-              {newest.map((file) => (
-                <TrayRow key={file.key} {...rowProps(file)} />
-              ))}
-            </ul>
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-3 sm:px-4">
-              <button
-                type="button"
-                onClick={() => input.current?.click()}
-                className={cn(
-                  'flex items-center gap-2 rounded-md px-1 py-1 text-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-                  dragging ? 'text-primary' : 'text-muted-foreground'
-                )}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            className={cn(
+              'flex min-h-14 w-full items-center gap-2 px-3 text-left text-sm outline-none transition-colors hover:bg-muted/20 focus-visible:bg-muted/20 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none sm:px-4',
+              dragging ? 'bg-primary/5 text-primary' : 'text-muted-foreground'
+            )}
+          >
+            <Plus className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {dragging ? (
+              <span className="font-medium">Drop to upload</span>
+            ) : (
+              <>
                 <span className="font-medium text-foreground">
-                  {dragging ? 'Drop to upload' : 'Add files'}
+                  Choose more files
                 </span>
-                <span className="[@media(pointer:coarse)]:hidden">
-                  or drop them anywhere
+                <span className="hidden sm:inline [@media(pointer:coarse)]:hidden">
+                  or drop and paste them anywhere
                 </span>
-              </button>
+              </>
+            )}
+          </button>
+        )}
+        <div className="border-t border-border/60 bg-muted/20 p-2.5 sm:p-3">
+          <UploadOptionsBar state={options} passwordId="upload-password" />
+        </div>
+      </div>
+
+      {!empty && (
+        <section aria-labelledby="upload-batch-heading" className="space-y-3">
+          <div className="flex min-h-9 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            <h2
+              id="upload-batch-heading"
+              className="min-w-0 text-base font-semibold tracking-tight tabular-nums"
+            >
+              {status}
+              {detail && (
+                <span
+                  className={cn(
+                    'ml-2 text-xs font-normal tracking-normal',
+                    failed && !going && !held.length && !paused
+                      ? 'font-medium text-destructive'
+                      : 'text-muted-foreground'
+                  )}
+                >
+                  <span className="sr-only">, </span>
+                  {detail}
+                </span>
+              )}
+            </h2>
+            <p className="sr-only" aria-live="polite">
+              {done.length
+                ? `${done.length} of ${files(newest.length)} uploaded`
+                : ''}
+            </p>
+            <p className="sr-only" aria-live="polite">
+              {announcement}
+            </p>
+            <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
+              {batchFolder && done.length > 0 && (
+                <Button asChild variant="ghost" className="px-3">
+                  <Link href={libraryHref({ folder: batchFolder.id })}>
+                    <Folder className="h-4 w-4" aria-hidden="true" />
+                    Open {batchFolder.name}
+                  </Link>
+                </Button>
+              )}
+              {pausedBy !== null && (
+                <Button
+                  variant="outline"
+                  className="px-3"
+                  onClick={() => tray.retry(pausedBy)}
+                >
+                  <RotateCw className="h-4 w-4" aria-hidden="true" />
+                  Resume
+                </Button>
+              )}
+              {held.length > 0 ? (
+                <Button
+                  className="px-3"
+                  disabled={'held' in settings}
+                  onClick={() => tray.release(settings)}
+                >
+                  <Upload className="h-4 w-4" aria-hidden="true" />
+                  Upload {files(held.length)}
+                </Button>
+              ) : (
+                done.length > 0 && (
+                  <div className="flex flex-1 items-center sm:flex-none">
+                    <Button
+                      className="flex-1 rounded-r-none px-3 focus-visible:z-10 sm:flex-none"
+                      onClick={() => void copy(done)}
+                    >
+                      <Copy className="h-4 w-4" aria-hidden="true" />
+                      {copyLabel}
+                      <kbd className="ml-0.5 hidden font-sans text-[11px] font-normal leading-4 opacity-60 [@media(pointer:fine)]:sm:inline">
+                        {copyKey}
+                      </kbd>
+                    </Button>
+                    <LinkFormatMenu
+                      format={format}
+                      onChange={setFormat}
+                      attached
+                    />
+                  </div>
+                )
+              )}
               {finished && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  className="px-3 text-muted-foreground max-sm:hidden"
                   onClick={() => tray.clear()}
                   title="Uploaded files stay in your library"
                 >
                   Clear list
                 </Button>
               )}
+              {/* On phones Clear list moves in here, beside Copy's width. */}
+              {(batchMenu || finished) && (
+                <DropdownMenu modal={false}>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        'h-9 w-9 data-[state=open]:bg-accent',
+                        !batchMenu && 'sm:hidden'
+                      )}
+                      aria-label="More for this list"
+                    >
+                      <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {canShare && done.length > 0 && (
+                      <DropdownMenuItem onSelect={() => void share()}>
+                        <Share2 className="h-4 w-4" aria-hidden="true" />
+                        Share…
+                      </DropdownMenuItem>
+                    )}
+                    {options.can.share && publicDone.length > 0 && (
+                      <DropdownMenuItem
+                        onSelect={() => void makePrivate(publicDone)}
+                      >
+                        <EyeOff className="h-4 w-4" aria-hidden="true" />
+                        {publicDone.length === 1
+                          ? 'Make private'
+                          : `Make ${publicDone.length} private`}
+                      </DropdownMenuItem>
+                    )}
+                    {finished && (
+                      <DropdownMenuItem
+                        className="sm:hidden"
+                        onSelect={() => tray.clear()}
+                      >
+                        <ListX className="h-4 w-4" aria-hidden="true" />
+                        Clear list
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
-            {earlier.length > 0 && (
-              <details className="group border-t border-border/60">
-                <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2.5 text-sm text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4 [&::-webkit-details-marker]:hidden">
-                  <ChevronRight
-                    className="h-4 w-4 transition-transform group-open:rotate-90 motion-reduce:transition-none"
-                    aria-hidden="true"
-                  />
-                  Earlier ({earlier.length})
-                </summary>
-                <ul className="mx-3 mb-3 divide-y divide-border/70 overflow-hidden rounded-lg border sm:mx-4">
-                  {earlier.map((file) => (
-                    <TrayRow key={file.key} {...rowProps(file)} />
-                  ))}
-                </ul>
-              </details>
-            )}
-          </section>
-        )}
-      </div>
-
+          </div>
+          <ul className={tileGrid}>
+            {newest.map((file) => (
+              <TrayTile key={file.key} {...rowProps(file)} />
+            ))}
+          </ul>
+          {earlier.length > 0 && (
+            <details className="group !mt-6 border-t border-border/60 pt-4">
+              <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-sm text-sm font-semibold outline-none hover:text-foreground/80 focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-90 motion-reduce:transition-none"
+                  aria-hidden="true"
+                />
+                Earlier
+                <span className="ml-1 text-xs font-normal tabular-nums text-muted-foreground">
+                  <span className="sr-only">, </span>
+                  {files(earlier.length)}
+                </span>
+              </summary>
+              <ul className={cn(tileGrid, 'mt-3')}>
+                {earlier.map((file) => (
+                  <TrayTile key={file.key} {...rowProps(file)} />
+                ))}
+              </ul>
+            </details>
+          )}
+        </section>
+      )}
       {refused > 0 && (
         <p
           role="alert"
@@ -785,10 +830,6 @@ export function UploadForm({
             ? `One file is larger than ${formatBytes(maxSize)} and wasn’t added.`
             : `${refused} files are larger than ${formatBytes(maxSize)} and weren’t added.`}
         </p>
-      )}
-
-      {empty && tips && (
-        <UploadTips shown={tips} onHide={() => void hideTips()} />
       )}
 
       <AlertDialog

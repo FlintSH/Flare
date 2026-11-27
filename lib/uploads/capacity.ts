@@ -5,6 +5,7 @@ import {
   type PermissionSubject,
   hasPermission,
 } from '@/lib/permissions/catalog'
+import { OVER_SIZE_LIMIT } from '@/lib/uploads/refusals'
 import { mbToBytes } from '@/lib/utils/size'
 
 /** An account's total storage allowance in bytes, or null when it has none. */
@@ -48,9 +49,7 @@ export function uploadCapacity(
 export function overCapacity(limit: 'size' | 'quota') {
   return new HttpError(
     413,
-    limit === 'size'
-      ? 'A file exceeds the upload size limit.'
-      : 'This would exceed your storage quota.'
+    limit === 'size' ? OVER_SIZE_LIMIT : 'This would exceed your storage quota.'
   )
 }
 

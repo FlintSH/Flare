@@ -1,12 +1,8 @@
-import type { ComponentType, ReactNode } from 'react'
-
 import Link from 'next/link'
 
-import { ArrowUpRight, Camera, SlidersHorizontal, X } from 'lucide-react'
+import { X } from 'lucide-react'
 
 import { Button } from '@/components/ui/button'
-
-import { cn } from '@/lib/utils'
 
 /** Which tips the Upload page shows, before the account hides them. */
 export type UploadTipsShown = {
@@ -14,13 +10,15 @@ export type UploadTipsShown = {
   createProfile: boolean
   /** The role can download the screenshot tools. */
   tools: boolean
-  /** The account has a default profile, which tool uploads follow. */
-  defaultProfile: boolean
 }
 
+const linkClassName =
+  'rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+
 /**
- * What makes uploading automatic, under an empty Upload page: saving choices
- * as a profile, and the tools that upload with them. Hiding it is for good.
+ * What makes uploading automatic, at the foot of an empty Upload page: the
+ * screenshot tools and saving choices as a profile. Hiding it is for good.
+ * Not on phones, where the tools don't run.
  */
 export function UploadTips({
   shown,
@@ -29,82 +27,47 @@ export function UploadTips({
   shown: UploadTipsShown
   onHide: () => void
 }) {
-  const both = shown.createProfile && shown.tools
   return (
     <aside
       aria-label="Upload tips"
-      className="relative rounded-xl border bg-muted/20 p-4 pr-12 text-sm"
+      className="mt-8 flex max-w-xl items-center gap-1 text-pretty text-xs text-muted-foreground max-sm:hidden"
     >
+      <p>
+        {shown.tools && (
+          <>
+            Upload from ShareX, Flameshot and other tools:{' '}
+            <Link
+              href="/dashboard/profile?section=uploads#upload-tools"
+              className={linkClassName}
+            >
+              set one up
+            </Link>
+            {shown.createProfile ? '. ' : '.'}
+          </>
+        )}
+        {shown.createProfile && (
+          <>
+            Save settings you reuse{' '}
+            <Link
+              href="/dashboard/profile?section=uploads#upload-profiles"
+              className={linkClassName}
+            >
+              as a profile
+            </Link>
+            .
+          </>
+        )}
+      </p>
       <Button
         variant="ghost"
         size="icon"
-        className="absolute right-2 top-2 h-8 w-8 text-muted-foreground"
+        className="h-7 w-7 shrink-0"
         aria-label="Hide these tips"
         title="Hide these tips"
         onClick={onHide}
       >
-        <X className="h-4 w-4" aria-hidden="true" />
+        <X className="h-3.5 w-3.5" aria-hidden="true" />
       </Button>
-      <ul className={cn('grid gap-4', both && 'sm:grid-cols-2 sm:gap-8')}>
-        {shown.createProfile && (
-          <UploadTip
-            icon={SlidersHorizontal}
-            title="Upload profiles"
-            href="/dashboard/profile?section=uploads#upload-profiles"
-            action="Create a profile"
-          >
-            Save the visibility, expiry, tags and naming you reuse, then pick
-            them here in one step.
-          </UploadTip>
-        )}
-        {shown.tools && (
-          <UploadTip
-            icon={Camera}
-            title="Screenshot tools"
-            href="/dashboard/profile?section=uploads#upload-tools"
-            action="Set up a tool"
-          >
-            Upload straight from ShareX, iTake, Flameshot, Spectacle or a
-            terminal, with your{' '}
-            {shown.defaultProfile ? 'default profile' : 'upload settings'}{' '}
-            applied.
-          </UploadTip>
-        )}
-      </ul>
     </aside>
-  )
-}
-
-function UploadTip({
-  icon: Icon,
-  title,
-  href,
-  action,
-  children,
-}: {
-  icon: ComponentType<{ className?: string; 'aria-hidden'?: boolean }>
-  title: string
-  href: string
-  action: string
-  children: ReactNode
-}) {
-  return (
-    <li className="flex min-w-0 gap-3">
-      <Icon
-        className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground"
-        aria-hidden
-      />
-      <div className="min-w-0 space-y-1">
-        <h2 className="font-medium">{title}</h2>
-        <p className="text-pretty text-muted-foreground">{children}</p>
-        <Link
-          href={href}
-          className="inline-flex items-center gap-1 rounded-sm font-medium text-primary underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-        >
-          {action}
-          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
-        </Link>
-      </div>
-    </li>
   )
 }
